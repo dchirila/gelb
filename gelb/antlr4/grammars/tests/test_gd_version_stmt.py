@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import pytest
 
 import antlr4 as a4
