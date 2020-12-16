@@ -1,0 +1,7 @@
+* install python3-pep8 & check all Py-files here automatically
+
+* configure Spacemacs, s.t. it runs pep8 automatically (e.g. when Python files are saved)
+
+* Document how to create the environment (requirements.txt?)
+** e.g. using Conda, something like:
+   conda create -n gelb python=3.8 numpy=TODO sympy=TODO antlr4-python3-runtime=TODO ipython=TODO

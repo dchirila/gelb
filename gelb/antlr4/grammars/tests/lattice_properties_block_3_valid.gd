@@ -1,0 +1,16 @@
+lattice_properties D2Q5 {
+  const int D = 2, Q = 5;
+  // DF direction-vectors
+  const array<int, {D, Q}> E = {{0, 0},   // O
+                                {1, 0},   // East
+                                {0, 1},   // North
+                                {-1, 0},  // South
+                                {0, -1}}; // West
+  // matrix for mapping DFs -> moments
+  const array<real, {Q, Q}> N = {{1, 1, 1, 1, 1},
+                                 {0, 1, 0, -1, 0},
+                                 {0, 0, 1, 0, -1},
+                                 {-4, 1, 1, 1, 1},
+                                 {0, 1, -1, 1, -1}};
+  const array<real, {Q, Q}> N_INV = inverse(N);
+}
