@@ -1,0 +1,67 @@
+digraph GeLB_AST {
+    size ="200,200";
+    node [shape=box];
+    rankdir=LR;
+    // splines=ortho;
+    forcelabels=true;
+    
+    /*
+    Program_N;
+    LatticeInstance_N
+    NodeClass_N
+    Configuration_N
+    LatticeProperties_N
+    
+    List_N;
+    Int_N;
+
+    InitializerASTNode;
+    DynamicASTNode;
+    GaugeASTNode;
+    FunctionASTNode;
+
+    GeometryASTNode;
+    */
+
+    // BEGIN :: Node Definitions //
+    program [label="Program_N"];
+
+    listof_lattice_instances [label="List_N"];
+    lattice_instance_0 [label="LatticeInstance_N"];
+    lattice_instance_1 [label="LatticeInstance_N"];
+
+    listof_node_classes [label="List_N"];
+    node_class_0 [label="NodeClass_N"];
+    node_class_1 [label="NodeClass_N"];
+
+    configuration [label="Configuration_N"];
+
+    listof_lattice_properties [label="List_N"];
+    lattice_properties_0 [label="LatticeProperties_N"];
+    lattice_properties_1 [label="LatticeProperties_N"];
+    // END :: Node Definitions //
+
+
+    // BEGIN :: Relationships //
+    program -> Int_N [label=".gd_version"];
+    program -> configuration [label=".configuration"];
+
+    program -> listof_lattice_properties [label=".listof_lattice_properties"];
+    listof_lattice_properties -> lattice_properties_0 [label="[0]"];
+    listof_lattice_properties -> lattice_properties_1 [label="[1]"];
+
+    program -> listof_lattice_instances [label=".listof_lattice_instances"];
+    listof_lattice_instances -> lattice_instance_0 [label="[0]"];
+    listof_lattice_instances -> lattice_instance_1 [label="[1]"];
+
+    program -> listof_node_classes [label=".listof_node_classes"];
+    listof_node_classes -> node_class_0 [label="[0]"];
+    listof_node_classes -> node_class_1 [label="[1]"];
+
+    program -> InitializerASTNode;
+    program -> DynamicASTNode;
+    program -> GaugeASTNode;
+    program -> FunctionASTNode;
+    program -> GeometryASTNode;
+    // END :: Relationships //
+}
