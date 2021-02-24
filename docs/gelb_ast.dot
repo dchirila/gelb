@@ -1,30 +1,68 @@
 digraph GeLB_AST {
-    size ="10,10";
+    size ="11,15.53";
+
+    // NOTE: UNcomment lines below for circular layout
+    // layout="twopi";
+    // graph [
+    //     ordering="out",
+    //     pad="0.9",
+    //     nodesep="0.9",
+    //     ranksep="2.7",
+    // ];
+    // node [
+    //     shape=box,
+    //     style=filled,
+    //     fillcolor="#efefef",
+    //     fontname=Helvetica,
+    //     fontsize=16.0,
+    //     fontcolor="#000000",
+    //     height=0.25,
+    //     width=1,
+    //     penwidth=0
+    // ];
+    // edge [
+    //     arrowhead=normal,
+    //     arrowsize=0.5,
+    //     len=0.5,
+    //     fontname=Helvetica,
+    //     fontsize=14.0,
+    //     fontcolor="#0000ff",
+    //     color="#bfbfbf"
+    // ];
+    // forcelabels=true;
+
+    // NOTE: UNcomment lines below for dot layout
+    layout="dot";
+    rankdir=LR;
     graph [
-        pad="0.5",
-        nodesep="0.6",
-        ranksep="1",
+        ordering="out",
+        pad="0.9",
+        nodesep="0.7",
+        ranksep="4.7",
     ];
     node [
         shape=box,
         style=filled,
         fillcolor="#efefef",
         fontname=Helvetica,
-        fontsize=12.0,
-        fontcolor="#2b2b2b",
+        fontsize=26.0,
+        fontcolor="#000000",
         height=0.25,
         width=1,
         penwidth=0
     ];
     edge [
         arrowhead=normal,
-        arrowsize=0.5,
+        arrowsize=3.5,
         len=0.5,
+        fontname=Helvetica,
+        fontsize=24.0,
+        fontcolor="#0000ff",
         color="#bfbfbf"
     ];
-    rankdir=LR;
-    // splines=ortho;
     forcelabels=true;
+
+    // splines=ortho;
     
     /*
     Program_N;
@@ -46,112 +84,229 @@ digraph GeLB_AST {
 
     // BEGIN :: Node Definitions //
     program [label="Program_N"];
+    gd_version [label="Int_N", fillcolor=springgreen3];
 
-    short_name [label="String_N"];
-    description [label="String_N"];
-
-    listof_lattice_instances [label="List_N"];
-    lattice_instance_0 [label="LatticeInstance_N"];
-
-    listof_node_classes [label="List_N"];
-    node_class_0 [label="NodeClass_N"];
+    short_name [label="String_N", fillcolor=springgreen3];
+    description [label="String_N", fillcolor=springgreen3];
 
     configuration [label="Configuration_N"];
-    listof_global_constant_decls [label="List_N"];
-    constant_decl_0 [label="ConstantDecl_N"];
+    listof_global_const_decls [label="List_N"];
+    const_decl_0 [label="ConstantDeclaration_N", fillcolor=salmon2];
 
     listof_lattice_properties [label="List_N"];
     lattice_properties_0 [label="LatticeProperties_N"];
+    lattice_properties_0_id [label="Id_N", fillcolor=springgreen3];
+    lattice_properties_0_listof_const_decls [label="List_N"];
+    lattice_properties_0_const_decl_0 [label="ConstantDeclaration_N", fillcolor=salmon2];
+
+    listof_lattice_instances [label="List_N"];
+    lattice_instance_0 [label="LatticeInstance_N"];
+    lattice_instance_0_id [label="Id_N", fillcolor=springgreen3];
+    lattice_instance_0_properties_id [label="Id_N", fillcolor=springgreen3];
+    lattice_instance_0_df_type [label="ScalarDType_N", fillcolor=magenta];
+    lattice_instance_0_df_alias [label="Id_N", fillcolor=springgreen3];
+
+    listof_node_classes [label="List_N"];
+    node_class_0 [label="NodeClass_N"];
+    node_class_0_id [label="Id_N", fillcolor=springgreen3];
+    node_class_0_listof_initializers [label="List_N"];
+    node_class_0_listof_initializers_initializer_0 [label="Id_N", fillcolor=springgreen3];
+    node_class_0_listof_dynamics [label="List_N"];
+    node_class_0_listof_dynamics_dynamic_0 [label="Id_N", fillcolor=springgreen3];
+    node_class_0_listof_gauges [label="List_N"];
+    node_class_0_listof_gauges_gauge_0 [label="Id_N", fillcolor=springgreen3];
 
     listof_initializers [label="List_N"];
     initializer_0 [label="Initializer_N"];
+    initializer_0_id [label="Id_N", fillcolor=springgreen3];
+    initializer_0_listof_const_decls [label="List_N"];
+    initializer_0_const_decl_0 [label="ConstantDeclaration_N", fillcolor=salmon2];
+    initializer_0_listof_var_decls [label="List_N"];
+    initializer_0_var_decl_0 [label="VariableDeclaration_N", fillcolor=salmon2];
+    initializer_0_listof_assignment_stmts [label="List_N"];
+    initializer_0_assignment_stmt_0 [label="AssignmentStmt_N", fillcolor=salmon2];
 
     listof_dynamics [label="List_N"];
     dynamic_0 [label="Dynamic_N"];
+    dynamic_0_id [label="Id_N", fillcolor=springgreen3];
+    dynamic_0_listof_const_decls [label="List_N"];
+    dynamic_0_const_decl_0 [label="ConstantDeclaration_N", fillcolor=salmon2];
+    dynamic_0_listof_var_decls [label="List_N"];
+    dynamic_0_var_decl_0 [label="VariableDeclaration_N", fillcolor=salmon2];
+    dynamic_0_listof_assignment_stmts [label="List_N"];
+    dynamic_0_assignment_stmt_0 [label="AssignmentStmt_N", fillcolor=salmon2];
 
     listof_gauges [label="List_N"];
     gauge_0 [label="Gauge_N"];
+    gauge_0_id [label="Id_N", fillcolor=springgreen3];
+    gauge_0_output_spec [label="OutputSpec_N", fillcolor=magenta];
+    gauge_0_listof_const_decls [label="List_N"];
+    gauge_0_const_decl_0 [label="ConstantDeclaration_N", fillcolor=salmon2];
+    gauge_0_listof_var_decls [label="List_N"];
+    gauge_0_var_decl_0 [label="VariableDeclaration_N", fillcolor=salmon2];
+    gauge_0_listof_assignment_stmts [label="List_N"];
+    gauge_0_assignment_stmt_0 [label="AssignmentStmt_N", fillcolor=salmon2];
 
     listof_functions [label="List_N"];
     function_0 [label="Function_N"];
+    function_0_id [label="Id_N", fillcolor=springgreen3];
+    function_0_input_spec [label="InputSpec_N", fillcolor=magenta];
+    function_0_output_spec [label="OutputSpec_N", fillcolor=magenta];
+    function_0_listof_const_decls [label="List_N"];
+    function_0_const_decl_0 [label="ConstantDeclaration_N", fillcolor=salmon2];
+    function_0_listof_var_decls [label="List_N"];
+    function_0_var_decl_0 [label="VariableDeclaration_N", fillcolor=salmon2];
+    function_0_listof_assignment_stmts [label="List_N"];
+    function_0_assignment_stmt_0 [label="AssignmentStmt_N", fillcolor=salmon2];
+    function_0_return_expr [label="Expr_N", fillcolor=salmon2];
+
+    geometry [label="Geometry_N"];
+    geometry_size [label="List_N"];
+    geometry_size_0 [label="Expr_N", fillcolor=salmon2];
+    geometry_periodicity [label="List_N"];
+    geometry_periodicity_0 [label="Expr_N", fillcolor=salmon2];
+    listof_geometry_paint_stmts [label="List_N"];
+    geometry_paint_stmt_0 [label="GeometryPaintStmt_N"];
+    geometry_paint_stmt_0_nodes_selection [label="NodesSelection_N", fillcolor=magenta];
+    geometry_paint_stmt_0_node_class_id [label="Id_N", fillcolor=springgreen3];
     // END :: Node Definitions //
 
-
     // BEGIN :: Relationships //
-    subgraph cluster_9 {
-        style=filled;
-        color=green;
-        program -> Int_N [label=".gd_version"];
-    }
+    program -> gd_version [xlabel=".gd_version"];
 
-    program -> configuration [label=".configuration"];
-    subgraph cluster_0 {
-        style=filled;
-        color=pink;
-        configuration -> SimulationMetadata_N [label=".simulation_metadata"];
-        subgraph cluster_10 {
-            style=filled;
-            color=green;
-            SimulationMetadata_N -> short_name [label=".short_name"];
-            SimulationMetadata_N -> description [label=".description"];
-        }
-        configuration -> listof_global_constant_decls [label=".global_constants"];
-        listof_global_constant_decls -> constant_decl_0 [label="[0]"];
-    }
-
-    program -> listof_lattice_properties [label=".listof_lattice_properties"];
+    program -> configuration [xlabel=".configuration"];
     subgraph cluster_1 {
         style=filled;
-        color=pink;
-        listof_lattice_properties -> lattice_properties_0 [label="[0]"];
+        color=yellow2;
+        configuration -> SimulationMetadata_N [xlabel=".simulation_metadata"];
+        subgraph cluster_2 {
+            style=filled;
+            SimulationMetadata_N -> short_name [xlabel=".short_name"];
+            SimulationMetadata_N -> description [xlabel=".description"];
+        }
+        configuration -> listof_global_const_decls [xlabel=".global_constants"];
+        listof_global_const_decls -> const_decl_0 [xlabel="\[0\]..."];
     }
 
-    program -> listof_lattice_instances [label=".listof_lattice_instances"];
-    subgraph cluster_2 {
-        style=filled;
-        color=pink;
-        listof_lattice_instances -> lattice_instance_0 [label="[0]"];
-    }
-
-    program -> listof_node_classes [label=".listof_node_classes"];
+    program -> listof_lattice_properties [xlabel=".listof_lattice_properties"];
     subgraph cluster_3 {
         style=filled;
-        color=pink;
-        listof_node_classes -> node_class_0 [label="[0]"];
+        color=yellow2;
+        listof_lattice_properties -> lattice_properties_0 [xlabel="\[0\]..."];
+        lattice_properties_0 -> lattice_properties_0_id [xlabel=".id"];
+        lattice_properties_0 -> lattice_properties_0_listof_const_decls [xlabel="List_N"];
+        lattice_properties_0_listof_const_decls -> lattice_properties_0_const_decl_0 [xlabel="\[0\]..."];
     }
 
-    program -> listof_initializers [label=".listof_initializers"];
+    program -> listof_lattice_instances [xlabel=".listof_lattice_instances"];
     subgraph cluster_4 {
         style=filled;
-        color=pink;
-        listof_initializers -> initializer_0 [label="[0]"];
+        color=yellow2;
+        listof_lattice_instances -> lattice_instance_0 [xlabel="\[0\]..."];
+        lattice_instance_0 -> lattice_instance_0_id [xlabel=".id"];
+        lattice_instance_0 -> lattice_instance_0_properties_id [xlabel=".properties_id"];
+        lattice_instance_0 -> lattice_instance_0_df_type [xlabel=".df_type"];
+        lattice_instance_0 -> lattice_instance_0_df_alias [xlabel=".df_alias"];
     }
 
-    program -> listof_dynamics [label=".listof_dynamics"];
+    program -> listof_node_classes [xlabel=".listof_node_classes"];
     subgraph cluster_5 {
         style=filled;
-        color=pink;
-        listof_dynamics -> dynamic_0 [label="[0]"];
+        color=yellow2;
+        listof_node_classes -> node_class_0 [xlabel="\[0\]..."];
+        node_class_0 -> node_class_0_id [xlabel=".id"];
+        node_class_0 -> node_class_0_listof_initializers [xlabel=".listof_initializers"];
+        node_class_0_listof_initializers -> node_class_0_listof_initializers_initializer_0 [xlabel="\[0\]..."];
+        node_class_0 -> node_class_0_listof_dynamics [xlabel=".listof_dynamics"];
+        node_class_0_listof_dynamics -> node_class_0_listof_dynamics_dynamic_0 [xlabel="\[0\]..."];
+        node_class_0 -> node_class_0_listof_gauges [xlabel=".listof_gauges"];
+        node_class_0_listof_gauges -> node_class_0_listof_gauges_gauge_0 [xlabel="\[0\]..."];
     }
 
-    program -> listof_gauges [label=".listof_gauges"];
+    program -> listof_initializers [xlabel=".listof_initializers"];
     subgraph cluster_6 {
         style=filled;
-        color=pink;
-        listof_gauges -> gauge_0 [label="[0]"];
+        color=yellow2;
+        listof_initializers -> initializer_0 [xlabel="\[0\]..."];
+        initializer_0 -> initializer_0_id [xlabel=".id"];
+        initializer_0 -> initializer_0_listof_const_decls [xlabel=".listof_const_decls"];
+        initializer_0_listof_const_decls -> initializer_0_const_decl_0 [xlabel="\[0\]..."];
+        initializer_0 -> initializer_0_listof_var_decls [xlabel=".listof_var_decls"];
+        initializer_0_listof_var_decls -> initializer_0_var_decl_0 [xlabel="\[0\]..."];
+        initializer_0 -> initializer_0_listof_assignment_stmts [xlabel=".listof_assignment_stmts"];
+        initializer_0_listof_assignment_stmts -> initializer_0_assignment_stmt_0 [xlabel="\[0\]..."];
     }
 
-    program -> listof_functions [label=".listof_functions"];
+    program -> listof_dynamics [xlabel=".listof_dynamics"];
     subgraph cluster_7 {
         style=filled;
-        color=pink;
-        listof_functions -> function_0 [label="[0]"];
+        color=yellow2;
+        listof_dynamics -> dynamic_0 [xlabel="\[0\]..."];
+        dynamic_0 -> dynamic_0_id [xlabel=".id"];
+        dynamic_0 -> dynamic_0_listof_const_decls [xlabel=".listof_const_decls"];
+        dynamic_0_listof_const_decls -> dynamic_0_const_decl_0 [xlabel="\[0\]..."];
+        dynamic_0 -> dynamic_0_listof_var_decls [xlabel=".listof_var_decls"];
+        dynamic_0_listof_var_decls -> dynamic_0_var_decl_0 [xlabel="\[0\]..."];
+        dynamic_0 -> dynamic_0_listof_assignment_stmts [xlabel=".listof_assignment_stmts"];
+        dynamic_0_listof_assignment_stmts -> dynamic_0_assignment_stmt_0 [xlabel="\[0\]..."];
     }
 
+    program -> listof_gauges [xlabel=".listof_gauges"];
     subgraph cluster_8 {
         style=filled;
-        color=pink;
-        program -> Geometry_N;
+        color=yellow2;
+        listof_gauges -> gauge_0 [xlabel="\[0\]..."];
+        gauge_0 -> gauge_0_id [xlabel=".id"];
+        gauge_0 -> gauge_0_output_spec [xlabel=".output_spec"];
+        gauge_0 -> gauge_0_listof_const_decls [xlabel=".listof_const_decls"];
+        gauge_0_listof_const_decls -> gauge_0_const_decl_0 [xlabel="\[0\]..."];
+        gauge_0 -> gauge_0_listof_var_decls [xlabel=".listof_var_decls"];
+        gauge_0_listof_var_decls -> gauge_0_var_decl_0 [xlabel="\[0\]..."];
+        gauge_0 -> gauge_0_listof_assignment_stmts [xlabel=".listof_assignment_stmts"];
+        gauge_0_listof_assignment_stmts -> gauge_0_assignment_stmt_0 [xlabel="\[0\]..."];
+    }
+
+    program -> listof_functions [xlabel=".listof_functions"];
+    subgraph cluster_9 {
+        style=filled;
+        color=yellow2;
+        listof_functions -> function_0 [xlabel="\[0\]..."];
+        function_0 -> function_0_id [xlabel=".id"];
+        function_0 -> function_0_input_spec [xlabel=".input_spec"];
+        function_0 -> function_0_output_spec [xlabel=".output_spec"];
+        function_0 -> function_0_listof_const_decls [xlabel=".listof_const_decls"];
+        function_0_listof_const_decls -> function_0_const_decl_0 [xlabel="\[0\]..."];
+        function_0 -> function_0_listof_var_decls [xlabel=".listof_var_decls"];
+        function_0_listof_var_decls -> function_0_var_decl_0 [xlabel="\[0\]..."];
+        function_0 -> function_0_listof_assignment_stmts [xlabel=".listof_assignment_stmts"];
+        function_0_listof_assignment_stmts -> function_0_assignment_stmt_0 [xlabel="\[0\]..."];
+        function_0 -> function_0_return_expr [xlabel=".return_expr"];
+    }
+
+    program -> geometry [xlabel=".geometry"];
+    subgraph cluster_10 {
+        style=filled;
+        color=yellow2;
+        geometry -> geometry_size [xlabel=".size"];
+        geometry_size -> geometry_size_0 [xlabel="\[0\]..."];
+        geometry -> geometry_periodicity [xlabel=".periodicity"];
+        geometry_periodicity -> geometry_periodicity_0 [xlabel="\[0\]..."];
+        geometry -> listof_geometry_paint_stmts [xlabel=".listof_paint_stmts"];
+        listof_geometry_paint_stmts -> geometry_paint_stmt_0 [xlabel="\[0\]..."];
+        geometry_paint_stmt_0 -> geometry_paint_stmt_0_nodes_selection [xlabel=".nodes_selection"];
+        geometry_paint_stmt_0 -> geometry_paint_stmt_0_node_class_id [xlabel=".node_class_id"];
     }
     // END :: Relationships //
+
+    // BEGIN :: Invisible Edges (for controlling order) //
+    // gd_version -> configuration [style=invis];
+    // configuration -> listof_lattice_properties [style=invis];
+    // listof_lattice_properties -> listof_lattice_instances [style=invis];
+    // listof_lattice_instances -> listof_node_classes [style=invis];
+    // listof_node_classes -> listof_initializers [style=invis];
+    // listof_initializers -> listof_dynamics [style=invis];
+    // listof_dynamics -> listof_gauges [style=invis];
+    // listof_gauges -> listof_functions [style=invis];
+    // listof_functions -> geometry [style=invis];
+    // END :: Invisible Edges (for controlling order) //
 }
