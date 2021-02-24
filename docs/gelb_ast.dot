@@ -1,6 +1,27 @@
 digraph GeLB_AST {
-    size ="200,200";
-    node [shape=box];
+    size ="10,10";
+    graph [
+        pad="0.5",
+        nodesep="0.6",
+        ranksep="1",
+    ];
+    node [
+        shape=box,
+        style=filled,
+        fillcolor="#efefef",
+        fontname=Helvetica,
+        fontsize=12.0,
+        fontcolor="#2b2b2b",
+        height=0.25,
+        width=1,
+        penwidth=0
+    ];
+    edge [
+        arrowhead=normal,
+        arrowsize=0.5,
+        len=0.5,
+        color="#bfbfbf"
+    ];
     rankdir=LR;
     // splines=ortho;
     forcelabels=true;
@@ -26,42 +47,111 @@ digraph GeLB_AST {
     // BEGIN :: Node Definitions //
     program [label="Program_N"];
 
+    short_name [label="String_N"];
+    description [label="String_N"];
+
     listof_lattice_instances [label="List_N"];
     lattice_instance_0 [label="LatticeInstance_N"];
-    lattice_instance_1 [label="LatticeInstance_N"];
 
     listof_node_classes [label="List_N"];
     node_class_0 [label="NodeClass_N"];
-    node_class_1 [label="NodeClass_N"];
 
     configuration [label="Configuration_N"];
+    listof_global_constant_decls [label="List_N"];
+    constant_decl_0 [label="ConstantDecl_N"];
 
     listof_lattice_properties [label="List_N"];
     lattice_properties_0 [label="LatticeProperties_N"];
-    lattice_properties_1 [label="LatticeProperties_N"];
+
+    listof_initializers [label="List_N"];
+    initializer_0 [label="Initializer_N"];
+
+    listof_dynamics [label="List_N"];
+    dynamic_0 [label="Dynamic_N"];
+
+    listof_gauges [label="List_N"];
+    gauge_0 [label="Gauge_N"];
+
+    listof_functions [label="List_N"];
+    function_0 [label="Function_N"];
     // END :: Node Definitions //
 
 
     // BEGIN :: Relationships //
-    program -> Int_N [label=".gd_version"];
+    subgraph cluster_9 {
+        style=filled;
+        color=green;
+        program -> Int_N [label=".gd_version"];
+    }
+
     program -> configuration [label=".configuration"];
+    subgraph cluster_0 {
+        style=filled;
+        color=pink;
+        configuration -> SimulationMetadata_N [label=".simulation_metadata"];
+        subgraph cluster_10 {
+            style=filled;
+            color=green;
+            SimulationMetadata_N -> short_name [label=".short_name"];
+            SimulationMetadata_N -> description [label=".description"];
+        }
+        configuration -> listof_global_constant_decls [label=".global_constants"];
+        listof_global_constant_decls -> constant_decl_0 [label="[0]"];
+    }
 
     program -> listof_lattice_properties [label=".listof_lattice_properties"];
-    listof_lattice_properties -> lattice_properties_0 [label="[0]"];
-    listof_lattice_properties -> lattice_properties_1 [label="[1]"];
+    subgraph cluster_1 {
+        style=filled;
+        color=pink;
+        listof_lattice_properties -> lattice_properties_0 [label="[0]"];
+    }
 
     program -> listof_lattice_instances [label=".listof_lattice_instances"];
-    listof_lattice_instances -> lattice_instance_0 [label="[0]"];
-    listof_lattice_instances -> lattice_instance_1 [label="[1]"];
+    subgraph cluster_2 {
+        style=filled;
+        color=pink;
+        listof_lattice_instances -> lattice_instance_0 [label="[0]"];
+    }
 
     program -> listof_node_classes [label=".listof_node_classes"];
-    listof_node_classes -> node_class_0 [label="[0]"];
-    listof_node_classes -> node_class_1 [label="[1]"];
+    subgraph cluster_3 {
+        style=filled;
+        color=pink;
+        listof_node_classes -> node_class_0 [label="[0]"];
+    }
 
-    program -> InitializerASTNode;
-    program -> DynamicASTNode;
-    program -> GaugeASTNode;
-    program -> FunctionASTNode;
-    program -> GeometryASTNode;
+    program -> listof_initializers [label=".listof_initializers"];
+    subgraph cluster_4 {
+        style=filled;
+        color=pink;
+        listof_initializers -> initializer_0 [label="[0]"];
+    }
+
+    program -> listof_dynamics [label=".listof_dynamics"];
+    subgraph cluster_5 {
+        style=filled;
+        color=pink;
+        listof_dynamics -> dynamic_0 [label="[0]"];
+    }
+
+    program -> listof_gauges [label=".listof_gauges"];
+    subgraph cluster_6 {
+        style=filled;
+        color=pink;
+        listof_gauges -> gauge_0 [label="[0]"];
+    }
+
+    program -> listof_functions [label=".listof_functions"];
+    subgraph cluster_7 {
+        style=filled;
+        color=pink;
+        listof_functions -> function_0 [label="[0]"];
+    }
+
+    subgraph cluster_8 {
+        style=filled;
+        color=pink;
+        program -> Geometry_N;
+    }
     // END :: Relationships //
 }
