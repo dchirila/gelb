@@ -91,7 +91,10 @@ digraph GeLB_AST {
 
     configuration [label="Configuration_N"];
     listof_global_const_decls [label="List_N"];
-    const_decl_0 [label="ConstantDeclaration_N", fillcolor=salmon2];
+    global_const_decl_0 [label="ConstantDeclaration_N", fillcolor=salmon2];
+    global_const_decl_0_dtype [label="DType_N", fillcolor=magenta];
+    global_const_decl_0_lhs [label="Id_N", fillcolor=springgreen3];
+    global_const_decl_0_rhs [label="Expr_N", fillcolor=salmon2];
 
     listof_lattice_properties [label="List_N"];
     lattice_properties_0 [label="LatticeProperties_N"];
@@ -185,7 +188,10 @@ digraph GeLB_AST {
             SimulationMetadata_N -> description [xlabel=".description"];
         }
         configuration -> listof_global_const_decls [xlabel=".global_constants"];
-        listof_global_const_decls -> const_decl_0 [xlabel="\[0\]..."];
+        listof_global_const_decls -> global_const_decl_0 [xlabel="\[0\]..."];
+        global_const_decl_0 -> global_const_decl_0_dtype [xlabel=".dtype"];
+        global_const_decl_0 -> global_const_decl_0_lhs [xlabel=".lhs_id"];
+        global_const_decl_0 -> global_const_decl_0_rhs [xlabel=".rhs_expr"];
     }
 
     program -> listof_lattice_properties [xlabel=".listof_lattice_properties"];
