@@ -208,8 +208,31 @@ Among the most notable restrictions, we mention:
   algorithms into future versions of GeLB.
 
 
+
 Revisions w.r.t. my PhD thesis
 ==============================
+
+* In the `geometry` block, only rectangular node-selections are allowed, using
+  the `nodes` statement (which is equivalent to the `node_range` statements in
+  the thesis). The `node` statement is not needed (because it is just a special
+  case of `nodes`), and the `read_geometry_from_file` statement needs more
+  testing (will be added back soon).
+
+* To avoid imposing one more constraint on the users, it is now possible to
+  specify more than one `initializer` for each node-class. In the thesis, only
+  one initializer was allowed for each node-class.
+
+* The `size` and `periodicity` of the lattice(s) are now specified during
+  lattice-instantiation (inside the `lattices` block). In the thesis, these
+  were specified within the `geometry` block.
+
+* The `gauge` out-specs and `function` {in,out}-specs are now given using
+  parentheses (instead of square brackets), to bring the syntax closer to
+  that of other programming languages.
+
+* When specifying size & periodicity of the lattice(s), I think it is more
+  natural to specify these during lattice-instantiation, so that we can have
+  two lattices with different sizes & periodicity traits.
 
 * The syntax for declaring *constant types* has changed slightly. Whereas in the
   thesis I was relying on the `_const` suffix, which was appended to the scalar
@@ -221,3 +244,24 @@ Revisions w.r.t. my PhD thesis
 
   * `const array<int, {2, 2} I = {{1, 0}, {0, 1}};` to declare and initialize a
     constant array of integers.
+
+
+Upcoming features
+=================
+
+* `gauge` blocks:
+
+  * support more than one out-spec
+
+* `function` blocks:
+
+  * support more than one {in & out}-spec
+
+* `geometry` block:
+
+  * re-introduce the `read_geometry_from_file` statement in the `geometry` block
+
+  * extend the `nodes` statement, to allow selection of nodes based on
+    arbitrary conditions (which produce a `bool` result, based on expressions
+    involving the node coordinates); this would allow us to specify shapes
+    such as spheres and cylinders within the GD-files
