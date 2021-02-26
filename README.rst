@@ -97,7 +97,13 @@ Please visit the GeLB.site_ for more in-depth documentation.
 Main features
 =============
 
-TODO (see example from HTTPie).
+- Compiler for the GeLB description (GD) language, which allows you to quickly write simulations based on the lattice Boltzmann method (LBM) or finite differences (FD)
+
+- Expressive and intuitive syntax
+
+- Built-in sanity checks (at *compile-time*) which prevent many types of bugs common in LBM implementations
+
+- Automatic generation of GPU code (using OpenCL)
 
 
 Installation
