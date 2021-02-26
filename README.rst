@@ -83,7 +83,15 @@ remember what fluid dynamics problem he was working on to start with :).
 About this document
 ===================
 
-TODO (see example from HTTPie).
+This document only provides:
+
+- a (very) high-level overview of GeLB and 
+
+- some instructions on installing it.
+
+Please visit the GeLB.site_ for more in-depth documentation.
+
+.. _GeLB.site: https://www.gelb.site/
 
 
 Main features
