@@ -11,7 +11,8 @@ configuration {         //
 }
 
 lattices { //
-  lattice f(D = 2, Q = 1, df_type = bool);
+  lattice f(D = 2, Q = 1, df_type = bool, size = {40, 40},
+            periodicity = {true, true});
 }
 
 node_classes {
@@ -44,10 +45,10 @@ dynamic LifeEvolve {
                     ((!f.in[x, y | 0]) && genesis[neighborSum]);
 }
 
-gauge CellStatus[out(bool status)] { //
+gauge CellStatus(out(bool status)) { //
   status = f.in[x, y | 0];
 }
 
-geometry(size = {40, 40}, periodicity = {true, true}) { //
+geometry { //
   nodes[:, :] = BULK;
 }
