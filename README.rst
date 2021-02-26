@@ -162,21 +162,20 @@ Among the most notable restrictions, we mention:
   those particular nodes to that category inside the `Geometry` block.
 
 - All user-defined functions should be "pure", by which we mean that:
+
   - they should have a single return point, and
-  - their return value should only depend on its input values, without
-    side-effects.
 
-  In other words, GD functions work similar to functions in mathematics (no
-  local state, generation of output, asking for user input, etc.).
+  - their return value should only depend on its input values, without side-effects.
 
-  This limitation also implies that a `Function` cannot *directly* access the
-  lattice state. However, it *is* allowed to:
+    In other words, GD functions work similar to functions in mathematics (no
+    local state, generation of output, asking for user input, etc.).
 
-  - *write* to the lattice state the result of a `Function` call (within an
-  `Initializer` or a `Dynamic`), as well as to
+    This limitation also implies that a `Function` cannot *directly* access
+    the lattice state. However, it *is* allowed to:
 
-  - pass to a `Function` data which was *read* from the lattice state (within a
-    `Dynamic` or a `Gauge`).
+    - *write* to the lattice state the result of a `Function` call (within an `Initializer` or a `Dynamic`), as well as to
+
+    - pass to a `Function` data which was *read* from the lattice state (within a `Dynamic` or a `Gauge`).
 
 - No support for recursive functions (although such functions are also not
   forbidden, they may lead to sub-optimal performance or even undefined behavior
