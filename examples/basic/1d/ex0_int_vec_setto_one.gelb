@@ -1,0 +1,23 @@
+lattices { //
+  lattice f(D = 1, Q = 1, df_type = int, size = {32}, periodicity = {false});
+}
+
+initializer SetDFsToZero { //
+  f.out[x | 0] = 0;
+}
+
+dynamic SetDFsToOne { //
+  f.out[x | 0] = 1;
+}
+
+gauge CurrentState[out(int state)] { //
+  state = f.in[x | 0];
+}
+
+node_classes { //
+  node_class BULK(SetDFsToZero, SetDFsToOne, CurrentState);
+}
+
+geometry { //
+  nodes[:] = BULK;
+}
