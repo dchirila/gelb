@@ -1,13 +1,13 @@
 lexer grammar CommonLexerRules;
 
-// // GD Keywords
+// // GeLB Keywords
 // DOT_PRODUCT : 'DotProduct' ;
 // VEC_PRODUCT : 'VectorProduct' ;
 // UP_STREAM_DF : 'UpStreamDF' ;
 // DOWN_STREAM_DF : 'DownStreamDF' ;
 // OPPOSITE_DF : 'OppositeDF' ;
 
-GD_VERSION : 'gd_version' ;
+GELB_VERSION : 'gelb_version' ;
 // CONFIGURATION : 'configuration' ;
 // SIMULATION_METADATA : 'simulation_metadata' ;
 // SHORT_NAME : 'short_name' ;
@@ -58,9 +58,9 @@ DIGIT : ZERO_DIGIT | NON_ZERO_DIGIT ;
 fragment NON_ZERO_DIGIT : '1'..'9' ;
 fragment ZERO_DIGIT : '0' ;
 
-// /* STRINGs-rule (valid for {single, multi}-line strings)
-//    NOTE: to simplify things, we only allow strings marked by DOUBLE-quotes
-//          (unlike Python, which also allows strings marked by SINGLE-quotes) */
+ /* STRINGs-rule (valid for {single, multi}-line strings)
+    NOTE: to simplify things, we only allow strings marked by DOUBLE-quotes
+          (unlike Python, which also allows strings marked by SINGLE-quotes) */
 // STRING : '"' (~[\\"] | '\\' [\\"()])* '"' ;
 
 // // Comments (to IGNORE)

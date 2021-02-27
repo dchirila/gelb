@@ -1,7 +1,5 @@
 * install python3-pep8 & check all Py-files here automatically
 
-* configure Spacemacs, s.t. it runs pep8 automatically (e.g. when Python files are saved)
-
 * Document how to create the environment (requirements.txt?)
 ** e.g. using Conda, something like:
    conda create -n gelb python=3.8 numpy=TODO sympy=TODO antlr4-python3-runtime=TODO ipython=TODO
@@ -15,10 +13,10 @@ UN-SORTED TODOs
   (b) close those browser tabs
 
 
-* Fix =array_data_type= (grammar rule @=GD.g4=)
+* Fix =array_data_type= (grammar rule @=GeLB.g4=)
      |
      V
-* Fix =list_literal= (grammar rule @=GD.g4=)
+* Fix =list_literal= (grammar rule @=GeLB.g4=)
      |
      V
-* implement =expr= (grammar rule @=GD.g4=)
+* implement =expr= (grammar rule @=GeLB.g4=)

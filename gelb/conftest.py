@@ -8,14 +8,14 @@ import subprocess
 
 
 def cleanup_antlr4_generated_files(output_dir):
-    subprocess.run(["rm", "-f", output_dir / "GD.interp"])
-    subprocess.run(["rm", "-f", output_dir / "GD.tokens"])
-    subprocess.run(["rm", "-f", output_dir / "GDLexer.interp"])
-    subprocess.run(["rm", "-f", output_dir / "GDLexer.py"])
-    subprocess.run(["rm", "-f", output_dir / "GDLexer.tokens"])
-    subprocess.run(["rm", "-f", output_dir / "GDParser.py"])
-    subprocess.run(["rm", "-f", output_dir / "GDListener.py"])
-    subprocess.run(["rm", "-f", output_dir / "GDVisitor.py"])
+    subprocess.run(["rm", "-f", output_dir / "GeLB.interp"])
+    subprocess.run(["rm", "-f", output_dir / "GeLB.tokens"])
+    subprocess.run(["rm", "-f", output_dir / "GeLBLexer.interp"])
+    subprocess.run(["rm", "-f", output_dir / "GeLBLexer.py"])
+    subprocess.run(["rm", "-f", output_dir / "GeLBLexer.tokens"])
+    subprocess.run(["rm", "-f", output_dir / "GeLBParser.py"])
+    subprocess.run(["rm", "-f", output_dir / "GeLBListener.py"])
+    subprocess.run(["rm", "-f", output_dir / "GeLBVisitor.py"])
 
 def pytest_sessionstart(session):
     """
@@ -39,12 +39,12 @@ def pytest_sessionstart(session):
                     returncode=2)
 
     # invoke the ANTLR4 Java tool (to generate {Lexer, Parser, Visitor} from the grammar)
-    ## infer the path to the GeLB Description (GD) language grammar
+    ## infer the path to the GeLB language grammar
     grammar_dir = pathlib.Path(__file__).parent / 'antlr4' / 'grammars'
     output_dir = pathlib.Path(__file__).parent / 'antlr4' / 'generated_code'
-    grammar_path = grammar_dir / "GD.g4"
+    grammar_path = grammar_dir / "GeLB.g4"
     if not grammar_path.is_file():
-        pytest.exit("<<<GeLB:ERROR>>> GD.g4 grammar file not found", returncode=3)
+        pytest.exit("<<<GeLB:ERROR>>> GeLB.g4 grammar file not found", returncode=3)
     cleanup_antlr4_generated_files(output_dir)  # to be on the safe side
     ## invoke ANTLR4 Java tool
     antlr4_tool_stat = subprocess.run(["java",

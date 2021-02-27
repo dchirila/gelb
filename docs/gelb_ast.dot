@@ -67,7 +67,7 @@ digraph GeLB_AST {
     
     // BEGIN :: Node Definitions //
     program [label="Program_N"];
-    gd_version [label="Int_N"];
+    gelb_version [label="Int_N"];
 
     short_name [label="String_N"];
     description [label="String_N"];
@@ -187,7 +187,7 @@ digraph GeLB_AST {
     // END :: Node Definitions //
 
     // BEGIN :: Relationships //
-    program -> gd_version [xlabel=".gd_version"];
+    program -> gelb_version [xlabel=".gelb_version"];
 
     program -> configuration [xlabel=".configuration"];
     subgraph cluster_1 {
@@ -343,16 +343,4 @@ digraph GeLB_AST {
         geometry_paint_stmt_0 -> geometry_paint_stmt_0_node_class_id [xlabel=".node_class_id"];
     }
     // END :: Relationships //
-
-    // BEGIN :: Invisible Edges (for controlling order) //
-    // gd_version -> configuration [style=invis];
-    // configuration -> listof_lattice_properties [style=invis];
-    // listof_lattice_properties -> listof_lattice_instances [style=invis];
-    // listof_lattice_instances -> listof_node_classes [style=invis];
-    // listof_node_classes -> listof_initializers [style=invis];
-    // listof_initializers -> listof_dynamics [style=invis];
-    // listof_dynamics -> listof_gauges [style=invis];
-    // listof_gauges -> listof_functions [style=invis];
-    // listof_functions -> geometry [style=invis];
-    // END :: Invisible Edges (for controlling order) //
 }

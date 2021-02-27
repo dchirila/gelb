@@ -2,20 +2,26 @@
 GeLB developer manual
 =====================
 
-Running the tests:
+* How to import the conda environment from ``gelb.yml``:
+  TODO
 
-cd $GELB_REPO_ROOT/gelb
-pytest
+* How to run the tests:
+
+  ``cd $GELB_REPO_ROOT/gelb``
+
+  ``conda activate gelb``
+
+  ``pytest``
 
 
-Exporting the conda environment to ``gelb.yml``:
+* How to export the conda environment to ``gelb.yml`` (in case you install other packages within the environment):
 
-conda env export --name gelb > gelb.yml
+  ``conda env export --name gelb > gelb.yml``
 
 
-Render RST files to HTML:
+* How to render RST files to HTML:
 
-rst2html.py FILE.rst FILE.html
+  ``rst2html.py FILE.rst FILE.html``
 
 
 Abstract Syntax Tree (AST)
@@ -49,19 +55,24 @@ Types of Nodes in the GeLB AST
 ==============================
 
 NOTEs:
+
 - All AST Nodes inherit from the **Node** class, which has:
+
   - Attributes:
+
     - start
     - end
 
-      NOTE: {start, end} are positions in the original input-stream, which allow
-      us to provide more informative error-messages
+    NOTE: {start, end} are positions in the original input-stream, which
+    allow us to provide more informative error-messages
 
   - Methods:
+
     - TODO
 
 - **Program**
-  - gd_version -> **NumIntLit**
+
+  - gelb_version -> **NumIntLit**
   - configuration -> **Configuration**
   - lattice_properties -> **List** (**LatticeProperties**)
   - lattices -> **List** (**Lattice** )

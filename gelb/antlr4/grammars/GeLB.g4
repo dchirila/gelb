@@ -1,14 +1,14 @@
-grammar GD;
+grammar GeLB;
 import CommonLexerRules;
 
-gd_program :
-        gd_version_stmt
+gelb_program :
+        gelb_version_stmt
         // configuration_block
         // lattice_properties_block
         // lattices_block
         EOF ;
 
-gd_version_stmt : GD_VERSION OP_ASSIGN NON_NEGATIVE_INT SEMICOLON ;
+gelb_version_stmt : GELB_VERSION OP_ASSIGN NON_NEGATIVE_INT SEMICOLON ;
 
 // configuration_block : CONFIGURATION LCURLY
 //         simulation_metadata_sub_block

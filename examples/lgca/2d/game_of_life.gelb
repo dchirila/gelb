@@ -1,4 +1,4 @@
-gd_version = 1;
+gelb_version = 1;
 
 configuration {         //
   simulation_metadata { //

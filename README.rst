@@ -97,7 +97,7 @@ Please visit the GeLB.site_ for more in-depth documentation.
 Main features
 =============
 
-- Compiler for the GeLB description (GD) language, which allows you to quickly write simulations based on the lattice Boltzmann method (LBM) or finite differences (FD)
+- Compiler for the GeLB language, which allows you to quickly write simulations based on the lattice Boltzmann method (LBM) or finite differences (FD)
 
 - Expressive and intuitive syntax
 
@@ -131,10 +131,10 @@ its dependencies is to use Anaconda.
     ``conda env create --file gelb.yml``
 
 
-Limitations of the GD language
-==============================
+Limitations of the GeLB language
+================================
 
-Compared to most general-purpose languages (GPLs), the GD language imposes
+Compared to most general-purpose languages (GPLs), the GeLB language imposes
 several restrictions. While a few of these restrictions were chosen because they
 would have delayed the release of the software, most of the restrictions are
 actually intentional, s.t. the GeLB compiler has the best chance of producing
@@ -145,14 +145,14 @@ will miss, in which case they are encouraged to contact the authors -- if many
 users miss a particular feature, we will try to add it to a future version of
 the language. Of course, users who are comfortable with compiler frameworks may
 also implement such additional features themselves. However, to prevent
-fragmentation of the language (and to ensure that GD programs are easily
+fragmentation of the language (and to ensure that GeLB programs are easily
 interchangeable), we encourage you to submit a GitHub pull request (PR) if you
 have implemented a feature which would be useful to the rest of the community.
 Contributors are strongly encouraged to also read the *GeLB developer manual*.
 
 Among the most notable restrictions, we mention:
 
-- No `print` statement. The only way to generate output from a GD program is to
+- No `print` statement. The only way to generate output from a GeLB program is to
   use a `Gauge`. For a future version of the language, we are planning to add
   additional mechanisms to generate output (e.g. for monitoring simulations, or
   for making debugging easier).
@@ -181,7 +181,7 @@ Among the most notable restrictions, we mention:
 
   - their return value should only depend on its input values, without side-effects.
 
-    In other words, GD functions work similar to functions in mathematics (no
+    In other words, GeLB functions work similar to functions in mathematics (no
     local state, generation of output, asking for user input, etc.).
 
     This limitation also implies that a `Function` cannot *directly* access
@@ -208,9 +208,32 @@ Among the most notable restrictions, we mention:
   algorithms into future versions of GeLB.
 
 
+High-level concepts and revisions w.r.t. my PhD thesis
+======================================================
 
-Revisions w.r.t. my PhD thesis
-==============================
+If you have never heard about GeLB before, I recommend to read through the
+GeLB paper TODO:insert-url-to-paper. After that, head to the GeLB.site_, for
+more in-depth information and tutorials.
+
+The GeLB framework was first mentioned in my PhD thesis
+TODO:insert-url-to-thesis (Chapter 4). In case you read that discussion and
+it piqued your interest, I am honored and humbled. In that write-up, I
+briefly described the most important concepts of the language, which have
+remained stable. That said, GeLB has evolved slightly from that initial
+implementation (used for generating the results in my thesis). The most
+important changes are listed below:
+
+* The first obvious change concerns the naming of the text files containing
+  user-written code to be processed by the GeLB compiler. In the thesis, I
+  was referring to these as "GeLB Description (GD) programs/files". However,
+  it turns out that there is no reason to burden the users with two acronyms
+  ("GeLB" and "GD"). Also, the file extension `.gd` is already taken by other
+  programming languages, which can create confusion. So, the decision has
+  been made to replace all mentions of "GD" with "GeLB" within the
+  documentation. Accordingly, the documentation now refers to "GeLB
+  programs", which are stored in "GeLB files", which have the `.gelb` file
+  extension. It is a trivial change which, however, hopefully saves you (and
+  me) some time later.
 
 * In the `geometry` block, only rectangular node-selections are allowed, using
   the `nodes` statement (which is equivalent to the `node_range` statements in
@@ -264,4 +287,13 @@ Upcoming features
   * extend the `nodes` statement, to allow selection of nodes based on
     arbitrary conditions (which produce a `bool` result, based on expressions
     involving the node coordinates); this would allow us to specify shapes
-    such as spheres and cylinders within the GD-files
+    such as spheres and cylinders within the GeLB files
+
+
+Using GeLB in your work
+=======================
+
+If you have used GeLB to obtain some published results, I would appreciate if
+you could cite the paper TODO:ref-paper. Also, I would like to hear from you,
+to start a conversation about which features you consider most important for
+the future releases.
