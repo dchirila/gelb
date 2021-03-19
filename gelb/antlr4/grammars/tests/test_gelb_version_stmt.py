@@ -8,6 +8,20 @@ import antlr4 as a4
 from gelb.antlr4.generated_code.GeLBLexer import GeLBLexer
 from gelb.antlr4.generated_code.GeLBParser import GeLBParser
 from gelb.antlr4.generated_code.GeLBVisitor import GeLBVisitor
+from gelb.ASTNodes import *
+
+
+"""TODO: move to =stage1_frontend.py="""
+def GeLBASTGeneratorVisitor(GeLBVisitor):
+    def __init__(self, ctx:GeLBParser.Gelb_programContext):
+        pass
+
+    def visitGelb_program(self, ctx:GeLBParser.Gelb_programContext):
+        return Program_N()
+
+    def visitGelb_version_stmt(self, ctx:GeLBParser.Gelb_version_stmtContext):
+        print(ctx)
+        return IntLiteral_N(TODO)
 
 
 def test_zero():
@@ -17,6 +31,8 @@ def test_zero():
     stream = a4.CommonTokenStream(lexer)
     parser = GeLBParser(stream)
     tree = parser.gelb_version_stmt()
+    print("<<<DEBUG>>>", type(tree))
+    raise AssertionError
     # Act (trigger parsing)
     result = tree.toStringTree(recog=parser)
     # Assert (test the parse tree)

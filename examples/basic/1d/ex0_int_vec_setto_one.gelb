@@ -1,5 +1,11 @@
-lattices { //
-  lattice f(D = 1, Q = 1, df_type = int, size = {32}, periodicity = {false});
+gelb_version = 1;
+
+lattices {
+  lattice f(1,        // d
+            1,        // q
+            int,      // df_type
+            {32},     // size
+            {false}); // periodicity
 }
 
 initializer SetDFsToZero { //
@@ -10,7 +16,7 @@ dynamic SetDFsToOne { //
   f.out[x | 0] = 1;
 }
 
-gauge CurrentState[out(int state)] { //
+gauge CurrentState(out(int state)) { //
   state = f.in[x | 0];
 }
 

@@ -10,9 +10,9 @@ dynamic IncrementDFs { //
   f.out[x | 0] = f.in[x | 0] + 1;
 }
 
-gauge CurrentState[out(int state)] { //
-                    state = f.in[x | 0];
-                  }
+gauge CurrentState(out(int state)) { //
+  state = f.in[x | 0];
+}
 
 node_classes { //
   node_class BULK(SetDFsToZero, IncrementDFs, CurrentState);

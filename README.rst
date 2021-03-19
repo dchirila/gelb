@@ -208,6 +208,31 @@ Among the most notable restrictions, we mention:
   algorithms into future versions of GeLB.
 
 
+Names and reserved keywords
+===========================
+
+Valid GeLB names (identifiers) for user-defined entities (variables,
+constants, lattices, initializers, dynamics, gauges, node-classes, etc.)
+consist of a sequence of letters, digits and underscores (`_`).
+
+.. warning:: The first character of a name *has* to be a letter.
+
+The following words are reserved, and may not be used for naming user-defined
+entities: `x`, `y`, `z` (which refer to the coordinates of the current node),
+`lattice`, `lattices`, `int`, `true`, `false`, `initializer`, `dynamic`,
+`gauge`, `in`, `out`, `node_classes`, `node_class`, `geometry`, `nodes`
+
+TODO: Add keywords above, as they are added back to `CommonLexerRules.g4`.
+
+GeLB names *are* case-sensitive, so `myvar` and `myVar` are treated as
+different names (although it is, of course, *not* recommended to introduce
+names which look so similar, due to readability concerns).
+
+In general, try to choose names which describe the meaning of the entity, and
+to be as consistent as possible with your naming scheme (e.g. adopt either
+`camelCaseNames` or `underscore_separated_names`).
+
+
 High-level concepts and revisions w.r.t. my PhD thesis
 ======================================================
 

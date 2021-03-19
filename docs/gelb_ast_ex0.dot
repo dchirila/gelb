@@ -67,12 +67,12 @@ digraph GeLB_AST {
     
     // BEGIN :: Node Definitions //
     program [label="Program_N"];
-    gelb_version [label="Int_N"];
+    gelb_version [label="IntLiteral_N"];
 
     short_name [label="String_N"];
     description [label="String_N"];
 
-    configuration [label="Configuration_N"];
+    configuration [label="GlobalConfig_N"];
     simulation_metadata [label="SimulationMetadata_N"];
     listof_global_const_decls [label="List_N"];
     global_const_decl_0 [label="ConstantDeclaration_N"];
