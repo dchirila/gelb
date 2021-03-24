@@ -1,6 +1,6 @@
 {
 	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-	"name": "GeLB",
+	"name": "GeLB Programming Language",
 	"patterns": [
 		{
 			"include": "#keywords"
@@ -12,8 +12,8 @@
 	"repository": {
 		"keywords": {
 			"patterns": [{
-				"name": "keyword.control.gelb",
-				"match": "\\b(if|while|for|return)\\b"
+				"name": "keyword.gelb",
+				"match": "\\b(array|bool|configuration|const|constants|d|description|df_type|dynamic|false|gauge|gelb_version|geometry|in|initializer|int|lattice|lattices|node_class|node_classes|nodes|out|periodicity|q|real|short_name|simulation_metadata|size|true|x|y|z)\\b"
 			}]
 		},
 		"strings": {
