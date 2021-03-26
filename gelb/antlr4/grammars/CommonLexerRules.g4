@@ -19,6 +19,7 @@ INT: 'int';
 BOOL: 'bool';
 TRUE: 'true';
 FALSE: 'false';
+REAL: 'real';
 // // END: Keywords for GeLB data-types // //
 
 INITIALIZER: 'initializer';
@@ -69,9 +70,6 @@ VERT: '|';
 COMMA: ',';
 DOT: '.';
 
-// Identifier (i.e. names for user-defined entities)
-// ID : LETTER (LETTER | DIGIT | '_')* ;
-
 // Literals
 INT_LITERAL: '0' | [1-9][0-9]* ;
 
@@ -80,7 +78,6 @@ INT_LITERAL: '0' | [1-9][0-9]* ;
 NON_NEGATIVE_INTEGER: DIGIT+ ;
 fragment DIGIT: [0-9] ;
 
-// fragment LETTER : [a-zA-Z] ;
 
 /* STRINGs-rule (valid for {single, multi}-line strings) NOTE: to simplify things, we only allow
  strings marked by DOUBLE-quotes (unlike Python, which also allows strings marked by SINGLE-quotes)
@@ -139,8 +136,6 @@ SEMICOLON : ';' ;
 // LCURLY : '{' ;
 // RCURLY : '}' ;
 
-// fragment LETTER : [a-zA-Z] ;
-
 // ID : LETTER (LETTER | DIGIT | '_')* ;
 
 // // Numbers
@@ -157,6 +152,11 @@ fragment ZERO_DIGIT : '0' ;
 // // Comments (to IGNORE)
 // SINGLE_LINE_COMMENT : '//' ~[\r\n]* '\r'? '\n' -> channel(HIDDEN);
 // MULTI_LINE_COMMENT : '/*' .*? '*/' -> channel(HIDDEN);
+
+// Identifier (i.e. names for user-defined entities)
+ID : [a-zA-Z_] [a-zA-Z0-9_]* ;
+
+fragment LETTER : [a-zA-Z] ;
 
 // Whitespace (to IGNORE)
 WS : [ \r\t\u000C\n]+ -> channel(HIDDEN);
