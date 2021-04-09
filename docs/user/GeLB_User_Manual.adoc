@@ -1,4 +1,4 @@
-= GeLB User Manual
+= GeLB User's Manual
 :author: Dragos-Bogdan Chirila
 :email: dchirila@gmail.com
 :homepage: https://gelb.site
@@ -26,7 +26,14 @@ to:
 . compile the `.gelb` files into executable programs, and
 . execute the simulations on their target machines.
 
-If you want to contribute to GeLB, please read the ...
+If you want to contribute to GeLB, we recommend to: 
+
+. **First**, familiarize yourself with the basic concepts of GeLB, by reading
+this manual.
+. Read the link:../dev/ARCHITECTURE.md[ARCHITECTURE.md] file, to get a
+high-level overview of how GeLB works under the hood.
+. Read the link:../dev/GeLB_Developer_Guide.adoc[GeLB Developer's Guide], for
+more developer-oriented information.
 
 TODO: insert link to the GeLB Developer's Guide
 
