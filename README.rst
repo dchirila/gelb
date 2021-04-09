@@ -2,10 +2,6 @@
 GeLB: GEneric Lattice Boltzmann framework from the future
 =========================================================
 
-GeLB is a framework which allows you to quickly create numerical simulations
-based on the Lattice Boltzmann (LB) method, using a high-level description of
-your simulation.
-
 In essence, the GeLB framework provides:
 
 * a domain-specific language (DSL), aiming to make LB researchers and tinkerers
@@ -104,6 +100,12 @@ Main features
 - Built-in sanity checks (at *compile-time*) which prevent many types of bugs common in LBM implementations
 
 - Automatic generation of GPU code (using OpenCL)
+
+
+NON features
+============
+
+- `NULL` and `NA` support
 
 
 Installation

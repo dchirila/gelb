@@ -1,0 +1,43 @@
+= GeLB User Manual
+:author: Dragos-Bogdan Chirila
+:email: dchirila@gmail.com
+:homepage: https://gelb.site
+Version 0.1, 9.4.2021
+:sectnums:
+:toc:
+:toclevels: 4
+
+:keywords: GeLB, LB, LBM, FD
+:imagesdir: ./img
+
+
+GeLB is a domain-specific programming language (DSL), which allows you to
+quickly create numerical simulations based on the lattice Boltzmann (LB) method,
+by writing a high-level description of your simulation. In essence, GeLB
+consists of:
+
+. the specification of the DSL, and
+. support tools for the DSL (reference compiler, editor/IDE plugins, etc.)
+
+This manual focuses on the basic knowledge required for _users_ of the software,
+to: 
+
+. write their simulations (in `.gelb` files),
+. compile the `.gelb` files into executable programs, and
+. execute the simulations on their target machines.
+
+If you want to contribute to GeLB, please read the ...
+
+TODO: insert link to the GeLB Developer's Guide
+
+and especially the
+
+TODO: inset link to the ARCHITECTURE.md file
+
+== Introduction
+
+TODO
+
+== Second section
+
+TODO
