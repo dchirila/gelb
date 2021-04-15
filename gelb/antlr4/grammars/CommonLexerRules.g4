@@ -1,5 +1,59 @@
 lexer grammar CommonLexerRules;
 
+// BEGIN: lexemes @ex0 _int_vec_setto_ne.gelb //
+/*
+
+// operators
+=
+
+// integer literals
+1
+0
+32
+
+// brackets
+(
+)
+[
+]
+{
+}
+
+// punctuation
+.
+,
+;
+|
+
+// keywords
+gelb_version
+lattices
+lattice
+int
+true
+false
+initializer
+out
+in
+x
+dynamic
+gauge
+node_classes
+node_class
+geometry
+nodes
+
+// Identifiers
+f
+SetDFsToZero
+SetDFsToOne
+CurrentState
+state
+BULK
+*/
+
+// END: lexemes @ex0 _int_vec_setto_ne.gelb //
+
 // BEGIN: GeLB Keywords //
 
 GELB_VERSION: 'gelb_version';
