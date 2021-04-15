@@ -44,16 +44,17 @@ TODO
 == Main abstractions / concepts of the GeLB language
 
 
-=== `lattice`(s): the main data-structure(s)
+=== Lattice(s): the main data-structure(s)
 
-All GeLB programs are centered on (at least one) `lattice` data-structure. A
-`lattice` is basically a (one-, two-, or three-dimensional) cartesian grid of
-`node`s. Each `node` has a state-vector attached to it (the length of the
-state-vector being a constant for the whole lattice). To use LB terminology,
-each element of the state-vector represents a node-local distribution
-function (DF), with *indexing starting at zero*. As we will discuss later,
-each `node` will need to be assigned to a `node_class` (think of "painting"
-the `lattice` using different colors).
+All GeLB programs are centered on (at least one) lattice data-structure.
+A lattice is basically a (one-, two-, or three-dimensional) cartesian grid of
+node(s).
+Each node has a state-vector attached to it (where *the length of the state-vector
+is a constant for the whole lattice*).
+To use LB terminology, each element of the state-vector represents a
+node-local distribution function (DF), with *indexing starting at zero*.
+As we will discuss later, each `node` will need to be assigned to a
+`node_class` (think of "painting" the `lattice` using different colors).
 
 ==== `lattice` input/output (I/O) ports
 
