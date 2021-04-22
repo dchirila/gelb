@@ -4,7 +4,7 @@ lexer grammar CommonLexerRules;
 /*
 
 // operators
-=
+OP_ASSIGN: '='
 
 // integer literals
 1
@@ -61,11 +61,11 @@ LATTICES: 'lattices';
 LATTICE: 'lattice';
 
 // // BEGIN: Keywords for intrinsic GeLB functions // //
-DOT_PRODUCT : 'dot_product' ;
-VEC_PRODUCT : 'vector_product' ;
-UP_STREAM_DF : 'up_stream_df' ;
-DOWN_STREAM_DF : 'down_stream_df' ;
-OPPOSITE_DF : 'opposite_df' ;
+// DOT_PRODUCT : 'dot_product' ;
+// VEC_PRODUCT : 'vector_product' ;
+// UP_STREAM_DF : 'up_stream_df' ;
+// DOWN_STREAM_DF : 'down_stream_df' ;
+// OPPOSITE_DF : 'opposite_df' ;
 // // END: Keywords for intrinsic GeLB functions // //
 
 // // BEGIN: Keywords for GeLB data-types // //

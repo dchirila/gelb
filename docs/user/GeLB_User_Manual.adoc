@@ -11,14 +11,6 @@ Version 0.1, 9.4.2021
 :imagesdir: ./img
 
 
-GeLB is a domain-specific programming language (DSL), which allows you to
-quickly create numerical simulations based on the lattice Boltzmann (LB) method,
-by writing a high-level description of your simulation. In essence, GeLB
-consists of:
-
-. the specification of the DSL, and
-. support tools for the DSL (reference compiler, editor/IDE plugins, etc.)
-
 This manual focuses on the basic knowledge required for _users_ of the software,
 to: 
 
