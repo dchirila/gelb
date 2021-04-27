@@ -1,6 +1,7 @@
 <p align="center">
     <img
     src="./docs/figs/gelb_logo.svg"
+    width="200"
     alt="GeLB logo">
 </p>
 
