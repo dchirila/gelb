@@ -1,3 +1,7 @@
+![GitHub all releases](https://img.shields.io/github/downloads/dchirila/gelb/total?logo=GitHub&style=flat-square)
+![Website](https://img.shields.io/website?logo=Read%20The%20Docs&style=flat-square&url=https%3A%2F%2Fgelb-lang.org)
+![Twitter Follow](https://img.shields.io/twitter/follow/gelb12410715?label=GeLB-lang&style=social)
+
 <p align="center">
     <img
     src="./docs/figs/gelb_logo.svg"
