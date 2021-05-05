@@ -315,12 +315,3 @@ Upcoming features
     arbitrary conditions (which produce a `bool` result, based on expressions
     involving the node coordinates); this would allow us to specify shapes
     such as spheres and cylinders within the GeLB files
-
-
-Using GeLB in your work
-=======================
-
-If you have used GeLB to obtain some published results, I would appreciate if
-you could cite the paper TODO:ref-paper. Also, I would like to hear from you,
-to start a conversation about which features you consider most important for
-the future releases.

@@ -52,4 +52,4 @@ triple s;
 //   }
 // }
 
-label("GeLB", (0, 0), currentpen+fontsize(168pt)+rgb(255, 174, 13));
+label("GeLB-lang", (0, 0), currentpen+fontsize(168pt)+rgb(255, 174, 13));
