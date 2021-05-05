@@ -22,4 +22,10 @@ appreciate if you cite the paper TODO:ref-paper.
 Also, we would like to hear from you, to start a conversation about which
 features you consider most important for the future releases.
 We want `GeLB` to grow with the help of the community, and probably you can also
-TODO:link-to-contribution-link-on-gelb-site.
+[contribute](https://gelb-lang.org/docs/GeLB_developer_guide/intro-for-devs).
+
+# License
+
+This project is licensed under the terms of the Mozilla Public License 2.0
+(MPL-2.0 -- see the
+[LICENSE](https://github.com/dchirila/gelb/blob/main/LICENSE) file).
