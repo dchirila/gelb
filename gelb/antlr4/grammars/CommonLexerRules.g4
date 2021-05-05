@@ -56,7 +56,7 @@ OP_ASSIGN: '=';
 
 // // BEGIN: GeLB Keywords //
 
-// GELB_VERSION: 'gelb_version';
+GELB_VERSION: 'gelb_version';
 // LATTICES: 'lattices';
 // LATTICE: 'lattice';
 
@@ -125,12 +125,10 @@ SEMICOLON: ';';
 // DOT: '.';
 
 // // Literals
-// INT_LITERAL: '0' | [1-9][0-9]* ;
 
-// // Numbers
+// Numbers
 // // ... int
-// NON_NEGATIVE_INTEGER: DIGIT+ ;
-// fragment DIGIT: [0-9] ;
+NON_NEGATIVE_INTEGER: '0' | [1-9][0-9]* ;
 
 
 // /* STRINGs-rule (valid for {single, multi}-line strings) NOTE: to simplify things, we only allow

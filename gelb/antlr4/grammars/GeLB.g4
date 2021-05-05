@@ -2,8 +2,9 @@ grammar GeLB;
 import CommonLexerRules;
 
 gelb_program: //
-	// gelb_version_stmt //
+	gelb_version_stmt //
 	simulation_metadata_block
+	// lattice_properties_block
 	// lattices_block //
 	// initializer_block //
 	// dynamic_block
@@ -12,7 +13,7 @@ gelb_program: //
 	// geometry_block
 	EOF;
 
-// gelb_version_stmt: GELB_VERSION OP_ASSIGN NON_NEGATIVE_INTEGER SEMICOLON ;
+gelb_version_stmt: GELB_VERSION OP_ASSIGN NON_NEGATIVE_INTEGER SEMICOLON ;
 
 simulation_metadata_block: SIMULATION_METADATA CURLY_OPEN
 	set_short_name_stmt
@@ -59,15 +60,6 @@ set_description_stmt: DESCRIPTION OP_ASSIGN STRING SEMICOLON;
 
 
 // **** TMP **** //
-
-// gelb_program :
-        // gelb_version_stmt
-        // configuration_block
-        // lattice_properties_block
-        // lattices_block
-        // EOF ;
-
-// gelb_version_stmt : GELB_VERSION OP_ASSIGN NON_NEGATIVE_INT SEMICOLON ;
 
 // configuration_block : CONFIGURATION LCURLY
 //         simulation_metadata_sub_block
