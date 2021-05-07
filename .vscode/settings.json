@@ -1,3 +1,4 @@
 {
-    "restructuredtext.confPath": ""
+    "restructuredtext.confPath": "",
+    "python.pythonPath": "~/anaconda3/envs/gelb/bin/python"
 }

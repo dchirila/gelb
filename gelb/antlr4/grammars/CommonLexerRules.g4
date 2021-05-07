@@ -57,7 +57,7 @@ OP_ASSIGN: '=';
 // // BEGIN: GeLB Keywords //
 
 GELB_VERSION: 'gelb_version';
-// LATTICES: 'lattices';
+LATTICES: 'lattices';
 // LATTICE: 'lattice';
 
 // // // BEGIN: Keywords for intrinsic GeLB functions // //
@@ -155,7 +155,11 @@ DESCRIPTION : 'description' ;
 // // CONSTANTS : 'constants' ;
 // // CONST : 'const' ;
 // // ARRAY : 'array' ;
-// // LATTICE_PROPERTIES : 'lattice_properties' ;
+LATTICE_PROPERTIES : 'lattice_properties' ;
+
+// Temporary marker, for parts which I need to implement/update.
+// TODO :: Remove in final GeLB-v1 version
+TODO : 'TODO' ;
 
 // // // Operators
 // OP_ASSIGN : '=' ;
@@ -184,8 +188,6 @@ DESCRIPTION : 'description' ;
 // // DOT       : '.' ;
 // // VERT      : '|' ;
 
-// // ID : LETTER (LETTER | DIGIT | '_')* ;
-
 // // // Numbers
 // NON_NEGATIVE_INT : NON_ZERO_DIGIT DIGIT* ;
 // DIGIT : ZERO_DIGIT | NON_ZERO_DIGIT ;
@@ -202,9 +204,7 @@ STRING : '"' (~[\\"] | '\\' [\\"()])* '"' ;
 // // MULTI_LINE_COMMENT : '/*' .*? '*/' -> channel(HIDDEN);
 
 // Identifier (i.e. names for user-defined entities)
-// ID : [a-zA-Z_] [a-zA-Z0-9_]* ;
-
-// fragment LETTER : [a-zA-Z] ;
+ID : [a-zA-Z_] [a-zA-Z0-9_]* ;
 
 // Whitespace (to IGNORE)
 WS : [ \r\t\u000C\n]+ -> channel(HIDDEN);
