@@ -4,8 +4,8 @@ import CommonLexerRules;
 gelb_program: //
 	gelb_version_stmt //
 	simulation_metadata_block
-	// lattice_properties_block
-	// lattices_block //
+	lattice_properties_block
+	lattices_block //
 	// initializer_block //
 	// dynamic_block
 	// gauge_block
@@ -23,10 +23,13 @@ CURLY_CLOSE;
 set_short_name_stmt: SHORT_NAME OP_ASSIGN STRING SEMICOLON;
 set_description_stmt: DESCRIPTION OP_ASSIGN STRING SEMICOLON;
 
-// lattices_block: //
-// 	LATTICES CURLY_OPEN //
-// 	lattice_instantiation //
-// 	CURLY_CLOSE;
+lattice_properties_block: LATTICE_PROPERTIES ID CURLY_OPEN
+	TODO // const_decl_stmt*
+CURLY_CLOSE;
+
+lattices_block: LATTICES CURLY_OPEN
+	TODO // lattice_instantiation_stmt*
+CURLY_CLOSE;
 
 // lattice_instantiation: //
 // 	LATTICE ID PAREN_OPEN //
@@ -116,9 +119,3 @@ set_description_stmt: DESCRIPTION OP_ASSIGN STRING SEMICOLON;
 // expr : NON_NEGATIVE_INT ;
 
 // sub_decl_with_val : ID OP_ASSIGN NON_NEGATIVE_INT ;
-
-// lattice_properties_block : LATTICE_PROPERTIES ID LCURLY
-//         const_decl_stmt*
-//         RCURLY ;
-
-// lattices_block : LCURLY RCURLY ;

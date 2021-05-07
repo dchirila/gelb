@@ -72,7 +72,6 @@ digraph GeLB_AST {
     short_name [label="String_N"];
     description [label="String_N"];
 
-    configuration [label="GlobalConfig_N"];
     simulation_metadata [label="SimulationMetadata_N"];
     listof_global_const_decls [label="List_N"];
     global_const_decl_0 [label="ConstantDeclaration_N"];
@@ -189,17 +188,18 @@ digraph GeLB_AST {
     // BEGIN :: Relationships //
     program -> gelb_version [xlabel=".gelb_version"];
 
-    program -> configuration [xlabel=".configuration"];
+    program -> simulation_metadata [xlabel=".simulation_metadata"];
     subgraph cluster_1 {
         style=filled;
         color=yellow2;
-        configuration -> simulation_metadata [xlabel=".simulation_metadata"];
-        subgraph cluster_2 {
-            style=filled;
-            simulation_metadata -> short_name [xlabel=".short_name"];
-            simulation_metadata -> description [xlabel=".description"];
-        }
-        configuration -> listof_global_const_decls [xlabel=".global_constants"];
+        simulation_metadata -> short_name [xlabel=".short_name"];
+        simulation_metadata -> description [xlabel=".description"];
+    }
+
+    program -> listof_global_const_decls [xlabel=".global_constants"];
+    subgraph cluster_2 {
+        style=filled;
+        color=yellow2;
         listof_global_const_decls -> global_const_decl_0 [xlabel="\[0\]..."];
         global_const_decl_0 -> global_const_decl_0_dtype [xlabel=".dtype"];
         global_const_decl_0_dtype -> global_const_decl_0_dtype_scalar_dtype [xlabel=".scalar_dtype"];
