@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
 
 import pytest
-
 import antlr4 as a4
-
-from gelb.antlr4.generated_code.GeLBLexer import GeLBLexer
-from gelb.antlr4.generated_code.GeLBParser import GeLBParser
-from gelb.antlr4.generated_code.GeLBVisitor import GeLBVisitor
+from gelb.antlr4.generated_code import GeLBLexer, GeLBParser, GeLBVisitor
 
 
 def test_parsing_set_description_stmt():
