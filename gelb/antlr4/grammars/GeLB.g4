@@ -5,7 +5,7 @@ gelb_program: //
 	gelb_version_stmt //
 	simulation_metadata_block
 	lattice_properties_block
-	lattices_block //
+	lattice_instantiations_block //
 	// initializer_block //
 	// dynamic_block
 	// gauge_block
@@ -27,8 +27,8 @@ lattice_properties_block: LATTICE_PROPERTIES ID CURLY_OPEN
 	TODO // const_decl_stmt*
 CURLY_CLOSE;
 
-lattices_block: LATTICES CURLY_OPEN
-	TODO // lattice_instantiation_stmt*
+lattice_instantiations_block: LATTICES CURLY_OPEN
+	TODO // lattice_instantiation_stmt+ // a program needs at least one lattice!
 CURLY_CLOSE;
 
 // lattice_instantiation: //
