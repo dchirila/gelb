@@ -1,0 +1,1 @@
+lattice_constants = { const int D = 2, Q = 1; }

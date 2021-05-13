@@ -1,4 +1,4 @@
-lattice_properties D2Q5 {
+lattice_constants = {
   const int D = 2, Q = 5;
   // DF direction-vectors
   const array<int, {D, Q}> E = {{0, 0},   // O

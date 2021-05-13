@@ -6,7 +6,7 @@ global_constants { //
 }
 
 lattices { //
-  lattice f(D = 2, Q = 1, df_type = bool, size = {40, 40},
+  lattice f(d = 2, q = 1, df_type = bool, size = {40, 40},
             periodicity = {true, true});
 }
 
@@ -40,7 +40,7 @@ dynamic LifeEvolve {
                     ((!f.in[x, y | 0]) && genesis[neighborSum]);
 }
 
-gauge CellStatus(out(bool status)) { //
+gauge CellStatus(out = {bool status}) { //
   status = f.in[x, y | 0];
 }
 

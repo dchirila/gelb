@@ -1,5 +1,5 @@
 lattices { //
-  lattice f(D = 1, Q = 1, df_type = int, size = {32}, periodicity = {false});
+  lattice f(d = 1, q = 1, df_type = int, size = {32}, periodicity = {false});
 }
 
 initializer SetDFsToZero { //
@@ -10,7 +10,7 @@ dynamic IncrementDFs { //
   f.out[x | 0] = f.in[x | 0] + 1;
 }
 
-gauge CurrentState(out(int state)) { //
+gauge CurrentState(out = {int state}) { //
   state = f.in[x | 0];
 }
 
