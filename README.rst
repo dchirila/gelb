@@ -262,6 +262,22 @@ important changes are listed below:
   extension. It is a trivial change which, however, hopefully saves you (and
   me) some time later.
 
+* Programs no longer need to include a `gelb_version` statement.
+  The idea behind this was to be able to specify which version of the language
+  we are using.
+  However, since **we do not plan to remove** any features from the language (at
+  least, for the foreseeable future), coercing users to always type this is just
+  pointless.
+  So, removing this feature simplifies the compiler a little and, most
+  importantly, it means that users have one less thing to worry about.
+  A situation that *will* probably occur is that users who have installed an
+  older version of `gelbc` attempt to use newer language features.
+  For such scenarios, it is good to give users a warning, if they use an older
+  version of the compiler.
+
+  TODO: in the compiler, check whether a newer version of the compiler was
+  published.
+
 * In the `geometry` block, only rectangular node-selections are allowed, using
   the `nodes` statement (which is equivalent to the `node_range` statements in
   the thesis). The `node` statement is not needed (because it is just a special

@@ -67,7 +67,6 @@ digraph GeLB_AST {
     
     // BEGIN :: Node Definitions //
     program [label="Program_N"];
-    gelb_version [label="IntLiteral_N"];
 
     short_name [label="String_N"];
     description [label="String_N"];
@@ -186,8 +185,6 @@ digraph GeLB_AST {
     // END :: Node Definitions //
 
     // BEGIN :: Relationships //
-    program -> gelb_version [xlabel=".gelb_version"];
-
     program -> simulation_metadata [xlabel=".simulation_metadata"];
     subgraph cluster_1 {
         style=filled;

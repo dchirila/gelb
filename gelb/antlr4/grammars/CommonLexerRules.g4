@@ -26,7 +26,6 @@ OP_ASSIGN: '=';
 // |
 
 // // keywords
-// gelb_version
 // lattices
 // lattice
 // int
@@ -56,7 +55,6 @@ OP_ASSIGN: '=';
 
 // // BEGIN: GeLB Keywords //
 
-GELB_VERSION: 'gelb_version';
 LATTICES: 'lattices';
 // LATTICE: 'lattice';
 

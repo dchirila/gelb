@@ -1,5 +1,3 @@
-gelb_version = 1;
-
 lattices {
   lattice f(1,        // d
             1,        // q

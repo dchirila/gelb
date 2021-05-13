@@ -2,7 +2,6 @@ grammar GeLB;
 import CommonLexerRules;
 
 gelb_program: //
-	gelb_version_stmt //
 	simulation_metadata_block
 	lattice_properties_block
 	lattice_instantiations_block //
@@ -12,8 +11,6 @@ gelb_program: //
 	// node_classes_block
 	// geometry_block
 	EOF;
-
-gelb_version_stmt: GELB_VERSION OP_ASSIGN NON_NEGATIVE_INTEGER SEMICOLON ;
 
 simulation_metadata_block: SIMULATION_METADATA CURLY_OPEN
 	set_short_name_stmt

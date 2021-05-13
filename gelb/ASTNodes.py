@@ -7,7 +7,6 @@ class Node_N(object):
 
 class Program_N(Node_N):
     def __init__(self):
-        self.gelb_version = None
         self.configuration = None
         self.listof_lattice_properties = None
         self.listof_lattice_instances = None
@@ -105,7 +104,7 @@ class StringLiteral_N(Node_N):
 
 class List_N(Node_N):
     def __init__(self):
-        pass
+        self.value = None
 
 class TODO_N(Node_N):
     def __init__(self):

@@ -1,5 +1,3 @@
-gelb_version = 1;
-
 configuration {         //
   simulation_metadata { //
     short_name = "game_of_life_random_ICs";

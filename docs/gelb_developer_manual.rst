@@ -72,7 +72,6 @@ NOTEs:
 
 - **Program**
 
-  - gelb_version -> **NumIntLit**
   - configuration -> **Configuration**
   - lattice_properties -> **List** (**LatticeProperties**)
   - lattices -> **List** (**Lattice** )
