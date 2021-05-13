@@ -19,29 +19,29 @@ from gelb.antlr4.generated_code import GeLBLexer, GeLBParser, GeLBVisitor
 #         return IntLiteral_N(TODO)
 
 
-def test_parsing_set_short_name_stmt():
+def test_simple():
     # Arrange
-    input = a4.InputStream("short_name=\"\";")
+    input = a4.InputStream("simulation_name=\"\";")
     lexer = GeLBLexer(input)
     stream = a4.CommonTokenStream(lexer)
     parser = GeLBParser(stream)
-    tree = parser.set_short_name_stmt()
+    tree = parser.set_simulation_name_stmt()
     # Act (trigger parsing)
     result = tree.toStringTree(recog=parser)
     # Assert (test the parse tree)
-    assert result == "(set_short_name_stmt short_name = \"\" ;)"
+    assert result == "(set_simulation_name_stmt simulation_name = \"\" ;)"
 
 @pytest.mark.parametrize(
     "test_string, expected_parse_tree",
     [
-        ("short_name=\"test\";"
-        , "(set_short_name_stmt short_name = \"test\" ;)"),
-        ("short_name =\"with spaces\";"
-        , "(set_short_name_stmt short_name = \"with spaces\" ;)"),
-        ("short_name= \"with a \nnewline\";"
-        , "(set_short_name_stmt short_name = \"with a \\nnewline\" ;)"),
-        ("short_name  \n\n=  \"weird\n\nformatting\";"
-        , "(set_short_name_stmt short_name = \"weird\\n\\nformatting\" ;)"),
+        ("simulation_name=\"test\";"
+        , "(set_simulation_name_stmt simulation_name = \"test\" ;)"),
+        ("simulation_name =\"with spaces\";"
+        , "(set_simulation_name_stmt simulation_name = \"with spaces\" ;)"),
+        ("simulation_name= \"with a \nnewline\";"
+        , "(set_simulation_name_stmt simulation_name = \"with a \\nnewline\" ;)"),
+        ("simulation_name  \n\n=  \"weird\n\nformatting\";"
+        , "(set_simulation_name_stmt simulation_name = \"weird\\n\\nformatting\" ;)"),
     ]
 )
 def test_with_param(test_string, expected_parse_tree):
@@ -50,7 +50,7 @@ def test_with_param(test_string, expected_parse_tree):
     lexer = GeLBLexer(input)
     stream = a4.CommonTokenStream(lexer)
     parser = GeLBParser(stream)
-    tree = parser.set_short_name_stmt()
+    tree = parser.set_simulation_name_stmt()
     # Act (trigger parsing)
     result = tree.toStringTree(recog=parser)
     # Assert (test the parse tree)

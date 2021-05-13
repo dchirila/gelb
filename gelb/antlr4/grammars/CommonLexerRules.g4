@@ -146,11 +146,9 @@ NON_NEGATIVE_INTEGER: '0' | [1-9][0-9]* ;
 
 // // **** TMP **** //
 
-// // CONFIGURATION : 'configuration' ;
-SIMULATION_METADATA : 'simulation_metadata' ;
-SHORT_NAME : 'short_name' ;
-DESCRIPTION : 'description' ;
-// // CONSTANTS : 'constants' ;
+SIMULATION_NAME : 'simulation_name' ;
+SIMULATION_DESCRIPTION : 'simulation_description' ;
+GLOBAL_CONSTANTS : 'global_constants' ;
 // // CONST : 'const' ;
 // // ARRAY : 'array' ;
 LATTICE_PROPERTIES : 'lattice_properties' ;

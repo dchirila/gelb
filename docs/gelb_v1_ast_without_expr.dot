@@ -68,10 +68,9 @@ digraph GeLB_AST {
     // BEGIN :: Node Definitions //
     program [label="Program_N"];
 
-    short_name [label="String_N"];
-    description [label="String_N"];
+    simulation_name [label="String_N"];
+    simulation_description [label="String_N"];
 
-    simulation_metadata [label="SimulationMetadata_N"];
     listof_global_const_decls [label="List_N"];
     global_const_decl_0 [label="ConstantDeclaration_N"];
     global_const_decl_0_dtype [label="DType_N"];
@@ -185,13 +184,8 @@ digraph GeLB_AST {
     // END :: Node Definitions //
 
     // BEGIN :: Relationships //
-    program -> simulation_metadata [xlabel=".simulation_metadata"];
-    subgraph cluster_1 {
-        style=filled;
-        color=yellow2;
-        simulation_metadata -> short_name [xlabel=".short_name"];
-        simulation_metadata -> description [xlabel=".description"];
-    }
+    program -> simulation_name [xlabel=".simulation_name"];
+    program -> simulation_description [xlabel=".simulation_description"];
 
     program -> listof_global_const_decls [xlabel=".global_constants"];
     subgraph cluster_2 {

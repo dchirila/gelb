@@ -1,0 +1,3 @@
+global_constants {
+  const int N_NEAREST = 8, DUMMY = 123;
+}

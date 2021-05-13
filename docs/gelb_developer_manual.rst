@@ -72,7 +72,8 @@ NOTEs:
 
 - **Program**
 
-  - configuration -> **Configuration**
+  - simulation_name -> **StringLit**
+  - simulation_description -> **StringLit**
   - lattice_properties -> **List** (**LatticeProperties**)
   - lattices -> **List** (**Lattice** )
   - node_classes -> **List** (**NodeClass**)
@@ -81,9 +82,6 @@ NOTEs:
   - gauges -> **List** (**Gauge**)
   - functions -> **List** (**Function**)
   - geometry -> **StructuredGeometry** | **GeneralGeometry**
-
-- **Configuration**
-  TODO
 
 - **LatticeProperties**
   TODO

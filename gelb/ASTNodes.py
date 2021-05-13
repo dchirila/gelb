@@ -7,7 +7,9 @@ class Node_N(object):
 
 class Program_N(Node_N):
     def __init__(self):
-        self.configuration = None
+        self.simulation_name = None
+        self.simulation_description = None
+        self.global_constants = None
         self.listof_lattice_properties = None
         self.listof_lattice_instances = None
         self.listof_node_classes = None
@@ -16,14 +18,6 @@ class Program_N(Node_N):
         self.listof_gauges = None
         self.listof_functions = None
         self.geometry = None
-
-class GlobalConfig_N(Node_N):
-    def __init__(self):
-        pass
-
-class SimulationMetadata_N(Node_N):
-    def __init__(self):
-        pass
 
 class LatticeProperties_N(Node_N):
     def __init__(self):

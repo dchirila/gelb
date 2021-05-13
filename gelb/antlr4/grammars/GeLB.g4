@@ -2,7 +2,9 @@ grammar GeLB;
 import CommonLexerRules;
 
 gelb_program: //
-	simulation_metadata_block
+	set_simulation_name_stmt
+	set_simulation_description_stmt
+	// global_constants_block
 	lattice_properties_block
 	lattice_instantiations_block //
 	// initializer_block //
@@ -12,13 +14,8 @@ gelb_program: //
 	// geometry_block
 	EOF;
 
-simulation_metadata_block: SIMULATION_METADATA CURLY_OPEN
-	set_short_name_stmt
-	set_description_stmt
-CURLY_CLOSE;
-
-set_short_name_stmt: SHORT_NAME OP_ASSIGN STRING SEMICOLON;
-set_description_stmt: DESCRIPTION OP_ASSIGN STRING SEMICOLON;
+set_simulation_name_stmt: SIMULATION_NAME OP_ASSIGN STRING SEMICOLON;
+set_simulation_description_stmt: SIMULATION_DESCRIPTION OP_ASSIGN STRING SEMICOLON;
 
 lattice_properties_block: LATTICE_PROPERTIES ID CURLY_OPEN
 	TODO // const_decl_stmt*
@@ -61,21 +58,7 @@ CURLY_CLOSE;
 
 // **** TMP **** //
 
-// configuration_block : CONFIGURATION LCURLY
-//         simulation_metadata_sub_block
-//         global_constants_sub_block
-//         RCURLY ;
-
-// simulation_metadata_sub_block : SIMULATION_METADATA LCURLY
-//         short_name_stmt
-//         description_stmt
-//         RCURLY ;
-
-// short_name_stmt : SHORT_NAME OP_ASSIGN STRING SEMICOLON ;
-
-// description_stmt : DESCRIPTION OP_ASSIGN STRING SEMICOLON ;
-
-// global_constants_sub_block : CONSTANTS LCURLY
+// global_constants_block: GLOBAL_CONSTANTS LCURLY
 //         const_decl_stmt*
 //         RCURLY ;
 
