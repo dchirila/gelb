@@ -1,74 +1,49 @@
 lexer grammar CommonLexerRules;
 
-// Operators
-OP_ASSIGN: '=';
-// OP_LT : '<' ;
-// OP_GT : '>' ;
+// Temporary marker, for parts which I need to implement/update.
+// TODO :: Remove in final GeLB-v1 version
+TODO : 'TODO' ;
 
-// // integer literals
-// 1
-// 0
-// 32
-
-// // brackets
-// (
-// )
-// [
-// ]
-
-// // punctuation
-// .
-// ,
-// |
-
-// // keywords
-// lattices
-// lattice
-// int
-// true
-// false
-// initializer
-// out
-// in
-// x
-// dynamic
-// gauge
-// node_classes
-// node_class
-// geometry
-// nodes
-
-// // Identifiers
-// f
-// SetDFsToZero
-// SetDFsToOne
-// CurrentState
-// state
-// BULK
-// */
-
-// // END: lexemes @ex0 _int_vec_setto_ne.gelb //
-
-// // BEGIN: GeLB Keywords //
-
+//                     BEGIN: Keywords                     //
+SIMULATION_NAME : 'simulation_name' ;
+SIMULATION_DESCRIPTION : 'simulation_description' ;
+//GLOBAL_CONSTANTS : 'global_constants' ;
 LATTICES: 'lattices';
 // LATTICE: 'lattice';
+LATTICE_PROPERTIES : 'lattice_properties' ;
+// NODE_CLASSES: 'node_classes';
+// INITIALIZERS: 'initializers';
+// DYNAMICS: 'dynamics';
+// GAUGES: 'gauges';
 
-// // // BEGIN: Keywords for intrinsic GeLB functions // //
-// // DOT_PRODUCT : 'dot_product' ;
-// // VEC_PRODUCT : 'vector_product' ;
-// // UP_STREAM_DF : 'up_stream_df' ;
-// // DOWN_STREAM_DF : 'down_stream_df' ;
-// // OPPOSITE_DF : 'opposite_df' ;
-// // // END: Keywords for intrinsic GeLB functions // //
+// BEGIN: Keywords for intrinsic functions
+// DOT_PRODUCT : 'dot_product' ;
+// VEC_PRODUCT : 'vector_product' ;
+// UP_STREAM_DF : 'up_stream_df' ;
+// DOWN_STREAM_DF : 'down_stream_df' ;
+// OPPOSITE_DF : 'opposite_df' ;
+// END: Keywords for intrinsic functions
 
-// // // BEGIN: Keywords for GeLB data-types // //
-// INT: 'int';
-// BOOL: 'bool';
+// BEGIN: Keywords for data-types
+// bool
+// BOOL : 'bool' ;
 // TRUE: 'true';
 // FALSE: 'false';
-// REAL: 'real';
-// // // END: Keywords for GeLB data-types // //
+// int
+// INT64 : 'int64' ;
+// INT32 : 'int32' ;
+// INT16 : 'int16' ;
+// INT8 : 'int8' ;
+// INT : 'int' ;
+// real
+// REAL64 : 'real64' ;
+// REAL32 : 'real32' ;
+// REAL16 : 'real16' ;
+// REAL : 'real' ;
+// datatype-modifiers (for constants and arrays)
+// CONST : 'const' ;
+// ARRAY : 'array' ;
+// END: Keywords for data-types
 
 // INITIALIZER: 'initializer';
 // OUT: 'out';
@@ -77,15 +52,9 @@ LATTICES: 'lattices';
 // Y: 'y';
 // Z: 'z';
 
-// CONST: 'const';
-
 // SIZE: 'size';
 // PERIODICITY: 'periodicity';
 
-// NODE_CLASSES: 'node_classes';
-// INITIALIZERS: 'initializers';
-// DYNAMICS: 'dynamics';
-// GAUGES: 'gauges';
 
 // DYNAMIC: 'dynamic';
 // GAUGE: 'gauge';
@@ -93,104 +62,50 @@ LATTICES: 'lattices';
 // NODE_CLASS: 'node_class';
 // GEOMETRY: 'geometry';
 // NODES: 'nodes';
-// // END: GeLB Keywords //
+//                     END: Keywords                     //
 
-// // Operators
-// // ... chevrons (angle brackets)
+//                     BEGIN: Operators                     //
+OP_ASSIGN: '=';
+// ... chevrons (angle brackets)
 // OP_LESS: '<';
 // OP_GREATER: '>';
+//                     END: Operators                     //
 
-// // parentheses
-// PAREN_OPEN: '(';
-// PAREN_CLOSE: ')';
-// // square brackets
-// BRACKET_OPEN: '[';
-// BRACKET_CLOSE: ']';
-// // curly brackets
+//                     BEGIN: Punctuation                     //
+// parentheses
+PAREN_OPEN: '(';
+PAREN_CLOSE: ')';
+// square brackets
+BRACKET_OPEN: '[';
+BRACKET_CLOSE: ']';
+// curly brackets
 CURLY_OPEN: '{';
 CURLY_CLOSE: '}';
-
-// MISC Symbols (punctuation, etc.)
+// MISC Symbols
 // COLON: ':';
 SEMICOLON: ';';
 // VERT: '|';
 // COMMA: ',';
 // DOT: '.';
+//                     END: Punctuation                     //
 
-// // Literals
-
+//                     BEGIN: Scalar literals                     //
 // Numbers
-// // ... int
+// ... int
 NON_NEGATIVE_INTEGER: '0' | [1-9][0-9]* ;
-
-
-// /* STRINGs-rule (valid for {single, multi}-line strings) NOTE: to simplify things, we only allow
-//  strings marked by DOUBLE-quotes (unlike Python, which also allows strings marked by SINGLE-quotes)
-//  */
-// // STRING : '"' (~[\\"] | '\\' [\\"()])* '"' ;
-
-// // // Comments (to IGNORE)
-
-// // SINGLE_LINE_COMMENT : '//' ~[\r\n]* '\r'? '\n' -> channel(HIDDEN);
-
-// // MULTI_LINE_COMMENT : '/*' .*? '*/' -> channel(HIDDEN);
-
-// // Whitespace (to IGNORE)
-// WS: [ \r\t\u000C\n]+ -> channel(HIDDEN);
-
-
-// // **** TMP **** //
-
-SIMULATION_NAME : 'simulation_name' ;
-SIMULATION_DESCRIPTION : 'simulation_description' ;
-GLOBAL_CONSTANTS : 'global_constants' ;
-// // CONST : 'const' ;
-// // ARRAY : 'array' ;
-LATTICE_PROPERTIES : 'lattice_properties' ;
-
-// Temporary marker, for parts which I need to implement/update.
-// TODO :: Remove in final GeLB-v1 version
-TODO : 'TODO' ;
-
-
-// // // Supported scalar data-types
-// // // // bool
-// // BOOL : 'bool' ;
-// // // // int
-// // INT64 : 'int64' ;
-// // INT32 : 'int32' ;
-// // INT16 : 'int16' ;
-// // INT8 : 'int8' ;
-// // INT : 'int' ;
-// // // // real
-// // REAL64 : 'real64' ;
-// // REAL32 : 'real32' ;
-// // REAL16 : 'real16' ;
-// // REAL : 'real' ;
-
-// // // MISC Symbols (punctuation, etc.)
-// SEMICOLON : ';' ;
-// // COLON     : ':' ;
-// // COMMA     : ',' ;
-// // DOT       : '.' ;
-// // VERT      : '|' ;
-
-// // // Numbers
-// NON_NEGATIVE_INT : NON_ZERO_DIGIT DIGIT* ;
-// DIGIT : ZERO_DIGIT | NON_ZERO_DIGIT ;
-// fragment NON_ZERO_DIGIT : '1'..'9' ;
-// fragment ZERO_DIGIT : '0' ;
 
  /* STRINGs-rule (valid for {single, multi}-line strings)
     NOTE: to simplify things, we only allow strings marked by DOUBLE-quotes
           (unlike Python, which also allows strings marked by SINGLE-quotes) */
 STRING : '"' (~[\\"] | '\\' [\\"()])* '"' ;
+//                     END: Scalar literals                     //
 
-// // // Comments (to IGNORE)
-// // SINGLE_LINE_COMMENT : '//' ~[\r\n]* '\r'? '\n' -> channel(HIDDEN);
-// // MULTI_LINE_COMMENT : '/*' .*? '*/' -> channel(HIDDEN);
+// Comments (to IGNORE)
+//SINGLE_LINE_COMMENT : '//' ~[\r\n]* '\r'? '\n' -> channel(HIDDEN);
+//MULTI_LINE_COMMENT : '/*' .*? '*/' -> channel(HIDDEN);
 
 // Identifier (i.e. names for user-defined entities)
+// Examples: f, SetDFsToZero, SetDFsToOne, CurrentState, state, BULK
 ID : [a-zA-Z_] [a-zA-Z0-9_]* ;
 
 // Whitespace (to IGNORE)

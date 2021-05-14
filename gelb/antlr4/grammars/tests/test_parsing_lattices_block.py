@@ -12,8 +12,8 @@ def test_one_lattice_instance():
     lexer = GeLBLexer(input)
     stream = a4.CommonTokenStream(lexer)
     parser = GeLBParser(stream)
-    tree = parser.lattice_instantiations_block()
+    tree = parser.lattices_block()
     # Act (trigger parsing)
     result = tree.toStringTree(recog=parser)
     # Assert (test the parse tree)
-    assert result == "(lattice_instantiations_block lattices { TODO })"
+    assert result == "(lattices_block lattices { TODO })"

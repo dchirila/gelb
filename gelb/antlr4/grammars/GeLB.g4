@@ -5,11 +5,11 @@ gelb_program: //
 	set_simulation_name_stmt
 	set_simulation_description_stmt
 	// global_constants_block
-	lattice_properties_block
-	lattice_instantiations_block //
+	lattices_block
 	// initializer_block //
 	// dynamic_block
 	// gauge_block
+	// function_block
 	// node_classes_block
 	// geometry_block
 	EOF;
@@ -21,7 +21,7 @@ lattice_properties_block: LATTICE_PROPERTIES ID CURLY_OPEN
 	TODO // const_decl_stmt*
 CURLY_CLOSE;
 
-lattice_instantiations_block: LATTICES CURLY_OPEN
+lattices_block: LATTICES CURLY_OPEN
 	TODO // lattice_instantiation_stmt+ // a program needs at least one lattice!
 CURLY_CLOSE;
 
