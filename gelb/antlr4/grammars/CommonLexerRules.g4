@@ -101,8 +101,8 @@ STRING : '"' (~[\\"] | '\\' [\\"()])* '"' ;
 //                     END: Scalar literals                     //
 
 // Comments (to IGNORE)
-//SINGLE_LINE_COMMENT : '//' ~[\r\n]* '\r'? '\n' -> channel(HIDDEN);
-//MULTI_LINE_COMMENT : '/*' .*? '*/' -> channel(HIDDEN);
+SINGLE_LINE_COMMENT : '//' ~[\r\n]* '\r'? '\n' -> channel(HIDDEN);
+MULTI_LINE_COMMENT : '/*' .*? '*/' -> channel(HIDDEN);
 
 // Identifier (i.e. names for user-defined entities)
 // Examples: f, SetDFsToZero, SetDFsToOne, CurrentState, state, BULK

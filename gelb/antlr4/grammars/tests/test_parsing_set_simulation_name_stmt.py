@@ -31,6 +31,33 @@ def test_simple():
     # Assert (test the parse tree)
     assert result == "(set_simulation_name_stmt simulation_name = \"\" ;)"
 
+def test_with_single_line_comments():
+    # Arrange
+    input = a4.InputStream("// comment 1\nsimulation_name // comment 2\n=\"test1\";")
+    lexer = GeLBLexer(input)
+    stream = a4.CommonTokenStream(lexer)
+    parser = GeLBParser(stream)
+    tree = parser.set_simulation_name_stmt()
+    # Act (trigger parsing)
+    result = tree.toStringTree(recog=parser)
+    # Assert (test the parse tree)
+    assert result == "(set_simulation_name_stmt simulation_name = \"test1\" ;)"
+
+def test_with_multi_line_comments():
+    # Arrange
+    input = a4.InputStream(
+        # crazy amount of comments, just because we can :)
+        "/*com 1 */ simulation_name /* c2*/ = /*c3*/\n/* c 4 */ \"test2\" /*c5 */;/* c6*/"
+    )
+    lexer = GeLBLexer(input)
+    stream = a4.CommonTokenStream(lexer)
+    parser = GeLBParser(stream)
+    tree = parser.set_simulation_name_stmt()
+    # Act (trigger parsing)
+    result = tree.toStringTree(recog=parser)
+    # Assert (test the parse tree)
+    assert result == "(set_simulation_name_stmt simulation_name = \"test2\" ;)"
+
 @pytest.mark.parametrize(
     "test_string, expected_parse_tree",
     [
