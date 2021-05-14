@@ -1,10 +1,9 @@
 lexer grammar CommonLexerRules;
 
-// // BEGIN: lexemes @ex0 _int_vec_setto_ne.gelb //
-// /*
-
-// operators
+// Operators
 OP_ASSIGN: '=';
+// OP_LT : '<' ;
+// OP_GT : '>' ;
 
 // // integer literals
 // 1
@@ -16,13 +15,10 @@ OP_ASSIGN: '=';
 // )
 // [
 // ]
-// {
-// }
 
 // // punctuation
 // .
 // ,
-// ;
 // |
 
 // // keywords
@@ -100,7 +96,6 @@ LATTICES: 'lattices';
 // // END: GeLB Keywords //
 
 // // Operators
-// OP_ASSIGN: '=';
 // // ... chevrons (angle brackets)
 // OP_LESS: '<';
 // OP_GREATER: '>';
@@ -157,10 +152,6 @@ LATTICE_PROPERTIES : 'lattice_properties' ;
 // TODO :: Remove in final GeLB-v1 version
 TODO : 'TODO' ;
 
-// // // Operators
-// OP_ASSIGN : '=' ;
-// // OP_LT : '<' ;
-// // OP_GT : '>' ;
 
 // // // Supported scalar data-types
 // // // // bool
