@@ -92,8 +92,8 @@ class Program_N(Node_N):
 #         self.value = None
 
 class StringLiteral_N(Node_N):
-    def __init__(self):
-        self.value = None
+    def __init__(self, value):
+        self.value = value
 #
 # class List_N(Node_N):
 #     def __init__(self):

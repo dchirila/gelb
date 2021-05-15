@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 import pytest
-import antlr4 as a4
-from gelb.antlr4.generated_code import GeLBLexer, GeLBParser, GeLBVisitor
+from gelb.stage1_frontend import a4, GeLBLexer, GeLBParser
+
 
 def test_parsing_lattice_properties_block():
     # Arrange
