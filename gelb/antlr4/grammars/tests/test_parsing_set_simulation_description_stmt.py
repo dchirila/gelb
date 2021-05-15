@@ -1,18 +1,14 @@
 #!/usr/bin/env python3
 
 import pytest
-from gelb.stage1_frontend import a4, GeLBLexer, GeLBParser
+from gelb.stage1_frontend import get_parse_tree_as_string
 
 
 def test_simple():
     # Arrange
-    input = a4.InputStream("simulation_description=\"\";")
-    lexer = GeLBLexer(input)
-    stream = a4.CommonTokenStream(lexer)
-    parser = GeLBParser(stream)
-    tree = parser.set_simulation_description_stmt()
+    test_string = "simulation_description=\"\";"
     # Act (trigger parsing)
-    result = tree.toStringTree(recog=parser)
+    result = get_parse_tree_as_string("set_simulation_description_stmt", test_string)
     # Assert (test the parse tree)
     assert result == "(set_simulation_description_stmt simulation_description = \"\" ;)"
 
@@ -30,13 +26,7 @@ def test_simple():
     ]
 )
 def test_with_param(test_string, expected_parse_tree):
-    # Arrange
-    input = a4.InputStream(test_string)
-    lexer = GeLBLexer(input)
-    stream = a4.CommonTokenStream(lexer)
-    parser = GeLBParser(stream)
-    tree = parser.set_simulation_description_stmt()
     # Act (trigger parsing)
-    result = tree.toStringTree(recog=parser)
+    result = get_parse_tree_as_string("set_simulation_description_stmt", test_string)
     # Assert (test the parse tree)
     assert result == expected_parse_tree

@@ -1,45 +1,31 @@
 #!/usr/bin/env python3
 
 import pytest
-from gelb.stage1_frontend import a4, GeLBLexer, GeLBParser
+from gelb.stage1_frontend import get_parse_tree_as_string
 
 
 def test_simple():
     # Arrange
-    input = a4.InputStream("simulation_name=\"\";")
-    lexer = GeLBLexer(input)
-    stream = a4.CommonTokenStream(lexer)
-    parser = GeLBParser(stream)
-    tree = parser.set_simulation_name_stmt()
+    test_string = "simulation_name=\"\";"
     # Act (trigger parsing)
-    result = tree.toStringTree(recog=parser)
+    result = get_parse_tree_as_string("set_simulation_name_stmt", test_string)
     # Assert (test the parse tree)
     assert result == "(set_simulation_name_stmt simulation_name = \"\" ;)"
 
 def test_with_single_line_comments():
     # Arrange
-    input = a4.InputStream("// comment 1\nsimulation_name // comment 2\n=\"test1\";")
-    lexer = GeLBLexer(input)
-    stream = a4.CommonTokenStream(lexer)
-    parser = GeLBParser(stream)
-    tree = parser.set_simulation_name_stmt()
+    test_string = "// comment 1\nsimulation_name // comment 2\n=\"test1\";"
     # Act (trigger parsing)
-    result = tree.toStringTree(recog=parser)
+    result = get_parse_tree_as_string("set_simulation_name_stmt", test_string)
     # Assert (test the parse tree)
     assert result == "(set_simulation_name_stmt simulation_name = \"test1\" ;)"
 
 def test_with_multi_line_comments():
     # Arrange
-    input = a4.InputStream(
-        # crazy amount of comments, just because we can :)
-        "/*com 1 */ simulation_name /* c2*/ = /*c3*/\n/* c 4 */ \"test2\" /*c5 */;/* c6*/"
-    )
-    lexer = GeLBLexer(input)
-    stream = a4.CommonTokenStream(lexer)
-    parser = GeLBParser(stream)
-    tree = parser.set_simulation_name_stmt()
+    # crazy amount of comments, just because we can :)
+    test_string = "/*com 1 */ simulation_name /* c2*/ = /*c3*/\n/* c 4 */ \"test2\" /*c5 */;/* c6*/"
     # Act (trigger parsing)
-    result = tree.toStringTree(recog=parser)
+    result = get_parse_tree_as_string("set_simulation_name_stmt", test_string)
     # Assert (test the parse tree)
     assert result == "(set_simulation_name_stmt simulation_name = \"test2\" ;)"
 
@@ -57,13 +43,7 @@ def test_with_multi_line_comments():
     ]
 )
 def test_with_param(test_string, expected_parse_tree):
-    # Arrange
-    input = a4.InputStream(test_string)
-    lexer = GeLBLexer(input)
-    stream = a4.CommonTokenStream(lexer)
-    parser = GeLBParser(stream)
-    tree = parser.set_simulation_name_stmt()
     # Act (trigger parsing)
-    result = tree.toStringTree(recog=parser)
+    result = get_parse_tree_as_string("set_simulation_name_stmt", test_string)
     # Assert (test the parse tree)
     assert result == expected_parse_tree

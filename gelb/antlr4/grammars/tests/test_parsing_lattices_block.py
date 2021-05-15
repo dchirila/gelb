@@ -1,19 +1,15 @@
 #!/usr/bin/env python3
 
 import pytest
-from gelb.stage1_frontend import a4, GeLBLexer, GeLBParser
+from gelb.stage1_frontend import get_parse_tree_as_string
 
 
 def test_one_lattice_instance():
     # Arrange
-    input = a4.InputStream("""lattices {
+    test_string = """lattices {
         TODO
-    }""")
-    lexer = GeLBLexer(input)
-    stream = a4.CommonTokenStream(lexer)
-    parser = GeLBParser(stream)
-    tree = parser.lattices_block()
+    }"""
     # Act (trigger parsing)
-    result = tree.toStringTree(recog=parser)
+    result = get_parse_tree_as_string("lattices_block", test_string)
     # Assert (test the parse tree)
     assert result == "(lattices_block lattices { TODO })"
