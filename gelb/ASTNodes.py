@@ -18,6 +18,12 @@ class Program_N(Node_N):
         # self.list_of_node_classes = None
         # self.geometry = None
 
+class SetSimulationNameStmt_N(Node_N):
+    pass
+
+class SetSimulationDescriptionStmt_N(Node_N):
+    pass
+
 # class LatticeProperties_N(Node_N):
 #     def __init__(self):
 #         pass
@@ -54,9 +60,9 @@ class Program_N(Node_N):
 #     def __init__(self):
 #         pass
 
-# class Id_N(Node_N):
-#     def __init__(self):
-#         pass
+class Identifier_N(Node_N):
+    def __init__(self, name):
+        self.name = name
 
 # class RectSelOfLatticeDFs_N(Node_N):
 #     """
@@ -71,9 +77,14 @@ class Program_N(Node_N):
 #     def __init__(self):
 #         pass
 
-# class BinaryExpr_N(Node_N):
-#     def __init__(self):
-#         pass
+class BinaryExpr_N(Node_N):
+    def __init__(self, left, right):
+        self.left = left
+        self.righ = right
+
+class Add_N(BinaryExpr_N):
+    def __init__(self, left, right):
+        super(Add_N, self).__init__(left, right)
 
 # class UnaryExpr_N(Node_N):
 #     def __init__(self):
@@ -98,6 +109,68 @@ class StringLiteral_N(Node_N):
 # class List_N(Node_N):
 #     def __init__(self):
 #         self.value = None
+
+# NOTE: later, we can distinguish (maybe) between:
+#       - intrinsic &
+#       - user-defined functions
+class FunctionCall_N(Node_N):
+    def __init__(self, args_list):
+        self.args_list = args_list  # TODO: make this a =List_N= !
+
+# TODO make Abstract Base Class
+class Stmt_N(Node_N):
+    pass
+
+# NOTE: declaration AND assignment!
+class ConstantDefinitionStmt_N(Stmt_N):
+    def __init__(self, name, value):
+        self.name = name
+        self.value = value
+
+class VariableDeclarationStmt_N(Stmt_N):
+    def __init__(self, name):
+        self.name = name
+        self.value = None
+
+    def __init__(self, name, value):
+        self.name = name
+        self.value = value
+
+class AssignmentStmt_N(Stmt_N):
+    def __init__(self, lhs, rhs):
+        self.lhs = lhs
+        self.rhs = rhs
+
+class VariableAssignmentStmt_N(AssignmentStmt_N):
+    pass
+
+class LatticeAssignmentStmt_N(AssignmentStmt_N):
+    pass
+
+# TODO only allow inside GeometryBlock_N
+class GeometryAssignmentStmt_N(AssignmentStmt_N):
+    pass
+
+class LatticesBlock_N(Node_N):
+    pass
+
+# TODO only allow inside LatticesBlock_N
+class LatticeInstantiationStmt_N(Node_N):
+    pass
+
+class NodeClassesBlock_N(Node_N):
+    pass
+
+# TODO only allow inside NodeClassesBlock_N
+class NodeClassInstantiationStmt_N(Node_N):
+    pass
+
+class UserFunctionBlock_N(Node_N):
+    pass
+
+# TODO only allow inside UserFunctionBlock_N
+class ReturnStmt_N(Node_N):
+    pass
 
 # class TODO_N(Node_N):
 #     def __init__(self):

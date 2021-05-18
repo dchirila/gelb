@@ -14,8 +14,12 @@ gelb_program: //
 	// geometry_block
 	EOF;
 
-set_simulation_name_stmt: SIMULATION_NAME OP_ASSIGN STRING SEMICOLON;
-set_simulation_description_stmt: SIMULATION_DESCRIPTION OP_ASSIGN STRING SEMICOLON;
+set_simulation_name_stmt: SIMULATION_NAME PAREN_OPEN
+    STRING
+PAREN_CLOSE SEMICOLON;
+set_simulation_description_stmt: SIMULATION_DESCRIPTION PAREN_OPEN
+    STRING
+PAREN_CLOSE SEMICOLON;
 
 lattice_properties_block: LATTICE_PROPERTIES ID CURLY_OPEN
 	TODO // const_decl_stmt*
@@ -57,6 +61,11 @@ CURLY_CLOSE;
 
 
 // **** TMP **** //
+/* TODO: Implement =array_initializer=
+   REFs: - Sec 2.4 @A4-book
+         - Ch 4 (A quick tour) & Ch 5 (Designing grammars) @A4-book
+         - py3antlr4book repo
+*/
 
 // global_constants_block: GLOBAL_CONSTANTS LCURLY
 //         const_decl_stmt*

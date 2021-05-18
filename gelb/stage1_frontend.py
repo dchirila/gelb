@@ -4,6 +4,12 @@ import antlr4 as a4
 from gelb.antlr4.generated_code import GeLBLexer, GeLBParser, GeLBVisitor
 # from gelb.ASTNodes import *
 
+# TODO: "flesh it out!"
+# INPUT: ANTLR4-generated ParseTree
+# OUTPUT: GeLB AST (*root* node)
+class ASTBuilderVisitor(GeLBVisitor):
+    pass
+
 def get_parse_tree_as_string(start_rule, test_string):
     input_stream = a4.InputStream(test_string)
     lexer = GeLBLexer(input_stream)

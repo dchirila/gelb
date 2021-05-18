@@ -58,3 +58,9 @@ TODO
 ## Cross-Cutting Concerns
 
 TODO
+
+## TODO: Organize
+
+- I could have used other implementation languages (e.g. C++, Kotlin, or
+JavaScript), but they all make it harder to interact with SymPy (which was one
+one of the core libraries that I decided to use early-on).
