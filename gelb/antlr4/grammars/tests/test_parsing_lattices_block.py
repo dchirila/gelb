@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import pytest
-from gelb.stage1_frontend import get_parse_tree_as_string
+from gelb.stage1_frontend import get_cst_as_string
 
 
 def test_one_lattice_instance():
@@ -10,6 +10,6 @@ def test_one_lattice_instance():
         TODO
     }"""
     # Act (trigger parsing)
-    result = get_parse_tree_as_string("lattices_block", test_string)
+    result = get_cst_as_string("lattices_block", test_string)
     # Assert (test the parse tree)
     assert result == "(lattices_block lattices { TODO })"

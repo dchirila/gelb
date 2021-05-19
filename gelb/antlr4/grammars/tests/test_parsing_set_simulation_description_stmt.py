@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 
 import pytest
-from gelb.stage1_frontend import get_parse_tree_as_string
+from gelb.stage1_frontend import get_cst_as_string
 
 
 def test_simple():
     # Arrange
     test_string = "simulation_description(\"\");"
     # Act (trigger parsing)
-    result = get_parse_tree_as_string("set_simulation_description_stmt", test_string)
+    result = get_cst_as_string("set_simulation_description_stmt", test_string)
     # Assert (test the parse tree)
     assert result == "(set_simulation_description_stmt simulation_description ( \"\" ) ;)"
 
@@ -27,6 +27,6 @@ def test_simple():
 )
 def test_with_param(test_string, expected_parse_tree):
     # Act (trigger parsing)
-    result = get_parse_tree_as_string("set_simulation_description_stmt", test_string)
+    result = get_cst_as_string("set_simulation_description_stmt", test_string)
     # Assert (test the parse tree)
     assert result == expected_parse_tree

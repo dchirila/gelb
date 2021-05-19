@@ -5,6 +5,7 @@ class Node_N(object):
     def eval(self):
         raise NotImplementedError()
 
+
 class Program_N(Node_N):
     def __init__(self):
         self.simulation_name = None
@@ -18,51 +19,64 @@ class Program_N(Node_N):
         # self.list_of_node_classes = None
         # self.geometry = None
 
+
 class SetSimulationNameStmt_N(Node_N):
     pass
 
+
 class SetSimulationDescriptionStmt_N(Node_N):
     pass
+
 
 # class LatticeProperties_N(Node_N):
 #     def __init__(self):
 #         pass
 
+
 # class Lattices_N(Node_N):
 #     def __init__(self):
 #         pass
+
 
 # class NodeClasses_N(Node_N):
 #     def __init__(self):
 #         pass
 
+
 # class Initializer_N(Node_N):
 #     def __init__(self):
 #         pass
+
 
 # class Dynamic_N(Node_N):
 #     def __init__(self):
 #         pass
 
+
 # class Gauge_N(Node_N):
 #     def __init__(self):
 #         pass
+
 
 # class Function_N(Node_N):
 #     def __init__(self):
 #         pass
 
+
 # class Geometry_N(Node_N):
 #     def __init__(self):
 #         pass
+
 
 # class Expr_N(Node_N):
 #     def __init__(self):
 #         pass
 
+
 class Identifier_N(Node_N):
     def __init__(self, name):
         self.name = name
+
 
 # class RectSelOfLatticeDFs_N(Node_N):
 #     """
@@ -73,42 +87,58 @@ class Identifier_N(Node_N):
 #     def __init__(self):
 #         pass
 
+
 # class RectSelOfArrayElems_N(Node_N):
 #     def __init__(self):
 #         pass
+
 
 class BinaryExpr_N(Node_N):
     def __init__(self, left, right):
         self.left = left
         self.righ = right
 
+
 class Add_N(BinaryExpr_N):
     def __init__(self, left, right):
         super(Add_N, self).__init__(left, right)
+
 
 # class UnaryExpr_N(Node_N):
 #     def __init__(self):
 #         pass
 
-# class IntLiteral_N(Node_N):
-#     def __init__(self):
-#         self.value = None
+
+class IntLiteral_N(Node_N):
+    def __init__(self, value):
+        self.value = value
+
+    def __str__(self):
+        return "(IntLiteral " + str(self.value) + ")"
+
 
 # class FloatLiteral_N(Node_N):
-#     def __init__(self):
-#         self.value = None
+#     def __init__(self, value):
+#         self.value = value
+
 
 # class BoolLiteral_N(Node_N):
-#     def __init__(self):
-#         self.value = None
+#     def __init__(self, value):
+#         self.value = value
+
 
 class StringLiteral_N(Node_N):
     def __init__(self, value):
         self.value = value
+
+    def __str__(self):
+        return "(StringLiteral " + self.value + ")"
+
 #
 # class List_N(Node_N):
 #     def __init__(self):
 #         self.value = None
+
 
 # NOTE: later, we can distinguish (maybe) between:
 #       - intrinsic &
@@ -117,15 +147,18 @@ class FunctionCall_N(Node_N):
     def __init__(self, args_list):
         self.args_list = args_list  # TODO: make this a =List_N= !
 
+
 # TODO make Abstract Base Class
 class Stmt_N(Node_N):
     pass
+
 
 # NOTE: declaration AND assignment!
 class ConstantDefinitionStmt_N(Stmt_N):
     def __init__(self, name, value):
         self.name = name
         self.value = value
+
 
 class VariableDeclarationStmt_N(Stmt_N):
     def __init__(self, name):
@@ -136,41 +169,52 @@ class VariableDeclarationStmt_N(Stmt_N):
         self.name = name
         self.value = value
 
+
 class AssignmentStmt_N(Stmt_N):
     def __init__(self, lhs, rhs):
         self.lhs = lhs
         self.rhs = rhs
 
+
 class VariableAssignmentStmt_N(AssignmentStmt_N):
     pass
 
+
 class LatticeAssignmentStmt_N(AssignmentStmt_N):
     pass
+
 
 # TODO only allow inside GeometryBlock_N
 class GeometryAssignmentStmt_N(AssignmentStmt_N):
     pass
 
+
 class LatticesBlock_N(Node_N):
     pass
+
 
 # TODO only allow inside LatticesBlock_N
 class LatticeInstantiationStmt_N(Node_N):
     pass
 
+
 class NodeClassesBlock_N(Node_N):
     pass
+
 
 # TODO only allow inside NodeClassesBlock_N
 class NodeClassInstantiationStmt_N(Node_N):
     pass
 
+
 class UserFunctionBlock_N(Node_N):
     pass
+
 
 # TODO only allow inside UserFunctionBlock_N
 class ReturnStmt_N(Node_N):
     pass
+
 
 # class TODO_N(Node_N):
 #     def __init__(self):
