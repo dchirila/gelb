@@ -13,6 +13,7 @@ def test_simple():
     # Assert (test the (sub-)AST, based on string representation)
     assert str(ast) == "(StringLiteral \"test_1\")"
 
+
 def test_with_comments():
     # Arrange
     test_string = "\n\n/*some comment*/simulation_name/*an other*/(\n\"test 2\");"

@@ -7,7 +7,7 @@ TODO : 'TODO' ;
 //                     BEGIN: Keywords                     //
 SIMULATION_NAME : 'simulation_name' ;
 SIMULATION_DESCRIPTION : 'simulation_description' ;
-//GLOBAL_CONSTANTS : 'global_constants' ;
+GLOBAL_CONSTANTS : 'global_constants' ;
 LATTICES: 'lattices';
 // LATTICE: 'lattice';
 LATTICE_PROPERTIES : 'lattice_properties' ;
@@ -26,23 +26,23 @@ LATTICE_PROPERTIES : 'lattice_properties' ;
 
 // BEGIN: Keywords for data-types
 // bool
-// BOOL : 'bool' ;
+BOOL : 'bool' ;
 // TRUE: 'true';
 // FALSE: 'false';
 // int
-// INT64 : 'int64' ;
-// INT32 : 'int32' ;
-// INT16 : 'int16' ;
-// INT8 : 'int8' ;
-// INT : 'int' ;
+INT64 : 'int64' ;
+INT32 : 'int32' ;
+INT16 : 'int16' ;
+INT8 : 'int8' ;
+INT : 'int' ;
 // real
-// REAL64 : 'real64' ;
-// REAL32 : 'real32' ;
-// REAL16 : 'real16' ;
-// REAL : 'real' ;
+REAL64 : 'real64' ;
+REAL32 : 'real32' ;
+REAL16 : 'real16' ;
+REAL : 'real' ;
 // datatype-modifiers (for constants and arrays)
-// CONST : 'const' ;
-// ARRAY : 'array' ;
+CONST : 'const' ;
+ARRAY : 'array' ;
 // END: Keywords for data-types
 
 // INITIALIZER: 'initializer';
@@ -67,8 +67,8 @@ LATTICE_PROPERTIES : 'lattice_properties' ;
 //                     BEGIN: Operators                     //
 OP_ASSIGN: '=';
 // ... chevrons (angle brackets)
-// OP_LESS: '<';
-// OP_GREATER: '>';
+OP_LESS: '<';
+OP_GREATER: '>';
 //                     END: Operators                     //
 
 //                     BEGIN: Punctuation                     //
@@ -85,7 +85,7 @@ CURLY_CLOSE: '}';
 // COLON: ':';
 SEMICOLON: ';';
 // VERT: '|';
-// COMMA: ',';
+COMMA: ',';
 // DOT: '.';
 //                     END: Punctuation                     //
 

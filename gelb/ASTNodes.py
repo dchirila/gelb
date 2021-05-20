@@ -92,6 +92,13 @@ class Identifier_N(Node_N):
 #     def __init__(self):
 #         pass
 
+class ScalarDataType_N(Node_N):
+    pass  # TODO: capture type (one of the few allowed options)
+          # TODO: enforce options @__init__
+
+class ArrayDataType_N(Node_N):
+    pass  # TODO: capture element data-type & shape
+
 
 class BinaryExpr_N(Node_N):
     def __init__(self, left, right):
@@ -161,10 +168,6 @@ class ConstantDefinitionStmt_N(Stmt_N):
 
 
 class VariableDeclarationStmt_N(Stmt_N):
-    def __init__(self, name):
-        self.name = name
-        self.value = None
-
     def __init__(self, name, value):
         self.name = name
         self.value = value
