@@ -17,6 +17,42 @@ class ASTBuilderVisitor(GeLBVisitor):
     def visitSet_simulation_description_stmt(self, ctx:GeLBParser.Set_simulation_description_stmtContext):
         return StringLiteral_N(ctx.STRING().__str__())
 
+    # Visit a parse tree produced by GeLBParser#scalar_bool_data_type.
+    def visitScalar_bool_data_type(self, ctx:GeLBParser.Scalar_bool_data_typeContext):
+        return ScalarDataType_N("bool")
+
+    # Visit a parse tree produced by GeLBParser#scalar_int_data_type.
+    def visitScalar_int_data_type(self, ctx:GeLBParser.Scalar_int_data_typeContext):
+        if ctx.INT64():
+            return ScalarDataType_N("int64")
+        elif ctx.INT32():
+            return ScalarDataType_N("int32")
+        elif ctx.INT16():
+            return ScalarDataType_N("int16")
+        elif ctx.INT8():
+            return ScalarDataType_N("int8")
+        elif ctx.INT():
+            return ScalarDataType_N("int")
+        else:
+            raise TypeError(
+                "<<<GeLB-Error>>> Invalid scalar INTEGER data-type specified!"
+            )
+
+    # Visit a parse tree produced by GeLBParser#scalar_real_data_type.
+    def visitScalar_real_data_type(self, ctx:GeLBParser.Scalar_real_data_typeContext):
+        if ctx.REAL64():
+            return ScalarDataType_N("real64")
+        elif ctx.REAL32():
+            return ScalarDataType_N("real32")
+        elif ctx.REAL16():
+            return ScalarDataType_N("real16")
+        elif ctx.REAL():
+            return ScalarDataType_N("real")
+        else:
+            raise TypeError(
+                "<<<GeLB-Error>>> Invalid scalar REAL data-type specified!"
+            )
+
     # Visit a parse tree produced by GeLBParser#array_literal_4d.
     def visitArray_literal_4d(self, ctx:GeLBParser.Array_literal_4dContext):
         return Array4DLiteral_N(self.get_list_of_children_sub_asts(ctx))

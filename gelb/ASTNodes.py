@@ -93,8 +93,24 @@ class Identifier_N(Node_N):
 #         pass
 
 class ScalarDataType_N(Node_N):
-    pass  # TODO: capture type (one of the few allowed options)
-          # TODO: enforce options @__init__
+    supported_scalar_types = [
+        'bool',  # boolean
+        'int64', 'int32', 'int16', 'int8', 'int',  # integer
+        'real64', 'real32', 'real16', 'real'  # real
+    ]
+    def __init__(self, value):
+        if value not in self.supported_scalar_types:
+            raise TypeError(
+                "<<<GeLB-Error>>> " + str(value) +
+                " is not a valid scalar data-type!" +
+                "\nHint: you can use one of the following values: " +
+                str(self.supported_scalar_types)
+            )
+        self.value = value
+
+    def __str__(self):
+        return "(ScalarDataType " + self.value + ")"
+
 
 class ArrayDataType_N(Node_N):
     pass  # TODO: capture element data-type & shape
@@ -124,7 +140,7 @@ class IntLiteral_N(Node_N):
         return "(IntLiteral " + str(self.value) + ")"
 
 
-# class FloatLiteral_N(Node_N):
+# class RealLiteral_N(Node_N):
 #     def __init__(self, value):
 #         self.value = value
 
@@ -187,10 +203,6 @@ class Array4DLiteral_N(ArrayLiteralBase_N):
     def __init__(self, value):
         super().__init__(value, 4)
 
-# class List_N(Node_N):
-#     def __init__(self):
-#         self.value = None
-
 
 # NOTE: later, we can distinguish (maybe) between:
 #       - intrinsic &
@@ -210,6 +222,9 @@ class ConstantDefinitionStmt_N(Stmt_N):
     def __init__(self, name, value):
         self.name = name
         self.value = value
+
+    def __str__(self):
+        return "TODO"
 
 
 class VariableDeclarationStmt_N(Stmt_N):
