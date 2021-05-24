@@ -160,15 +160,29 @@ class Array1DLiteral_N(Node_N):
         return result
 
 
-# class Array2DLiteral(Node_N):
+class Array2DLiteral_N(Node_N):
+    def __init__(self, value):
+        # value is a Python list of Array1DLiteral_N instances
+        self.value = value
+
+    def __str__(self):
+        result = "(ArrayLiteral2D {"
+        is_first_sub_array = True
+        for sub_array in self.value:
+            if is_first_sub_array:
+                is_first_sub_array = False
+                result = result + str(sub_array)
+            else:
+                result = result + ", " + str(sub_array)
+        result = result + "})"
+        return result
+
+
+# class Array3DLiteral_N(Node_N):
 #     TODO use np.array
 #
 #
-# class Array3DLiteral(Node_N):
-#     TODO use np.array
-#
-#
-# class Array4DLiteral(Node_N):
+# class Array4DLiteral_N(Node_N):
 #     TODO use np.array
 
 
