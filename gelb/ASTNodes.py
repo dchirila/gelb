@@ -142,13 +142,21 @@ class StringLiteral_N(Node_N):
         return "(StringLiteral " + self.value + ")"
 
 
-class Array1DLiteral_N(Node_N):
-    def __init__(self, value):
-        # value is a Python list
+# base-class for Array{1,2,3,4}DLiteral_N
+class ArrayLiteralBase_N(Node_N):
+    def __init__(self, value, dimensionality):
+        # value is a Python list, where the elements can be (depending on the
+        # dimensionality of the derived class):
+        # - IntLiteral_N @Array1DLiteral_N
+        #   TODO: replace with ScalarExpr_N or Expr_N later (general exprs).
+        # - Array1DLiteral_N @Array2DLiteral_N
+        # - Array2DLiteral_N @Array3DLiteral_N
+        # - Array3DLiteral_N @Array4DLiteral_N
         self.value = value
+        self.dimensionality = dimensionality
 
     def __str__(self):
-        result = "(ArrayLiteral1D {"
+        result = "(ArrayLiteral" + str(self.dimensionality) + "D {"
         is_first_element = True
         for element in self.value:
             if is_first_element:
@@ -160,59 +168,24 @@ class Array1DLiteral_N(Node_N):
         return result
 
 
-class Array2DLiteral_N(Node_N):
+class Array1DLiteral_N(ArrayLiteralBase_N):
     def __init__(self, value):
-        # value is a Python list of Array1DLiteral_N instances
-        self.value = value
-
-    def __str__(self):
-        result = "(ArrayLiteral2D {"
-        is_first_sub_array = True
-        for sub_array in self.value:
-            if is_first_sub_array:
-                is_first_sub_array = False
-                result = result + str(sub_array)
-            else:
-                result = result + ", " + str(sub_array)
-        result = result + "})"
-        return result
+        super().__init__(value, 1)
 
 
-class Array3DLiteral_N(Node_N):
+class Array2DLiteral_N(ArrayLiteralBase_N):
     def __init__(self, value):
-        # value is a Python list of Array2DLiteral_N instances
-        self.value = value
-
-    def __str__(self):
-        result = "(ArrayLiteral3D {"
-        is_first_sub_array = True
-        for sub_array in self.value:
-            if is_first_sub_array:
-                is_first_sub_array = False
-                result = result + str(sub_array)
-            else:
-                result = result + ", " + str(sub_array)
-        result = result + "})"
-        return result
+        super().__init__(value, 2)
 
 
-class Array4DLiteral_N(Node_N):
+class Array3DLiteral_N(ArrayLiteralBase_N):
     def __init__(self, value):
-        # value is a Python list of Array3DLiteral_N instances
-        self.value = value
+        super().__init__(value, 3)
 
-    def __str__(self):
-        result = "(ArrayLiteral4D {"
-        is_first_sub_array = True
-        for sub_array in self.value:
-            if is_first_sub_array:
-                is_first_sub_array = False
-                result = result + str(sub_array)
-            else:
-                result = result + ", " + str(sub_array)
-        result = result + "})"
-        return result
 
+class Array4DLiteral_N(ArrayLiteralBase_N):
+    def __init__(self, value):
+        super().__init__(value, 4)
 
 # class List_N(Node_N):
 #     def __init__(self):
