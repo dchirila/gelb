@@ -196,8 +196,22 @@ class Array3DLiteral_N(Node_N):
         return result
 
 
-# class Array4DLiteral_N(Node_N):
-#     TODO use np.array
+class Array4DLiteral_N(Node_N):
+    def __init__(self, value):
+        # value is a Python list of Array3DLiteral_N instances
+        self.value = value
+
+    def __str__(self):
+        result = "(ArrayLiteral4D {"
+        is_first_sub_array = True
+        for sub_array in self.value:
+            if is_first_sub_array:
+                is_first_sub_array = False
+                result = result + str(sub_array)
+            else:
+                result = result + ", " + str(sub_array)
+        result = result + "})"
+        return result
 
 
 # class List_N(Node_N):

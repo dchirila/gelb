@@ -17,6 +17,26 @@ class ASTBuilderVisitor(GeLBVisitor):
     def visitSet_simulation_description_stmt(self, ctx:GeLBParser.Set_simulation_description_stmtContext):
         return StringLiteral_N(ctx.STRING().__str__())
 
+    # Visit a parse tree produced by GeLBParser#array_literal_4d.
+    def visitArray_literal_4d(self, ctx:GeLBParser.Array_literal_4dContext):
+        list_of_children_sub_asts = []
+        # Strategy: visit all children nodes (based on the implementation of
+        # ParseTreeVisitor.visitChildren), and append non-trivial children to
+        # the list_of_children_sub_asts.
+        n = ctx.getChildCount()
+        # print("<<<DEBUG>>>", ctx.getChildCount())
+        for i in range(n):
+            c = ctx.getChild(i)
+            # NOTE: boring children (i.e. syntax elements which don't belong
+            # inside the AST) yield childResult == None, because we DON'T
+            # implement a visitor-method override for them!
+            childResult = c.accept(self)
+            if childResult:
+                # print("<<<DEBUG-CHILD>>>", str(childResult))
+                list_of_children_sub_asts.append(childResult)
+
+        return Array4DLiteral_N(list_of_children_sub_asts)
+
     # Visit a parse tree produced by GeLBParser#array_literal_3d.
     def visitArray_literal_3d(self, ctx:GeLBParser.Array_literal_3dContext):
         list_of_children_sub_asts = []
