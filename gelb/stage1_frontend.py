@@ -17,6 +17,30 @@ class ASTBuilderVisitor(GeLBVisitor):
     def visitSet_simulation_description_stmt(self, ctx:GeLBParser.Set_simulation_description_stmtContext):
         return StringLiteral_N(ctx.STRING().__str__())
 
+    # Visit a parse tree produced by GeLBParser#array_literal_1d.
+    def visitArray_literal_1d(self, ctx:GeLBParser.Array_literal_1dContext):
+        list_of_children_sub_asts = []
+        # Strategy: visit all children nodes (based on the implementation of
+        # ParseTreeVisitor.visitChildren), and append non-trivial children to
+        # the list_of_children_sub_asts.
+        n = ctx.getChildCount()
+        # print("<<<DEBUG>>>", ctx.getChildCount())
+        for i in range(n):
+            c = ctx.getChild(i)
+            # NOTE: boring children (i.e. syntax elements which don't belong
+            # inside the AST) yield childResult == None, because we DON'T
+            # implement a visitor-method override for them!
+            childResult = c.accept(self)
+            if childResult:
+                # print("<<<DEBUG-CHILD>>>", str(childResult))
+                list_of_children_sub_asts.append(childResult)
+
+        return Array1DLiteral_N(list_of_children_sub_asts)
+
+    # Visit a parse tree produced by GeLBParser#scalar_expr.
+    def visitScalar_expr(self, ctx:GeLBParser.Scalar_exprContext):
+        return IntLiteral_N(int(ctx.NON_NEGATIVE_INTEGER().__str__()))
+
 
 def get_cst_as_string(start_rule, input_string):
     input_stream = a4.InputStream(input_string)

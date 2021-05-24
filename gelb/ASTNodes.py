@@ -141,7 +141,37 @@ class StringLiteral_N(Node_N):
     def __str__(self):
         return "(StringLiteral " + self.value + ")"
 
+
+class Array1DLiteral_N(Node_N):
+    def __init__(self, value):
+        # value is a Python list
+        self.value = value
+
+    def __str__(self):
+        result = "(ArrayLiteral1D {"
+        is_first_element = True
+        for element in self.value:
+            if is_first_element:
+                is_first_element = False
+                result = result + str(element)
+            else:
+                result = result + ", " + str(element)
+        result = result + "})"
+        return result
+
+
+# class Array2DLiteral(Node_N):
+#     TODO use np.array
 #
+#
+# class Array3DLiteral(Node_N):
+#     TODO use np.array
+#
+#
+# class Array4DLiteral(Node_N):
+#     TODO use np.array
+
+
 # class List_N(Node_N):
 #     def __init__(self):
 #         self.value = None
