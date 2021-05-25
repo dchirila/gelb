@@ -53,6 +53,24 @@ class ASTBuilderVisitor(GeLBVisitor):
                 "<<<GeLB-Error>>> Invalid scalar REAL data-type specified!"
             )
 
+    # Visit a parse tree produced by GeLBParser#array_data_type.
+    def visitArray_data_type(self, ctx:GeLBParser.Array_data_typeContext):
+        list_of_children_sub_asts = self.get_list_of_children_sub_asts(ctx)
+        # print("<<<DEBUG>>>", ctx.getChildCount())
+        # for i in range(ctx.getChildCount()):
+        #     c = ctx.getChild(i)
+        #     childResult = c.accept(self)
+        #     if childResult:
+        #         print("<<<DEBUG>>>  ", childResult)
+
+        # raise TypeError()
+        return ArrayDataType_N(
+            # should contain the element data-type
+            list_of_children_sub_asts[0],
+            # should contain the shape
+            list_of_children_sub_asts[1]
+        )
+
     # Visit a parse tree produced by GeLBParser#array_literal_4d.
     def visitArray_literal_4d(self, ctx:GeLBParser.Array_literal_4dContext):
         return Array4DLiteral_N(self.get_list_of_children_sub_asts(ctx))

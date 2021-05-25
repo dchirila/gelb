@@ -87,7 +87,11 @@ scalar_real_data_type : REAL64 | REAL32 | REAL16 | REAL ;
 array_data_type : ARRAY OP_LESS
     scalar_data_type
     COMMA
-    (array_literal_1d | NON_NEGATIVE_INTEGER)  // shape (scalar or array)
+    /* shape is (depending on dimensionality):
+       - a one-dimensional array (for dimensionality >= 2) or
+       - a scalar_expr (for dimensionality == 1)
+     */
+    (array_literal_1d | scalar_expr)
 OP_GREATER ;
 
 /* Fixed-dimensionality array literals

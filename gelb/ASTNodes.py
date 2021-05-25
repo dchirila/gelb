@@ -113,7 +113,18 @@ class ScalarDataType_N(Node_N):
 
 
 class ArrayDataType_N(Node_N):
-    pass  # TODO: capture element data-type & shape
+    def __init__(self, element_data_type, shape):
+        self.element_data_type = element_data_type
+        self.shape = shape  # might be either Array1DLiteral_N or IntLiteral_N
+
+    def __str__(self):
+        return (
+            "(ArrayDataType " +
+            str(self.element_data_type) +
+            " " +
+            str(self.shape) +
+            ")"
+        )
 
 
 class BinaryExpr_N(Node_N):

@@ -13,7 +13,7 @@ def test_1d_array_type():
     assert result == (
         "(array_data_type array < " +
             "(scalar_data_type (scalar_int_data_type int64)) , " +
-            "3 " +
+            "(scalar_expr 3) " +
         ">)")
 
 def test_2d_array_type():
