@@ -230,12 +230,19 @@ class Stmt_N(Node_N):
 
 # NOTE: declaration AND assignment!
 class ConstantDefinitionStmt_N(Stmt_N):
-    def __init__(self, name, value):
+    def __init__(self, data_type, name, value):
+        self.data_type = data_type
         self.name = name
         self.value = value
 
     def __str__(self):
-        return "TODO"
+        return (
+            "(ConstantDefinitionStmt " +
+            str(self.name) + " " +
+            str(self.data_type) + " " +
+            str(self.value) +
+            ")"
+        )
 
 
 class VariableDeclarationStmt_N(Stmt_N):
