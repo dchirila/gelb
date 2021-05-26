@@ -17,6 +17,10 @@ class ASTBuilderVisitor(GeLBVisitor):
     def visitSet_simulation_description_stmt(self, ctx:GeLBParser.Set_simulation_description_stmtContext):
         return StringLiteral_N(ctx.STRING().__str__())
 
+    # Visit a parse tree produced by GeLBParser#global_constants_block.
+    def visitGlobal_constants_block(self, ctx:GeLBParser.Global_constants_blockContext):
+        return GlobalConstantsBlock_N(self.get_list_of_children_sub_asts(ctx))
+
     # Visit a parse tree produced by GeLBParser#constant_definition_stmt.
     def visitConstant_definition_stmt(self, ctx:GeLBParser.Constant_definition_stmtContext):
         list_of_children_sub_asts = self.get_list_of_children_sub_asts(ctx)

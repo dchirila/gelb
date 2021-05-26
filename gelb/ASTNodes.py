@@ -28,42 +28,62 @@ class SetSimulationDescriptionStmt_N(Node_N):
     pass
 
 
-# class LatticeProperties_N(Node_N):
+class Block_N(Node_N):
+    def __init__(self, list_of_stmts):
+        self.list_of_stmts = list_of_stmts
+
+    def __str__(self):
+        raise NotImplementedError()
+
+
+class GlobalConstantsBlock_N(Block_N):
+    def __init__(self, list_of_stmts):
+        super().__init__(list_of_stmts)
+
+    def __str__(self):
+        result = "(GlobalConstantsBlock"
+        for stmt in self.list_of_stmts:
+            result = result + " " + str(stmt)
+        result = result + ")"
+        return result
+
+
+# class LatticeConstantsBlock_N(Node_N):
 #     def __init__(self):
 #         pass
 
 
-# class Lattices_N(Node_N):
+# class LatticeBlock_N(Node_N):
 #     def __init__(self):
 #         pass
 
 
-# class NodeClasses_N(Node_N):
+# class NodeClassesBlock_N(Node_N):
 #     def __init__(self):
 #         pass
 
 
-# class Initializer_N(Node_N):
+# class InitializerBlock_N(Node_N):
 #     def __init__(self):
 #         pass
 
 
-# class Dynamic_N(Node_N):
+# class DynamicBlock_N(Node_N):
 #     def __init__(self):
 #         pass
 
 
-# class Gauge_N(Node_N):
+# class GaugeBlock_N(Node_N):
 #     def __init__(self):
 #         pass
 
 
-# class Function_N(Node_N):
+# class FunctionBlock_N(Node_N):
 #     def __init__(self):
 #         pass
 
 
-# class Geometry_N(Node_N):
+# class GeometryBlock_N(Node_N):
 #     def __init__(self):
 #         pass
 
@@ -135,7 +155,7 @@ class BinaryExpr_N(Node_N):
 
 class Add_N(BinaryExpr_N):
     def __init__(self, left, right):
-        super(Add_N, self).__init__(left, right)
+        super().__init__(left, right)
 
 
 # class UnaryExpr_N(Node_N):
