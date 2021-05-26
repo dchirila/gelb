@@ -17,6 +17,14 @@ class ASTBuilderVisitor(GeLBVisitor):
     def visitSet_simulation_description_stmt(self, ctx:GeLBParser.Set_simulation_description_stmtContext):
         return StringLiteral_N(ctx.STRING().__str__())
 
+    # Visit a parse tree produced by GeLBParser#variable_assignment_stmt.
+    def visitVariable_assignment_stmt(self, ctx:GeLBParser.Variable_assignment_stmtContext):
+        list_of_children_sub_asts = self.get_list_of_children_sub_asts(ctx)
+        return VariableAssignmentStmt_N(
+            ctx.ID(),
+            list_of_children_sub_asts[0]
+        )
+
     # Visit a parse tree produced by GeLBParser#scalar_bool_data_type.
     def visitScalar_bool_data_type(self, ctx:GeLBParser.Scalar_bool_data_typeContext):
         return ScalarDataType_N("bool")

@@ -251,7 +251,17 @@ class AssignmentStmt_N(Stmt_N):
 
 
 class VariableAssignmentStmt_N(AssignmentStmt_N):
-    pass
+    def __init__(self, lhs, rhs):
+        super().__init__(lhs, rhs)
+
+    def __str__(self):
+        return (
+            "(VariableAssignmentStmt " +
+            str(self.lhs) +
+            " " +
+            str(self.rhs) +
+            ")"
+        )
 
 
 class LatticeAssignmentStmt_N(AssignmentStmt_N):

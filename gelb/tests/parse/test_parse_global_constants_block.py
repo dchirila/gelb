@@ -17,7 +17,9 @@ def test_simple():
     assert result == (
         "(global_constants_block global_constants { " +
         "(constant_definition_stmt const (data_type (scalar_data_type " +
-        "(scalar_int_data_type int))) (variable_assignment_stmt CX = 0 ;)) " +
+        "(scalar_int_data_type int))) (variable_assignment_stmt CX = " +
+        "(scalar_expr 0) ;)) " +
         "(constant_definition_stmt const (data_type (scalar_data_type " +
-        "(scalar_int_data_type int))) (variable_assignment_stmt Z = 123 ;)) })"
+        "(scalar_int_data_type int))) (variable_assignment_stmt Z = " +
+        "(scalar_expr 123) ;)) })"
     )

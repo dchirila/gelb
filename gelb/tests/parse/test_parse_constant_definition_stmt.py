@@ -13,6 +13,6 @@ def test_scalar_int():
     assert result == (
         "(constant_definition_stmt const " +
             "(data_type (scalar_data_type (scalar_int_data_type int))) " +
-            "(variable_assignment_stmt LENGTH = 32 ;)" +
+            "(variable_assignment_stmt LENGTH = (scalar_expr 32) ;)" +
         ")"
     )
