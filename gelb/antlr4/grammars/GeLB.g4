@@ -22,7 +22,7 @@ set_simulation_description_stmt : SIMULATION_DESCRIPTION PAREN_OPEN
     STRING
 PAREN_CLOSE SEMICOLON;
 
-lattice_properties_sub_block : LATTICE_PROPERTIES ID CURLY_OPEN
+lattice_constants_sub_block : LATTICE_CONSTANTS ID CURLY_OPEN
     constant_definition_stmt*
 CURLY_CLOSE;
 

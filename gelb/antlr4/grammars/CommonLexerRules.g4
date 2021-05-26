@@ -10,7 +10,7 @@ SIMULATION_DESCRIPTION : 'simulation_description' ;
 GLOBAL_CONSTANTS : 'global_constants' ;
 LATTICES: 'lattices';
 // LATTICE: 'lattice';
-LATTICE_PROPERTIES : 'lattice_properties' ;
+LATTICE_CONSTANTS : 'lattice_constants' ;
 // NODE_CLASSES: 'node_classes';
 // INITIALIZERS: 'initializers';
 // DYNAMICS: 'dynamics';
