@@ -16,11 +16,11 @@ def test_simple():
     result = get_cst_as_string("lattice_constants_sub_block", test_string)
     # Assert (test the parse tree)
     assert result == (
-            "(lattice_constants_sub_block lattice_constants D2Q1 { " +
-            "(constant_definition_stmt const (data_type (scalar_data_type " +
-            "(scalar_int_data_type int))) (variable_assignment_stmt D = " +
-            "(scalar_expr 2) ;)) " +
-            "(constant_definition_stmt const (data_type (scalar_data_type " +
-            "(scalar_int_data_type int))) (variable_assignment_stmt Q = " +
+            "(lattice_constants_sub_block lattice_constants D2Q1 { "
+            "(constant_definition_stmt const (data_type (scalar_data_type "
+            "(scalar_int_data_type int))) (variable_assignment_stmt D = "
+            "(scalar_expr 2) ;)) "
+            "(constant_definition_stmt const (data_type (scalar_data_type "
+            "(scalar_int_data_type int))) (variable_assignment_stmt Q = "
             "(scalar_expr 1) ;)) })"
     )

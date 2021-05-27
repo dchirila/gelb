@@ -11,14 +11,14 @@ def test_simple():
     result = get_cst_as_string("array_literal_3d", test_string)
     # Assert (test the parse tree)
     assert result == (
-        "(array_literal_3d { " +
-        "(array_literal_2d { " +
-                "(array_literal_1d { (scalar_expr 1) , (scalar_expr 2) }) , " +
-                "(array_literal_1d { (scalar_expr 3) , (scalar_expr 4) }) " +
-        "}) , " +
-        "(array_literal_2d { " +
-                "(array_literal_1d { (scalar_expr 5) , (scalar_expr 6) }) , " +
-                "(array_literal_1d { (scalar_expr 7) , (scalar_expr 8) }) " +
-        "}) " +
+        "(array_literal_3d { "
+        "(array_literal_2d { "
+                "(array_literal_1d { (scalar_expr 1) , (scalar_expr 2) }) , "
+                "(array_literal_1d { (scalar_expr 3) , (scalar_expr 4) }) "
+        "}) , "
+        "(array_literal_2d { "
+                "(array_literal_1d { (scalar_expr 5) , (scalar_expr 6) }) , "
+                "(array_literal_1d { (scalar_expr 7) , (scalar_expr 8) }) "
+        "}) "
         "})"
     )

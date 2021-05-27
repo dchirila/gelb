@@ -11,9 +11,9 @@ def test_1d_array_type():
     result = get_cst_as_string("array_data_type", test_string)
     # Assert (test the parse tree)
     assert result == (
-        "(array_data_type array < " +
-            "(scalar_data_type (scalar_int_data_type int64)) , " +
-            "(scalar_expr 3) " +
+        "(array_data_type array < "
+            "(scalar_data_type (scalar_int_data_type int64)) , "
+            "(scalar_expr 3) "
         ">)")
 
 def test_2d_array_type():
@@ -23,7 +23,7 @@ def test_2d_array_type():
     result = get_cst_as_string("array_data_type", test_string)
     # Assert (test the parse tree)
     assert result == (
-            "(array_data_type array < " +
-            "(scalar_data_type (scalar_real_data_type real64)) , " +
-            "(array_literal_1d { (scalar_expr 2) , (scalar_expr 3) }) " +
+            "(array_data_type array < "
+            "(scalar_data_type (scalar_real_data_type real64)) , "
+            "(array_literal_1d { (scalar_expr 2) , (scalar_expr 3) }) "
             ">)")

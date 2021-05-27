@@ -121,15 +121,14 @@ class ScalarDataType_N(Node_N):
     def __init__(self, value):
         if value not in self.supported_scalar_types:
             raise TypeError(
-                "<<<GeLB-Error>>> " + str(value) +
-                " is not a valid scalar data-type!" +
-                "\nHint: you can use one of the following values: " +
-                str(self.supported_scalar_types)
+                f"<<<GeLB-Error>>> {str(value)} is not a valid scalar data-type!"
+                f"\nHint: you can use one of the following values: "
+                f"{self.supported_scalar_types}"
             )
         self.value = value
 
     def __str__(self):
-        return "(ScalarDataType " + self.value + ")"
+        return f"(ScalarDataType {self.value})"
 
 
 class ArrayDataType_N(Node_N):
@@ -139,11 +138,7 @@ class ArrayDataType_N(Node_N):
 
     def __str__(self):
         return (
-            "(ArrayDataType " +
-            str(self.element_data_type) +
-            " " +
-            str(self.shape) +
-            ")"
+            f"(ArrayDataType {self.element_data_type} {self.shape})"
         )
 
 
@@ -168,7 +163,7 @@ class IntLiteral_N(Node_N):
         self.value = value
 
     def __str__(self):
-        return "(IntLiteral " + str(self.value) + ")"
+        return f"(IntLiteral {self.value})"
 
 
 # class RealLiteral_N(Node_N):
@@ -186,7 +181,7 @@ class StringLiteral_N(Node_N):
         self.value = value
 
     def __str__(self):
-        return "(StringLiteral " + self.value + ")"
+        return f"(StringLiteral {self.value})"
 
 
 # base-class for Array{1,2,3,4}DLiteral_N
@@ -257,11 +252,7 @@ class ConstantDefinitionStmt_N(Stmt_N):
 
     def __str__(self):
         return (
-            "(ConstantDefinitionStmt " +
-            str(self.name) + " " +
-            str(self.data_type) + " " +
-            str(self.value) +
-            ")"
+            f"(ConstantDefinitionStmt {self.name} {self.data_type} {self.value})"
         )
 
 
@@ -283,11 +274,7 @@ class VariableAssignmentStmt_N(AssignmentStmt_N):
 
     def __str__(self):
         return (
-            "(VariableAssignmentStmt " +
-            str(self.lhs) +
-            " " +
-            str(self.rhs) +
-            ")"
+            f"(VariableAssignmentStmt {self.lhs} {self.rhs})"
         )
 
 

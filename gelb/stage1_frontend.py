@@ -133,7 +133,7 @@ def get_cst_as_string(start_rule, input_string):
         cst = func_start_rule()
         return cst.toStringTree(recog=parser)
     else:
-        print("[ERROR] Can't find start rule '{}' @GeLBParser".format(start_rule))
+        print(f"[ERROR] Can't find start rule '{start_rule}' @GeLBParser")
 
 
 def get_ast(start_rule, input_string):
@@ -147,16 +147,16 @@ def get_ast(start_rule, input_string):
         func_start_rule = getattr(parser, start_rule)
         cst = func_start_rule()
         ast_builder = ASTBuilderVisitor()
-        visitor_method_name = "visit" + start_rule.capitalize()
+        visitor_method_name = f"visit{start_rule.capitalize()}"
         if hasattr(ast_builder, visitor_method_name):
             # TODO: trigger creation of (sub-)AST & return
             visitor_method = getattr(ast_builder, visitor_method_name)
             ast = visitor_method(cst)
             return ast
         else:
-            print("[ERROR] Can't find method '{}' @ASTBUilderVisitor".format(
-                visitor_method_name)
+            print(
+                f"[ERROR] Can't find method '{visitor_method_name}' "
+                f"@ASTBUilderVisitor"
             )
     else:
-        print("[ERROR] Can't find start rule '{}' @GeLBParser".format(start_rule))
-
+        print(f"[ERROR] Can't find start rule '{start_rule}' @GeLBParser")

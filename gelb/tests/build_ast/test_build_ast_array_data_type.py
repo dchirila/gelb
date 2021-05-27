@@ -19,7 +19,7 @@ def test_2d_array_type():
     ast = get_ast("array_data_type", test_string)
     # Assert
     assert str(ast) == (
-        "(ArrayDataType " +
-        "(ScalarDataType real64) " +
+        "(ArrayDataType "
+        "(ScalarDataType real64) "
         "(ArrayLiteral1D {(IntLiteral 2), (IntLiteral 3)}))"
     )
