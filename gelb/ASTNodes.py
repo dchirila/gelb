@@ -20,14 +20,6 @@ class Program_N(Node_N):
         # self.geometry = None
 
 
-class SetSimulationNameStmt_N(Node_N):
-    pass
-
-
-class SetSimulationDescriptionStmt_N(Node_N):
-    pass
-
-
 class Block_N(Node_N):
     def __init__(self, list_of_stmts):
         self.list_of_stmts = list_of_stmts
@@ -46,6 +38,33 @@ class GlobalConstantsBlock_N(Block_N):
             result = result + " " + str(stmt)
         result = result + ")"
         return result
+
+
+class LatticesBlock_N(Node_N):
+    pass
+
+
+# TODO only allow inside LatticesBlock_N
+class LatticeInstantiationStmt_N(Node_N):
+    pass
+
+
+class NodeClassesBlock_N(Node_N):
+    pass
+
+
+# TODO only allow inside NodeClassesBlock_N
+class NodeClassInstantiationStmt_N(Node_N):
+    pass
+
+
+class UserFunctionBlock_N(Node_N):
+    pass
+
+
+# TODO only allow inside UserFunctionBlock_N
+class ReturnStmt_N(Node_N):
+    pass
 
 
 # class LatticeConstantsBlock_N(Node_N):
@@ -284,33 +303,6 @@ class LatticeAssignmentStmt_N(AssignmentStmt_N):
 
 # TODO only allow inside GeometryBlock_N
 class GeometryAssignmentStmt_N(AssignmentStmt_N):
-    pass
-
-
-class LatticesBlock_N(Node_N):
-    pass
-
-
-# TODO only allow inside LatticesBlock_N
-class LatticeInstantiationStmt_N(Node_N):
-    pass
-
-
-class NodeClassesBlock_N(Node_N):
-    pass
-
-
-# TODO only allow inside NodeClassesBlock_N
-class NodeClassInstantiationStmt_N(Node_N):
-    pass
-
-
-class UserFunctionBlock_N(Node_N):
-    pass
-
-
-# TODO only allow inside UserFunctionBlock_N
-class ReturnStmt_N(Node_N):
     pass
 
 
