@@ -36,16 +36,19 @@ CURLY_CLOSE;
 
 lattices_block : LATTICES CURLY_OPEN
     // NOTE: a program needs at least one lattice!
-	lattice_instantiation_stmt+
+	lattice_insta_stmt+
 CURLY_CLOSE;
 
- lattice_instantiation_stmt :                  // Example:
-    LATTICE ID PAREN_OPEN                      // lattice f(
- 	NON_NEGATIVE_INTEGER COMMA                 //   d=2,
- 	NON_NEGATIVE_INTEGER COMMA                 //   q=9,
- 	scalar_data_type COMMA                     //   df_type=int64,
- 	(array_literal_1d | NON_NEGATIVE_INTEGER)  //   size=256
- 	PAREN_CLOSE SEMICOLON;                     // );
+ lattice_insta_stmt :  // Example:
+    LATTICE ID PAREN_OPEN       // lattice f(
+ 	NON_NEGATIVE_INTEGER COMMA  //   d=2,
+ 	NON_NEGATIVE_INTEGER COMMA  //   q=9,
+ 	scalar_data_type COMMA      //   df_type=int64,
+ 	lattice_size                //   size=256
+ 	PAREN_CLOSE SEMICOLON;      // );
+
+lattice_size : array_literal_1d
+             | NON_NEGATIVE_INTEGER ;
 
 // initializer_block: //
 // 	INITIALIZER ID CURLY_OPEN //

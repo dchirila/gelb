@@ -45,8 +45,19 @@ class LatticesBlock_N(Node_N):
 
 
 # TODO only allow inside LatticesBlock_N
-class LatticeInstantiationStmt_N(Node_N):
-    pass
+class LatticeInstaStmt_N(Node_N):
+    def __init__(self, name, d, q, df_type, size):
+        self.name = name
+        self.d = d
+        self.q = q
+        self.df_type = df_type
+        self.size = size
+
+    def __str__(self):
+        return (
+            f"(LatticeInstaStmt {self.name} {self.d} {self.q} "
+            f"{self.df_type} {self.size})"
+        )
 
 
 class NodeClassesBlock_N(Node_N):
@@ -54,7 +65,7 @@ class NodeClassesBlock_N(Node_N):
 
 
 # TODO only allow inside NodeClassesBlock_N
-class NodeClassInstantiationStmt_N(Node_N):
+class NodeClassInstaStmt_N(Node_N):
     pass
 
 

@@ -10,19 +10,61 @@ from gelb.ASTNodes import *
 class ASTBuilderVisitor(GeLBVisitor):
 
     # Visit a parse tree produced by GeLBParser#set_simulation_name_stmt.
-    def visitSet_simulation_name_stmt(self, ctx:GeLBParser.Set_simulation_name_stmtContext):
+    def visitSet_simulation_name_stmt(
+            self,
+            ctx:GeLBParser.Set_simulation_name_stmtContext):
         return StringLiteral_N(ctx.STRING().__str__())
 
     # Visit a parse tree produced by GeLBParser#set_simulation_description_stmt.
-    def visitSet_simulation_description_stmt(self, ctx:GeLBParser.Set_simulation_description_stmtContext):
+    def visitSet_simulation_description_stmt(
+            self,
+            ctx:GeLBParser.Set_simulation_description_stmtContext):
         return StringLiteral_N(ctx.STRING().__str__())
 
     # Visit a parse tree produced by GeLBParser#global_constants_block.
-    def visitGlobal_constants_block(self, ctx:GeLBParser.Global_constants_blockContext):
+    def visitGlobal_constants_block(
+            self,
+            ctx:GeLBParser.Global_constants_blockContext):
         return GlobalConstantsBlock_N(self.get_list_of_children_sub_asts(ctx))
 
+    # Visit a parse tree produced by GeLBParser#lattice_constants_sub_block.
+    # def visitLattice_constants_sub_block(
+    #         self,
+    #         ctx:GeLBParser.Lattice_constants_sub_blockContext):
+    #     return self.visitChildren(ctx)
+
+    # Visit a parse tree produced by GeLBParser#lattices_block.
+    # def visitLattices_block(
+    #         self,
+    #         ctx:GeLBParser.Lattices_blockContext):
+    #     return self.visitChildren(ctx)
+
+    # Visit a parse tree produced by GeLBParser#lattice_insta_stmt.
+    def visitLattice_insta_stmt(
+            self,
+            ctx:GeLBParser.Lattice_insta_stmtContext):
+        name = ctx.ID()
+        d = IntLiteral_N(ctx.NON_NEGATIVE_INTEGER()[0])
+        q = IntLiteral_N(ctx.NON_NEGATIVE_INTEGER()[1])
+        df_type = self.visit(ctx.scalar_data_type())
+        lattice_size = self.visit(ctx.lattice_size())
+        return LatticeInstaStmt_N(name, d, q, df_type, lattice_size)
+
+    # Visit a parse tree produced by GeLBParser#lattice_size.
+    def visitLattice_size(self, ctx:GeLBParser.Lattice_sizeContext):
+        if ctx.NON_NEGATIVE_INTEGER():
+            return IntLiteral_N(ctx.NON_NEGATIVE_INTEGER())
+        elif ctx.array_literal_1d():
+            return self.visit(ctx.array_literal_1d())
+        else:
+            raise TypeError(
+                "<<<GeLB-Error>>> Invalid lattice size specified!"
+            )
+
     # Visit a parse tree produced by GeLBParser#constant_definition_stmt.
-    def visitConstant_definition_stmt(self, ctx:GeLBParser.Constant_definition_stmtContext):
+    def visitConstant_definition_stmt(
+            self,
+            ctx:GeLBParser.Constant_definition_stmtContext):
         list_of_children_sub_asts = self.get_list_of_children_sub_asts(ctx)
         data_type = list_of_children_sub_asts[0]
         name = list_of_children_sub_asts[1].lhs
@@ -30,7 +72,9 @@ class ASTBuilderVisitor(GeLBVisitor):
         return ConstantDefinitionStmt_N(data_type, name, value)
 
     # Visit a parse tree produced by GeLBParser#variable_assignment_stmt.
-    def visitVariable_assignment_stmt(self, ctx:GeLBParser.Variable_assignment_stmtContext):
+    def visitVariable_assignment_stmt(
+            self,
+            ctx:GeLBParser.Variable_assignment_stmtContext):
         list_of_children_sub_asts = self.get_list_of_children_sub_asts(ctx)
         return VariableAssignmentStmt_N(
             ctx.ID(),
@@ -38,11 +82,15 @@ class ASTBuilderVisitor(GeLBVisitor):
         )
 
     # Visit a parse tree produced by GeLBParser#scalar_bool_data_type.
-    def visitScalar_bool_data_type(self, ctx:GeLBParser.Scalar_bool_data_typeContext):
+    def visitScalar_bool_data_type(
+            self,
+            ctx:GeLBParser.Scalar_bool_data_typeContext):
         return ScalarDataType_N("bool")
 
     # Visit a parse tree produced by GeLBParser#scalar_int_data_type.
-    def visitScalar_int_data_type(self, ctx:GeLBParser.Scalar_int_data_typeContext):
+    def visitScalar_int_data_type(
+            self,
+            ctx:GeLBParser.Scalar_int_data_typeContext):
         if ctx.INT64():
             return ScalarDataType_N("int64")
         elif ctx.INT32():
@@ -59,7 +107,9 @@ class ASTBuilderVisitor(GeLBVisitor):
             )
 
     # Visit a parse tree produced by GeLBParser#scalar_real_data_type.
-    def visitScalar_real_data_type(self, ctx:GeLBParser.Scalar_real_data_typeContext):
+    def visitScalar_real_data_type(
+            self,
+            ctx:GeLBParser.Scalar_real_data_typeContext):
         if ctx.REAL64():
             return ScalarDataType_N("real64")
         elif ctx.REAL32():

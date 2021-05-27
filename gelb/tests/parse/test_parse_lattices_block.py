@@ -14,6 +14,7 @@ def test_one_lattice_instance_no_arg_keywords():
     # Assert (test the parse tree)
     assert result == (
         "(lattices_block lattices { ("
-        "lattice_instantiation_stmt lattice f ( "
-        "2 , 9 , (scalar_data_type (scalar_bool_data_type bool)) , 32 ) ;) })"
+        "lattice_insta_stmt lattice f ( "
+        "2 , 9 , (scalar_data_type (scalar_bool_data_type bool)) , "
+        "(lattice_size 32) ) ;) })"
     )
