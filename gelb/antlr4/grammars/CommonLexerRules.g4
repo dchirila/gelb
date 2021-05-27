@@ -9,7 +9,7 @@ SIMULATION_NAME : 'simulation_name' ;
 SIMULATION_DESCRIPTION : 'simulation_description' ;
 GLOBAL_CONSTANTS : 'global_constants' ;
 LATTICES: 'lattices';
-// LATTICE: 'lattice';
+LATTICE: 'lattice';
 LATTICE_CONSTANTS : 'lattice_constants' ;
 // NODE_CLASSES: 'node_classes';
 // INITIALIZERS: 'initializers';
@@ -27,8 +27,8 @@ LATTICE_CONSTANTS : 'lattice_constants' ;
 // BEGIN: Keywords for data-types
 // bool
 BOOL : 'bool' ;
-// TRUE: 'true';
-// FALSE: 'false';
+TRUE: 'true';
+FALSE: 'false';
 // int
 INT64 : 'int64' ;
 INT32 : 'int32' ;

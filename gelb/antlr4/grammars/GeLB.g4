@@ -4,14 +4,14 @@ import CommonLexerRules;
 gelb_program : //
 	set_simulation_name_stmt
 	set_simulation_description_stmt
-	global_constants_block
+	global_constants_block?  // optional block
 	lattices_block
 	// initializer_block //
 	// dynamic_block
 	// gauge_block
 	// function_block
 	// node_classes_block
-	// geometry_block
+	// geometry_block  // TODO add periodicity here
 	EOF;
 
 set_simulation_name_stmt : SIMULATION_NAME PAREN_OPEN
@@ -22,27 +22,30 @@ set_simulation_description_stmt : SIMULATION_DESCRIPTION PAREN_OPEN
     STRING
 PAREN_CLOSE SEMICOLON;
 
+// When this optional block is present...
+global_constants_block: GLOBAL_CONSTANTS CURLY_OPEN
+    // it should contain at least one constant definition
+    constant_definition_stmt+
+CURLY_CLOSE ;
+
+// When this optional block is present...
 lattice_constants_sub_block : LATTICE_CONSTANTS ID CURLY_OPEN
-    constant_definition_stmt*
+    // it should contain at least one constant definition
+    constant_definition_stmt+
 CURLY_CLOSE;
 
 lattices_block : LATTICES CURLY_OPEN
     // NOTE: a program needs at least one lattice!
-	TODO // lattice_instantiation_stmt+
+	lattice_instantiation_stmt+
 CURLY_CLOSE;
 
-// lattice_instantiation: //
-// 	LATTICE ID PAREN_OPEN //
-// 	NON_NEGATIVE_INTEGER // d
-// 	COMMA //
-// 	NON_NEGATIVE_INTEGER // q
-// 	COMMA //
-// 	INT // df_type
-// 	COMMA //
-// 	CURLY_OPEN NON_NEGATIVE_INTEGER CURLY_CLOSE // size
-// 	COMMA //
-// 	CURLY_OPEN FALSE CURLY_CLOSE // periodicity
-// 	PAREN_CLOSE SEMICOLON;
+ lattice_instantiation_stmt :                  // Example:
+    LATTICE ID PAREN_OPEN                      // lattice f(
+ 	NON_NEGATIVE_INTEGER COMMA                 //   d=2,
+ 	NON_NEGATIVE_INTEGER COMMA                 //   q=9,
+ 	scalar_data_type COMMA                     //   df_type=int64,
+ 	(array_literal_1d | NON_NEGATIVE_INTEGER)  //   size=256
+ 	PAREN_CLOSE SEMICOLON;                     // );
 
 // initializer_block: //
 // 	INITIALIZER ID CURLY_OPEN //
@@ -60,10 +63,6 @@ CURLY_CLOSE;
 // 	BRACKET_OPEN //
 // 	X VERT NON_NEGATIVE_INTEGER //
 // 	BRACKET_CLOSE;
-
-global_constants_block: GLOBAL_CONSTANTS CURLY_OPEN
-    constant_definition_stmt*
-CURLY_CLOSE ;
 
 constant_definition_stmt : CONST data_type variable_assignment_stmt ;
 
