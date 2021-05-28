@@ -11,8 +11,11 @@ def test_1d_no_arg_keywords():
     ast = get_ast("lattice_insta_stmt", test_string)
     # Assert (test the parse tree)
     assert str(ast) == (
-        "(LatticeInstaStmt f (IntLiteral 2) (IntLiteral 9) "
-        "(ScalarDataType bool) (IntLiteral 32))"
+        "(LatticeInstaStmt f"
+        " (IntLiteral 2)"
+        " (IntLiteral 9)"
+        " (ScalarDataType bool) (IntLiteral 32)"
+        ")"
     )
 
 
@@ -23,7 +26,10 @@ def test_2d_no_arg_keywords():
     ast = get_ast("lattice_insta_stmt", test_string)
     # Assert (test the parse tree)
     assert str(ast) == (
-        "(LatticeInstaStmt g (IntLiteral 2) (IntLiteral 9) "
-        "(ScalarDataType real32) "
-        "(ArrayLiteral1D (IntLiteral 32) (IntLiteral 32)))"
+        "(LatticeInstaStmt g"
+        " (IntLiteral 2)"
+        " (IntLiteral 9)"
+        " (ScalarDataType real32)"
+        " (ArrayLiteral1D (IntLiteral 32) (IntLiteral 32))"
+        ")"
     )

@@ -11,10 +11,10 @@ def test_scalar_int():
     ast = get_ast("constant_definition_stmt", test_string)
     # Assert (test the (sub-)AST, based on string representation)
     assert str(ast) == (
-            "(ConstantDefinitionStmt "
-            "LENGTH "
-            "(ScalarDataType int) "
-            "(IntLiteral 32)"
+            "(ConstantDefinitionStmt"
+            " LENGTH"
+            " (ScalarDataType int)"
+            " (IntLiteral 32)"
             ")"
     )
 
@@ -25,10 +25,10 @@ def test_1d_array_real32_init_with_scalar():
     ast = get_ast("constant_definition_stmt", test_string)
     # Assert (test the parse tree)
     assert str(ast) == (
-            "(ConstantDefinitionStmt "
-            "DFS "
-            "(ArrayDataType (ScalarDataType real32) (IntLiteral 9)) "
-            "(IntLiteral 1)"
+            "(ConstantDefinitionStmt"
+            " DFS"
+            " (ArrayDataType (ScalarDataType real32) (IntLiteral 9))"
+            " (IntLiteral 1)"
             ")"
     )
 
@@ -39,9 +39,9 @@ def test_1d_array_real32_init_with_scalar():
 #     ast = get_ast("constant_definition_stmt", test_string)
 #     # Assert (test the parse tree)
 #     assert str(ast) == (
-#         "(ConstantDefinitionStmt "
-#         "TMP "
-#         "(ArrayDataType (ScalarDataType real32) (IntLiteral 9)) "
-#         "(IntLiteral 1)"
+#         "(ConstantDefinitionStmt"
+#         " TMP"
+#         " (ArrayDataType (ScalarDataType real32) (IntLiteral 9))"
+#         " (IntLiteral 1)"
 #         ")"
 #     )
