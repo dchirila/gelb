@@ -14,12 +14,13 @@ def test_one_lattice_instance_no_arg_keywords():
     # Assert (test the parse tree)
     assert str(ast) == (
         "(LatticesBlock"
-        " (LatticeInstaStmt f"
-            " (IntLiteral 2)"
-            " (IntLiteral 9)"
-            " (ScalarDataType bool)"
-            " (IntLiteral 32)"
-            ")"
+        " (LatticeInstaStmt"
+        " (Identifier f)"
+        " (IntLiteral 2)"
+        " (IntLiteral 9)"
+        " (ScalarDataType bool)"
+        " (IntLiteral 32)"
+        ")"
         ")"
     )
 
@@ -34,7 +35,8 @@ def test_two_lattice_instances_no_arg_keywords():
     # Assert (test the parse tree)
     assert str(ast) == (
         "(LatticesBlock"
-        " (LatticeInstaStmt f"
+        " (LatticeInstaStmt"
+            " (Identifier f)"
             " (IntLiteral 3)"
             " (IntLiteral 19)"
             " (ScalarDataType real64)"
@@ -44,7 +46,8 @@ def test_two_lattice_instances_no_arg_keywords():
                 " (IntLiteral 256)"
             ")"
         ")"
-        " (LatticeInstaStmt g"
+        " (LatticeInstaStmt"
+            " (Identifier g)"
             " (IntLiteral 3)"
             " (IntLiteral 5)"
             " (ScalarDataType real64)"

@@ -17,8 +17,16 @@ def test_simple():
     # Assert (test the parse tree)
     assert str(ast) == (
         "(GlobalConstantsBlock"
-        " (ConstantDefinitionStmt CX (ScalarDataType int) (IntLiteral 0))"
-        " (ConstantDefinitionStmt Z (ScalarDataType int) (IntLiteral 123))"
+        " (ConstantDefinitionStmt"
+            " (Identifier CX)"
+            " (ScalarDataType int)"
+            " (IntLiteral 0)"
+            ")"
+        " (ConstantDefinitionStmt"
+            " (Identifier Z)"
+            " (ScalarDataType int)"
+            " (IntLiteral 123)"
+            ")"
         ")"
     )
 

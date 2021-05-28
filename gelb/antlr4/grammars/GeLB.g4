@@ -30,7 +30,7 @@ global_constants_block: GLOBAL_CONSTANTS CURLY_OPEN
 CURLY_CLOSE ;
 
 // When this optional block is present...
-lattice_constants_block : LATTICE_CONSTANTS ID CURLY_OPEN
+lattice_constants_block : LATTICE_CONSTANTS identifier CURLY_OPEN
     // it should contain at least one constant definition
     constant_definition_stmt+
 CURLY_CLOSE;
@@ -40,19 +40,19 @@ lattices_block : LATTICES CURLY_OPEN
 	lattice_insta_stmt+
 CURLY_CLOSE;
 
- lattice_insta_stmt :  // Example:
-    LATTICE ID PAREN_OPEN       // lattice f(
- 	NON_NEGATIVE_INTEGER COMMA  //   d=2,
- 	NON_NEGATIVE_INTEGER COMMA  //   q=9,
- 	scalar_data_type COMMA      //   df_type=int64,
- 	lattice_size                //   size=256
- 	PAREN_CLOSE SEMICOLON;      // );
+ lattice_insta_stmt :                   // Example:
+    LATTICE identifier PAREN_OPEN       // lattice f(
+ 	NON_NEGATIVE_INTEGER COMMA          //   d=2,
+ 	NON_NEGATIVE_INTEGER COMMA          //   q=9,
+ 	scalar_data_type COMMA              //   df_type=int64,
+ 	lattice_size                        //   size=256
+ 	PAREN_CLOSE SEMICOLON;              // );
 
 lattice_size : array_literal_1d
              | NON_NEGATIVE_INTEGER ;
 
 // initializer_block: //
-// 	INITIALIZER ID CURLY_OPEN //
+// 	INITIALIZER identifier CURLY_OPEN //
 // 	lattice_assignment_stmt //
 // 	CURLY_CLOSE;
 
@@ -63,7 +63,7 @@ lattice_size : array_literal_1d
 // 	SEMICOLON;
 
 // dfs_selection: //
-// 	ID DOT OUT //
+// 	identifier DOT OUT //
 // 	BRACKET_OPEN //
 // 	X VERT NON_NEGATIVE_INTEGER //
 // 	BRACKET_CLOSE;
@@ -125,9 +125,11 @@ array_literal_1d : CURLY_OPEN
     scalar_expr (COMMA scalar_expr)+
 CURLY_CLOSE ;
 
-variable_assignment_stmt : ID OP_ASSIGN
+variable_assignment_stmt : identifier OP_ASSIGN
     scalar_expr
 SEMICOLON ;
+
+identifier : ID ;
 
 /* TODO:
    - allow simple arithmetic expressions

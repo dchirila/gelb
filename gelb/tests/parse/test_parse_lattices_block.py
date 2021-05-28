@@ -13,8 +13,18 @@ def test_one_lattice_instance_no_arg_keywords():
     result = get_cst_as_string("lattices_block", test_string)
     # Assert (test the parse tree)
     assert result == (
-        "(lattices_block lattices { ("
-        "lattice_insta_stmt lattice f ( "
-        "2 , 9 , (scalar_data_type (scalar_bool_data_type bool)) , "
-        "(lattice_size 32) ) ;) })"
+        "(lattices_block lattices {"
+        " (lattice_insta_stmt lattice"
+            " (identifier f)"
+            " ("
+                " 2"
+                " ,"
+                " 9"
+                " ,"
+                " (scalar_data_type (scalar_bool_data_type bool))"
+                " ,"
+                " (lattice_size 32)"
+            " )"
+        " ;)"
+        " })"
     )

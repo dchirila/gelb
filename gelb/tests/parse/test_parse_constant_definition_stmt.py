@@ -11,8 +11,14 @@ def test_scalar_int():
     result = get_cst_as_string("constant_definition_stmt", test_string)
     # Assert (test the parse tree)
     assert result == (
-        "(constant_definition_stmt const "
-            "(data_type (scalar_data_type (scalar_int_data_type int))) "
-            "(variable_assignment_stmt LENGTH = (scalar_expr 32) ;)"
+        "(constant_definition_stmt const"
+        " (data_type"
+        " (scalar_data_type (scalar_int_data_type int))"
+        ")"
+        " (variable_assignment_stmt"
+        " (identifier LENGTH)"
+        " ="
+        " (scalar_expr 32)"
+        " ;)"
         ")"
     )

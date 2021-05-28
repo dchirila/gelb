@@ -10,7 +10,12 @@ def test_simple():
     # Act
     ast = get_ast("variable_assignment_stmt", test_string)
     # Assert
-    assert str(ast) == "(VariableAssignmentStmt alpha (IntLiteral 123))"
+    assert str(ast) == (
+        "(VariableAssignmentStmt"
+        " (Identifier alpha)"
+        " (IntLiteral 123)"
+        ")"
+    )
 
 def test_with_comments_and_whitespace():
     # Arrange
@@ -19,5 +24,8 @@ def test_with_comments_and_whitespace():
     ast = get_ast("variable_assignment_stmt", test_string)
     # Assert
     assert str(ast) == (
-        "(VariableAssignmentStmt beta_quadrant (IntLiteral 980))"
+        "(VariableAssignmentStmt"
+        " (Identifier beta_quadrant)"
+        " (IntLiteral 980)"
+        ")"
     )

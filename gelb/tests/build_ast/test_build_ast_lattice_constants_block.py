@@ -16,14 +16,17 @@ def test_simple():
     ast = get_ast("lattice_constants_block", test_string)
     # Assert (test the parse tree)
     assert str(ast) == (
-        "(LatticeConstantsBlock D2Q1"
-            " (ConstantDefinitionStmt D"
-                " (ScalarDataType int)"
-                " (IntLiteral 2)"
+        "(LatticeConstantsBlock"
+        " (Identifier D2Q1)"
+            " (ConstantDefinitionStmt"
+            " (Identifier D)"
+            " (ScalarDataType int)"
+            " (IntLiteral 2)"
             ")"
-            " (ConstantDefinitionStmt Q"
-                " (ScalarDataType int)"
-                " (IntLiteral 1)"
+            " (ConstantDefinitionStmt"
+            " (Identifier Q)"
+            " (ScalarDataType int)"
+            " (IntLiteral 1)"
             ")"
         ")"
     )

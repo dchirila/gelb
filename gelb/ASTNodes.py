@@ -148,6 +148,9 @@ class Identifier_N(Node_N):
     def __init__(self, name):
         self.name = name
 
+    def __str__(self):
+        return f"(Identifier {self.name})"
+
 
 # class RectSelOfLatticeDFs_N(Node_N):
 #     """

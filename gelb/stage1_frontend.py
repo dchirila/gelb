@@ -31,8 +31,9 @@ class ASTBuilderVisitor(GeLBVisitor):
     def visitLattice_constants_block(
             self,
             ctx:GeLBParser.Lattice_constants_blockContext):
-        return LatticeConstantsBlock_N(ctx.ID(),
-                                       self.get_list_of_children_sub_asts(ctx))
+        list_of_children_sub_asts = self.get_list_of_children_sub_asts(ctx)
+        return LatticeConstantsBlock_N(list_of_children_sub_asts[0],
+                                       list_of_children_sub_asts[1:])
 
     # Visit a parse tree produced by GeLBParser#lattices_block.
     def visitLattices_block(
@@ -44,7 +45,7 @@ class ASTBuilderVisitor(GeLBVisitor):
     def visitLattice_insta_stmt(
             self,
             ctx:GeLBParser.Lattice_insta_stmtContext):
-        name = ctx.ID()
+        name = self.visit(ctx.identifier())
         d = IntLiteral_N(ctx.NON_NEGATIVE_INTEGER()[0])
         q = IntLiteral_N(ctx.NON_NEGATIVE_INTEGER()[1])
         df_type = self.visit(ctx.scalar_data_type())
@@ -78,8 +79,8 @@ class ASTBuilderVisitor(GeLBVisitor):
             ctx:GeLBParser.Variable_assignment_stmtContext):
         list_of_children_sub_asts = self.get_list_of_children_sub_asts(ctx)
         return VariableAssignmentStmt_N(
-            ctx.ID(),
-            list_of_children_sub_asts[0]
+            list_of_children_sub_asts[0],
+            list_of_children_sub_asts[1]
         )
 
     # Visit a parse tree produced by GeLBParser#scalar_bool_data_type.
@@ -149,6 +150,10 @@ class ASTBuilderVisitor(GeLBVisitor):
     # Visit a parse tree produced by GeLBParser#array_literal_1d.
     def visitArray_literal_1d(self, ctx:GeLBParser.Array_literal_1dContext):
         return Array1DLiteral_N(self.get_list_of_children_sub_asts(ctx))
+
+    # Visit a parse tree produced by GeLBParser#identifier.
+    def visitIdentifier(self, ctx:GeLBParser.IdentifierContext):
+        return Identifier_N(ctx.ID())
 
     # Visit a parse tree produced by GeLBParser#scalar_expr.
     def visitScalar_expr(self, ctx:GeLBParser.Scalar_exprContext):

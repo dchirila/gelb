@@ -11,7 +11,11 @@ def test_simple():
     result = get_cst_as_string("variable_assignment_stmt", test_string)
     # Assert (test the parse tree)
     assert result == (
-        "(variable_assignment_stmt alpha = (scalar_expr 123) ;)"
+        "(variable_assignment_stmt"
+        " (identifier alpha)"
+        " ="
+        " (scalar_expr 123)"
+        " ;)"
     )
 
 def test_with_comments_and_whitespace():
@@ -21,6 +25,10 @@ def test_with_comments_and_whitespace():
     result = get_cst_as_string("variable_assignment_stmt", test_string)
     # Assert (test the parse tree)
     assert result == (
-        "(variable_assignment_stmt beta_quadrant = (scalar_expr 980) ;)"
+        "(variable_assignment_stmt"
+        " (identifier beta_quadrant)"
+        " ="
+        " (scalar_expr 980)"
+        " ;)"
     )
 

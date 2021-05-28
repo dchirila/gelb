@@ -12,7 +12,7 @@ def test_scalar_int():
     # Assert (test the (sub-)AST, based on string representation)
     assert str(ast) == (
             "(ConstantDefinitionStmt"
-            " LENGTH"
+            " (Identifier LENGTH)"
             " (ScalarDataType int)"
             " (IntLiteral 32)"
             ")"
@@ -26,7 +26,7 @@ def test_1d_array_real32_init_with_scalar():
     # Assert (test the parse tree)
     assert str(ast) == (
             "(ConstantDefinitionStmt"
-            " DFS"
+            " (Identifier DFS)"
             " (ArrayDataType (ScalarDataType real32) (IntLiteral 9))"
             " (IntLiteral 1)"
             ")"
