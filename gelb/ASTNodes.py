@@ -41,7 +41,15 @@ class GlobalConstantsBlock_N(Block_N):
 
 
 class LatticesBlock_N(Node_N):
-    pass
+    def __init__(self, lattice_instances):
+        self.lattice_instances = lattice_instances
+
+    def __str__(self):
+        result = "(LatticesBlock"
+        for lattice_instance in self.lattice_instances:
+            result = result + f" {str(lattice_instance)}"
+        result = result + ")"
+        return result
 
 
 # TODO only allow inside LatticesBlock_N

@@ -34,10 +34,10 @@ class ASTBuilderVisitor(GeLBVisitor):
     #     return self.visitChildren(ctx)
 
     # Visit a parse tree produced by GeLBParser#lattices_block.
-    # def visitLattices_block(
-    #         self,
-    #         ctx:GeLBParser.Lattices_blockContext):
-    #     return self.visitChildren(ctx)
+    def visitLattices_block(
+            self,
+            ctx:GeLBParser.Lattices_blockContext):
+        return LatticesBlock_N(self.get_list_of_children_sub_asts(ctx))
 
     # Visit a parse tree produced by GeLBParser#lattice_insta_stmt.
     def visitLattice_insta_stmt(
