@@ -20,6 +20,9 @@ class Program_N(Node_N):
         # self.list_of_node_classes = None
         # self.geometry = None
 
+    def eval(self):
+        pass
+
 
 class Block_N(Node_N):
     def __init__(self, list_of_stmts):
@@ -27,6 +30,9 @@ class Block_N(Node_N):
 
     def __str__(self):
         raise NotImplementedError()
+
+    def eval(self):
+        pass
 
 
 class GlobalConstantsBlock_N(Block_N):
@@ -39,6 +45,9 @@ class GlobalConstantsBlock_N(Block_N):
             result = result + f" {str(stmt)}"
         result = result + ")"
         return result
+
+    def eval(self):
+        pass
 
 
 class LatticeConstantsBlock_N(Block_N):
@@ -53,6 +62,9 @@ class LatticeConstantsBlock_N(Block_N):
         result = result + ")"
         return result
 
+    def eval(self):
+        pass
+
 
 class LatticesBlock_N(Node_N):
     def __init__(self, lattice_instances):
@@ -64,6 +76,9 @@ class LatticesBlock_N(Node_N):
             result = result + f" {str(lattice_instance)}"
         result = result + ")"
         return result
+
+    def eval(self):
+        pass
 
 
 # TODO only allow inside LatticesBlock_N
@@ -81,28 +96,34 @@ class LatticeInstaStmt_N(Node_N):
             f"{self.df_type} {self.size})"
         )
 
+    def eval(self):
+        pass
+
 
 class NodeClassesBlock_N(Node_N):
-    pass
+    def eval(self):
+        pass
 
 
 # TODO only allow inside NodeClassesBlock_N
 class NodeClassInstaStmt_N(Node_N):
-    pass
+    def eval(self):
+        pass
 
 
 class UserFunctionBlock_N(Node_N):
-    pass
+    def eval(self):
+        pass
 
 
 # TODO only allow inside UserFunctionBlock_N
 class ReturnStmt_N(Node_N):
-    pass
+    def eval(self):
+        pass
 
 
 # class InitializerBlock_N(Node_N):
 #     def __init__(self):
-#         pass
 
 
 # class DynamicBlock_N(Node_N):
@@ -136,6 +157,9 @@ class Identifier_N(Node_N):
 
     def __str__(self):
         return f"(Identifier {self.name})"
+
+    def eval(self):
+        pass
 
 
 # class RectSelOfLatticeDFs_N(Node_N):
@@ -171,6 +195,9 @@ class ScalarDataType_N(Node_N):
     def __str__(self):
         return f"(ScalarDataType {self.value})"
 
+    def eval(self):
+        pass
+
 
 class ArrayDataType_N(Node_N):
     def __init__(self, element_data_type, shape):
@@ -182,16 +209,25 @@ class ArrayDataType_N(Node_N):
             f"(ArrayDataType {self.element_data_type} {self.shape})"
         )
 
+    def eval(self):
+        pass
+
 
 class BinaryExpr_N(Node_N):
     def __init__(self, left, right):
         self.left = left
         self.righ = right
 
+    def eval(self):
+        pass
+
 
 class Add_N(BinaryExpr_N):
     def __init__(self, left, right):
         super().__init__(left, right)
+
+    def eval(self):
+        pass
 
 
 # class UnaryExpr_N(Node_N):
@@ -205,6 +241,9 @@ class IntLiteral_N(Node_N):
 
     def __str__(self):
         return f"(IntLiteral {self.value})"
+
+    def eval(self):
+        pass
 
 
 # class RealLiteral_N(Node_N):
@@ -223,6 +262,9 @@ class StringLiteral_N(Node_N):
 
     def __str__(self):
         return f"(StringLiteral {self.value})"
+
+    def eval(self):
+        pass
 
 
 # base-class for Array{1,2,3,4}DLiteral_N
@@ -245,25 +287,40 @@ class ArrayLiteralBase_N(Node_N):
         result = result + ")"
         return result
 
+    def eval(self):
+        pass
+
 
 class Array1DLiteral_N(ArrayLiteralBase_N):
     def __init__(self, value):
         super().__init__(value, 1)
+
+    def eval(self):
+        pass
 
 
 class Array2DLiteral_N(ArrayLiteralBase_N):
     def __init__(self, value):
         super().__init__(value, 2)
 
+    def eval(self):
+        pass
+
 
 class Array3DLiteral_N(ArrayLiteralBase_N):
     def __init__(self, value):
         super().__init__(value, 3)
 
+    def eval(self):
+        pass
+
 
 class Array4DLiteral_N(ArrayLiteralBase_N):
     def __init__(self, value):
         super().__init__(value, 4)
+
+    def eval(self):
+        pass
 
 
 # NOTE: later, we can distinguish (maybe) between:
@@ -273,10 +330,14 @@ class FunctionCall_N(Node_N):
     def __init__(self, args_list):
         self.args_list = args_list  # TODO: make this a =List_N= !
 
+    def eval(self):
+        pass
+
 
 # TODO make Abstract Base Class
 class Stmt_N(Node_N):
-    pass
+    def eval(self):
+        pass
 
 
 # NOTE: declaration AND assignment!
@@ -291,17 +352,26 @@ class ConstantDefinitionStmt_N(Stmt_N):
             f"(ConstantDefinitionStmt {self.name} {self.data_type} {self.value})"
         )
 
+    def eval(self):
+        pass
+
 
 class VariableDeclarationStmt_N(Stmt_N):
     def __init__(self, name, value):
         self.name = name
         self.value = value
 
+    def eval(self):
+        pass
+
 
 class AssignmentStmt_N(Stmt_N):
     def __init__(self, lhs, rhs):
         self.lhs = lhs
         self.rhs = rhs
+
+    def eval(self):
+        pass
 
 
 class VariableAssignmentStmt_N(AssignmentStmt_N):
@@ -313,11 +383,16 @@ class VariableAssignmentStmt_N(AssignmentStmt_N):
             f"(VariableAssignmentStmt {self.lhs} {self.rhs})"
         )
 
+    def eval(self):
+        pass
+
 
 class LatticeAssignmentStmt_N(AssignmentStmt_N):
-    pass
+    def eval(self):
+        pass
 
 
 # TODO only allow inside GeometryBlock_N
 class GeometryAssignmentStmt_N(AssignmentStmt_N):
-    pass
+    def eval(self):
+        pass

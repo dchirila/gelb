@@ -40,7 +40,7 @@ def test_1d_array_real32_init_with_scalar():
 #     # Assert (test the parse tree)
 #     assert str(ast) == (
 #         "(ConstantDefinitionStmt"
-#         " TMP"
+#         " (Identifier TMP)"
 #         " (ArrayDataType (ScalarDataType real32) (IntLiteral 9))"
 #         " (IntLiteral 1)"
 #         ")"

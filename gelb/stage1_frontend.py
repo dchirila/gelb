@@ -4,33 +4,33 @@ import antlr4 as a4
 from gelb.antlr4.generated_code import GeLBLexer, GeLBParser, GeLBVisitor
 from gelb.ASTNodes import *
 
+
 # TODO: "flesh it out!"
 # INPUT: ANTLR4-generated ParseTree
 # OUTPUT: GeLB AST (*root* node)
 class ASTBuilderVisitor(GeLBVisitor):
-
     # Visit a parse tree produced by GeLBParser#set_simulation_name_stmt.
     def visitSet_simulation_name_stmt(
             self,
-            ctx:GeLBParser.Set_simulation_name_stmtContext):
+            ctx: GeLBParser.Set_simulation_name_stmtContext):
         return StringLiteral_N(ctx.STRING().__str__())
 
     # Visit a parse tree produced by GeLBParser#set_simulation_description_stmt.
     def visitSet_simulation_description_stmt(
             self,
-            ctx:GeLBParser.Set_simulation_description_stmtContext):
+            ctx: GeLBParser.Set_simulation_description_stmtContext):
         return StringLiteral_N(ctx.STRING().__str__())
 
     # Visit a parse tree produced by GeLBParser#global_constants_block.
     def visitGlobal_constants_block(
             self,
-            ctx:GeLBParser.Global_constants_blockContext):
+            ctx: GeLBParser.Global_constants_blockContext):
         return GlobalConstantsBlock_N(self.get_list_of_children_sub_asts(ctx))
 
     # Visit a parse tree produced by GeLBParser#lattice_constants_block.
     def visitLattice_constants_block(
             self,
-            ctx:GeLBParser.Lattice_constants_blockContext):
+            ctx: GeLBParser.Lattice_constants_blockContext):
         list_of_children_sub_asts = self.get_list_of_children_sub_asts(ctx)
         return LatticeConstantsBlock_N(list_of_children_sub_asts[0],
                                        list_of_children_sub_asts[1:])
@@ -38,13 +38,13 @@ class ASTBuilderVisitor(GeLBVisitor):
     # Visit a parse tree produced by GeLBParser#lattices_block.
     def visitLattices_block(
             self,
-            ctx:GeLBParser.Lattices_blockContext):
+            ctx: GeLBParser.Lattices_blockContext):
         return LatticesBlock_N(self.get_list_of_children_sub_asts(ctx))
 
     # Visit a parse tree produced by GeLBParser#lattice_insta_stmt.
     def visitLattice_insta_stmt(
             self,
-            ctx:GeLBParser.Lattice_insta_stmtContext):
+            ctx: GeLBParser.Lattice_insta_stmtContext):
         name = self.visit(ctx.identifier())
         d = IntLiteral_N(ctx.NON_NEGATIVE_INTEGER()[0])
         q = IntLiteral_N(ctx.NON_NEGATIVE_INTEGER()[1])
@@ -53,7 +53,7 @@ class ASTBuilderVisitor(GeLBVisitor):
         return LatticeInstaStmt_N(name, d, q, df_type, lattice_size)
 
     # Visit a parse tree produced by GeLBParser#lattice_size.
-    def visitLattice_size(self, ctx:GeLBParser.Lattice_sizeContext):
+    def visitLattice_size(self, ctx: GeLBParser.Lattice_sizeContext):
         if ctx.NON_NEGATIVE_INTEGER():
             return IntLiteral_N(ctx.NON_NEGATIVE_INTEGER())
         elif ctx.array_literal_1d():
@@ -66,7 +66,7 @@ class ASTBuilderVisitor(GeLBVisitor):
     # Visit a parse tree produced by GeLBParser#constant_definition_stmt.
     def visitConstant_definition_stmt(
             self,
-            ctx:GeLBParser.Constant_definition_stmtContext):
+            ctx: GeLBParser.Constant_definition_stmtContext):
         list_of_children_sub_asts = self.get_list_of_children_sub_asts(ctx)
         data_type = list_of_children_sub_asts[0]
         name = list_of_children_sub_asts[1].lhs
@@ -76,7 +76,7 @@ class ASTBuilderVisitor(GeLBVisitor):
     # Visit a parse tree produced by GeLBParser#variable_assignment_stmt.
     def visitVariable_assignment_stmt(
             self,
-            ctx:GeLBParser.Variable_assignment_stmtContext):
+            ctx: GeLBParser.Variable_assignment_stmtContext):
         list_of_children_sub_asts = self.get_list_of_children_sub_asts(ctx)
         return VariableAssignmentStmt_N(
             list_of_children_sub_asts[0],
@@ -86,13 +86,13 @@ class ASTBuilderVisitor(GeLBVisitor):
     # Visit a parse tree produced by GeLBParser#scalar_bool_data_type.
     def visitScalar_bool_data_type(
             self,
-            ctx:GeLBParser.Scalar_bool_data_typeContext):
+            ctx: GeLBParser.Scalar_bool_data_typeContext):
         return ScalarDataType_N("bool")
 
     # Visit a parse tree produced by GeLBParser#scalar_int_data_type.
     def visitScalar_int_data_type(
             self,
-            ctx:GeLBParser.Scalar_int_data_typeContext):
+            ctx: GeLBParser.Scalar_int_data_typeContext):
         if ctx.INT64():
             return ScalarDataType_N("int64")
         elif ctx.INT32():
@@ -111,7 +111,7 @@ class ASTBuilderVisitor(GeLBVisitor):
     # Visit a parse tree produced by GeLBParser#scalar_real_data_type.
     def visitScalar_real_data_type(
             self,
-            ctx:GeLBParser.Scalar_real_data_typeContext):
+            ctx: GeLBParser.Scalar_real_data_typeContext):
         if ctx.REAL64():
             return ScalarDataType_N("real64")
         elif ctx.REAL32():
@@ -126,7 +126,7 @@ class ASTBuilderVisitor(GeLBVisitor):
             )
 
     # Visit a parse tree produced by GeLBParser#array_data_type.
-    def visitArray_data_type(self, ctx:GeLBParser.Array_data_typeContext):
+    def visitArray_data_type(self, ctx: GeLBParser.Array_data_typeContext):
         list_of_children_sub_asts = self.get_list_of_children_sub_asts(ctx)
         return ArrayDataType_N(
             # should contain the element data-type
@@ -136,27 +136,27 @@ class ASTBuilderVisitor(GeLBVisitor):
         )
 
     # Visit a parse tree produced by GeLBParser#array_literal_4d.
-    def visitArray_literal_4d(self, ctx:GeLBParser.Array_literal_4dContext):
+    def visitArray_literal_4d(self, ctx: GeLBParser.Array_literal_4dContext):
         return Array4DLiteral_N(self.get_list_of_children_sub_asts(ctx))
 
     # Visit a parse tree produced by GeLBParser#array_literal_3d.
-    def visitArray_literal_3d(self, ctx:GeLBParser.Array_literal_3dContext):
+    def visitArray_literal_3d(self, ctx: GeLBParser.Array_literal_3dContext):
         return Array3DLiteral_N(self.get_list_of_children_sub_asts(ctx))
 
     # Visit a parse tree produced by GeLBParser#array_literal_2d.
-    def visitArray_literal_2d(self, ctx:GeLBParser.Array_literal_2dContext):
+    def visitArray_literal_2d(self, ctx: GeLBParser.Array_literal_2dContext):
         return Array2DLiteral_N(self.get_list_of_children_sub_asts(ctx))
 
     # Visit a parse tree produced by GeLBParser#array_literal_1d.
-    def visitArray_literal_1d(self, ctx:GeLBParser.Array_literal_1dContext):
+    def visitArray_literal_1d(self, ctx: GeLBParser.Array_literal_1dContext):
         return Array1DLiteral_N(self.get_list_of_children_sub_asts(ctx))
 
     # Visit a parse tree produced by GeLBParser#identifier.
-    def visitIdentifier(self, ctx:GeLBParser.IdentifierContext):
+    def visitIdentifier(self, ctx: GeLBParser.IdentifierContext):
         return Identifier_N(ctx.ID())
 
     # Visit a parse tree produced by GeLBParser#scalar_expr.
-    def visitScalar_expr(self, ctx:GeLBParser.Scalar_exprContext):
+    def visitScalar_expr(self, ctx: GeLBParser.Scalar_exprContext):
         return IntLiteral_N(int(ctx.NON_NEGATIVE_INTEGER().__str__()))
 
     def get_list_of_children_sub_asts(self, ctx):
@@ -168,11 +168,11 @@ class ASTBuilderVisitor(GeLBVisitor):
         for i in range(n):
             c = ctx.getChild(i)
             # NOTE: boring children (i.e. syntax elements which don't belong
-            # inside the AST) yield childResult == None, because we DON'T
+            # inside the AST) yield child_result == None, because we DON'T
             # implement a visitor-method override for them!
-            childResult = c.accept(self)
-            if childResult:
-                list_of_children_sub_asts.append(childResult)
+            child_result = c.accept(self)
+            if child_result:
+                list_of_children_sub_asts.append(child_result)
 
         return list_of_children_sub_asts
 
@@ -212,7 +212,7 @@ def get_ast(start_rule, input_string):
         else:
             print(
                 f"[ERROR] Can't find method '{visitor_method_name}' "
-                f"@ASTBUilderVisitor"
+                f"@ASTBuilderVisitor"
             )
     else:
         print(f"[ERROR] Can't find start rule '{start_rule}' @GeLBParser")
