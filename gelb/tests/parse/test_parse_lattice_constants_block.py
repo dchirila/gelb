@@ -13,10 +13,10 @@ def test_simple():
         }
     """
     # Act (trigger parsing)
-    result = get_cst_as_string("lattice_constants_sub_block", test_string)
+    result = get_cst_as_string("lattice_constants_block", test_string)
     # Assert (test the parse tree)
     assert result == (
-            "(lattice_constants_sub_block lattice_constants D2Q1 { "
+            "(lattice_constants_block lattice_constants D2Q1 { "
             "(constant_definition_stmt const (data_type (scalar_data_type "
             "(scalar_int_data_type int))) (variable_assignment_stmt D = "
             "(scalar_expr 2) ;)) "

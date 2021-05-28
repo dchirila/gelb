@@ -27,11 +27,12 @@ class ASTBuilderVisitor(GeLBVisitor):
             ctx:GeLBParser.Global_constants_blockContext):
         return GlobalConstantsBlock_N(self.get_list_of_children_sub_asts(ctx))
 
-    # Visit a parse tree produced by GeLBParser#lattice_constants_sub_block.
-    # def visitLattice_constants_sub_block(
-    #         self,
-    #         ctx:GeLBParser.Lattice_constants_sub_blockContext):
-    #     return self.visitChildren(ctx)
+    # Visit a parse tree produced by GeLBParser#lattice_constants_block.
+    def visitLattice_constants_block(
+            self,
+            ctx:GeLBParser.Lattice_constants_blockContext):
+        return LatticeConstantsBlock_N(ctx.ID(),
+                                       self.get_list_of_children_sub_asts(ctx))
 
     # Visit a parse tree produced by GeLBParser#lattices_block.
     def visitLattices_block(

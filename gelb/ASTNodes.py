@@ -10,7 +10,7 @@ class Program_N(Node_N):
     def __init__(self):
         self.simulation_name = None
         self.simulation_description = None
-        # self.list_of_lattices = None
+        self.list_of_lattices = None
         # self.global_constants = None
         # self.list_of_initializers = None
         # self.list_of_dynamics = None
@@ -34,6 +34,19 @@ class GlobalConstantsBlock_N(Block_N):
 
     def __str__(self):
         result = "(GlobalConstantsBlock"
+        for stmt in self.list_of_stmts:
+            result = result + " " + str(stmt)
+        result = result + ")"
+        return result
+
+
+class LatticeConstantsBlock_N(Block_N):
+    def __init__(self, lattice_name, list_of_stmts):
+        self.lattice_name = lattice_name
+        super().__init__(list_of_stmts)
+
+    def __str__(self):
+        result = f"(LatticeConstantsBlock {self.lattice_name}"
         for stmt in self.list_of_stmts:
             result = result + " " + str(stmt)
         result = result + ")"

@@ -4,7 +4,8 @@ import CommonLexerRules;
 gelb_program : //
 	set_simulation_name_stmt
 	set_simulation_description_stmt
-	global_constants_block?  // optional block
+	global_constants_block?  // 0 or 1 instance
+	lattice_constants_block*  // 0 or more instance(s)
 	lattices_block
 	// initializer_block //
 	// dynamic_block
@@ -29,7 +30,7 @@ global_constants_block: GLOBAL_CONSTANTS CURLY_OPEN
 CURLY_CLOSE ;
 
 // When this optional block is present...
-lattice_constants_sub_block : LATTICE_CONSTANTS ID CURLY_OPEN
+lattice_constants_block : LATTICE_CONSTANTS ID CURLY_OPEN
     // it should contain at least one constant definition
     constant_definition_stmt+
 CURLY_CLOSE;
