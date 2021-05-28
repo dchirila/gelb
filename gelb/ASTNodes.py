@@ -35,7 +35,7 @@ class GlobalConstantsBlock_N(Block_N):
     def __str__(self):
         result = "(GlobalConstantsBlock"
         for stmt in self.list_of_stmts:
-            result = result + " " + str(stmt)
+            result = result + f" {str(stmt)}"
         result = result + ")"
         return result
 
@@ -48,7 +48,7 @@ class LatticeConstantsBlock_N(Block_N):
     def __str__(self):
         result = f"(LatticeConstantsBlock {self.lattice_name}"
         for stmt in self.list_of_stmts:
-            result = result + " " + str(stmt)
+            result = result + f" {str(stmt)}"
         result = result + ")"
         return result
 
@@ -249,15 +249,10 @@ class ArrayLiteralBase_N(Node_N):
         self.dimensionality = dimensionality
 
     def __str__(self):
-        result = "(ArrayLiteral" + str(self.dimensionality) + "D {"
-        is_first_element = True
+        result = f"(ArrayLiteral{str(self.dimensionality)}D"
         for element in self.value:
-            if is_first_element:
-                is_first_element = False
-                result = result + str(element)
-            else:
-                result = result + ", " + str(element)
-        result = result + "})"
+            result = result + f" {str(element)}"
+        result = result + ")"
         return result
 
 

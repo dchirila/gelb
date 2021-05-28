@@ -11,14 +11,14 @@ def test_simple():
     ast = get_ast("array_literal_3d", test_string)
     # Assert (test the (sub-)AST, based on string representation)
     assert str(ast) == (
-        "(ArrayLiteral3D {"
-        "(ArrayLiteral2D {"
-        "(ArrayLiteral1D {(IntLiteral 1), (IntLiteral 2)}), "
-        "(ArrayLiteral1D {(IntLiteral 3), (IntLiteral 4)})"
-        "}), "
-        "(ArrayLiteral2D {"
-        "(ArrayLiteral1D {(IntLiteral 5), (IntLiteral 6)}), "
-        "(ArrayLiteral1D {(IntLiteral 7), (IntLiteral 8)})"
-        "})"
-        "})"
+        "(ArrayLiteral3D"
+        " (ArrayLiteral2D"
+        " (ArrayLiteral1D (IntLiteral 1) (IntLiteral 2))"
+        " (ArrayLiteral1D (IntLiteral 3) (IntLiteral 4))"
+        ")"
+        " (ArrayLiteral2D"
+        " (ArrayLiteral1D (IntLiteral 5) (IntLiteral 6))"
+        " (ArrayLiteral1D (IntLiteral 7) (IntLiteral 8))"
+        ")"
+        ")"
     )

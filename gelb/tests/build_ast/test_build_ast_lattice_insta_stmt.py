@@ -25,5 +25,5 @@ def test_2d_no_arg_keywords():
     assert str(ast) == (
         "(LatticeInstaStmt g (IntLiteral 2) (IntLiteral 9) "
         "(ScalarDataType real32) "
-        "(ArrayLiteral1D {(IntLiteral 32), (IntLiteral 32)}))"
+        "(ArrayLiteral1D (IntLiteral 32) (IntLiteral 32)))"
     )

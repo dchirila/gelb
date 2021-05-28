@@ -10,7 +10,12 @@ def test_1d_array_type():
     # Act
     ast = get_ast("array_data_type", test_string)
     # Assert
-    assert str(ast) == "(ArrayDataType (ScalarDataType int64) (IntLiteral 3))"
+    assert str(ast) == (
+        "(ArrayDataType"
+        " (ScalarDataType int64)"
+        " (IntLiteral 3)"
+        ")"
+    )
 
 def test_2d_array_type():
     # Arrange
@@ -19,7 +24,8 @@ def test_2d_array_type():
     ast = get_ast("array_data_type", test_string)
     # Assert
     assert str(ast) == (
-        "(ArrayDataType "
-        "(ScalarDataType real64) "
-        "(ArrayLiteral1D {(IntLiteral 2), (IntLiteral 3)}))"
+        "(ArrayDataType"
+        " (ScalarDataType real64)"
+        " (ArrayLiteral1D (IntLiteral 2) (IntLiteral 3))"
+        ")"
     )

@@ -125,7 +125,9 @@ array_literal_1d : CURLY_OPEN
     scalar_expr (COMMA scalar_expr)+
 CURLY_CLOSE ;
 
-variable_assignment_stmt : ID OP_ASSIGN scalar_expr SEMICOLON ;
+variable_assignment_stmt : ID OP_ASSIGN
+    scalar_expr
+SEMICOLON ;
 
 /* TODO:
    - allow simple arithmetic expressions

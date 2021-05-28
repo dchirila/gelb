@@ -11,7 +11,11 @@ def test_simple():
     ast = get_ast("array_literal_1d", test_string)
     # Assert (test the (sub-)AST, based on string representation)
     assert str(ast) == (
-        "(ArrayLiteral1D {(IntLiteral 1), (IntLiteral 2), (IntLiteral 3)})"
+        "(ArrayLiteral1D"
+        " (IntLiteral 1)"
+        " (IntLiteral 2)"
+        " (IntLiteral 3)"
+        ")"
     )
 
 def test_with_comments_and_whitespace():
@@ -21,5 +25,8 @@ def test_with_comments_and_whitespace():
     ast = get_ast("array_literal_1d", test_string)
     # Assert (test the (sub-)AST, based on string representation)
     assert str(ast) == (
-        "(ArrayLiteral1D {(IntLiteral 123), (IntLiteral 456)})"
+        "(ArrayLiteral1D"
+        " (IntLiteral 123)"
+        " (IntLiteral 456)"
+        ")"
     )
