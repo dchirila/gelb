@@ -10,8 +10,9 @@ class Program_N(Node_N):
     def __init__(self):
         self.simulation_name = None
         self.simulation_description = None
-        self.list_of_lattices = None
-        # self.global_constants = None
+        self.global_constants = None
+        self.listof_lattice_constants = None
+        self.listof_lattice_instances = None
         # self.list_of_initializers = None
         # self.list_of_dynamics = None
         # self.list_of_gauges = None
@@ -99,21 +100,6 @@ class ReturnStmt_N(Node_N):
     pass
 
 
-# class LatticeConstantsBlock_N(Node_N):
-#     def __init__(self):
-#         pass
-
-
-# class LatticeBlock_N(Node_N):
-#     def __init__(self):
-#         pass
-
-
-# class NodeClassesBlock_N(Node_N):
-#     def __init__(self):
-#         pass
-
-
 # class InitializerBlock_N(Node_N):
 #     def __init__(self):
 #         pass
@@ -165,6 +151,7 @@ class Identifier_N(Node_N):
 # class RectSelOfArrayElems_N(Node_N):
 #     def __init__(self):
 #         pass
+
 
 class ScalarDataType_N(Node_N):
     supported_scalar_types = [
@@ -334,8 +321,3 @@ class LatticeAssignmentStmt_N(AssignmentStmt_N):
 # TODO only allow inside GeometryBlock_N
 class GeometryAssignmentStmt_N(AssignmentStmt_N):
     pass
-
-
-# class TODO_N(Node_N):
-#     def __init__(self):
-#         pass
