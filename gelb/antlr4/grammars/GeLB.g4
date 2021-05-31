@@ -42,14 +42,11 @@ CURLY_CLOSE;
 
  lattice_insta_stmt :                   // Example:
     LATTICE identifier PAREN_OPEN       // lattice f(
- 	NON_NEGATIVE_INT_LITERAL COMMA      //   d=2,
- 	NON_NEGATIVE_INT_LITERAL COMMA      //   q=9,
+ 	expr COMMA                          //   d=2,
+ 	expr COMMA                          //   q=9,
  	scalar_data_type COMMA              //   df_type=int64,
- 	lattice_size                        //   size=256
+ 	expr                                //   size=256
  	PAREN_CLOSE SEMICOLON;              // );
-
-lattice_size : array_literal_1d
-             | NON_NEGATIVE_INT_LITERAL ;
 
 // initializer_block: //
 // 	INITIALIZER identifier CURLY_OPEN //
@@ -59,13 +56,13 @@ lattice_size : array_literal_1d
 // lattice_assignment_stmt: //
 // 	dfs_selection //
 // 	OP_ASSIGN //
-// 	NON_NEGATIVE_INT_LITERAL //
+// 	expr //
 // 	SEMICOLON;
 
 // dfs_selection: //
 // 	identifier DOT OUT //
 // 	BRACKET_OPEN //
-// 	X VERT NON_NEGATIVE_INT_LITERAL //
+// 	X VERT expr //
 // 	BRACKET_CLOSE;
 
 constant_definition_stmt : CONST data_type variable_assignment_stmt ;

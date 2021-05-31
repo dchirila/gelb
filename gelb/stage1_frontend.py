@@ -51,22 +51,17 @@ class ASTBuilderVisitor(GeLBVisitor):
             self,
             ctx: GeLBParser.Lattice_insta_stmtContext):
         name = self.visit(ctx.identifier())
-        d = IntLiteral_N(ctx.NON_NEGATIVE_INT_LITERAL()[0])
-        q = IntLiteral_N(ctx.NON_NEGATIVE_INT_LITERAL()[1])
+        d = self.visitExpr(ctx.expr()[0])
+        q = self.visitExpr(ctx.expr()[1])
         df_type = self.visit(ctx.scalar_data_type())
-        lattice_size = self.visit(ctx.lattice_size())
-        return LatticeInstaStmt_N(name, d, q, df_type, lattice_size)
-
-    # Visit a parse tree produced by GeLBParser#lattice_size.
-    def visitLattice_size(self, ctx: GeLBParser.Lattice_sizeContext):
-        if ctx.NON_NEGATIVE_INT_LITERAL():
-            return IntLiteral_N(ctx.NON_NEGATIVE_INT_LITERAL())
-        elif ctx.array_literal_1d():
-            return self.visit(ctx.array_literal_1d())
-        else:
-            raise TypeError(
-                "<<<GeLB-Error>>> Invalid lattice size specified!"
-            )
+        lattice_size = self.visit(ctx.expr()[2])
+        return LatticeInstaStmt_N(
+            name,
+            d,
+            q,
+            df_type,
+            lattice_size
+        )
 
     # Visit a parse tree produced by GeLBParser#constant_definition_stmt.
     def visitConstant_definition_stmt(
