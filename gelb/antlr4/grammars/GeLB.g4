@@ -145,14 +145,9 @@ expr : PAREN_OPEN expr PAREN_CLOSE         # parensExpr
      | value=NON_NEGATIVE_REAL_LITERAL     # nonNegRealLiteralExpr
      | value=NON_NEGATIVE_INT_LITERAL      # nonNegIntLiteralExpr
      | value=BOOL_LITERAL                  # boolLiteralExpr
+     | array_literal_4d  # arrayLiteralExpr
+     | array_literal_3d  # arrayLiteralExpr
+     | array_literal_2d  # arrayLiteralExpr
+     | array_literal_1d  # arrayLiteralExpr
      // END :: literals //
      ;
-
-//expr
-//     // BEGIN :: literals //
-//     | array_literal_4d # arrayLiteralExpr
-//     | array_literal_3d # arrayLiteralExpr
-//     | array_literal_2d # arrayLiteralExpr
-//     | array_literal_1d # arrayLiteralExpr
-//     // END :: literals //
-//     ;
