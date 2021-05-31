@@ -176,6 +176,8 @@ class ASTBuilderVisitor(GeLBVisitor):
             return self.visitUnaryExpr(ctx)
         elif isinstance(ctx, GeLBParser.InfixExprContext):
             return self.visitInfixExpr(ctx)
+        elif isinstance(ctx, GeLBParser.IdentifierExprContext):
+            return self.visitIdentifierExpr(ctx)
         else:
             print("<<<GeLB-Error>>> Invalid expression type!")
             raise TypeError()
@@ -249,6 +251,10 @@ class ASTBuilderVisitor(GeLBVisitor):
     # Visit a parse tree produced by GeLBParser#nonNegIntLiteralExpr.
     def visitNonNegIntLiteralExpr(self, ctx:GeLBParser.NonNegIntLiteralExprContext):
         return IntLiteral_N(int(ctx.value.text))
+
+    # Visit a parse tree produced by GeLBParser#identifierExpr.
+    def visitIdentifierExpr(self, ctx:GeLBParser.IdentifierExprContext):
+        return self.visitIdentifier(ctx.identifier())
 
     def get_list_of_children_sub_asts(self, ctx):
         list_of_children_sub_asts = []

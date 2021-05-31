@@ -150,4 +150,5 @@ expr : PAREN_OPEN expr PAREN_CLOSE         # parensExpr
      | array_literal_2d  # arrayLiteralExpr
      | array_literal_1d  # arrayLiteralExpr
      // END :: literals //
+     | identifier  # identifierExpr
      ;
