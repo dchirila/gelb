@@ -75,3 +75,27 @@ def test_positive_real9():
     ast = get_ast("expr", test_string)
     # Assert
     assert str(ast) == "(RealLiteral 1e-08)"
+
+def test_positive_real_inside_parens():
+    # Arrange
+    test_string = "(1.23e-4)"
+    # Act
+    ast = get_ast("expr", test_string)
+    # Assert
+    assert str(ast) == "(RealLiteral 0.000123)"
+
+def test_negative_real():
+    # Arrange
+    test_string = "-1.23e-4"
+    # Act
+    ast = get_ast("expr", test_string)
+    # Assert
+    assert str(ast) == "(UnaryMinusExpr (RealLiteral 0.000123))"
+
+def test_really_positive_real():
+    # Arrange
+    test_string = "+1.23e-4"
+    # Act
+    ast = get_ast("expr", test_string)
+    # Assert
+    assert str(ast) == "(RealLiteral 0.000123)"
