@@ -12,6 +12,14 @@ def test_zero():
     # Assert (test the parse tree)
     assert result == "(expr 0)"
 
+def test_zero_inside_parens():
+    # Arrange
+    test_string = "(0)"
+    # Act (trigger parsing)
+    result = get_cst_as_string("expr", test_string)
+    # Assert (test the parse tree)
+    assert result == "(expr ( (expr 0) ))"
+
 def test_positive_int():
     # Arrange
     test_string = "123"

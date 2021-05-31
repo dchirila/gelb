@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 
 import antlr4 as a4
-from gelb.antlr4.generated_code import GeLBLexer, GeLBParser, GeLBVisitor
+
+from gelb.antlr4.generated_code import (
+    GeLBLexer,
+    GeLBParser,
+    GeLBVisitor
+)
 from gelb.ASTNodes import *
 
 
@@ -157,7 +162,21 @@ class ASTBuilderVisitor(GeLBVisitor):
 
     # Visit a parse tree produced by GeLBParser#expr.
     def visitExpr(self, ctx: GeLBParser.ExprContext):
-        return IntLiteral_N(int(ctx.NON_NEGATIVE_INTEGER().__str__()))
+        if isinstance(ctx, GeLBParser.NonNegIntExprContext):
+            return self.visitNonNegIntExpr(ctx)
+        elif isinstance(ctx, GeLBParser.ParensExprContext):
+            return self.visitParensExpr(ctx)
+        else:
+            print("<<<GeLB-Error>>> Invalid expression type!")
+            raise TypeError()
+
+    # Visit a parse tree produced by GeLBParser#parensExpr.
+    def visitParensExpr(self, ctx:GeLBParser.ParensExprContext):
+        return self.visit(ctx.expr())
+
+    # Visit a parse tree produced by GeLBParser#nonNegIntExpr.
+    def visitNonNegIntExpr(self, ctx:GeLBParser.NonNegIntExprContext):
+        return IntLiteral_N(int(ctx.value.text))
 
     def get_list_of_children_sub_asts(self, ctx):
         list_of_children_sub_asts = []
