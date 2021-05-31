@@ -272,9 +272,15 @@ class IntLiteral_N(Node_N):
         raise NotImplementedError()
 
 
-# class RealLiteral_N(Node_N):
-#     def __init__(self, value):
-#         self.value = value
+class RealLiteral_N(Node_N):
+    def __init__(self, value):
+        self.value = value
+
+    def __str__(self):
+        return f"(RealLiteral {self.value})"
+
+    def eval(self):
+        raise NotImplementedError()
 
 
 # class BoolLiteral_N(Node_N):

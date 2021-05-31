@@ -99,13 +99,11 @@ DOT : '.' ;
 //                     BEGIN: Scalar literals                     //
 // Numbers
 // ... real
-//NON_NEGATIVE_REAL : [0-9]+ DOT [0-9]* EXPONENT?
-//                  | [0-9]+ EXPONENT?
-//                  | DOT [0-9]+ EXPONENT?
-//                  ;
-//
-//EXPONENT : [Ee] (OP_ADD | OP_SUB)? [0-9]+ ;
-
+NON_NEGATIVE_REAL : [0-9]+ DOT [0-9]* EXPONENT?
+                  | DOT [0-9]+ EXPONENT?
+                  | NON_NEGATIVE_INTEGER EXPONENT
+                  ;
+EXPONENT : [Ee] (OP_ADD | OP_SUB)? [0-9]+ ;
 // ... int
 NON_NEGATIVE_INTEGER : '0' | ( [1-9] [0-9]* ) ;
 

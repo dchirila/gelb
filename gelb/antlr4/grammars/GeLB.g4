@@ -139,6 +139,7 @@ identifier : ID ;
  */
 expr : PAREN_OPEN expr PAREN_CLOSE         # parensExpr
      | op=(OP_ADD | OP_SUB | OP_NOT) expr  # unaryExpr
+     | value=NON_NEGATIVE_REAL             # nonNegRealExpr
      | value=NON_NEGATIVE_INTEGER          # nonNegIntExpr
      ;
 
