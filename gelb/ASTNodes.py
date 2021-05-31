@@ -21,7 +21,7 @@ class Program_N(Node_N):
         # self.geometry = None
 
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 class Block_N(Node_N):
@@ -32,7 +32,7 @@ class Block_N(Node_N):
         raise NotImplementedError()
 
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 class GlobalConstantsBlock_N(Block_N):
@@ -47,7 +47,7 @@ class GlobalConstantsBlock_N(Block_N):
         return result
 
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 class LatticeConstantsBlock_N(Block_N):
@@ -63,7 +63,7 @@ class LatticeConstantsBlock_N(Block_N):
         return result
 
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 class LatticesBlock_N(Node_N):
@@ -78,7 +78,7 @@ class LatticesBlock_N(Node_N):
         return result
 
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 # TODO only allow inside LatticesBlock_N
@@ -97,29 +97,29 @@ class LatticeInstaStmt_N(Node_N):
         )
 
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 class NodeClassesBlock_N(Node_N):
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 # TODO only allow inside NodeClassesBlock_N
 class NodeClassInstaStmt_N(Node_N):
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 class UserFunctionBlock_N(Node_N):
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 # TODO only allow inside UserFunctionBlock_N
 class ReturnStmt_N(Node_N):
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 # class InitializerBlock_N(Node_N):
@@ -128,27 +128,27 @@ class ReturnStmt_N(Node_N):
 
 # class DynamicBlock_N(Node_N):
 #     def __init__(self):
-#         pass
+#         raise NotImplementedError()
 
 
 # class GaugeBlock_N(Node_N):
 #     def __init__(self):
-#         pass
+#         raise NotImplementedError()
 
 
 # class FunctionBlock_N(Node_N):
 #     def __init__(self):
-#         pass
+#         raise NotImplementedError()
 
 
 # class GeometryBlock_N(Node_N):
 #     def __init__(self):
-#         pass
+#         raise NotImplementedError()
 
 
 # class Expr_N(Node_N):
 #     def __init__(self):
-#         pass
+#         raise NotImplementedError()
 
 
 class Identifier_N(Node_N):
@@ -159,7 +159,7 @@ class Identifier_N(Node_N):
         return f"(Identifier {self.name})"
 
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 # class RectSelOfLatticeDFs_N(Node_N):
@@ -169,12 +169,12 @@ class Identifier_N(Node_N):
 #     TODO: store type of lattice selection (IN or OUT)
 #     """
 #     def __init__(self):
-#         pass
+#         raise NotImplementedError()
 
 
 # class RectSelOfArrayElems_N(Node_N):
 #     def __init__(self):
-#         pass
+#         raise NotImplementedError()
 
 
 class ScalarDataType_N(Node_N):
@@ -196,7 +196,7 @@ class ScalarDataType_N(Node_N):
         return f"(ScalarDataType {self.value})"
 
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 class ArrayDataType_N(Node_N):
@@ -210,7 +210,7 @@ class ArrayDataType_N(Node_N):
         )
 
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 class BinaryExpr_N(Node_N):
@@ -218,21 +218,47 @@ class BinaryExpr_N(Node_N):
         self.left = left
         self.righ = right
 
+    def __str__(self):
+        raise NotImplementedError()
+
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 class Add_N(BinaryExpr_N):
     def __init__(self, left, right):
         super().__init__(left, right)
 
+    def __str__(self):
+        raise NotImplementedError()
+
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
-# class UnaryExpr_N(Node_N):
-#     def __init__(self):
-#         pass
+class UnaryExpr_N(Node_N):
+    def __init__(self, operator, value):
+        self.operator = operator
+        self.value = value
+
+    def __str__(self):
+        raise NotImplementedError()
+
+    def eval(self):
+        raise NotImplementedError()
+
+
+class NotExpr_N(UnaryExpr_N):
+    def __init__(self, value):
+        super().__init__('not', value)
+
+
+class UnaryMinusExpr_N(UnaryExpr_N):
+    def __init__(self, value):
+        super().__init__('-', value)
+
+    def __str__(self):
+        return f"(UnaryMinusExpr {self.value})"
 
 
 class IntLiteral_N(Node_N):
@@ -243,7 +269,7 @@ class IntLiteral_N(Node_N):
         return f"(IntLiteral {self.value})"
 
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 # class RealLiteral_N(Node_N):
@@ -264,7 +290,7 @@ class StringLiteral_N(Node_N):
         return f"(StringLiteral {self.value})"
 
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 # base-class for Array{1,2,3,4}DLiteral_N
@@ -288,7 +314,7 @@ class ArrayLiteralBase_N(Node_N):
         return result
 
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 class Array1DLiteral_N(ArrayLiteralBase_N):
@@ -296,7 +322,7 @@ class Array1DLiteral_N(ArrayLiteralBase_N):
         super().__init__(value, 1)
 
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 class Array2DLiteral_N(ArrayLiteralBase_N):
@@ -304,7 +330,7 @@ class Array2DLiteral_N(ArrayLiteralBase_N):
         super().__init__(value, 2)
 
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 class Array3DLiteral_N(ArrayLiteralBase_N):
@@ -312,7 +338,7 @@ class Array3DLiteral_N(ArrayLiteralBase_N):
         super().__init__(value, 3)
 
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 class Array4DLiteral_N(ArrayLiteralBase_N):
@@ -320,7 +346,7 @@ class Array4DLiteral_N(ArrayLiteralBase_N):
         super().__init__(value, 4)
 
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 # NOTE: later, we can distinguish (maybe) between:
@@ -331,13 +357,13 @@ class FunctionCall_N(Node_N):
         self.args_list = args_list  # TODO: make this a =List_N= !
 
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 # TODO make Abstract Base Class
 class Stmt_N(Node_N):
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 # NOTE: declaration AND assignment!
@@ -353,7 +379,7 @@ class ConstantDefinitionStmt_N(Stmt_N):
         )
 
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 class VariableDeclarationStmt_N(Stmt_N):
@@ -362,7 +388,7 @@ class VariableDeclarationStmt_N(Stmt_N):
         self.value = value
 
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 class AssignmentStmt_N(Stmt_N):
@@ -371,7 +397,7 @@ class AssignmentStmt_N(Stmt_N):
         self.rhs = rhs
 
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 class VariableAssignmentStmt_N(AssignmentStmt_N):
@@ -384,15 +410,15 @@ class VariableAssignmentStmt_N(AssignmentStmt_N):
         )
 
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 class LatticeAssignmentStmt_N(AssignmentStmt_N):
     def eval(self):
-        pass
+        raise NotImplementedError()
 
 
 # TODO only allow inside GeometryBlock_N
 class GeometryAssignmentStmt_N(AssignmentStmt_N):
     def eval(self):
-        pass
+        raise NotImplementedError()

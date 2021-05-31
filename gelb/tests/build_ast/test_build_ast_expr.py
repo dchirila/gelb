@@ -36,17 +36,25 @@ def test_positive_int_inside_parens():
     # Assert
     assert str(ast) == "(IntLiteral 921)"
 
+def test_negative_int():
+    # Arrange
+    test_string = "-981"
+    # Act
+    ast = get_ast("expr", test_string)
+    # Assert (test the parse tree)
+    assert str(ast) == "(UnaryMinusExpr (IntLiteral 981))"
+
+def test_really_positive_int():
+    # Arrange
+    test_string = "+29"
+    # Act
+    ast = get_ast("expr", test_string)
+    # Assert (test the parse tree)
+    assert str(ast) == "(IntLiteral 29)"
+
 # def test_positive_float():
 #     # Arrange
 #     test_string = "3.14"
-#     # Act (trigger parsing)
-#     result = get_cst_as_string("expr", test_string)
-#     # Assert (test the parse tree)
-#     assert result == "(expr 123)"
-
-# def test_negative_int():
-#     # Arrange
-#     test_string = "-981"
 #     # Act (trigger parsing)
 #     result = get_cst_as_string("expr", test_string)
 #     # Assert (test the parse tree)

@@ -137,8 +137,9 @@ identifier : ID ;
    statically) and scalar-valued array expressions -- basically, as long as the
    result is a scalar, we should accept it here.
  */
-expr : PAREN_OPEN expr PAREN_CLOSE  # parensExpr
-     | value=NON_NEGATIVE_INTEGER   # nonNegIntExpr
+expr : PAREN_OPEN expr PAREN_CLOSE         # parensExpr
+     | op=(OP_ADD | OP_SUB | OP_NOT) expr  # unaryExpr
+     | value=NON_NEGATIVE_INTEGER          # nonNegIntExpr
      ;
 
 //expr : PAREN_OPEN expr PAREN_CLOSE               # parensExpr

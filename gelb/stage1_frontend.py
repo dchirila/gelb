@@ -166,6 +166,8 @@ class ASTBuilderVisitor(GeLBVisitor):
             return self.visitNonNegIntExpr(ctx)
         elif isinstance(ctx, GeLBParser.ParensExprContext):
             return self.visitParensExpr(ctx)
+        elif isinstance(ctx, GeLBParser.UnaryExprContext):
+            return self.visitUnaryExpr(ctx)
         else:
             print("<<<GeLB-Error>>> Invalid expression type!")
             raise TypeError()
@@ -173,6 +175,20 @@ class ASTBuilderVisitor(GeLBVisitor):
     # Visit a parse tree produced by GeLBParser#parensExpr.
     def visitParensExpr(self, ctx:GeLBParser.ParensExprContext):
         return self.visit(ctx.expr())
+
+    # Visit a parse tree produced by GeLBParser#unaryExpr.
+    def visitUnaryExpr(self, ctx:GeLBParser.UnaryExprContext):
+        if ctx.op.text == '+':
+            return self.visit(ctx.expr())
+        elif ctx.op.text == '-':
+            return UnaryMinusExpr_N(
+                self.visit(ctx.expr())
+            )
+        elif ctx.op.text == '!':
+            return NotExpr_N(self.visit(ctx.expr()))
+        else:
+            print("<<<GeLB-Error>>> Invalid unary expression type!")
+            raise TypeError()
 
     # Visit a parse tree produced by GeLBParser#nonNegIntExpr.
     def visitNonNegIntExpr(self, ctx:GeLBParser.NonNegIntExprContext):

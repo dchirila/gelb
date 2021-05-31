@@ -74,6 +74,8 @@ OP_POW : '^' ;
 // ... chevrons (angle brackets)
 OP_LESS : '<' ;
 OP_GREATER : '>' ;
+// ... logical operators
+OP_NOT : '!' ;
 //                     END: Operators                     //
 
 //                     BEGIN: Punctuation                     //
