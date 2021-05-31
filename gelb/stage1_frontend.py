@@ -170,6 +170,8 @@ class ASTBuilderVisitor(GeLBVisitor):
             return self.visitBoolLiteralExpr(ctx)
         elif isinstance(ctx, GeLBParser.ArrayLiteralExprContext):
             return self.visitArrayLiteralExpr(ctx)
+        elif isinstance(ctx, GeLBParser.PowExprContext):
+            return self.visitPowExpr(ctx)
         elif isinstance(ctx, GeLBParser.ParensExprContext):
             return self.visitParensExpr(ctx)
         elif isinstance(ctx, GeLBParser.UnaryExprContext):
@@ -243,6 +245,13 @@ class ASTBuilderVisitor(GeLBVisitor):
         else:
             print("<<<GeLB-Error>>> Invalid array literal expression!")
             raise TypeError()
+
+    # Visit a parse tree produced by GeLBParser#powExpr.
+    def visitPowExpr(self, ctx:GeLBParser.PowExprContext):
+        return Pow_N(
+            self.visit(ctx.left),
+            self.visit(ctx.right)
+        )
 
     # Visit a parse tree produced by GeLBParser#boolLiteralExpr.
     def visitBoolLiteralExpr(self, ctx:GeLBParser.BoolLiteralExprContext):

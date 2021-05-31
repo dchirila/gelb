@@ -99,3 +99,19 @@ def test_really_positive_real():
     ast = get_ast("expr", test_string)
     # Assert
     assert str(ast) == "(RealLiteral 0.000123)"
+
+def test_real_raised_to_int():
+    # Arrange
+    test_string = "3.14 ^ 2"
+    # Act
+    ast = get_ast("expr", test_string)
+    # Assert
+    assert str(ast) == "(Pow (RealLiteral 3.14) (IntLiteral 2))"
+
+def test_real_raised_to_real():
+    # Arrange
+    test_string = "3.14 ^ 3.14"
+    # Act
+    ast = get_ast("expr", test_string)
+    # Assert
+    assert str(ast) == "(Pow (RealLiteral 3.14) (RealLiteral 3.14))"

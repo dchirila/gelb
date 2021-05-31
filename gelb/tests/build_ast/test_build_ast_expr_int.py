@@ -83,3 +83,11 @@ def test_int_divided_by_int():
     ast = get_ast("expr", test_string)
     # Assert
     assert str(ast) == "(Div (IntLiteral 120) (IntLiteral 12))"
+
+def test_int_raised_to_int():
+    # Arrange
+    test_string = "2 ^ 3"
+    # Act
+    ast = get_ast("expr", test_string)
+    # Assert
+    assert str(ast) == "(Pow (IntLiteral 2) (IntLiteral 3))"

@@ -132,13 +132,14 @@ SEMICOLON ;
 identifier : ID ;
 
 /* TODO:
-   - allow simple arithmetic expressions
-   - allow expressions involving built-in functions (which can be evaluated
-   statically) and scalar-valued array expressions -- basically, as long as the
-   result is a scalar, we should accept it here.
+   - allow expressions involving =array_selection=s
+   - allow expressions involving =lattice_in_selection=s
+   - allow expressions involving built-in functions
+   - allow expressions involving user-defined functions
  */
-expr : PAREN_OPEN expr PAREN_CLOSE         # parensExpr
-     | op=(OP_ADD | OP_SUB | OP_NOT) expr  # unaryExpr
+expr : PAREN_OPEN expr PAREN_CLOSE                # parensExpr
+     | <assoc=right> left=expr OP_POW right=expr  # powExpr
+     | op=(OP_ADD | OP_SUB | OP_NOT) expr         # unaryExpr
      | left=expr op=(OP_MUL | OP_DIV) right=expr  # infixExpr
      | left=expr op=(OP_ADD | OP_SUB) right=expr  # infixExpr
      // BEGIN :: literals //

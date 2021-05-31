@@ -216,6 +216,14 @@ class Sub_N(BinaryExpr_N):
         return f"(Sub {self.left} {self.right})"
 
 
+class Pow_N(BinaryExpr_N):
+    def __init__(self, left, right):
+        super().__init__('^', left, right)
+
+    def __str__(self):
+        return f"(Pow {self.left} {self.right})"
+
+
 class UnaryExpr_N(Node_N):
     def __init__(self, operator, value):
         self.operator = operator
