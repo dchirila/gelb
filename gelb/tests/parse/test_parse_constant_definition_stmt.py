@@ -18,7 +18,7 @@ def test_scalar_int():
         " (variable_assignment_stmt"
         " (identifier LENGTH)"
         " ="
-        " (scalar_expr 32)"
+        " (expr 32)"
         " ;)"
         ")"
     )

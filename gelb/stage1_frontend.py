@@ -155,8 +155,8 @@ class ASTBuilderVisitor(GeLBVisitor):
     def visitIdentifier(self, ctx: GeLBParser.IdentifierContext):
         return Identifier_N(ctx.ID())
 
-    # Visit a parse tree produced by GeLBParser#scalar_expr.
-    def visitScalar_expr(self, ctx: GeLBParser.Scalar_exprContext):
+    # Visit a parse tree produced by GeLBParser#expr.
+    def visitExpr(self, ctx: GeLBParser.ExprContext):
         return IntLiteral_N(int(ctx.NON_NEGATIVE_INTEGER().__str__()))
 
     def get_list_of_children_sub_asts(self, ctx):

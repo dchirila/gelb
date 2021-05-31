@@ -12,7 +12,7 @@ def test_simple():
     # Assert (test the parse tree)
     assert result == (
         "(array_literal_2d { "
-            "(array_literal_1d { (scalar_expr 1) , (scalar_expr 2) }) , "
-            "(array_literal_1d { (scalar_expr 3) , (scalar_expr 4) }) "
+            "(array_literal_1d { (expr 1) , (expr 2) }) , "
+            "(array_literal_1d { (expr 3) , (expr 4) }) "
         "})"
     )

@@ -29,3 +29,16 @@ def test_with_comments_and_whitespace():
         " (IntLiteral 980)"
         ")"
     )
+
+# def test_rhs_array1d_literal():
+#     # Arrange
+#     test_string = "alpha = {1, 2, 3} ;"
+#     # Act
+#     ast = get_ast("variable_assignment_stmt", test_string)
+#     # Assert
+#     assert str(ast) == (
+#         "(VariableAssignmentStmt"
+#         " (Identifier alpha)"
+#         " (IntLiteral 123)"
+#         ")"
+#     )

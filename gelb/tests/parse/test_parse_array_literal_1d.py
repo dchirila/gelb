@@ -11,7 +11,7 @@ def test_simple():
     result = get_cst_as_string("array_literal_1d", test_string)
     # Assert (test the parse tree)
     assert result == (
-        "(array_literal_1d { (scalar_expr 1) , (scalar_expr 2) , (scalar_expr 3) })"
+        "(array_literal_1d { (expr 1) , (expr 2) , (expr 3) })"
     )
 
 def test_with_comments_and_whitespace():
@@ -22,6 +22,6 @@ def test_with_comments_and_whitespace():
     # Assert (test the parse tree)
     assert result == (
             "(array_literal_1d "
-            "{ (scalar_expr 123) , (scalar_expr 456) }"
+            "{ (expr 123) , (expr 456) }"
             ")"
     )

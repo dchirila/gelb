@@ -14,7 +14,7 @@ def test_simple():
         "(variable_assignment_stmt"
         " (identifier alpha)"
         " ="
-        " (scalar_expr 123)"
+        " (expr 123)"
         " ;)"
     )
 
@@ -28,7 +28,7 @@ def test_with_comments_and_whitespace():
         "(variable_assignment_stmt"
         " (identifier beta_quadrant)"
         " ="
-        " (scalar_expr 980)"
+        " (expr 980)"
         " ;)"
     )
 

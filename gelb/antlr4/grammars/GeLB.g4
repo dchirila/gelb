@@ -92,9 +92,9 @@ array_data_type : ARRAY OP_LESS
     COMMA
     /* shape is (depending on dimensionality):
        - a one-dimensional array (for dimensionality >= 2) or
-       - a scalar_expr (for dimensionality == 1)
+       - a expr (for dimensionality == 1)
      */
-    (array_literal_1d | scalar_expr)
+    (array_literal_1d | expr)
 OP_GREATER ;
 
 /* Fixed-dimensionality array literals
@@ -122,11 +122,11 @@ array_literal_2d : CURLY_OPEN
 CURLY_CLOSE ;
 
 array_literal_1d : CURLY_OPEN
-    scalar_expr (COMMA scalar_expr)+
+    expr (COMMA expr)+
 CURLY_CLOSE ;
 
 variable_assignment_stmt : identifier OP_ASSIGN
-    scalar_expr
+    expr
 SEMICOLON ;
 
 identifier : ID ;
@@ -137,4 +137,20 @@ identifier : ID ;
    statically) and scalar-valued array expressions -- basically, as long as the
    result is a scalar, we should accept it here.
  */
-scalar_expr : NON_NEGATIVE_INTEGER ;
+expr : NON_NEGATIVE_INTEGER ;
+
+//expr : PAREN_OPEN expr PAREN_CLOSE               # parensExpr
+//     | op=(OP_ADD | OP_SUB) expr                 # unaryExpr
+//     | left=expr op=(OP_MUL | OP_DIV) right=expr # infixBinaryExpr
+//     | left=expr op=(OP_ADD | OP_SUB) right=expr # infixBinaryExpr
+//     // BEGIN :: literals //
+//     | NON_NEGATIVE_INTEGER                   # intLiteralExpr
+//     | NON_NEGATIVE_REAL                      # realLiteralExpr
+//     | TRUE                          # boolLiteralExpr
+//     | FALSE                         # boolLiteralExpr
+//     | array_literal_4d # arrayLiteralExpr
+//     | array_literal_3d # arrayLiteralExpr
+//     | array_literal_2d # arrayLiteralExpr
+//     | array_literal_1d # arrayLiteralExpr
+//     // END :: literals //
+//     ;

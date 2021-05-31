@@ -8,13 +8,13 @@ TODO : 'TODO' ;
 SIMULATION_NAME : 'simulation_name' ;
 SIMULATION_DESCRIPTION : 'simulation_description' ;
 GLOBAL_CONSTANTS : 'global_constants' ;
-LATTICES: 'lattices';
-LATTICE: 'lattice';
+LATTICES : 'lattices' ;
+LATTICE : 'lattice' ;
 LATTICE_CONSTANTS : 'lattice_constants' ;
-// NODE_CLASSES: 'node_classes';
-// INITIALIZERS: 'initializers';
-// DYNAMICS: 'dynamics';
-// GAUGES: 'gauges';
+// NODE_CLASSES : 'node_classes' ;
+// INITIALIZERS : 'initializers' ;
+// DYNAMICS : 'dynamics' ;
+// GAUGES : 'gauges' ;
 
 // BEGIN: Keywords for intrinsic functions
 // DOT_PRODUCT : 'dot_product' ;
@@ -27,8 +27,8 @@ LATTICE_CONSTANTS : 'lattice_constants' ;
 // BEGIN: Keywords for data-types
 // bool
 BOOL : 'bool' ;
-TRUE: 'true';
-FALSE: 'false';
+TRUE : 'true' ;
+FALSE : 'false' ;
 // int
 INT64 : 'int64' ;
 INT32 : 'int32' ;
@@ -46,53 +46,66 @@ ARRAY : 'array' ;
 // END: Keywords for data-types
 
 // INITIALIZER: 'initializer';
-// OUT: 'out';
-// IN: 'in';
-// X: 'x';
-// Y: 'y';
-// Z: 'z';
+// OUT : 'out' ;
+// IN : 'in' ;
+// X : 'x' ;
+// Y : 'y' ;
+// Z : 'z' ;
 
-// SIZE: 'size';
-// PERIODICITY: 'periodicity';
+// SIZE : 'size' ;
+// PERIODICITY : 'periodicity' ;
 
 
-// DYNAMIC: 'dynamic';
-// GAUGE: 'gauge';
+// DYNAMIC : 'dynamic' ;
+// GAUGE : 'gauge' ;
 
-// NODE_CLASS: 'node_class';
-// GEOMETRY: 'geometry';
-// NODES: 'nodes';
+// NODE_CLASS : 'node_class' ;
+// GEOMETRY : 'geometry' ;
+// NODES : 'nodes' ;
 //                     END: Keywords                     //
 
 //                     BEGIN: Operators                     //
-OP_ASSIGN: '=';
+OP_ASSIGN : '=' ;
+OP_ADD : '+' ;
+OP_SUB : '-' ;
+OP_MUL : '*' ;
+OP_DIV : '/' ;
+OP_POW : '^' ;
 // ... chevrons (angle brackets)
-OP_LESS: '<';
-OP_GREATER: '>';
+OP_LESS : '<' ;
+OP_GREATER : '>' ;
 //                     END: Operators                     //
 
 //                     BEGIN: Punctuation                     //
 // parentheses
-PAREN_OPEN: '(';
-PAREN_CLOSE: ')';
+PAREN_OPEN : '(' ;
+PAREN_CLOSE : ')' ;
 // square brackets
-BRACKET_OPEN: '[';
-BRACKET_CLOSE: ']';
+BRACKET_OPEN : '[' ;
+BRACKET_CLOSE : ']' ;
 // curly brackets
-CURLY_OPEN: '{';
-CURLY_CLOSE: '}';
+CURLY_OPEN : '{' ;
+CURLY_CLOSE : '}' ;
 // MISC Symbols
 // COLON: ':';
-SEMICOLON: ';';
-// VERT: '|';
-COMMA: ',';
-// DOT: '.';
+SEMICOLON : ';' ;
+// VERT : '|' ;
+COMMA : ',' ;
+DOT : '.' ;
 //                     END: Punctuation                     //
 
 //                     BEGIN: Scalar literals                     //
 // Numbers
+// ... real
+//NON_NEGATIVE_REAL : [0-9]+ DOT [0-9]* EXPONENT?
+//                  | [0-9]+ EXPONENT?
+//                  | DOT [0-9]+ EXPONENT?
+//                  ;
+//
+//EXPONENT : [Ee] (OP_ADD | OP_SUB)? [0-9]+ ;
+
 // ... int
-NON_NEGATIVE_INTEGER: '0' | [1-9][0-9]* ;
+NON_NEGATIVE_INTEGER : '0' | ( [1-9] [0-9]* ) ;
 
  /* STRINGs-rule (valid for {single, multi}-line strings)
     NOTE: to simplify things, we only allow strings marked by DOUBLE-quotes

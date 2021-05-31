@@ -8,6 +8,6 @@ def test_simple():
     # Arrange
     test_string = "123"
     # Act (trigger parsing)
-    result = get_cst_as_string("scalar_expr", test_string)
+    result = get_cst_as_string("expr", test_string)
     # Assert (test the parse tree)
-    assert result == "(scalar_expr 123)"
+    assert result == "(expr 123)"
