@@ -146,11 +146,6 @@ class ReturnStmt_N(Node_N):
 #         raise NotImplementedError()
 
 
-# class Expr_N(Node_N):
-#     def __init__(self):
-#         raise NotImplementedError()
-
-
 class Identifier_N(Node_N):
     def __init__(self, name):
         self.name = name
@@ -214,26 +209,48 @@ class ArrayDataType_N(Node_N):
 
 
 class BinaryExpr_N(Node_N):
-    def __init__(self, left, right):
+    def __init__(self, operator, left, right):
+        self.operator = operator
         self.left = left
-        self.righ = right
+        self.right = right
 
     def __str__(self):
         raise NotImplementedError()
 
     def eval(self):
         raise NotImplementedError()
+
+
+class Mul_N(BinaryExpr_N):
+    def __init__(self, left, right):
+        super().__init__('*', left, right)
+
+    def __str__(self):
+        return f"(Mul {self.left} {self.right})"
+
+
+class Div_N(BinaryExpr_N):
+    def __init__(self, left, right):
+        super().__init__('/', left, right)
+
+    def __str__(self):
+        return f"(Div {self.left} {self.right})"
 
 
 class Add_N(BinaryExpr_N):
     def __init__(self, left, right):
-        super().__init__(left, right)
+        super().__init__('+', left, right)
 
     def __str__(self):
-        raise NotImplementedError()
+        return f"(Add {self.left} {self.right})"
 
-    def eval(self):
-        raise NotImplementedError()
+
+class Sub_N(BinaryExpr_N):
+    def __init__(self, left, right):
+        super().__init__('-', left, right)
+
+    def __str__(self):
+        return f"(Sub {self.left} {self.right})"
 
 
 class UnaryExpr_N(Node_N):

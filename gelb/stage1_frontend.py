@@ -164,12 +164,14 @@ class ASTBuilderVisitor(GeLBVisitor):
     def visitExpr(self, ctx: GeLBParser.ExprContext):
         if isinstance(ctx, GeLBParser.NonNegIntExprContext):
             return self.visitNonNegIntExpr(ctx)
-        if isinstance(ctx, GeLBParser.NonNegRealExprContext):
+        elif isinstance(ctx, GeLBParser.NonNegRealExprContext):
             return self.visitNonNegRealExpr(ctx)
         elif isinstance(ctx, GeLBParser.ParensExprContext):
             return self.visitParensExpr(ctx)
         elif isinstance(ctx, GeLBParser.UnaryExprContext):
             return self.visitUnaryExpr(ctx)
+        elif isinstance(ctx, GeLBParser.InfixExprContext):
+            return self.visitInfixExpr(ctx)
         else:
             print("<<<GeLB-Error>>> Invalid expression type!")
             raise TypeError()
@@ -177,6 +179,32 @@ class ASTBuilderVisitor(GeLBVisitor):
     # Visit a parse tree produced by GeLBParser#parensExpr.
     def visitParensExpr(self, ctx:GeLBParser.ParensExprContext):
         return self.visit(ctx.expr())
+
+    # Visit a parse tree produced by GeLBParser#infixExpr.
+    def visitInfixExpr(self, ctx:GeLBParser.InfixExprContext):
+        if ctx.op.text == '*':
+            return Mul_N(
+                self.visit(ctx.left),
+                self.visit(ctx.right)
+            )
+        elif ctx.op.text == '/':
+            return Div_N(
+                self.visit(ctx.left),
+                self.visit(ctx.right)
+            )
+        elif ctx.op.text == '+':
+            return Add_N(
+                self.visit(ctx.left),
+                self.visit(ctx.right)
+            )
+        elif ctx.op.text == '-':
+            return Sub_N(
+                self.visit(ctx.left),
+                self.visit(ctx.right)
+            )
+        else:
+            print("<<<GeLB-Error>>> Invalid infix expression!")
+            raise TypeError()
 
     # Visit a parse tree produced by GeLBParser#unaryExpr.
     def visitUnaryExpr(self, ctx:GeLBParser.UnaryExprContext):

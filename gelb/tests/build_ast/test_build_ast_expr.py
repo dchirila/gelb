@@ -17,7 +17,7 @@ def test_zero_inside_parens():
     test_string = "(0)"
     # Act
     ast = get_ast("expr", test_string)
-    # Assert (test the parse tree)
+    # Assert
     assert str(ast) == "(IntLiteral 0)"
 
 def test_positive_int():
@@ -41,7 +41,7 @@ def test_negative_int():
     test_string = "-981"
     # Act
     ast = get_ast("expr", test_string)
-    # Assert (test the parse tree)
+    # Assert
     assert str(ast) == "(UnaryMinusExpr (IntLiteral 981))"
 
 def test_really_positive_int():
@@ -49,13 +49,37 @@ def test_really_positive_int():
     test_string = "+29"
     # Act
     ast = get_ast("expr", test_string)
-    # Assert (test the parse tree)
+    # Assert
     assert str(ast) == "(IntLiteral 29)"
 
-# def test_int_plus_int():
-#     # Arrange
-#     test_string = "123 + 321"
-#     # Act (trigger parsing)
-#     result = get_cst_as_string("expr", test_string)
-#     # Assert (test the parse tree)
-#     assert result == "(expr 123)"
+def test_int_plus_int():
+    # Arrange
+    test_string = "123 + 321"
+    # Act
+    ast = get_ast("expr", test_string)
+    # Assert
+    assert str(ast) == "(Add (IntLiteral 123) (IntLiteral 321))"
+
+def test_int_minus_int():
+    # Arrange
+    test_string = "123 - 321"
+    # Act
+    ast = get_ast("expr", test_string)
+    # Assert
+    assert str(ast) == "(Sub (IntLiteral 123) (IntLiteral 321))"
+
+def test_int_times_int():
+    # Arrange
+    test_string = "12 * 10"
+    # Act
+    ast = get_ast("expr", test_string)
+    # Assert
+    assert str(ast) == "(Mul (IntLiteral 12) (IntLiteral 10))"
+
+def test_int_divided_by_int():
+    # Arrange
+    test_string = "120 / 12"
+    # Act
+    ast = get_ast("expr", test_string)
+    # Assert
+    assert str(ast) == "(Div (IntLiteral 120) (IntLiteral 12))"
