@@ -166,6 +166,8 @@ class ASTBuilderVisitor(GeLBVisitor):
             return self.visitNonNegIntLiteralExpr(ctx)
         elif isinstance(ctx, GeLBParser.NonNegRealLiteralExprContext):
             return self.visitNonNegRealLiteralExpr(ctx)
+        elif isinstance(ctx, GeLBParser.BoolLiteralExprContext):
+            return self.visitBoolLiteralExpr(ctx)
         elif isinstance(ctx, GeLBParser.ParensExprContext):
             return self.visitParensExpr(ctx)
         elif isinstance(ctx, GeLBParser.UnaryExprContext):
@@ -226,7 +228,7 @@ class ASTBuilderVisitor(GeLBVisitor):
 
     # Visit a parse tree produced by GeLBParser#boolLiteralExpr.
     def visitBoolLiteralExpr(self, ctx:GeLBParser.BoolLiteralExprContext):
-        return self.visitChildren(ctx)
+        return BoolLiteral_N(ctx.value.text)
 
     # Visit a parse tree produced by GeLBParser#nonNegIntLiteralExpr.
     def visitNonNegIntLiteralExpr(self, ctx:GeLBParser.NonNegIntLiteralExprContext):

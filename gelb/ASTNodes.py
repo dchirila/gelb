@@ -253,7 +253,13 @@ class RealLiteral_N(Node_N):
 
 class BoolLiteral_N(Node_N):
     def __init__(self, value):
-        self.value = value
+        # Store as string, because we use lowercase, i.e.:
+        # 'true' & 'false', instead of
+        # 'True' & 'False' (which Python uses)
+        self.value = str(value)
+
+    def __str__(self):
+        return f"(BoolLiteral {self.value})"
 
 
 class StringLiteral_N(Node_N):
