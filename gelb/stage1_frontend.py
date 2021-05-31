@@ -51,16 +51,16 @@ class ASTBuilderVisitor(GeLBVisitor):
             self,
             ctx: GeLBParser.Lattice_insta_stmtContext):
         name = self.visit(ctx.identifier())
-        d = IntLiteral_N(ctx.NON_NEGATIVE_INTEGER()[0])
-        q = IntLiteral_N(ctx.NON_NEGATIVE_INTEGER()[1])
+        d = IntLiteral_N(ctx.NON_NEGATIVE_INT_LITERAL()[0])
+        q = IntLiteral_N(ctx.NON_NEGATIVE_INT_LITERAL()[1])
         df_type = self.visit(ctx.scalar_data_type())
         lattice_size = self.visit(ctx.lattice_size())
         return LatticeInstaStmt_N(name, d, q, df_type, lattice_size)
 
     # Visit a parse tree produced by GeLBParser#lattice_size.
     def visitLattice_size(self, ctx: GeLBParser.Lattice_sizeContext):
-        if ctx.NON_NEGATIVE_INTEGER():
-            return IntLiteral_N(ctx.NON_NEGATIVE_INTEGER())
+        if ctx.NON_NEGATIVE_INT_LITERAL():
+            return IntLiteral_N(ctx.NON_NEGATIVE_INT_LITERAL())
         elif ctx.array_literal_1d():
             return self.visit(ctx.array_literal_1d())
         else:
@@ -162,10 +162,10 @@ class ASTBuilderVisitor(GeLBVisitor):
 
     # Visit a parse tree produced by GeLBParser#expr.
     def visitExpr(self, ctx: GeLBParser.ExprContext):
-        if isinstance(ctx, GeLBParser.NonNegIntExprContext):
-            return self.visitNonNegIntExpr(ctx)
-        elif isinstance(ctx, GeLBParser.NonNegRealExprContext):
-            return self.visitNonNegRealExpr(ctx)
+        if isinstance(ctx, GeLBParser.NonNegIntLiteralExprContext):
+            return self.visitNonNegIntLiteralExpr(ctx)
+        elif isinstance(ctx, GeLBParser.NonNegRealLiteralExprContext):
+            return self.visitNonNegRealLiteralExpr(ctx)
         elif isinstance(ctx, GeLBParser.ParensExprContext):
             return self.visitParensExpr(ctx)
         elif isinstance(ctx, GeLBParser.UnaryExprContext):
@@ -220,12 +220,16 @@ class ASTBuilderVisitor(GeLBVisitor):
             print("<<<GeLB-Error>>> Invalid unary expression type!")
             raise TypeError()
 
-    # Visit a parse tree produced by GeLBParser#nonNegRealExpr.
-    def visitNonNegRealExpr(self, ctx:GeLBParser.NonNegRealExprContext):
+    # Visit a parse tree produced by GeLBParser#nonNegRealLiteralExpr.
+    def visitNonNegRealLiteralExpr(self, ctx:GeLBParser.NonNegRealLiteralExprContext):
         return RealLiteral_N(float(ctx.value.text))
 
-    # Visit a parse tree produced by GeLBParser#nonNegIntExpr.
-    def visitNonNegIntExpr(self, ctx:GeLBParser.NonNegIntExprContext):
+    # Visit a parse tree produced by GeLBParser#boolLiteralExpr.
+    def visitBoolLiteralExpr(self, ctx:GeLBParser.BoolLiteralExprContext):
+        return self.visitChildren(ctx)
+
+    # Visit a parse tree produced by GeLBParser#nonNegIntLiteralExpr.
+    def visitNonNegIntLiteralExpr(self, ctx:GeLBParser.NonNegIntLiteralExprContext):
         return IntLiteral_N(int(ctx.value.text))
 
     def get_list_of_children_sub_asts(self, ctx):

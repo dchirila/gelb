@@ -27,8 +27,6 @@ LATTICE_CONSTANTS : 'lattice_constants' ;
 // BEGIN: Keywords for data-types
 // bool
 BOOL : 'bool' ;
-TRUE : 'true' ;
-FALSE : 'false' ;
 // int
 INT64 : 'int64' ;
 INT32 : 'int32' ;
@@ -99,13 +97,17 @@ DOT : '.' ;
 //                     BEGIN: Scalar literals                     //
 // Numbers
 // ... real
-NON_NEGATIVE_REAL : [0-9]+ DOT [0-9]* EXPONENT?
-                  | DOT [0-9]+ EXPONENT?
-                  | NON_NEGATIVE_INTEGER EXPONENT
-                  ;
+NON_NEGATIVE_REAL_LITERAL : [0-9]+ DOT [0-9]* EXPONENT?
+                          | DOT [0-9]+ EXPONENT?
+                          | NON_NEGATIVE_INT_LITERAL EXPONENT
+                          ;
 EXPONENT : [Ee] (OP_ADD | OP_SUB)? [0-9]+ ;
 // ... int
-NON_NEGATIVE_INTEGER : '0' | ( [1-9] [0-9]* ) ;
+NON_NEGATIVE_INT_LITERAL : '0' | ( [1-9] [0-9]* ) ;
+// ... bool
+BOOL_LITERAL : TRUE | FALSE ;
+TRUE : 'true' ;
+FALSE : 'false' ;
 
  /* STRINGs-rule (valid for {single, multi}-line strings)
     NOTE: to simplify things, we only allow strings marked by DOUBLE-quotes

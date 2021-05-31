@@ -42,14 +42,14 @@ CURLY_CLOSE;
 
  lattice_insta_stmt :                   // Example:
     LATTICE identifier PAREN_OPEN       // lattice f(
- 	NON_NEGATIVE_INTEGER COMMA          //   d=2,
- 	NON_NEGATIVE_INTEGER COMMA          //   q=9,
+ 	NON_NEGATIVE_INT_LITERAL COMMA      //   d=2,
+ 	NON_NEGATIVE_INT_LITERAL COMMA      //   q=9,
  	scalar_data_type COMMA              //   df_type=int64,
  	lattice_size                        //   size=256
  	PAREN_CLOSE SEMICOLON;              // );
 
 lattice_size : array_literal_1d
-             | NON_NEGATIVE_INTEGER ;
+             | NON_NEGATIVE_INT_LITERAL ;
 
 // initializer_block: //
 // 	INITIALIZER identifier CURLY_OPEN //
@@ -59,13 +59,13 @@ lattice_size : array_literal_1d
 // lattice_assignment_stmt: //
 // 	dfs_selection //
 // 	OP_ASSIGN //
-// 	NON_NEGATIVE_INTEGER //
+// 	NON_NEGATIVE_INT_LITERAL //
 // 	SEMICOLON;
 
 // dfs_selection: //
 // 	identifier DOT OUT //
 // 	BRACKET_OPEN //
-// 	X VERT NON_NEGATIVE_INTEGER //
+// 	X VERT NON_NEGATIVE_INT_LITERAL //
 // 	BRACKET_CLOSE;
 
 constant_definition_stmt : CONST data_type variable_assignment_stmt ;
@@ -141,19 +141,15 @@ expr : PAREN_OPEN expr PAREN_CLOSE         # parensExpr
      | op=(OP_ADD | OP_SUB | OP_NOT) expr  # unaryExpr
      | left=expr op=(OP_MUL | OP_DIV) right=expr  # infixExpr
      | left=expr op=(OP_ADD | OP_SUB) right=expr  # infixExpr
-     | value=NON_NEGATIVE_REAL             # nonNegRealExpr
-     | value=NON_NEGATIVE_INTEGER          # nonNegIntExpr
+     // BEGIN :: literals //
+     | value=NON_NEGATIVE_REAL_LITERAL     # nonNegRealLiteralExpr
+     | value=NON_NEGATIVE_INT_LITERAL      # nonNegIntLiteralExpr
+     | value=BOOL_LITERAL                  # boolLiteralExpr
+     // END :: literals //
      ;
 
-//expr : PAREN_OPEN expr PAREN_CLOSE               # parensExpr
-//     | op=(OP_ADD | OP_SUB) expr                 # unaryExpr
-//     | left=expr op=(OP_MUL | OP_DIV) right=expr # infixBinaryExpr
-//     | left=expr op=(OP_ADD | OP_SUB) right=expr # infixBinaryExpr
+//expr
 //     // BEGIN :: literals //
-//     | NON_NEGATIVE_INTEGER                   # intLiteralExpr
-//     | NON_NEGATIVE_REAL                      # realLiteralExpr
-//     | TRUE                          # boolLiteralExpr
-//     | FALSE                         # boolLiteralExpr
 //     | array_literal_4d # arrayLiteralExpr
 //     | array_literal_3d # arrayLiteralExpr
 //     | array_literal_2d # arrayLiteralExpr
