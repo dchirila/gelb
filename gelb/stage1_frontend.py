@@ -131,6 +131,21 @@ class ASTBuilderVisitor(GeLBVisitor):
             stmts.append(self.visit(stmt))
         return GaugeBlock_N(name, outputs, stmts)
 
+    # Visit a parse tree produced by GeLBParser#node_classes_block.
+    def visitNode_classes_block(self, ctx:GeLBParser.Node_classes_blockContext):
+        node_classes = []
+        for node_class in ctx.node_class_insta_stmt():
+            node_classes.append(self.visit(node_class))
+        return NodeClassesBlock_N(node_classes)
+
+    # Visit a parse tree produced by GeLBParser#node_class_insta_stmt.
+    def visitNode_class_insta_stmt(self, ctx:GeLBParser.Node_class_insta_stmtContext):
+        name = self.visit(ctx.identifier()[0])
+        initializer = self.visit(ctx.identifier()[1])
+        dynamic = self.visit(ctx.identifier()[2])
+        gauge = self.visit(ctx.identifier()[3])
+        return NodeClassInstaStmt_N(name, initializer, dynamic, gauge)
+
     # Visit a parse tree produced by GeLBParser#lattice_assignment_stmt.
     def visitLattice_assignment_stmt(self, ctx:GeLBParser.Lattice_assignment_stmtContext):
         lhs = self.visit(ctx.rect_sel_of_lattice_out_dfs())

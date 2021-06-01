@@ -83,12 +83,33 @@ class LatticeInstaStmt_N(Node_N):
 
 
 class NodeClassesBlock_N(Node_N):
-    pass
+    def __init__(self, node_classes):
+        self.node_classes = node_classes
+
+    def __str__(self):
+        result = f"(NodeClassesBlock"
+        for node_class in self.node_classes:
+            result = result + f" {node_class}"
+        result = result + ")"
+        return result
 
 
 # TODO only allow inside NodeClassesBlock_N
 class NodeClassInstaStmt_N(Node_N):
-    pass
+    def __init__(self, name, initializer, dynamic, gauge):
+        self.name = name
+        self.initializer = initializer
+        self.dynamic = dynamic
+        self.gauge = gauge
+
+    def __str__(self):
+        return (
+            f"(NodeClassInstaStmt"
+            f" {self.name}"
+            f" {self.initializer}"
+            f" {self.dynamic}"
+            f" {self.gauge})"
+        )
 
 
 class UserFunctionBlock_N(Node_N):
@@ -142,6 +163,7 @@ class GaugeBlock_N(Node_N):
         return result
 
 
+# TODO: implement this, based on GaugeBlock_N (only that here we also have inputs)
 # class FunctionBlock_N(Node_N):
 #     def __init__(self):
 #         raise NotImplementedError()

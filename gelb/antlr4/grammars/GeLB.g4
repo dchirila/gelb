@@ -11,7 +11,7 @@ gelb_program : //
 	dynamic_block
 	gauge_block
 	// function_block
-	// node_classes_block
+	node_classes_block
 	// geometry_block  // TODO add periodicity here
 	EOF ;
 
@@ -70,6 +70,19 @@ gauge_block :
     CURLY_OPEN
     variable_assignment_stmt+  // core statements
     CURLY_CLOSE ;
+
+node_classes_block : NODE_CLASSES CURLY_OPEN  // node_classes {
+    node_class_insta_stmt+  // node_class BULK(SetDFsToZero, IncrementDFs, CurrentState)
+    CURLY_CLOSE ;                             // }
+
+node_class_insta_stmt : NODE_CLASS
+    identifier PAREN_OPEN  // name of the NodeClass
+    identifier  // Initializer
+    COMMA
+    identifier  // Dynamic
+    COMMA
+    identifier  // Gauge
+    PAREN_CLOSE ;
 
 lattice_assignment_stmt :
     rect_sel_of_lattice_out_dfs

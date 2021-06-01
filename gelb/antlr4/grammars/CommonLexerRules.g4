@@ -7,7 +7,7 @@ GLOBAL_CONSTANTS : 'global_constants' ;
 LATTICES : 'lattices' ;
 LATTICE : 'lattice' ;
 LATTICE_CONSTANTS : 'lattice_constants' ;
-// NODE_CLASSES : 'node_classes' ;
+NODE_CLASSES : 'node_classes' ;
 // INITIALIZERS : 'initializers' ;
 // DYNAMICS : 'dynamics' ;
 // GAUGES : 'gauges' ;
@@ -50,7 +50,7 @@ IN : 'in' ;
 DYNAMIC : 'dynamic' ;
 GAUGE : 'gauge' ;
 
-// NODE_CLASS : 'node_class' ;
+NODE_CLASS : 'node_class' ;
 // GEOMETRY : 'geometry' ;
 // NODES : 'nodes' ;
 //                     END: Keywords                     //
