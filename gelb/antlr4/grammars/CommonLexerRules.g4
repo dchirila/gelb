@@ -1,9 +1,5 @@
 lexer grammar CommonLexerRules;
 
-// Temporary marker, for parts which I need to implement/update.
-// TODO :: Remove in final GeLB-v1 version
-TODO : 'TODO' ;
-
 //                     BEGIN: Keywords                     //
 SIMULATION_NAME : 'simulation_name' ;
 SIMULATION_DESCRIPTION : 'simulation_description' ;
@@ -43,12 +39,9 @@ CONST : 'const' ;
 ARRAY : 'array' ;
 // END: Keywords for data-types
 
-// INITIALIZER: 'initializer';
-// OUT : 'out' ;
-// IN : 'in' ;
-// X : 'x' ;
-// Y : 'y' ;
-// Z : 'z' ;
+INITIALIZER: 'initializer';
+OUT : 'out' ;
+IN : 'in' ;
 
 // SIZE : 'size' ;
 // PERIODICITY : 'periodicity' ;
@@ -87,9 +80,9 @@ BRACKET_CLOSE : ']' ;
 CURLY_OPEN : '{' ;
 CURLY_CLOSE : '}' ;
 // MISC Symbols
-// COLON: ':';
+COLON: ':';
 SEMICOLON : ';' ;
-// VERT : '|' ;
+VERT : '|' ;
 COMMA : ',' ;
 DOT : '.' ;
 //                     END: Punctuation                     //

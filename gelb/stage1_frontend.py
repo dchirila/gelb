@@ -63,6 +63,77 @@ class ASTBuilderVisitor(GeLBVisitor):
             lattice_size
         )
 
+    # Visit a parse tree produced by GeLBParser#singleElementRange.
+    def visitSingleElementRange(self, ctx:GeLBParser.SingleElementRangeContext):
+        lowAndHigh = self.visit(ctx.low)
+        return Range_N(lowAndHigh, lowAndHigh)
+
+    # Visit a parse tree produced by GeLBParser#lowhighBoundRange.
+    def visitLowhighBoundRange(self, ctx:GeLBParser.LowhighBoundRangeContext):
+        low = self.visit(ctx.low)
+        high = self.visit(ctx.high)
+        return Range_N(low, high)
+
+    # Visit a parse tree produced by GeLBParser#lowBoundRange.
+    def visitLowBoundRange(self, ctx:GeLBParser.LowBoundRangeContext):
+        low = self.visit(ctx.low)
+        return Range_N(low, None)
+
+    # Visit a parse tree produced by GeLBParser#highBoundRange.
+    def visitHighBoundRange(self, ctx:GeLBParser.HighBoundRangeContext):
+        high = self.visit(ctx.high)
+        return Range_N(None, high)
+
+    # Visit a parse tree produced by GeLBParser#allElementsRange.
+    def visitAllElementsRange(self, ctx:GeLBParser.AllElementsRangeContext):
+        return Range_N(None, None)
+
+    # Visit a parse tree produced by GeLBParser#coordinates_range
+    def visitCoords_range(self, ctx: GeLBParser.Coords_rangeContext):
+        if isinstance(ctx, GeLBParser.SingleElementRangeContext):
+            return self.visitSingleElementRange(ctx)
+        elif isinstance(ctx, GeLBParser.LowhighBoundRangeContext):
+            return self.visitLowhighBoundRange(ctx)
+        elif isinstance(ctx, GeLBParser.LowBoundRangeContext):
+            return self.visitLowBoundRange(ctx)
+        elif isinstance(ctx, GeLBParser.HighBoundRangeContext):
+            return self.visitHighBoundRange(ctx)
+        elif isinstance(ctx, GeLBParser.AllElementsRangeContext):
+            return Range_N(None, None)
+        else:
+            print("<<<GeLB-Error>>> Invalid coordinates range!")
+            raise TypeError()
+
+    # Visit a parse tree produced by GeLBParser#initializer_block.
+    def visitInitializer_block(self, ctx:GeLBParser.Initializer_blockContext):
+        name = self.visit(ctx.identifier())
+        stmts = []
+        for stmt in ctx.lattice_assignment_stmt():
+            stmts.append(self.visit(stmt))
+        return InitializerBlock_N(name, stmts)
+
+    # Visit a parse tree produced by GeLBParser#lattice_assignment_stmt.
+    def visitLattice_assignment_stmt(self, ctx:GeLBParser.Lattice_assignment_stmtContext):
+        lhs = self.visit(ctx.rect_sel_of_lattice_out_dfs())
+        rhs = self.visit(ctx.expr())
+        return LatticeAssignmentStmt_N(lhs, rhs)
+
+    # Visit a parse tree produced by GeLBParser#rect_sel_of_lattice_in_dfs.
+    def visitRect_sel_of_lattice_in_dfs(self, ctx:GeLBParser.Rect_sel_of_lattice_in_dfsContext):
+        spatial_ranges = []
+        for range in ctx.coords_range():
+            spatial_ranges.append(self.visit(range))
+        dfs_range = self.visit(ctx.lattice_dfs_range())
+        return RectSelOfLatticeInDFs_N(spatial_ranges, dfs_range)
+
+    # Visit a parse tree produced by GeLBParser#rect_sel_of_lattice_out_dfs.
+    def visitRect_sel_of_lattice_out_dfs(self, ctx:GeLBParser.Rect_sel_of_lattice_out_dfsContext):
+        spatial_ranges = []
+        for range in ctx.coords_range():
+            spatial_ranges.append(self.visit(range))
+        dfs_range = self.visit(ctx.lattice_dfs_range())
+        return RectSelOfLatticeOutDFs_N(spatial_ranges, dfs_range)
+
     # Visit a parse tree produced by GeLBParser#constant_definition_stmt.
     def visitConstant_definition_stmt(
             self,

@@ -7,21 +7,21 @@ gelb_program : //
 	global_constants_block?  // 0 or 1 instance
 	lattice_constants_block*  // 0 or more instance(s)
 	lattices_block
-	// initializer_block //
+    initializer_block
 	// dynamic_block
 	// gauge_block
 	// function_block
 	// node_classes_block
 	// geometry_block  // TODO add periodicity here
-	EOF;
+	EOF ;
 
 set_simulation_name_stmt : SIMULATION_NAME PAREN_OPEN
     STRING
-PAREN_CLOSE SEMICOLON;
+PAREN_CLOSE SEMICOLON ;
 
 set_simulation_description_stmt : SIMULATION_DESCRIPTION PAREN_OPEN
     STRING
-PAREN_CLOSE SEMICOLON;
+PAREN_CLOSE SEMICOLON ;
 
 // When this optional block is present...
 global_constants_block: GLOBAL_CONSTANTS CURLY_OPEN
@@ -33,12 +33,12 @@ CURLY_CLOSE ;
 lattice_constants_block : LATTICE_CONSTANTS identifier CURLY_OPEN
     // it should contain at least one constant definition
     constant_definition_stmt+
-CURLY_CLOSE;
+CURLY_CLOSE ;
 
 lattices_block : LATTICES CURLY_OPEN
     // NOTE: a program needs at least one lattice!
 	lattice_insta_stmt+
-CURLY_CLOSE;
+CURLY_CLOSE ;
 
  lattice_insta_stmt :                   // Example:
     LATTICE identifier PAREN_OPEN       // lattice f(
@@ -46,24 +46,46 @@ CURLY_CLOSE;
  	expr COMMA                          //   q=9,
  	scalar_data_type COMMA              //   df_type=int64,
  	expr                                //   size=256
- 	PAREN_CLOSE SEMICOLON;              // );
+ 	PAREN_CLOSE SEMICOLON ;             // );
 
-// initializer_block: //
-// 	INITIALIZER identifier CURLY_OPEN //
-// 	lattice_assignment_stmt //
-// 	CURLY_CLOSE;
+initializer_block:
+    INITIALIZER identifier CURLY_OPEN
+ 	lattice_assignment_stmt+
+ 	CURLY_CLOSE ;
 
-// lattice_assignment_stmt: //
-// 	dfs_selection //
-// 	OP_ASSIGN //
-// 	expr //
-// 	SEMICOLON;
+lattice_assignment_stmt:
+    rect_sel_of_lattice_out_dfs
+    OP_ASSIGN
+    expr
+    SEMICOLON ;
 
-// dfs_selection: //
-// 	identifier DOT OUT //
-// 	BRACKET_OPEN //
-// 	X VERT expr //
-// 	BRACKET_CLOSE;
+rect_sel_of_lattice_out_dfs:
+    identifier DOT OUT
+    BRACKET_OPEN
+    coords_range (COMMA coords_range)*  // spatial ranges
+    lattice_dfs_range
+    BRACKET_CLOSE ;
+
+rect_sel_of_lattice_in_dfs:
+    identifier DOT IN
+    BRACKET_OPEN
+    coords_range (COMMA coords_range)*  // spatial ranges
+    lattice_dfs_range
+    BRACKET_CLOSE ;
+
+/*
+ NOTE: Because we use =coords_range= for both spatial- and DFs-selections,
+       we define this intermediate rule =lattice_dfs_ranges= to include
+       the =VERT= separator. This simplifies processing later.
+ */
+lattice_dfs_range : VERT coords_range ;
+
+coords_range : low=expr                  # singleElementRange
+             | low=expr COLON high=expr  # lowhighBoundRange
+             | low=expr COLON            # lowBoundRange
+             |          COLON high=expr  # highBoundRange
+             |          COLON            # allElementsRange
+             ;
 
 constant_definition_stmt : CONST data_type variable_assignment_stmt ;
 

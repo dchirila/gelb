@@ -16,7 +16,7 @@ class Program_N(Node_N):
         self.global_constants = None
         self.listof_lattice_constants = None
         self.listof_lattice_instances = None
-        # self.list_of_initializers = None
+        self.list_of_initializers = None
         # self.list_of_dynamics = None
         # self.list_of_gauges = None
         # self.list_of_functions = None
@@ -100,8 +100,17 @@ class ReturnStmt_N(Node_N):
     pass
 
 
-# class InitializerBlock_N(Node_N):
-#     def __init__(self):
+class InitializerBlock_N(Node_N):
+    def __init__(self, name, stmts):
+        self.name = name
+        self.stmts = stmts
+
+    def __str__(self):
+        result = f"(Initializer {self.name}"
+        for stmt in self.stmts:
+            result = result + f" {stmt}"
+        result = result + ")"
+        return result
 
 
 # class DynamicBlock_N(Node_N):
@@ -132,14 +141,58 @@ class Identifier_N(Node_N):
         return f"(Identifier {self.name})"
 
 
-# class RectSelOfLatticeDFs_N(Node_N):
-#     """
-#     Rectangular selection of lattice DFs.
-#
-#     TODO: store type of lattice selection (IN or OUT)
-#     """
-#     def __init__(self):
-#         raise NotImplementedError()
+class Range_N(Node_N):
+    def __init__(self, low, high):
+        self.low = low
+        self.high = high
+
+    def __str__(self):
+        lowRepres = self.low if self.low else "(RangePlaceholder Min)"
+        highRepres = self.high if self.high else "(RangePlaceholder Max)"
+        return f"(Range {lowRepres} {highRepres})"
+
+
+class RectSelOfLatticeDFs_N(Node_N):
+    """
+    Rectangular selection of lattice DFs.
+    """
+    def __init__(self,
+                 spatial_ranges,
+                 dfs_range,
+                 selection_type):
+        self.spatial_ranges = spatial_ranges
+        self.dfs_range = dfs_range
+        self.selection_type = selection_type
+
+
+class RectSelOfLatticeInDFs_N(RectSelOfLatticeDFs_N):
+    def __init__(self,
+                 spatial_ranges,
+                 dfs_range):
+        super().__init__(spatial_ranges, dfs_range, 'in')
+
+    def __str__(self):
+        result = "(RectSelOfLatticeInDFs"
+        for spatial_range in self.spatial_ranges:
+            result = result + f" {spatial_range}"
+        result = result + f" {self.dfs_range}"
+        result = result + ")"
+        return result
+
+
+class RectSelOfLatticeOutDFs_N(RectSelOfLatticeDFs_N):
+    def __init__(self,
+                 spatial_ranges,
+                 dfs_range):
+        super().__init__(spatial_ranges, dfs_range, 'out')
+
+    def __str__(self):
+        result = "(RectSelOfLatticeOutDFs"
+        for spatial_range in self.spatial_ranges:
+            result = result + f" {spatial_range}"
+        result = result + f" {self.dfs_range}"
+        result = result + ")"
+        return result
 
 
 # class RectSelOfArrayElems_N(Node_N):
@@ -368,7 +421,13 @@ class VariableAssignmentStmt_N(AssignmentStmt_N):
 
 
 class LatticeAssignmentStmt_N(AssignmentStmt_N):
-    pass
+    def __init__(self, lhs, rhs):
+        super().__init__(lhs, rhs)
+
+    def __str__(self):
+        return (
+            f"(LatticeAssignmentStmt {self.lhs} {self.rhs})"
+        )
 
 
 # TODO only allow inside GeometryBlock_N
