@@ -51,8 +51,8 @@ DYNAMIC : 'dynamic' ;
 GAUGE : 'gauge' ;
 
 NODE_CLASS : 'node_class' ;
-// GEOMETRY : 'geometry' ;
-// NODES : 'nodes' ;
+GEOMETRY : 'geometry' ;
+NODES : 'nodes' ;
 //                     END: Keywords                     //
 
 //                     BEGIN: Operators                     //

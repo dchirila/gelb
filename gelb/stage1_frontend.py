@@ -146,6 +146,21 @@ class ASTBuilderVisitor(GeLBVisitor):
         gauge = self.visit(ctx.identifier()[3])
         return NodeClassInstaStmt_N(name, initializer, dynamic, gauge)
 
+    # Visit a parse tree produced by GeLBParser#geometry_block.
+    def visitGeometry_block(self, ctx:GeLBParser.Geometry_blockContext):
+        stmts = []
+        for stmt in ctx.paint_nodes_stmt():
+            stmts.append(self.visit(stmt))
+        return GeometryBlock_N(stmts)
+
+    # Visit a parse tree produced by GeLBParser#paint_nodes_stmt.
+    def visitPaint_nodes_stmt(self, ctx:GeLBParser.Paint_nodes_stmtContext):
+        node_class = self.visit(ctx.identifier())
+        spatial_ranges = []
+        for range in ctx.coords_range():
+            spatial_ranges.append(self.visit(range))
+        return PaintNodesStmt_N(node_class, spatial_ranges)
+
     # Visit a parse tree produced by GeLBParser#lattice_assignment_stmt.
     def visitLattice_assignment_stmt(self, ctx:GeLBParser.Lattice_assignment_stmtContext):
         lhs = self.visit(ctx.rect_sel_of_lattice_out_dfs())

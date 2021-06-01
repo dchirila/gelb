@@ -12,7 +12,7 @@ gelb_program : //
 	gauge_block
 	// function_block
 	node_classes_block
-	// geometry_block  // TODO add periodicity here
+	geometry_block  // TODO add periodicity here
 	EOF ;
 
 set_simulation_name_stmt : SIMULATION_NAME PAREN_OPEN
@@ -83,6 +83,15 @@ node_class_insta_stmt : NODE_CLASS
     COMMA
     identifier  // Gauge
     PAREN_CLOSE ;
+
+geometry_block : GEOMETRY CURLY_OPEN
+    paint_nodes_stmt+
+    CURLY_CLOSE ;
+
+paint_nodes_stmt : NODES BRACKET_OPEN  // nodes[
+    coords_range (COMMA coords_range)*
+    BRACKET_CLOSE OP_ASSIGN           // ] =
+    identifier SEMICOLON ;            // BULK ;
 
 lattice_assignment_stmt :
     rect_sel_of_lattice_out_dfs

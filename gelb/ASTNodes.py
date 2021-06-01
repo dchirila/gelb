@@ -18,9 +18,9 @@ class Program_N(Node_N):
         self.listof_lattice_instances = None
         self.list_of_initializers = None
         self.list_of_dynamics = None
-        # self.list_of_gauges = None
+        self.list_of_gauges = None
         # self.list_of_functions = None
-        # self.list_of_node_classes = None
+        self.list_of_node_classes = None
         # self.geometry = None
 
 
@@ -169,9 +169,29 @@ class GaugeBlock_N(Node_N):
 #         raise NotImplementedError()
 
 
-# class GeometryBlock_N(Node_N):
-#     def __init__(self):
-#         raise NotImplementedError()
+class GeometryBlock_N(Node_N):
+    def __init__(self, stmts):
+        self.stmts = stmts
+
+    def __str__(self):
+        result = "(GeometryBlock"
+        for stmt in self.stmts:
+            result = result + f" {stmt}"
+        result = result + ")"
+        return result
+
+
+class PaintNodesStmt_N(Node_N):
+    def __init__(self, node_class, spatial_ranges):
+        self.node_class = node_class
+        self.spatial_ranges = spatial_ranges
+
+    def __str__(self):
+        result = f"(PaintNodesStmt {self.node_class}"
+        for range in self.spatial_ranges:
+            result = result + f" {range}"
+        result = result + ")"
+        return result
 
 
 class Identifier_N(Node_N):
