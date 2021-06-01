@@ -112,6 +112,14 @@ class ASTBuilderVisitor(GeLBVisitor):
             stmts.append(self.visit(stmt))
         return InitializerBlock_N(name, stmts)
 
+    # Visit a parse tree produced by GeLBParser#dynamic_block.
+    def visitDynamic_block(self, ctx:GeLBParser.Dynamic_blockContext):
+        name = self.visit(ctx.identifier())
+        stmts = []
+        for stmt in ctx.lattice_assignment_stmt():
+            stmts.append(self.visit(stmt))
+        return DynamicBlock_N(name, stmts)
+
     # Visit a parse tree produced by GeLBParser#lattice_assignment_stmt.
     def visitLattice_assignment_stmt(self, ctx:GeLBParser.Lattice_assignment_stmtContext):
         lhs = self.visit(ctx.rect_sel_of_lattice_out_dfs())

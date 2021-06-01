@@ -47,7 +47,7 @@ IN : 'in' ;
 // PERIODICITY : 'periodicity' ;
 
 
-// DYNAMIC : 'dynamic' ;
+DYNAMIC : 'dynamic' ;
 // GAUGE : 'gauge' ;
 
 // NODE_CLASS : 'node_class' ;

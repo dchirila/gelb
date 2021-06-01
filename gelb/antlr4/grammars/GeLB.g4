@@ -8,7 +8,7 @@ gelb_program : //
 	lattice_constants_block*  // 0 or more instance(s)
 	lattices_block
     initializer_block
-	// dynamic_block
+	dynamic_block
 	// gauge_block
 	// function_block
 	// node_classes_block
@@ -40,7 +40,7 @@ lattices_block : LATTICES CURLY_OPEN
 	lattice_insta_stmt+
 CURLY_CLOSE ;
 
- lattice_insta_stmt :                   // Example:
+lattice_insta_stmt :                   // Example:
     LATTICE identifier PAREN_OPEN       // lattice f(
  	expr COMMA                          //   d=2,
  	expr COMMA                          //   q=9,
@@ -48,12 +48,17 @@ CURLY_CLOSE ;
  	expr                                //   size=256
  	PAREN_CLOSE SEMICOLON ;             // );
 
-initializer_block:
+initializer_block :
     INITIALIZER identifier CURLY_OPEN
  	lattice_assignment_stmt+
  	CURLY_CLOSE ;
 
-lattice_assignment_stmt:
+dynamic_block :
+    DYNAMIC identifier CURLY_OPEN
+ 	lattice_assignment_stmt+
+    CURLY_CLOSE ;
+
+lattice_assignment_stmt :
     rect_sel_of_lattice_out_dfs
     OP_ASSIGN
     expr

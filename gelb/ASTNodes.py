@@ -17,7 +17,7 @@ class Program_N(Node_N):
         self.listof_lattice_constants = None
         self.listof_lattice_instances = None
         self.list_of_initializers = None
-        # self.list_of_dynamics = None
+        self.list_of_dynamics = None
         # self.list_of_gauges = None
         # self.list_of_functions = None
         # self.list_of_node_classes = None
@@ -113,9 +113,17 @@ class InitializerBlock_N(Node_N):
         return result
 
 
-# class DynamicBlock_N(Node_N):
-#     def __init__(self):
-#         raise NotImplementedError()
+class DynamicBlock_N(Node_N):
+    def __init__(self, name, stmts):
+        self.name = name
+        self.stmts = stmts
+
+    def __str__(self):
+        result = f"(Dynamic {self.name}"
+        for stmt in self.stmts:
+            result = result + f" {stmt}"
+        result = result + ")"
+        return result
 
 
 # class GaugeBlock_N(Node_N):
