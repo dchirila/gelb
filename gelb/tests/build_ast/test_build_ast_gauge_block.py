@@ -1,0 +1,32 @@
+#!/usr/bin/env python3
+
+import pytest
+from gelb.stage1_frontend import ASTBuilderVisitor, get_ast
+
+
+def test_simple():
+    # Arrange
+    test_string = """
+    gauge CurrentState(out = {int state;}) { //
+      state = f.in[x | 0];
+    }
+    """
+    # Act
+    ast = get_ast("gauge_block", test_string)
+    # Assert
+    assert str(ast) == (
+        "(Gauge"
+        " (Identifier CurrentState)"
+        " (VariableDeclarationStmt"
+            " (Identifier state)"
+            " (ScalarDataType int)"
+            ")"
+        " (VariableAssignmentStmt"
+            " (Identifier state)"
+            " (RectSelOfLatticeInDFs"
+                " (Range (Identifier x) (Identifier x))"
+                " (Range (IntLiteral 0) (IntLiteral 0))"
+                ")"
+            ")"
+        ")"
+    )

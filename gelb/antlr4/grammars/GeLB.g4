@@ -9,7 +9,7 @@ gelb_program : //
 	lattices_block
     initializer_block
 	dynamic_block
-	// gauge_block
+	gauge_block
 	// function_block
 	// node_classes_block
 	// geometry_block  // TODO add periodicity here
@@ -58,6 +58,19 @@ dynamic_block :
  	lattice_assignment_stmt+
     CURLY_CLOSE ;
 
+gauge_block :
+    GAUGE identifier
+    // BEGIN :: Interface //
+    PAREN_OPEN                    // (
+    // Gauges only have outputs
+    OUT OP_ASSIGN CURLY_OPEN      // out = {
+    variable_declaration_stmt+    // int x1; array<real64, 3> x2;
+    CURLY_CLOSE PAREN_CLOSE       // })
+    // END :: Interface //
+    CURLY_OPEN
+    variable_assignment_stmt+  // core statements
+    CURLY_CLOSE ;
+
 lattice_assignment_stmt :
     rect_sel_of_lattice_out_dfs
     OP_ASSIGN
@@ -93,6 +106,8 @@ coords_range : low=expr                  # singleElementRange
              ;
 
 constant_definition_stmt : CONST data_type variable_assignment_stmt ;
+
+variable_declaration_stmt : data_type identifier SEMICOLON ;
 
 data_type : scalar_data_type
           | array_data_type ;
@@ -175,5 +190,6 @@ expr : PAREN_OPEN expr PAREN_CLOSE                # parensExpr
      | array_literal_2d  # arrayLiteralExpr
      | array_literal_1d  # arrayLiteralExpr
      // END :: literals //
+     | rect_sel_of_lattice_in_dfs  # rectSelOfLatticeInDFsExpr
      | identifier  # identifierExpr
      ;

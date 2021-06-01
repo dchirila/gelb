@@ -126,9 +126,20 @@ class DynamicBlock_N(Node_N):
         return result
 
 
-# class GaugeBlock_N(Node_N):
-#     def __init__(self):
-#         raise NotImplementedError()
+class GaugeBlock_N(Node_N):
+    def __init__(self, name, outputs, stmts):
+        self.name = name
+        self.outputs = outputs
+        self.stmts = stmts
+
+    def __str__(self):
+        result = f"(Gauge {self.name}"
+        for output in self.outputs:
+            result = result + f" {output}"
+        for stmt in self.stmts:
+            result = result + f" {stmt}"
+        result = result + ")"
+        return result
 
 
 # class FunctionBlock_N(Node_N):
@@ -407,9 +418,14 @@ class ConstantDefinitionStmt_N(Stmt_N):
 
 
 class VariableDeclarationStmt_N(Stmt_N):
-    def __init__(self, name, value):
+    def __init__(self, data_type, name):
+        self.data_type = data_type
         self.name = name
-        self.value = value
+
+    def __str__(self):
+        return (
+            f"(VariableDeclarationStmt {self.name} {self.data_type})"
+        )
 
 
 class AssignmentStmt_N(Stmt_N):

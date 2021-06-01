@@ -48,7 +48,7 @@ IN : 'in' ;
 
 
 DYNAMIC : 'dynamic' ;
-// GAUGE : 'gauge' ;
+GAUGE : 'gauge' ;
 
 // NODE_CLASS : 'node_class' ;
 // GEOMETRY : 'geometry' ;

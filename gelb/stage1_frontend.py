@@ -120,6 +120,17 @@ class ASTBuilderVisitor(GeLBVisitor):
             stmts.append(self.visit(stmt))
         return DynamicBlock_N(name, stmts)
 
+    # Visit a parse tree produced by GeLBParser#gauge_block.
+    def visitGauge_block(self, ctx:GeLBParser.Gauge_blockContext):
+        name = self.visit(ctx.identifier())
+        outputs = []
+        for output in ctx.variable_declaration_stmt():
+            outputs.append(self.visit(output))
+        stmts = []
+        for stmt in ctx.variable_assignment_stmt():
+            stmts.append(self.visit(stmt))
+        return GaugeBlock_N(name, outputs, stmts)
+
     # Visit a parse tree produced by GeLBParser#lattice_assignment_stmt.
     def visitLattice_assignment_stmt(self, ctx:GeLBParser.Lattice_assignment_stmtContext):
         lhs = self.visit(ctx.rect_sel_of_lattice_out_dfs())
@@ -160,6 +171,13 @@ class ASTBuilderVisitor(GeLBVisitor):
         return VariableAssignmentStmt_N(
             list_of_children_sub_asts[0],
             list_of_children_sub_asts[1]
+        )
+
+    # Visit a parse tree produced by GeLBParser#variable_declaration_stmt.
+    def visitVariable_declaration_stmt(self, ctx:GeLBParser.Variable_declaration_stmtContext):
+        return VariableDeclarationStmt_N(
+            self.visit(ctx.data_type()),
+            self.visit(ctx.identifier())
         )
 
     # Visit a parse tree produced by GeLBParser#scalar_bool_data_type.
