@@ -1,1 +1,46 @@
 #!/usr/bin/env python3
+
+"""
+gelbc -- reference compiler (more accurately: "transpiler") for the GeLB DSL.
+
+This is the compiler-driver, which reads a "*.gelb" file and passes it through
+the various stages of the compiler.
+"""
+
+from utils.misc import (fatal_error_with_hint_to_term, load_file)
+# from gelb.stage1_frontend import *
+
+import argparse as argp
+
+
+if __name__ == '__main__':
+    p = argp.ArgumentParser(description=__doc__, prog='gelbc')
+    p.add_argument(
+        "input_file",
+        help="input_file (\".gelb\")",
+        default=None
+    )
+    p.add_argument(
+        "-b",
+        "--backend",
+        help="generate code using BACKEND",
+        default=None
+    )
+    p.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="make the compiler more verbose (useful for debugging)"
+    )
+    args = p.parse_args()
+
+    # Stage 1 :: FrontEnd
+    src_raw = load_file(args.input_file, args.verbose)
+    # ast = build_initial_ast(src_raw, args.verbose)
+    # ... TODO semantic analysis, checks, etc.
+
+    # Stage 2 :: MidWare
+    # ... TODO More checks & AST transformations
+
+    # Stage 3 :: BackEnd
+    # ... TODO code-generation

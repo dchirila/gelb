@@ -23,4 +23,5 @@ dependencies:
   - matplotlib
   - pip:
     - antlr4-python3-runtime==4.9.2
-prefix: /home/dchirila/anaconda3/envs/gelb
+    - click==8.0.1
+    - colorama==0.4.4
