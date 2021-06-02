@@ -12,7 +12,7 @@ gelb_program : //
 	gauge_block
 	// function_block
 	node_classes_block
-	geometry_block  // TODO add periodicity here
+	geometry_block
 	EOF ;
 
 set_simulation_name_stmt : SIMULATION_NAME PAREN_OPEN
@@ -41,12 +41,14 @@ lattices_block : LATTICES CURLY_OPEN
 CURLY_CLOSE ;
 
 lattice_insta_stmt :                   // Example:
-    LATTICE identifier PAREN_OPEN       // lattice f(
- 	expr COMMA                          //   d=2,
- 	expr COMMA                          //   q=9,
- 	scalar_data_type COMMA              //   df_type=int64,
- 	expr                                //   size=256
- 	PAREN_CLOSE SEMICOLON ;             // );
+    LATTICE identifier PAREN_OPEN        // lattice f(
+ 	expr                                 //   d=2,
+ 	COMMA expr                           //   q=9,
+ 	COMMA scalar_data_type               //   df_type=int64,
+ 	COMMA expr                           //   size=256
+ 	// TODO add periodicity support below
+ 	//COMMA expr                           //   periodicity=false
+ 	PAREN_CLOSE SEMICOLON ;              // );
 
 initializer_block :
     INITIALIZER identifier CURLY_OPEN
@@ -77,12 +79,10 @@ node_classes_block : NODE_CLASSES CURLY_OPEN  // node_classes {
 
 node_class_insta_stmt : NODE_CLASS
     identifier PAREN_OPEN  // name of the NodeClass
-    identifier  // Initializer
-    COMMA
-    identifier  // Dynamic
-    COMMA
-    identifier  // Gauge
-    PAREN_CLOSE ;
+    identifier             // Initializer
+    COMMA identifier       // Dynamic
+    COMMA identifier       // Gauge
+    PAREN_CLOSE SEMICOLON ;
 
 geometry_block : GEOMETRY CURLY_OPEN
     paint_nodes_stmt+
