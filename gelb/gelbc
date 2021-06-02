@@ -54,14 +54,12 @@ from gelb.stage1_frontend import get_ast
 @click.option(
     "--backend",
     type=click.Choice(
-        ['cpu_fortran_serial',
-         'cpu_c_serial',
+        ['cpu_c_serial',
          'cpu_c_parallel_openmp',
-         'cpu_c_parallel_mpi',
          'gpu_c_parallel_opencl',
          ]
     ),
-    default='cpu_fortran_serial',
+    default='cpu_c_serial',
     help="Which backend to use for code-generation"
 )
 def cli(v, input_file, backend):
