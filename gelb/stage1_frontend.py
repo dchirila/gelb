@@ -20,6 +20,7 @@ except ModuleNotFoundError:
     )
 
 from gelb.ASTNodes import *
+from gelb.utils.misc import ensure_file_is_not_empty_or_whitespace
 
 
 # TODO: "flesh it out!"
@@ -432,7 +433,9 @@ def get_cst_as_string(start_rule, input_string):
         print(f"[ERROR] Can't find start rule '{start_rule}' @GeLBParser")
 
 
-def get_ast(start_rule, input_string):
+def get_ast(start_rule, input_string, verbose=False):
+    ensure_file_is_not_empty_or_whitespace(input_string, verbose)
+
     input_stream = a4.InputStream(input_string)
     lexer = GeLBLexer(input_stream)
     token_stream = a4.CommonTokenStream(lexer)

@@ -145,3 +145,30 @@ def find_gelb_files_in_cwd():
         if fnmatch(file, '*.gelb'):
             gelb_files_in_cwd.append(file)
     return gelb_files_in_cwd
+
+
+def ensure_file_is_not_empty_or_whitespace(file_as_string, verbose):
+    verbose_progress_message("ensuring file is not empty", verbose)
+    if len(file_as_string) != 0:
+        verbose_progress_message("OK", verbose)
+    else:
+        verbose_progress_message("FAIL", verbose)
+        fatal_error_with_hint_to_term(
+            "input file is empty",
+            "visit https://gelb-lang.org to learn how to write your first "
+            "GeLB programs"
+        )
+
+    verbose_progress_message(
+        "ensuring file contains more than just whitespace",
+        verbose
+    )
+    if not file_as_string.isspace():
+        verbose_progress_message("OK", verbose)
+    else:
+        verbose_progress_message("FAIL", verbose)
+        fatal_error_with_hint_to_term(
+            "input file contains only whitespace",
+            "visit https://gelb-lang.org to learn how to write your first "
+            "GeLB programs"
+        )
