@@ -1,16 +1,9 @@
 #!/usr/bin/env python3
 
-"""
-gelbc -- reference compiler (more accurately: "transpiler") for the GeLB DSL.
-
-This is the compiler-driver, which reads a "*.gelb" file and passes it through
-the various stages of the compiler.
-"""
-
 # BEGIN :: PYTHONPATH check #
 # NOTE: without PYTHONPATH set, we cannot import code from other parts of
 #       GeLB, which makes this code not-so-elegant.
-from click import echo
+import click
 from colorama import Fore, Style
 import sys
 from os import environ
@@ -18,14 +11,14 @@ try:
     PYTHONPATH = environ['PYTHONPATH']
 except:
     # display the error message
-    echo(Fore.RED + "<<<gelbc-ERROR>>>" + Style.RESET_ALL, nl=False)
-    echo(f" PYTHONPATH env var not set")
+    click.echo(Fore.RED + "<<<gelbc-ERROR>>>" + Style.RESET_ALL, nl=False)
+    click.echo(f" PYTHONPATH env var not set")
     # say that it was a fatal error
-    echo(Fore.RED + "<<<gelbc-ERROR>>>" + Style.RESET_ALL, nl=False)
-    echo(" aborting due to previous error")
+    click.echo(Fore.RED + "<<<gelbc-ERROR>>>" + Style.RESET_ALL, nl=False)
+    click.echo(" aborting due to previous error")
     # display a hint
-    echo(Fore.GREEN + "<<<gelbc-HINT >>>" + Style.RESET_ALL, nl=False)
-    echo("""
+    click.echo(Fore.GREEN + "<<<gelbc-HINT >>>" + Style.RESET_ALL, nl=False)
+    click.echo("""
 This is a development version of gelbc, which requires you to add the
 root directory of the repository to the PYTHONPATH environment variable.
 
@@ -46,32 +39,39 @@ to my ~/.zshrc file (also works with ~/.bashrc, if you use the Bash shell).
 from gelb.utils.misc import load_file
 from gelb.stage1_frontend import get_ast
 
-import argparse as argp
 
+@click.command()
+@click.option(
+    "-v",
+    is_flag=True,
+    help="Make the compiler more verbose (useful for debugging)"
+)
+@click.argument(
+    "input_file",
+    type=click.Path(),
+    nargs=1
+)
+@click.option(
+    "--backend",
+    type=click.Choice(
+        ['cpu_fortran_serial',
+         'cpu_c_serial',
+         'cpu_c_parallel_openmp',
+         'cpu_c_parallel_mpi',
+         'gpu_c_parallel_opencl',
+         ]
+    ),
+    default='cpu_fortran_serial',
+    help="Which backend to use for code-generation"
+)
+def cli(v, input_file, backend):
+    """
+gelbc -- reference compiler (actually: "transpiler") for the GeLB DSL.
 
-if __name__ == '__main__':
-    p = argp.ArgumentParser(description=__doc__, prog='gelbc')
-    p.add_argument(
-        "input_file",
-        help="input_file (\".gelb\")",
-        default=None
-    )
-    p.add_argument(
-        "-b",
-        "--backend",
-        help="generate code using BACKEND",
-        default=None
-    )
-    p.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="make the compiler more verbose (useful for debugging)"
-    )
-    args = p.parse_args()
-
+This is the compiler-driver, which reads a "*.gelb" file and passes it through the various stages of the compiler.
+    """
     # Stage 1 :: FrontEnd
-    src_raw = load_file(args.input_file, args.verbose)
+    src_raw = load_file(input_file, v)
     # TODO add support for verbose flag
     # ast = get_ast("gelb_program", src_raw, args.verbose)
     ast = get_ast("gelb_program", src_raw)
@@ -83,3 +83,6 @@ if __name__ == '__main__':
 
     # Stage 3 :: BackEnd
     # ... TODO code-generation
+
+if __name__ == "__main__":
+    cli()
