@@ -1,38 +1,12 @@
 #!/usr/bin/env python3
 
 from pathlib import Path
-import sys
-import click
-from colorama import Fore, Style
 from fnmatch import fnmatch
+from subprocess import run
+import pathlib
+import pkg_resources
 
-
-def show_fatal_error_message_without_abort(error_message):
-    # display the error message
-    click.echo(Fore.RED + "<<<gelbc-ERROR>>>" + Style.RESET_ALL, nl=False)
-    click.echo(f" {error_message}")
-    # say that it was a fatal error
-    click.echo(Fore.RED + "<<<gelbc-ERROR>>>" + Style.RESET_ALL, nl=False)
-    click.echo(" aborting due to previous error")
-
-
-def fatal_error_to_term(error_message):
-    show_fatal_error_message_without_abort(error_message)
-    sys.exit(1)  # make error fatal (i.e. abort)
-
-
-def fatal_error_with_hint_to_term(error_message, hint_message):
-    show_fatal_error_message_without_abort(error_message)
-    # display the hint
-    click.echo(Fore.GREEN + "<<<gelbc-HINT >>>" + Style.RESET_ALL, nl=False)
-    click.echo(f" {hint_message}")
-    sys.exit(1)  # make error fatal (i.e. abort)
-
-
-def info_to_term(message, verbose):
-    if verbose:
-        click.echo(Fore.BLUE + "<<<gelbc-INFO >>>" + Style.RESET_ALL, nl=False)
-        click.echo(f" {message}")
+from gelb.utils.error_reporting import *
 
 
 def ensure_input_file_has_gelb_extension(input_file, verbose):
@@ -58,6 +32,75 @@ def ensure_input_file_exists_and_get_full_path(input_file, verbose):
         fatal_error_with_hint_to_term(
             f"couldn't read input file \"{input_file}\"",
             "specify a file which exists"
+        )
+
+
+def cleanup_antlr4_generated_files(output_dir):
+    run(["rm", "-f", output_dir / "GeLB.interp"])
+    run(["rm", "-f", output_dir / "GeLB.tokens"])
+    run(["rm", "-f", output_dir / "GeLBLexer.interp"])
+    run(["rm", "-f", output_dir / "GeLBLexer.py"])
+    run(["rm", "-f", output_dir / "GeLBLexer.tokens"])
+    run(["rm", "-f", output_dir / "GeLBParser.py"])
+    run(["rm", "-f", output_dir / "GeLBListener.py"])
+    run(["rm", "-f", output_dir / "GeLBVisitor.py"])
+
+
+def find_antlr4_tool_path():
+    # check that the ANTLR4 Java-lib is present
+    # NOTE: To avoid possible issues with incompatible ANTLR4 versions, this
+    # Java library is included within the GeLB repository (so normally it
+    # should be there, unless you removed it)
+    lib_dir = pathlib.Path(__file__).parent.parent.parent / 'lib'
+    antlr4_lib_path = lib_dir / 'antlr-4.9.2-complete.jar'
+    if not antlr4_lib_path.is_file():
+        fatal_error_to_term("Antlr4 java library file not found")
+    else:
+        return antlr4_lib_path
+
+
+def ensure_antlr4_python3_runtime_is_present():
+    # check that the =antlr4-python3-runtime= Python package is installed
+    installed_packages = {pkg.key for pkg in pkg_resources.working_set}
+    if "antlr4-python3-runtime" not in installed_packages:
+        fatal_error_to_term("Python3 package \"antlr4-python3-runtime\""
+                            " not installed")
+
+
+def invoke_antlr4_tool():
+    """
+    Invoke the ANTLR4 Java tool.
+
+    This generates =GeLB{Lexer,Parser,Visitor}.py=, based on the =GeLB.g4= grammar.
+    """
+    antlr4_lib_path = find_antlr4_tool_path()
+    ensure_antlr4_python3_runtime_is_present()
+    # infer the path to the GeLB language grammar
+    grammar_dir = pathlib.Path(__file__).parent.parent / 'antlr4' / 'grammars'
+    output_dir = pathlib.Path(__file__).parent.parent / 'antlr4' / 'generated_code'
+    grammar_path = grammar_dir / "GeLB.g4"
+    if not grammar_path.is_file():
+        fatal_error_to_term(f"{grammar_path} grammar file not found")
+    cleanup_antlr4_generated_files(output_dir)  # to be on the safe side
+
+    ## invoke ANTLR4 Java tool
+    antlr4_tool_stat = run(["java",
+                            "-Xmx500M",
+                            "-jar", antlr4_lib_path,
+                            "-Werror",  # treat warnings as errors
+                            "-Dlanguage=Python3",
+                            "-no-listener",
+                            "-visitor",
+                            "-o",
+                            output_dir,
+                            grammar_path])
+    if antlr4_tool_stat.returncode != 0:
+        fatal_error_with_hint_to_term(
+            f"ANTLR4 Java tool failed to compile the grammar\n"
+            f"\n\treturn code: {antlr4_tool_stat.returncode}"
+            f"\n\tstdout: {antlr4_tool_stat.stdout}"
+            f"\n\tstderr: {antlr4_tool_stat.stderr}",
+            "fix the grammar file(s)"
         )
 
 
