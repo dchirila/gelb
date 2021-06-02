@@ -4,38 +4,52 @@ from pathlib import Path
 from fnmatch import fnmatch
 from subprocess import run
 import pathlib
+import os
 import pkg_resources
 
 from gelb.utils.error_reporting import *
 
 
 def ensure_input_file_has_gelb_extension(input_file, verbose):
-    info_to_term("ensuring that input file has \".gelb\" file extension", verbose)
+    verbose_progress_message(
+        "ensuring that input file has \".gelb\" file extension",
+        verbose
+    )
     if not fnmatch(input_file, "*.gelb"):
+        verbose_progress_message("FAIL", verbose)
         fatal_error_with_hint_to_term(
             f"input-file \"{input_file}\" does not have the \".gelb\" extension",
             f"give me a file that ends in \".gelb\""
         )
-    info_to_term("OK!", verbose)
+    verbose_progress_message("OK", verbose)
 
 
 def ensure_input_file_exists_and_get_full_path(input_file, verbose):
-    info_to_term(
+    verbose_progress_message(
         "getting full input file path (and ensuring that it exists)",
         verbose
     )
     try:
         path = Path(input_file).resolve(strict=True)
-        info_to_term("OK!", verbose)
+        verbose_progress_message("OK", verbose)
         return path
     except FileNotFoundError:
+        verbose_progress_message("FAIL", verbose)
+        gelb_files_in_cwd = find_gelb_files_in_cwd()
+        if gelb_files_in_cwd:
+            extra_hint = (
+                f" Did you mean one of the following files "
+                f"{gelb_files_in_cwd}?"
+            )
+        else:
+            extra_hint = ""
         fatal_error_with_hint_to_term(
             f"couldn't read input file \"{input_file}\"",
-            "specify a file which exists"
+            f"specify a file which exists.{extra_hint}"
         )
 
 
-def cleanup_antlr4_generated_files(output_dir):
+def cleanup_antlr4_generated_files(output_dir, verbose=False):
     run(["rm", "-f", output_dir / "GeLB.interp"])
     run(["rm", "-f", output_dir / "GeLB.tokens"])
     run(["rm", "-f", output_dir / "GeLBLexer.interp"])
@@ -46,7 +60,7 @@ def cleanup_antlr4_generated_files(output_dir):
     run(["rm", "-f", output_dir / "GeLBVisitor.py"])
 
 
-def find_antlr4_tool_path():
+def find_antlr4_tool_path(verbose=False):
     # check that the ANTLR4 Java-lib is present
     # NOTE: To avoid possible issues with incompatible ANTLR4 versions, this
     # Java library is included within the GeLB repository (so normally it
@@ -59,7 +73,7 @@ def find_antlr4_tool_path():
         return antlr4_lib_path
 
 
-def ensure_antlr4_python3_runtime_is_present():
+def ensure_antlr4_python3_runtime_is_present(verbose=False):
     # check that the =antlr4-python3-runtime= Python package is installed
     installed_packages = {pkg.key for pkg in pkg_resources.working_set}
     if "antlr4-python3-runtime" not in installed_packages:
@@ -67,7 +81,7 @@ def ensure_antlr4_python3_runtime_is_present():
                             " not installed")
 
 
-def invoke_antlr4_tool():
+def invoke_antlr4_tool(verbose=False):
     """
     Invoke the ANTLR4 Java tool.
 
@@ -104,18 +118,30 @@ def invoke_antlr4_tool():
         )
 
 
-def load_file(input_file, verbose):
+def load_file(input_file, verbose=False):
     ensure_input_file_has_gelb_extension(input_file, verbose)
     path = ensure_input_file_exists_and_get_full_path(input_file, verbose)
 
-    info_to_term(f"loading input-file (=\"{path}\")", verbose)
+    verbose_progress_message(f"loading input-file (=\"{path}\")", verbose)
     try:
         src_raw = path.read_text(encoding='utf-8')
-        info_to_term("OK!", verbose)
+        verbose_progress_message("OK", verbose)
         return src_raw
     except OSError:
+        verbose_progress_message("FAIL", verbose)
         fatal_error_with_hint_to_term(
             f"couldn't read input file \"{path}\"",
             f"change permissions for file \"{path}\", "
             f"to allow gelbc to read it"
         )
+
+
+def find_gelb_files_in_cwd():
+    """
+    Finds (and returns list of) GeLB files in the current working directory.
+    """
+    gelb_files_in_cwd = []
+    for file in os.listdir('.'):
+        if fnmatch(file, '*.gelb'):
+            gelb_files_in_cwd.append(file)
+    return gelb_files_in_cwd

@@ -11,13 +11,13 @@ try:
     PYTHONPATH = environ['PYTHONPATH']
 except:
     # display the error message
-    click.echo(Fore.RED + "<<<gelbc-ERROR>>>" + Style.RESET_ALL, nl=False)
-    click.echo(f" PYTHONPATH env var not set")
+    click.echo(Fore.RED + "gelbc-ERROR:" + Style.RESET_ALL, nl=False)
+    click.echo(f" PYTHONPATH env var not set\n")
     # say that it was a fatal error
-    click.echo(Fore.RED + "<<<gelbc-ERROR>>>" + Style.RESET_ALL, nl=False)
-    click.echo(" aborting due to previous error")
+    click.echo(Fore.RED + "gelbc-ERROR:" + Style.RESET_ALL, nl=False)
+    click.echo(" aborting compilation due to previous error\n")
     # display a hint
-    click.echo(Fore.GREEN + "<<<gelbc-HINT >>>" + Style.RESET_ALL, nl=False)
+    click.echo(Fore.GREEN + "gelbc-HINT:" + Style.RESET_ALL, nl=False)
     click.echo("""
 This is a development version of gelbc, which requires you to add the
 root directory of the repository to the PYTHONPATH environment variable.
@@ -48,7 +48,8 @@ from gelb.stage1_frontend import get_ast
 )
 @click.argument(
     "input_file",
-    type=click.Path(),
+    # not using click.Path(), s.t. we can show nicer error-message
+    type=click.STRING,
     nargs=1
 )
 @click.option(
@@ -66,7 +67,8 @@ def cli(v, input_file, backend):
     """
 gelbc -- reference compiler (actually: "transpiler") for the GeLB DSL.
 
-This is the compiler-driver, which reads a "*.gelb" file and passes it through the various stages of the compiler.
+This is the compiler-driver, which reads a "*.gelb" file and passes it
+through the various stages of the compiler.
     """
     # Stage 1 :: FrontEnd
     src_raw = load_file(input_file, v)
