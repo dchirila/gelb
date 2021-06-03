@@ -21,7 +21,7 @@ class Program_N(Node_N):
         self.list_of_gauges = None
         # self.list_of_functions = None
         self.list_of_node_classes = None
-        # self.geometry = None
+        self.geometry = None
 
 
 class Block_N(Node_N):
