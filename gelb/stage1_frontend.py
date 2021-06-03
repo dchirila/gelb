@@ -23,6 +23,11 @@ from gelb.ASTBuilderVisitor import ASTBuilderVisitor
 from gelb.ParsingError import ParsingError
 from gelb.utils.misc import ensure_file_is_not_empty_or_whitespace
 from gelb.utils.compiler_complaints import *
+from gelb.utils.output_to_terminal import (
+    info_to_term,
+    verbose_progress_message,
+    fatal_error_to_term
+)
 
 
 def get_cst_as_string(start_rule, input_string):
@@ -45,17 +50,39 @@ def get_cst_as_string(start_rule, input_string):
 def get_ast(start_rule, input_string, verbose=False):
     ensure_file_is_not_empty_or_whitespace(input_string, verbose)
 
-    input_stream = a4.InputStream(input_string)
-    lexer = GeLBLexer(input_stream)
-    token_stream = a4.CommonTokenStream(lexer)
-    token_stream.fill()
-    parser = GeLBParser(token_stream)
-    parser.removeErrorListeners()
-    parser.addErrorListener(ParsingError())
+    info_to_term(
+        "[stage 1] building the initial abstract syntax tree (AST)...",
+        verbose
+    )
 
+    verbose_progress_message("\tpreparing parser", verbose)
+    try:
+        input_stream = a4.InputStream(input_string)
+        lexer = GeLBLexer(input_stream)
+        token_stream = a4.CommonTokenStream(lexer)
+        token_stream.fill()
+        parser = GeLBParser(token_stream)
+        parser.removeErrorListeners()
+        parser.addErrorListener(ParsingError())
+        verbose_progress_message("OK", verbose)
+    except:
+        verbose_progress_message("FAIL", verbose)
+        fatal_error_to_term("\tfailed to prepare parser")
+
+    info_to_term("\tparsing your file...", verbose)
     if hasattr(parser, start_rule):
         func_start_rule = getattr(parser, start_rule)
-        cst = func_start_rule()
+
+        verbose_progress_message(
+            "\t\tgenerating concrete syntax tree (CST)",
+            verbose
+        )
+        try:
+            cst = func_start_rule()
+            verbose_progress_message("OK", verbose)
+        except:
+            verbose_progress_message("FAIL", verbose)
+
         ast_builder = ASTBuilderVisitor()
         visitor_method_name = f"visit{start_rule.capitalize()}"
         if hasattr(ast_builder, visitor_method_name):

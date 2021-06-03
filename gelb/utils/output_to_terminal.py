@@ -16,6 +16,12 @@ def show_fatal_error_message_without_abort(error_message):
 
 def fatal_error_to_term(error_message):
     show_fatal_error_message_without_abort(error_message)
+    # display a minimal hint
+    click.echo(Fore.GREEN + "gelbc-HINT:" + Style.RESET_ALL, nl=False)
+    click.echo(
+        f" Please report this error on our Slack #feedback channel"
+        f" (https://gelb-devs.slack.com)."
+    )
     sys.exit(1)  # make error fatal (i.e. abort)
 
 
