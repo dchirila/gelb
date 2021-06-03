@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import antlr4.error.ErrorListener
 
 import antlr4 as a4
 
@@ -21,6 +20,7 @@ except ModuleNotFoundError:
     )
 
 from gelb.ASTNodes import *
+from gelb.ParsingError import ParsingError
 from gelb.utils.misc import ensure_file_is_not_empty_or_whitespace
 from gelb.utils.compiler_complaints import *
 
@@ -418,28 +418,6 @@ class ASTBuilderVisitor(GeLBVisitor):
                 list_of_children_sub_asts.append(child_result)
 
         return list_of_children_sub_asts
-
-
-class ParsingError(antlr4.error.ErrorListener.ErrorListener):
-    def syntaxError(self, recognizer, offendingSymbol, line, column, msg, e):
-        fatal_error_with_hint_to_term(
-            "parsing error TODO-explain-more",
-            # hint
-            f"here is some debugging information:"
-            f"\n\ttype(recognizer) = {type(recognizer)}"
-            f"\n\trecognizer = {recognizer}"
-            f"\n\ttype(offendingSymbol) = {type(offendingSymbol)}"
-            f"\n\toffendingSymbol = {offendingSymbol}"
-            f"\n\tline = {line}"
-            f"\n\tcolumn = {column}"
-            f"\n\tmsg = {msg}"
-            f"\n\ttype(e) = {type(e)}"
-            f"\n\te = {e}"
-        )
-
-    def printContext(self, TODO_all_info_needed_for_highlighting):
-        raise NotImplementedError()
-
 
 
 def get_cst_as_string(start_rule, input_string):
