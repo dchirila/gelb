@@ -21,6 +21,7 @@ except ModuleNotFoundError:
 
 from gelb.ASTNodes import *
 from gelb.utils.misc import ensure_file_is_not_empty_or_whitespace
+from gelb.utils.error_reporting import fatal_error_with_hint_to_term
 
 
 # TODO: "flesh it out!"
@@ -453,9 +454,25 @@ def get_ast(start_rule, input_string, verbose=False):
             ast = visitor_method(cst)
             return ast
         else:
-            print(
-                f"[ERROR] Can't find method '{visitor_method_name}' "
-                f"@ASTBuilderVisitor"
+            fatal_error_with_hint_to_term(
+                f"(internal) can't find method \"{visitor_method_name}\""
+                f"@ASTBuilderVisitor",
+                # hint
+                f"If you are a GeLB developer, please check whether rule"
+                f" \"{start_rule}\" is part of the grammar (look @\"GeLB.g4\""
+                f" file). Also, check that the ANTLR4 Java tool actually"
+                f" generated a method named \"{visitor_method_name}\" (look"
+                f" @\"GeLBVisitor.py\").\n\n"
+                f"If you are a GeLB user, please report this error on our"
+                f" Slack #feedback channel."
             )
     else:
-        print(f"[ERROR] Can't find start rule '{start_rule}' @GeLBParser")
+        fatal_error_with_hint_to_term(
+            f"(internal) can't find rule \"{start_rule}\" @GeLBParser",
+            # hint
+            f"If you are a GeLB developer, please check whether rule"
+            f" \"{start_rule}\" is part of the grammar (look @\"GeLB.g4\""
+            f" file).\n\n"
+            f"If you are a GeLB user, please report this error on our"
+            f" Slack #feedback channel."
+        )
