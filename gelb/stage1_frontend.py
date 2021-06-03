@@ -22,7 +22,7 @@ except ModuleNotFoundError:
 
 from gelb.ASTNodes import *
 from gelb.utils.misc import ensure_file_is_not_empty_or_whitespace
-from gelb.utils.error_reporting import fatal_error_with_hint_to_term
+from gelb.utils.compiler_complaints import *
 
 
 # TODO: "flesh it out!"
@@ -430,11 +430,8 @@ class ParsingError(antlr4.error.ErrorListener.ErrorListener):
             f"\n\trecognizer = {recognizer}"
             f"\n\ttype(offendingSymbol) = {type(offendingSymbol)}"
             f"\n\toffendingSymbol = {offendingSymbol}"
-            f"\n\ttype(line) = {type(line)}"
             f"\n\tline = {line}"
-            f"\n\ttype(column) = {type(column)}"
             f"\n\tcolumn = {column}"
-            f"\n\ttype(msg) = {type(msg)}"
             f"\n\tmsg = {msg}"
             f"\n\ttype(e) = {type(e)}"
             f"\n\te = {e}"
@@ -488,30 +485,3 @@ def get_ast(start_rule, input_string, verbose=False):
                                                   visitor_method_name)
     else:
         complain_about_invalid_grammar_rule(start_rule)
-
-
-def complain_about_missing_visitor_method(rule, visitor_method_name):
-    fatal_error_with_hint_to_term(
-        f"(internal) can't find method \"{visitor_method_name}\""
-        f"@ASTBuilderVisitor",
-        # hint
-        f"If you are a GeLB developer, please check whether rule"
-        f" \"{rule}\" is part of the grammar (look @\"GeLB.g4\""
-        f" file). Also, check that the ANTLR4 Java tool actually"
-        f" generated a method named \"{visitor_method_name}\" (look"
-        f" @\"GeLBVisitor.py\").\n\n"
-        f"If you are a GeLB user, please report this error on our"
-        f" Slack #feedback channel (https://gelb-devs.slack.com)."
-    )
-
-
-def complain_about_invalid_grammar_rule(rule):
-    fatal_error_with_hint_to_term(
-        f"(internal) can't find rule \"{rule}\" @GeLBParser",
-        # hint
-        f"If you are a GeLB developer, please check whether rule"
-        f" \"{rule}\" is part of the grammar (look @\"GeLB.g4\""
-        f" file).\n\n"
-        f"If you are a GeLB user, please report this error on our"
-        f" Slack #feedback channel (https://gelb-devs.slack.com)."
-    )

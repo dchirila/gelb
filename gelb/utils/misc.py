@@ -7,7 +7,7 @@ import pathlib
 import os
 import pkg_resources
 
-from gelb.utils.error_reporting import *
+from gelb.utils.output_to_terminal import *
 
 
 def ensure_input_file_has_gelb_extension(input_file, verbose):

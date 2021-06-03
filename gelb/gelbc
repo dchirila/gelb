@@ -68,7 +68,7 @@ through the various stages of the compiler.
     src_raw = load_file(input_file, v)
     # TODO add support for verbose flag
     # ast = get_ast("gelb_program", src_raw, v)
-    ast = get_ast("gelb_prograx", src_raw, v)
+    ast = get_ast("gelb_program", src_raw, v)
     print(ast)
     # ... TODO semantic analysis, checks, etc.
 
