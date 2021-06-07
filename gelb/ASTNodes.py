@@ -9,19 +9,61 @@ class Node_N(object):
         raise NotImplementedError()
 
 
+class List_N(Node_N):
+    def __init__(self):
+        self.elements = []
+
+    def append(self, element):
+        self.elements.append(element)
+
+    def __getitem__(self, i):
+        return self.elements[i]
+
+    def __len__(self):
+        return len(self.elements)
+
+    def __str__(self):
+        result = (
+            f"(List"
+        )
+        for element in self.elements:
+            result += f" {str(element)}"
+        result += ")"
+        return result
+
+
 class Program_N(Node_N):
     def __init__(self):
         self.simulation_name = None
         self.simulation_description = None
         self.global_constants = None
-        self.listof_lattice_constants = None
-        self.listof_lattice_instances = None
-        self.list_of_initializers = None
-        self.list_of_dynamics = None
-        self.list_of_gauges = None
-        # self.list_of_functions = None
-        self.list_of_node_classes = None
+        self.list_of_lattice_constants_blocks = List_N()
+        self.lattices = List_N()
+        self.list_of_initializers = List_N()
+        self.list_of_dynamics = List_N()
+        self.list_of_gauges = List_N()
+        # self.list_of_functions = List_N()
+        self.node_classes = None
         self.geometry = None
+
+    def __str__(self):
+        result = (
+            f"(Program"
+            f" {str(self.simulation_name)}"
+            f" {str(self.simulation_description)}"
+        )
+        if self.global_constants is not None:
+            result += f" {str(self.global_constants)}"
+        if self.list_of_lattice_constants_blocks:  # if list is not empty...
+            result += f" {str(self.list_of_lattice_constants_blocks)}"
+        result += f" {str(self.lattices)}"
+        result += f" {str(self.list_of_initializers)}"
+        result += f" {str(self.list_of_dynamics)}"
+        result += f" {str(self.list_of_gauges)}"
+        result += f" {str(self.node_classes)}"
+        result += f" {str(self.geometry)}"
+        result += ")"
+        return result
 
 
 class Block_N(Node_N):
@@ -36,8 +78,8 @@ class GlobalConstantsBlock_N(Block_N):
     def __str__(self):
         result = "(GlobalConstantsBlock"
         for stmt in self.list_of_stmts:
-            result = result + f" {str(stmt)}"
-        result = result + ")"
+            result += f" {str(stmt)}"
+        result += ")"
         return result
 
 
@@ -49,8 +91,8 @@ class LatticeConstantsBlock_N(Block_N):
     def __str__(self):
         result = f"(LatticeConstantsBlock {self.lattice_name}"
         for stmt in self.list_of_stmts:
-            result = result + f" {str(stmt)}"
-        result = result + ")"
+            result += f" {str(stmt)}"
+        result += ")"
         return result
 
 
@@ -61,8 +103,8 @@ class LatticesBlock_N(Node_N):
     def __str__(self):
         result = "(LatticesBlock"
         for lattice_instance in self.lattice_instances:
-            result = result + f" {str(lattice_instance)}"
-        result = result + ")"
+            result += f" {str(lattice_instance)}"
+        result += ")"
         return result
 
 
@@ -89,8 +131,8 @@ class NodeClassesBlock_N(Node_N):
     def __str__(self):
         result = f"(NodeClassesBlock"
         for node_class in self.node_classes:
-            result = result + f" {node_class}"
-        result = result + ")"
+            result += f" {node_class}"
+        result += ")"
         return result
 
 
@@ -129,8 +171,8 @@ class InitializerBlock_N(Node_N):
     def __str__(self):
         result = f"(Initializer {self.name}"
         for stmt in self.stmts:
-            result = result + f" {stmt}"
-        result = result + ")"
+            result += f" {stmt}"
+        result += ")"
         return result
 
 
@@ -142,8 +184,8 @@ class DynamicBlock_N(Node_N):
     def __str__(self):
         result = f"(Dynamic {self.name}"
         for stmt in self.stmts:
-            result = result + f" {stmt}"
-        result = result + ")"
+            result += f" {stmt}"
+        result += ")"
         return result
 
 
@@ -156,10 +198,10 @@ class GaugeBlock_N(Node_N):
     def __str__(self):
         result = f"(Gauge {self.name}"
         for output in self.outputs:
-            result = result + f" {output}"
+            result += f" {output}"
         for stmt in self.stmts:
-            result = result + f" {stmt}"
-        result = result + ")"
+            result += f" {stmt}"
+        result += ")"
         return result
 
 
@@ -176,8 +218,8 @@ class GeometryBlock_N(Node_N):
     def __str__(self):
         result = "(GeometryBlock"
         for stmt in self.stmts:
-            result = result + f" {stmt}"
-        result = result + ")"
+            result += f" {stmt}"
+        result += ")"
         return result
 
 
@@ -189,8 +231,8 @@ class PaintNodesStmt_N(Node_N):
     def __str__(self):
         result = f"(PaintNodesStmt {self.node_class}"
         for range in self.spatial_ranges:
-            result = result + f" {range}"
-        result = result + ")"
+            result += f" {range}"
+        result += ")"
         return result
 
 
@@ -235,9 +277,9 @@ class RectSelOfLatticeInDFs_N(RectSelOfLatticeDFs_N):
     def __str__(self):
         result = "(RectSelOfLatticeInDFs"
         for spatial_range in self.spatial_ranges:
-            result = result + f" {spatial_range}"
-        result = result + f" {self.dfs_range}"
-        result = result + ")"
+            result += f" {spatial_range}"
+        result += f" {self.dfs_range}"
+        result += ")"
         return result
 
 
@@ -250,9 +292,9 @@ class RectSelOfLatticeOutDFs_N(RectSelOfLatticeDFs_N):
     def __str__(self):
         result = "(RectSelOfLatticeOutDFs"
         for spatial_range in self.spatial_ranges:
-            result = result + f" {spatial_range}"
-        result = result + f" {self.dfs_range}"
-        result = result + ")"
+            result += f" {spatial_range}"
+        result += f" {self.dfs_range}"
+        result += ")"
         return result
 
 
@@ -385,8 +427,9 @@ class BoolLiteral_N(Node_N):
 
 
 class StringLiteral_N(Node_N):
-    def __init__(self, value):
+    def __init__(self, value, field_name=None):
         self.value = value
+        self.field_name = field_name
 
     def __str__(self):
         return f"(StringLiteral {self.value})"
@@ -408,8 +451,8 @@ class ArrayLiteralBase_N(Node_N):
     def __str__(self):
         result = f"(ArrayLiteral{str(self.dimensionality)}D"
         for element in self.value:
-            result = result + f" {str(element)}"
-        result = result + ")"
+            result += f" {str(element)}"
+        result += ")"
         return result
 
 

@@ -8,6 +8,7 @@ import os
 import pkg_resources
 
 from gelb.utils.output_to_terminal import *
+from gelb.utils.compiler_complaints import generic_hint
 
 
 def ensure_input_file_has_gelb_extension(input_file, verbose):
@@ -136,6 +137,10 @@ def load_file(input_file, verbose=False):
         )
 
 
+def print_error_context(input_file):
+    src_raw = load_file()
+
+
 def find_gelb_files_in_cwd():
     """
     Finds (and returns list of) GeLB files in the current working directory.
@@ -155,8 +160,7 @@ def ensure_file_is_not_empty_or_whitespace(file_as_string, verbose):
         verbose_progress_message("FAIL", verbose)
         fatal_error_with_hint_to_term(
             "input file is empty",
-            "visit https://gelb-lang.org to learn how to write your first "
-            "GeLB programs"
+            generic_hint
         )
 
     verbose_progress_message(
@@ -169,6 +173,5 @@ def ensure_file_is_not_empty_or_whitespace(file_as_string, verbose):
         verbose_progress_message("FAIL", verbose)
         fatal_error_with_hint_to_term(
             "input file contains only whitespace",
-            "visit https://gelb-lang.org to learn how to write your first "
-            "GeLB programs"
+            generic_hint
         )

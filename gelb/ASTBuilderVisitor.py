@@ -18,34 +18,121 @@ except ModuleNotFoundError:
     )
 
 from gelb.ASTNodes import *
+from gelb.utils.compiler_complaints import *
 
 
 # INPUT: ANTLR4-generated ParseTree
 # OUTPUT: GeLB AST (*root* node)
 class ASTBuilderVisitor(GeLBVisitor):
+    def __init__(self):
+        self.blocks_instances = {
+            "set_simulation_name_stmt": 0,
+            "set_simulation_description_stmt": 0,
+            "global_constants_block": 0,
+            "lattice_constants_block": 0,
+            "lattices_block": 0,
+            "initializer_block": 0,
+            "dynamic_block": 0,
+            "gauge_block": 0,
+            "function_block": 0,
+            "node_classes_block": 0,
+            "geometry_block": 0
+        }
+
+        # Visit a parse tree produced by GeLBParser#gelb_program.
+    def visitGelb_program(self, ctx:GeLBParser.Gelb_programContext):
+        result = Program_N()
+        # TODO inspect the children of this node...
+        # TODO iterate over the children, and gradually add AST sub-trees
+        #      to the full AST.
+        #
+        # TODO check that all mandatory elements are present
+        # TODO check that each element is present a valid number of times
+        # TODO add =valid_number_of_occurrences= @ASTNodes-classes?!?
+        list_of_children_sub_asts = self.get_list_of_children_sub_asts(ctx)
+        for child in list_of_children_sub_asts:
+            if isinstance(child, StringLiteral_N):
+                # StringLiteral_N only used for simulation_{name,description}
+                if child.field_name == "simulation_name":
+                    result.simulation_name = child
+                elif child.field_name == "simulation_description":
+                    result.simulation_description = child
+            elif isinstance(child, GlobalConstantsBlock_N):
+                result.global_constants = child
+            elif isinstance(child, LatticesBlock_N):
+                result.lattices = child
+            elif isinstance(child, InitializerBlock_N):
+                result.list_of_initializers.append(child)
+            elif isinstance(child, DynamicBlock_N):
+                result.list_of_dynamics.append(child)
+            elif isinstance(child, GaugeBlock_N):
+                result.list_of_gauges.append(child)
+            elif isinstance(child, NodeClassesBlock_N):
+                result.node_classes = child
+            elif isinstance(child, GeometryBlock_N):
+                result.geometry = child
+            else:
+                # TODO raise exception - unrecognized block
+                print(type(child), "\t", child)
+                print()
+                raise NotImplementedError()
+        return result
+
     # Visit a parse tree produced by GeLBParser#set_simulation_name_stmt.
     def visitSet_simulation_name_stmt(
             self,
             ctx: GeLBParser.Set_simulation_name_stmtContext):
-        return StringLiteral_N(ctx.STRING().__str__())
+        if self.blocks_instances["set_simulation_name_stmt"] == 0:
+            self.blocks_instances["set_simulation_name_stmt"] += 1
+            return StringLiteral_N(
+                ctx.STRING().__str__(),
+                "simulation_name"
+            )
+        else:
+            complain_about_invalid_no_of_block_occurrences(
+                "simulation_name", 1, 1, ctx.start.line, ctx.start.column
+            )
 
     # Visit a parse tree produced by GeLBParser#set_simulation_description_stmt.
     def visitSet_simulation_description_stmt(
             self,
             ctx: GeLBParser.Set_simulation_description_stmtContext):
-        return StringLiteral_N(ctx.STRING().__str__())
+        if self.blocks_instances["set_simulation_description_stmt"] == 0:
+            self.blocks_instances["set_simulation_description_stmt"] += 1
+            return StringLiteral_N(
+                ctx.STRING().__str__(),
+                "simulation_description"
+            )
+        else:
+            complain_about_invalid_no_of_block_occurrences(
+                "simulation_description", 1, 1, ctx.start.line, ctx.start.column
+            )
+
 
     # Visit a parse tree produced by GeLBParser#global_constants_block.
     def visitGlobal_constants_block(
             self,
             ctx: GeLBParser.Global_constants_blockContext):
-        return GlobalConstantsBlock_N(self.get_list_of_children_sub_asts(ctx))
+        if self.blocks_instances["global_constants_block"] == 0:
+            self.blocks_instances["global_constants_block"] += 1
+            return GlobalConstantsBlock_N(
+                self.get_list_of_children_sub_asts(ctx)
+            )
+        else:
+            complain_about_invalid_no_of_block_occurrences(
+                "global_constants", 0, 1, ctx.start.line, ctx.start.column
+            )
 
     # Visit a parse tree produced by GeLBParser#lattice_constants_block.
     def visitLattice_constants_block(
             self,
             ctx: GeLBParser.Lattice_constants_blockContext):
         list_of_children_sub_asts = self.get_list_of_children_sub_asts(ctx)
+        # we can have any number of occurrences for =lattice_constants_block=,
+        # so no reason to ever complain; however, we need to keep track how
+        # many there are
+        # TODO: keep pointers to the instances
+        self.blocks_instances["lattice_constants_block"] += 1
         return LatticeConstantsBlock_N(list_of_children_sub_asts[0],
                                        list_of_children_sub_asts[1:])
 
@@ -116,7 +203,7 @@ class ASTBuilderVisitor(GeLBVisitor):
     # Visit a parse tree produced by GeLBParser#initializer_block.
     def visitInitializer_block(self, ctx:GeLBParser.Initializer_blockContext):
         name = self.visit(ctx.identifier())
-        stmts = []
+        stmts = List_N()
         for stmt in ctx.lattice_assignment_stmt():
             stmts.append(self.visit(stmt))
         return InitializerBlock_N(name, stmts)
@@ -124,7 +211,7 @@ class ASTBuilderVisitor(GeLBVisitor):
     # Visit a parse tree produced by GeLBParser#dynamic_block.
     def visitDynamic_block(self, ctx:GeLBParser.Dynamic_blockContext):
         name = self.visit(ctx.identifier())
-        stmts = []
+        stmts = List_N()
         for stmt in ctx.lattice_assignment_stmt():
             stmts.append(self.visit(stmt))
         return DynamicBlock_N(name, stmts)
@@ -132,17 +219,17 @@ class ASTBuilderVisitor(GeLBVisitor):
     # Visit a parse tree produced by GeLBParser#gauge_block.
     def visitGauge_block(self, ctx:GeLBParser.Gauge_blockContext):
         name = self.visit(ctx.identifier())
-        outputs = []
+        outputs = List_N()
         for output in ctx.variable_declaration_stmt():
             outputs.append(self.visit(output))
-        stmts = []
+        stmts = List_N()
         for stmt in ctx.variable_assignment_stmt():
             stmts.append(self.visit(stmt))
         return GaugeBlock_N(name, outputs, stmts)
 
     # Visit a parse tree produced by GeLBParser#node_classes_block.
     def visitNode_classes_block(self, ctx:GeLBParser.Node_classes_blockContext):
-        node_classes = []
+        node_classes = List_N()
         for node_class in ctx.node_class_insta_stmt():
             node_classes.append(self.visit(node_class))
         return NodeClassesBlock_N(node_classes)
@@ -157,7 +244,7 @@ class ASTBuilderVisitor(GeLBVisitor):
 
     # Visit a parse tree produced by GeLBParser#geometry_block.
     def visitGeometry_block(self, ctx:GeLBParser.Geometry_blockContext):
-        stmts = []
+        stmts = List_N()
         for stmt in ctx.paint_nodes_stmt():
             stmts.append(self.visit(stmt))
         return GeometryBlock_N(stmts)
@@ -165,7 +252,7 @@ class ASTBuilderVisitor(GeLBVisitor):
     # Visit a parse tree produced by GeLBParser#paint_nodes_stmt.
     def visitPaint_nodes_stmt(self, ctx:GeLBParser.Paint_nodes_stmtContext):
         node_class = self.visit(ctx.identifier())
-        spatial_ranges = []
+        spatial_ranges = List_N()
         for range in ctx.coords_range():
             spatial_ranges.append(self.visit(range))
         return PaintNodesStmt_N(node_class, spatial_ranges)
@@ -178,7 +265,7 @@ class ASTBuilderVisitor(GeLBVisitor):
 
     # Visit a parse tree produced by GeLBParser#rect_sel_of_lattice_in_dfs.
     def visitRect_sel_of_lattice_in_dfs(self, ctx:GeLBParser.Rect_sel_of_lattice_in_dfsContext):
-        spatial_ranges = []
+        spatial_ranges = List_N()
         for range in ctx.coords_range():
             spatial_ranges.append(self.visit(range))
         dfs_range = self.visit(ctx.lattice_dfs_range())
@@ -186,7 +273,7 @@ class ASTBuilderVisitor(GeLBVisitor):
 
     # Visit a parse tree produced by GeLBParser#rect_sel_of_lattice_out_dfs.
     def visitRect_sel_of_lattice_out_dfs(self, ctx:GeLBParser.Rect_sel_of_lattice_out_dfsContext):
-        spatial_ranges = []
+        spatial_ranges = List_N()
         for range in ctx.coords_range():
             spatial_ranges.append(self.visit(range))
         dfs_range = self.visit(ctx.lattice_dfs_range())
@@ -397,7 +484,7 @@ class ASTBuilderVisitor(GeLBVisitor):
         return self.visitIdentifier(ctx.identifier())
 
     def get_list_of_children_sub_asts(self, ctx):
-        list_of_children_sub_asts = []
+        list_of_children_sub_asts = List_N()
         # Strategy: visit all children nodes (based on the implementation of
         # ParseTreeVisitor.visitChildren), and append non-trivial children to
         # the list_of_children_sub_asts.

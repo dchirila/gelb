@@ -1,18 +1,29 @@
 grammar GeLB;
 import CommonLexerRules;
 
-gelb_program : //
-	set_simulation_name_stmt
-	set_simulation_description_stmt
-	global_constants_block?  // 0 or 1 instance
-	lattice_constants_block*  // 0 or more instance(s)
-	lattices_block
-    initializer_block
-	dynamic_block
-	gauge_block
-	// function_block
-	node_classes_block
-	geometry_block
+/*
+ Root grammar rule, for an entire GeLB program.
+
+ NOTE: We want to allow users to specify the block in any order they like.
+       To achieve this, we use the pattern:
+       gelb_program : ( block_type1 | block_type 2 | ... )* ;
+
+       Later, in ASTBuilderVisitor.visitGelb_program, we enforce some rules,
+       e.g. that the number of occurrences of each block-type is valid.
+ */
+gelb_program : // Valid # of occurrences (as interval)
+	( set_simulation_name_stmt         // [1, 1]
+	| set_simulation_description_stmt  // [1, 1]
+	| global_constants_block           // [0, 1]
+	| lattice_constants_block          // [0, oo)
+	| lattices_block                   // [1. 1]
+    | initializer_block                // [1, oo)
+	| dynamic_block                    // [1, oo)
+	| gauge_block                      // [1, oo)
+	//| function_block                   // [0, oo)
+	| node_classes_block               // [1, 1]
+	| geometry_block                   // [1, 1]
+	)*
 	EOF ;
 
 set_simulation_name_stmt : SIMULATION_NAME PAREN_OPEN

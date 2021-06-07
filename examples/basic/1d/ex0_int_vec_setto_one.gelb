@@ -1,9 +1,12 @@
+simulation_name("ex0_int_vec_setto_one");
+simulation_description("Pretty much the hello world of GeLB");
+
 lattices {
   lattice f(1,        // d
             1,        // q
             int,      // df_type
-            {32},     // size
-            {false}); // periodicity
+            32        // size
+  );
 }
 
 initializer SetDFsToZero { //
