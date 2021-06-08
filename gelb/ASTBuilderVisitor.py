@@ -140,7 +140,13 @@ class ASTBuilderVisitor(GeLBVisitor):
     def visitLattices_block(
             self,
             ctx: GeLBParser.Lattices_blockContext):
-        return LatticesBlock_N(self.get_list_of_children_sub_asts(ctx))
+        if self.blocks_instances["lattices_block"] == 0:
+            self.blocks_instances["lattices_block"] += 1
+            return LatticesBlock_N(self.get_list_of_children_sub_asts(ctx))
+        else:
+            complain_about_invalid_no_of_block_occurrences(
+                "lattices", 1, 1, ctx.start.line, ctx.start.column
+            )
 
     # Visit a parse tree produced by GeLBParser#lattice_insta_stmt.
     def visitLattice_insta_stmt(
@@ -229,10 +235,16 @@ class ASTBuilderVisitor(GeLBVisitor):
 
     # Visit a parse tree produced by GeLBParser#node_classes_block.
     def visitNode_classes_block(self, ctx:GeLBParser.Node_classes_blockContext):
-        node_classes = List_N()
-        for node_class in ctx.node_class_insta_stmt():
-            node_classes.append(self.visit(node_class))
-        return NodeClassesBlock_N(node_classes)
+        if self.blocks_instances["node_classes_block"] == 0:
+            node_classes = List_N()
+            for node_class in ctx.node_class_insta_stmt():
+                node_classes.append(self.visit(node_class))
+            self.blocks_instances["node_classes_block"] += 1
+            return NodeClassesBlock_N(node_classes)
+        else:
+            complain_about_invalid_no_of_block_occurrences(
+                "node_classes", 1, 1, ctx.start.line, ctx.start.column
+            )
 
     # Visit a parse tree produced by GeLBParser#node_class_insta_stmt.
     def visitNode_class_insta_stmt(self, ctx:GeLBParser.Node_class_insta_stmtContext):
@@ -244,10 +256,16 @@ class ASTBuilderVisitor(GeLBVisitor):
 
     # Visit a parse tree produced by GeLBParser#geometry_block.
     def visitGeometry_block(self, ctx:GeLBParser.Geometry_blockContext):
-        stmts = List_N()
-        for stmt in ctx.paint_nodes_stmt():
-            stmts.append(self.visit(stmt))
-        return GeometryBlock_N(stmts)
+        if self.blocks_instances["geometry_block"] == 0:
+            stmts = List_N()
+            for stmt in ctx.paint_nodes_stmt():
+                stmts.append(self.visit(stmt))
+            self.blocks_instances["geometry_block"] += 1
+            return GeometryBlock_N(stmts)
+        else:
+            complain_about_invalid_no_of_block_occurrences(
+                "geometry", 1, 1, ctx.start.line, ctx.start.column
+            )
 
     # Visit a parse tree produced by GeLBParser#paint_nodes_stmt.
     def visitPaint_nodes_stmt(self, ctx:GeLBParser.Paint_nodes_stmtContext):
