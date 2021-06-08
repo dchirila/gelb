@@ -41,11 +41,11 @@ class ASTBuilderVisitor(GeLBVisitor):
 
         # Visit a parse tree produced by GeLBParser#gelb_program.
     def visitGelb_program(self, ctx:GeLBParser.Gelb_programContext):
-        result = Program_N()
-        # TODO inspect the children of this node...
-        # TODO iterate over the children, and gradually add AST sub-trees
-        #      to the full AST.
-        #
+        """
+        During this stage, we are accepting all possible high-level blocks,
+        and constructing the whole-program AST.
+        """
+        result = Program_N()  # creates empty =Program_N=
         # TODO check that all mandatory elements are present
         # TODO check that each element is present a valid number of times
         # TODO add =valid_number_of_occurrences= @ASTNodes-classes?!?
@@ -76,6 +76,7 @@ class ASTBuilderVisitor(GeLBVisitor):
                 print(type(child), "\t", child)
                 print()
                 raise NotImplementedError()
+        # result.validate()
         return result
 
     # Visit a parse tree produced by GeLBParser#set_simulation_name_stmt.

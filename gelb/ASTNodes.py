@@ -38,11 +38,11 @@ class Program_N(Node_N):
         self.simulation_description = None
         self.global_constants = None
         self.list_of_lattice_constants_blocks = List_N()
-        self.lattices = List_N()
+        self.lattices = None
         self.list_of_initializers = List_N()
         self.list_of_dynamics = List_N()
         self.list_of_gauges = List_N()
-        # self.list_of_functions = List_N()
+        #self.list_of_functions = List_N()
         self.node_classes = None
         self.geometry = None
 
@@ -154,15 +154,6 @@ class NodeClassInstaStmt_N(Node_N):
         )
 
 
-class UserFunctionBlock_N(Node_N):
-    pass
-
-
-# TODO only allow inside UserFunctionBlock_N
-class ReturnStmt_N(Node_N):
-    pass
-
-
 class InitializerBlock_N(Node_N):
     def __init__(self, name, stmts):
         self.name = name
@@ -205,12 +196,6 @@ class GaugeBlock_N(Node_N):
         return result
 
 
-# TODO: implement this, based on GaugeBlock_N (only that here we also have inputs)
-# class FunctionBlock_N(Node_N):
-#     def __init__(self):
-#         raise NotImplementedError()
-
-
 class GeometryBlock_N(Node_N):
     def __init__(self, stmts):
         self.stmts = stmts
@@ -223,20 +208,8 @@ class GeometryBlock_N(Node_N):
         return result
 
 
-class PaintNodesStmt_N(Node_N):
-    def __init__(self, node_class, spatial_ranges):
-        self.node_class = node_class
-        self.spatial_ranges = spatial_ranges
-
-    def __str__(self):
-        result = f"(PaintNodesStmt {self.node_class}"
-        for range in self.spatial_ranges:
-            result += f" {range}"
-        result += ")"
-        return result
-
-
 class Identifier_N(Node_N):
+    """Terminal AST-node"""
     def __init__(self, name):
         self.name = name
 
@@ -298,9 +271,10 @@ class RectSelOfLatticeOutDFs_N(RectSelOfLatticeDFs_N):
         return result
 
 
-# class RectSelOfArrayElems_N(Node_N):
-#     def __init__(self):
-#         raise NotImplementedError()
+# TODO implement, inspired by RectSelOfLatticeDFs_N
+class RectSelOfArrayElems_N(Node_N):
+    def __init__(self):
+        raise NotImplementedError()
 
 
 class ScalarDataType_N(Node_N):
@@ -400,6 +374,7 @@ class UnaryMinusExpr_N(UnaryExpr_N):
 
 
 class IntLiteral_N(Node_N):
+    """Terminal AST-node"""
     def __init__(self, value):
         self.value = value
 
@@ -408,6 +383,7 @@ class IntLiteral_N(Node_N):
 
 
 class RealLiteral_N(Node_N):
+    """Terminal AST-node"""
     def __init__(self, value):
         self.value = value
 
@@ -416,6 +392,7 @@ class RealLiteral_N(Node_N):
 
 
 class BoolLiteral_N(Node_N):
+    """Terminal AST-node"""
     def __init__(self, value):
         # Store as string, because we use lowercase, i.e.:
         # 'true' & 'false', instead of
@@ -427,6 +404,7 @@ class BoolLiteral_N(Node_N):
 
 
 class StringLiteral_N(Node_N):
+    """Terminal AST-node"""
     def __init__(self, value, field_name=None):
         self.value = value
         self.field_name = field_name
@@ -458,22 +436,22 @@ class ArrayLiteralBase_N(Node_N):
 
 class Array1DLiteral_N(ArrayLiteralBase_N):
     def __init__(self, value):
-        super().__init__(value, 1)
+        super().__init__(value, dimensionality=1)
 
 
 class Array2DLiteral_N(ArrayLiteralBase_N):
     def __init__(self, value):
-        super().__init__(value, 2)
+        super().__init__(value, dimensionality=2)
 
 
 class Array3DLiteral_N(ArrayLiteralBase_N):
     def __init__(self, value):
-        super().__init__(value, 3)
+        super().__init__(value, dimensionality=3)
 
 
 class Array4DLiteral_N(ArrayLiteralBase_N):
     def __init__(self, value):
-        super().__init__(value, 4)
+        super().__init__(value, dimensionality=4)
 
 
 # NOTE: later, we can distinguish (maybe) between:
@@ -486,7 +464,8 @@ class FunctionCall_N(Node_N):
 
 # TODO make Abstract Base Class
 class Stmt_N(Node_N):
-    pass
+    def __str__(self):
+        raise NotImplementedError()
 
 
 # NOTE: declaration AND assignment!
@@ -519,6 +498,18 @@ class AssignmentStmt_N(Stmt_N):
         self.rhs = rhs
 
 
+class PaintNodesStmt_N(AssignmentStmt_N):
+    def __init__(self, node_class, spatial_ranges):
+        super().__init__(node_class, spatial_ranges)
+
+    def __str__(self):
+        result = f"(PaintNodesStmt {self.lhs}"
+        for range in self.rhs:
+            result += f" {range}"
+        result += ")"
+        return result
+
+
 class VariableAssignmentStmt_N(AssignmentStmt_N):
     def __init__(self, lhs, rhs):
         super().__init__(lhs, rhs)
@@ -539,6 +530,12 @@ class LatticeAssignmentStmt_N(AssignmentStmt_N):
         )
 
 
-# TODO only allow inside GeometryBlock_N
-class GeometryAssignmentStmt_N(AssignmentStmt_N):
+# TODO only allow inside UserFunctionBlock_N
+class ReturnStmt_N(Node_N):
     pass
+
+
+# TODO: implement this, based on GaugeBlock_N (only that here we also have inputs)
+class FunctionBlock_N(Node_N):
+    def __init__(self):
+        raise NotImplementedError()
