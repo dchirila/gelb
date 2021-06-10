@@ -6,13 +6,14 @@ from gelb.stage1_frontend import ASTBuilderVisitor, get_ast
 
 def test_simple():
     # Arrange
-    test_string = "f.out[x, y|:] = 3;"
+    test_string = "fgh.out[x, y|:] = 3;"
     # Act
-    ast = get_ast("lattice_assignment_stmt", test_string)
+    ast = get_ast("lattice_out_selection_assignment_stmt", test_string)
     # Assert
     assert str(ast) == (
-        "(LatticeAssignmentStmt"
+        "(LatticeOutSelectionAssignmentStmt"
         " (RectSelOfLatticeOutDFs"
+        " (Identifier fgh)"
         " (Range (Identifier x) (Identifier x))"
         " (Range (Identifier y) (Identifier y))"
         " (Range (RangePlaceholder Min) (RangePlaceholder Max))"

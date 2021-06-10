@@ -1,16 +1,32 @@
 #!/usr/bin/env python3
 
-class Node_N(object):
-    """Base class (for all GeLB AST Node-types)"""
-    def __str__(self):
-        raise NotImplementedError()
+from abc import ABC, abstractmethod
 
-    def eval(self):
-        raise NotImplementedError()
+
+class Node_N(ABC):
+    """
+    Base class (for all GeLB AST Node-types)
+    """
+    def __init__(self, code_range):
+        self.code_range = code_range
+
+    @abstractmethod
+    def __str__(self):
+        pass
+
+    # @abstractmethod
+    # def eval(self):
+    #     pass
 
 
 class List_N(Node_N):
-    def __init__(self):
+    """
+    Wrapper for Python lists, with some GeLB-related functionality.
+
+    Used in various places throughout the GeLB AST.
+    """
+    def __init__(self, code_range):
+        super().__init__(code_range)  # pass code_range to superclass
         self.elements = []
 
     def append(self, element):
@@ -23,26 +39,24 @@ class List_N(Node_N):
         return len(self.elements)
 
     def __str__(self):
-        result = (
-            f"(List"
-        )
-        for element in self.elements:
-            result += f" {str(element)}"
-        result += ")"
-        return result
+        return f"(List {' '.join(f'{e}' for e in self.elements)})"
 
 
 class Program_N(Node_N):
-    def __init__(self):
+    """
+    Represents the root AST node for a GeLB program.
+    """
+    def __init__(self, code_range):
+        super().__init__(code_range)
         self.simulation_name = None
         self.simulation_description = None
         self.global_constants = None
-        self.list_of_lattice_constants_blocks = List_N()
+        self.lattice_constants_blocks = None
         self.lattices = None
-        self.list_of_initializers = List_N()
-        self.list_of_dynamics = List_N()
-        self.list_of_gauges = List_N()
-        #self.list_of_functions = List_N()
+        self.initializers = None
+        self.dynamics = None
+        self.gauges = None
+        # self.functions = None
         self.node_classes = None
         self.geometry = None
 
@@ -54,63 +68,120 @@ class Program_N(Node_N):
         )
         if self.global_constants is not None:
             result += f" {str(self.global_constants)}"
-        if self.list_of_lattice_constants_blocks:  # if list is not empty...
-            result += f" {str(self.list_of_lattice_constants_blocks)}"
+        if self.lattice_constants_blocks:  # if list is not empty...
+            result += f" {str(self.lattice_constants_blocks)}"
         result += f" {str(self.lattices)}"
-        result += f" {str(self.list_of_initializers)}"
-        result += f" {str(self.list_of_dynamics)}"
-        result += f" {str(self.list_of_gauges)}"
+        result += f" {str(self.initializers)}"
+        result += f" {str(self.dynamics)}"
+        result += f" {str(self.gauges)}"
         result += f" {str(self.node_classes)}"
         result += f" {str(self.geometry)}"
         result += ")"
         return result
 
 
+class Stmt_N(Node_N):
+    """Base-class for all types of GeLB statements."""
+    @abstractmethod
+    def __str__(self):
+        pass
+
+
+class SetSimulationNameStmt_N(Stmt_N):
+    """
+    Represents an instruction to set the simulation name.
+
+    Example of corresponding code:
+
+    simulation_name("test");
+    """
+    def __init__(self, code_range, name):
+        super().__init__(code_range)
+        self.name = name
+
+    def __str__(self):
+        return f"(SetSimulationNameStmt {self.name})"
+
+
+class SetSimulationDescriptionStmt_N(Stmt_N):
+    """
+    Represents an instruction to set the simulation's description.
+
+    Example of corresponding code:
+
+    simulation_description(
+    "This is
+    a test"
+    );
+
+    NOTE: The description may be a multi-line string.
+    """
+    def __init__(self, code_range, description):
+        super().__init__(code_range)
+        self.description = description
+
+    def __str__(self):
+        return f"(SetSimulationDescriptionStmt {self.description})"
+
+
 class Block_N(Node_N):
-    def __init__(self, list_of_stmts):
-        self.list_of_stmts = list_of_stmts
+    """
+    Base-class for larger AST sub-trees.
+
+    All derived classes have a list of statements, enclosed within curly
+    braces (with a preamble which depends on the specific type of block).
+    """
+    def __init__(self, code_range, stmts):
+        super().__init__(code_range)
+        self.stmts = stmts
+
+    @abstractmethod
+    def __str__(self):
+        pass
 
 
 class GlobalConstantsBlock_N(Block_N):
-    def __init__(self, list_of_stmts):
-        super().__init__(list_of_stmts)
+    """
+    Represents the block of global constants.
 
+    The constants defined within this block are visible in all other blocks.
+    """
     def __str__(self):
-        result = "(GlobalConstantsBlock"
-        for stmt in self.list_of_stmts:
-            result += f" {str(stmt)}"
-        result += ")"
-        return result
+        return (
+            f"(GlobalConstantsBlock {' '.join(f'{e}' for e in self.stmts)})"
+        )
 
 
 class LatticeConstantsBlock_N(Block_N):
-    def __init__(self, lattice_name, list_of_stmts):
-        self.lattice_name = lattice_name
-        super().__init__(list_of_stmts)
+    """
+    Represents a block of constants for a specific lattice.
+
+    The constants defined within such a block are visible using the syntax
+    LATTICE_NAME.CONSTANT_NAME.
+    """
+    def __init__(self, code_range, name, stmts):
+        super().__init__(code_range, stmts)
+        self.name = name
 
     def __str__(self):
-        result = f"(LatticeConstantsBlock {self.lattice_name}"
-        for stmt in self.list_of_stmts:
-            result += f" {str(stmt)}"
-        result += ")"
-        return result
+        return (
+            f"(LatticeConstantsBlock"
+            f" {self.name}"
+            f" {' '.join(f'{e}' for e in self.stmts)})"
+        )
 
 
-class LatticesBlock_N(Node_N):
-    def __init__(self, lattice_instances):
-        self.lattice_instances = lattice_instances
-
+class LatticesBlock_N(Block_N):
     def __str__(self):
-        result = "(LatticesBlock"
-        for lattice_instance in self.lattice_instances:
-            result += f" {str(lattice_instance)}"
-        result += ")"
-        return result
+        return (
+            f"(LatticesBlock {' '.join(f'{e}' for e in self.stmts)})"
+        )
 
 
 # TODO only allow inside LatticesBlock_N
 class LatticeInstaStmt_N(Node_N):
-    def __init__(self, name, d, q, df_type, size):
+    def __init__(self, code_range, name, d, q, df_type, size):
+        super().__init__(code_range)
         self.name = name
         self.d = d
         self.q = q
@@ -124,21 +195,18 @@ class LatticeInstaStmt_N(Node_N):
         )
 
 
-class NodeClassesBlock_N(Node_N):
-    def __init__(self, node_classes):
-        self.node_classes = node_classes
-
+class NodeClassesBlock_N(Block_N):
     def __str__(self):
-        result = f"(NodeClassesBlock"
-        for node_class in self.node_classes:
-            result += f" {node_class}"
-        result += ")"
-        return result
+        return (
+            f"(NodeClassesBlock {' '.join(f'{e}' for e in self.stmts)})"
+        )
 
 
 # TODO only allow inside NodeClassesBlock_N
+# TODO allow multiple {initializers, dynamics, gauges}
 class NodeClassInstaStmt_N(Node_N):
-    def __init__(self, name, initializer, dynamic, gauge):
+    def __init__(self, code_range, name, initializer, dynamic, gauge):
+        super().__init__(code_range)
         self.name = name
         self.initializer = initializer
         self.dynamic = dynamic
@@ -154,63 +222,58 @@ class NodeClassInstaStmt_N(Node_N):
         )
 
 
-class InitializerBlock_N(Node_N):
-    def __init__(self, name, stmts):
+class InitializerBlock_N(Block_N):
+    def __init__(self, code_range, name, stmts):
+        super().__init__(code_range, stmts)
         self.name = name
-        self.stmts = stmts
 
     def __str__(self):
-        result = f"(Initializer {self.name}"
-        for stmt in self.stmts:
-            result += f" {stmt}"
-        result += ")"
-        return result
+        return (
+            f"(Initializer"
+            f" {self.name}"
+            f" {' '.join(f'{e}' for e in self.stmts)})"
+        )
 
 
-class DynamicBlock_N(Node_N):
-    def __init__(self, name, stmts):
+class DynamicBlock_N(Block_N):
+    def __init__(self, code_range, name, stmts):
+        super().__init__(code_range, stmts)
         self.name = name
-        self.stmts = stmts
 
     def __str__(self):
-        result = f"(Dynamic {self.name}"
-        for stmt in self.stmts:
-            result += f" {stmt}"
-        result += ")"
-        return result
+        return (
+            f"(Dynamic"
+            f" {self.name}"
+            f" {' '.join(f'{e}' for e in self.stmts)})"
+        )
 
 
-class GaugeBlock_N(Node_N):
-    def __init__(self, name, outputs, stmts):
+class GaugeBlock_N(Block_N):
+    def __init__(self, code_range, name, outputs, stmts):
+        super().__init__(code_range, stmts)
         self.name = name
         self.outputs = outputs
-        self.stmts = stmts
 
     def __str__(self):
-        result = f"(Gauge {self.name}"
-        for output in self.outputs:
-            result += f" {output}"
-        for stmt in self.stmts:
-            result += f" {stmt}"
-        result += ")"
-        return result
+        return (
+            f"(Gauge"
+            f" {self.name}"
+            f" {' '.join(f'{e}' for e in self.outputs)}"
+            f" {' '.join(f'{e}' for e in self.stmts)})"
+        )
 
 
-class GeometryBlock_N(Node_N):
-    def __init__(self, stmts):
-        self.stmts = stmts
-
+class GeometryBlock_N(Block_N):
     def __str__(self):
-        result = "(GeometryBlock"
-        for stmt in self.stmts:
-            result += f" {stmt}"
-        result += ")"
-        return result
+        return (
+            f"(GeometryBlock {' '.join(f'{e}' for e in self.stmts)})"
+        )
 
 
 class Identifier_N(Node_N):
     """Terminal AST-node"""
-    def __init__(self, name):
+    def __init__(self, code_range, name):
+        super().__init__(code_range)
         self.name = name
 
     def __str__(self):
@@ -218,271 +281,317 @@ class Identifier_N(Node_N):
 
 
 class Range_N(Node_N):
-    def __init__(self, low, high):
+    def __init__(self, code_range, low, high):
+        super().__init__(code_range)
         self.low = low
         self.high = high
 
     def __str__(self):
-        lowRepres = self.low if self.low else "(RangePlaceholder Min)"
-        highRepres = self.high if self.high else "(RangePlaceholder Max)"
-        return f"(Range {lowRepres} {highRepres})"
+        low_repres = self.low if self.low else "(RangePlaceholder Min)"
+        high_repres = self.high if self.high else "(RangePlaceholder Max)"
+        return f"(Range {low_repres} {high_repres})"
 
 
-class RectSelOfLatticeDFs_N(Node_N):
+class RectSel_N(Node_N):
     """
-    Rectangular selection of lattice DFs.
+    Base-class for rectangular selections of elements.
     """
-    def __init__(self,
-                 spatial_ranges,
-                 dfs_range,
-                 selection_type):
-        self.spatial_ranges = spatial_ranges
-        self.dfs_range = dfs_range
-        self.selection_type = selection_type
+    def __init__(self, code_range, element_ranges):
+        super().__init__(code_range)
+        self.element_ranges = element_ranges
+
+    def __getitem__(self, i):
+        return self.element_ranges[i]
+
+    def __len__(self):
+        return len(self.element_ranges)
+
+    @abstractmethod
+    def __str__(self):
+        pass
+
+
+class RectSelOfLatticeDFs_N(RectSel_N):
+    """
+    Base-class for rectangular selection of lattice IN/OUT DFs.
+
+    NOTE: Last element in self.element_ranges represents the DFs-range.
+    """
+    def __init__(self, code_range, lattice_name, element_ranges):
+        super().__init__(code_range, element_ranges)
+        self.lattice_name = lattice_name
+
+    @abstractmethod
+    def __str__(self):
+        pass
 
 
 class RectSelOfLatticeInDFs_N(RectSelOfLatticeDFs_N):
-    def __init__(self,
-                 spatial_ranges,
-                 dfs_range):
-        super().__init__(spatial_ranges, dfs_range, 'in')
+    """
+    Rectangular selection of lattice IN DFs.
 
+    NOTE: Last element in self.element_ranges represents the DFs-range.
+    """
     def __str__(self):
-        result = "(RectSelOfLatticeInDFs"
-        for spatial_range in self.spatial_ranges:
-            result += f" {spatial_range}"
-        result += f" {self.dfs_range}"
-        result += ")"
-        return result
+        return (
+            f"(RectSelOfLatticeInDFs"
+            f" {self.lattice_name}"
+            f" {' '.join(f'{e}' for e in self.element_ranges)})"
+        )
 
 
 class RectSelOfLatticeOutDFs_N(RectSelOfLatticeDFs_N):
-    def __init__(self,
-                 spatial_ranges,
-                 dfs_range):
-        super().__init__(spatial_ranges, dfs_range, 'out')
+    """
+    Rectangular selection of lattice OUT DFs.
+
+    NOTE: Last element in self.element_ranges represents the DFs-range.
+    """
+    def __str__(self):
+        return (
+            f"(RectSelOfLatticeOutDFs"
+            f" {self.lattice_name}"
+            f" {' '.join(f'{e}' for e in self.element_ranges)})"
+        )
+
+
+class RectSelOfArrayElems_N(RectSel_N):
+    """
+    Rectangular selection of array elements.
+    """
+    def __init__(self, code_range, array_name, element_ranges):
+        super().__init__(code_range, element_ranges)
+        self.array_name = array_name
 
     def __str__(self):
-        result = "(RectSelOfLatticeOutDFs"
-        for spatial_range in self.spatial_ranges:
-            result += f" {spatial_range}"
-        result += f" {self.dfs_range}"
-        result += ")"
-        return result
+        return (
+            f"(RectSelOfArrayElems"
+            f" {self.array_name}"
+            f" {' '.join(f'{e}' for e in self.element_ranges)})"
+        )
 
 
-# TODO implement, inspired by RectSelOfLatticeDFs_N
-class RectSelOfArrayElems_N(Node_N):
-    def __init__(self):
-        raise NotImplementedError()
+class DataType_N(Node_N):
+    def __init__(self, code_range, scalar_dtype):
+        super().__init__(code_range)
+        self.scalar_dtype = scalar_dtype
 
-
-class ScalarDataType_N(Node_N):
-    supported_scalar_types = [
-        'bool',  # boolean
-        'int64', 'int32', 'int16', 'int8', 'int',  # integer
-        'real64', 'real32', 'real16', 'real'  # real
-    ]
-    def __init__(self, value):
-        if value not in self.supported_scalar_types:
-            raise TypeError(
-                f"<<<GeLB-Error>>> {str(value)} is not a valid scalar data-type!"
-                f"\nHint: you can use one of the following values: "
-                f"{self.supported_scalar_types}"
-            )
-        self.value = value
-
+    @abstractmethod
     def __str__(self):
-        return f"(ScalarDataType {self.value})"
+        pass
 
 
-class ArrayDataType_N(Node_N):
-    def __init__(self, element_data_type, shape):
-        self.element_data_type = element_data_type
+class ScalarDataType_N(DataType_N):
+    def __str__(self):
+        return f"(ScalarDataType {self.scalar_dtype})"
+
+
+class ArrayDataType_N(DataType_N):
+    def __init__(self, code_range, scalar_dtype, shape):
+        super().__init__(code_range, scalar_dtype)
         self.shape = shape  # might be either Array1DLiteral_N or IntLiteral_N
 
     def __str__(self):
         return (
-            f"(ArrayDataType {self.element_data_type} {self.shape})"
+            f"(ArrayDataType {self.scalar_dtype} {self.shape})"
         )
 
 
 class BinaryExpr_N(Node_N):
-    def __init__(self, operator, left, right):
-        self.operator = operator
+    def __init__(self, code_range, left, right):
+        super().__init__(code_range)
         self.left = left
         self.right = right
 
+    @abstractmethod
+    def __str__(self):
+        pass
+
 
 class Mul_N(BinaryExpr_N):
-    def __init__(self, left, right):
-        super().__init__('*', left, right)
-
     def __str__(self):
         return f"(Mul {self.left} {self.right})"
 
 
 class Div_N(BinaryExpr_N):
-    def __init__(self, left, right):
-        super().__init__('/', left, right)
-
     def __str__(self):
         return f"(Div {self.left} {self.right})"
 
 
 class Add_N(BinaryExpr_N):
-    def __init__(self, left, right):
-        super().__init__('+', left, right)
-
     def __str__(self):
         return f"(Add {self.left} {self.right})"
 
 
 class Sub_N(BinaryExpr_N):
-    def __init__(self, left, right):
-        super().__init__('-', left, right)
-
     def __str__(self):
         return f"(Sub {self.left} {self.right})"
 
 
 class Pow_N(BinaryExpr_N):
-    def __init__(self, left, right):
-        super().__init__('^', left, right)
-
     def __str__(self):
         return f"(Pow {self.left} {self.right})"
 
 
 class UnaryExpr_N(Node_N):
-    def __init__(self, operator, value):
-        self.operator = operator
+    def __init__(self, code_range, value):
+        super().__init__(code_range)
         self.value = value
+
+    @abstractmethod
+    def __str__(self):
+        pass
 
 
 class NotExpr_N(UnaryExpr_N):
-    def __init__(self, value):
-        super().__init__('not', value)
+    def __str__(self):
+        return f"(NotExpr {self.value})"
 
 
 class UnaryMinusExpr_N(UnaryExpr_N):
-    def __init__(self, value):
-        super().__init__('-', value)
-
     def __str__(self):
         return f"(UnaryMinusExpr {self.value})"
 
 
-class IntLiteral_N(Node_N):
-    """Terminal AST-node"""
-    def __init__(self, value):
+class Literal_N(Node_N):
+    """Base-class for terminal AST-nodes."""
+    def __init__(self, code_range, value):
+        super().__init__(code_range)
         self.value = value
 
+    @abstractmethod
+    def __str__(self):
+        pass
+
+
+class IntLiteral_N(Literal_N):
+    """Terminal AST-node, representing an integer literal."""
     def __str__(self):
         return f"(IntLiteral {self.value})"
 
 
-class RealLiteral_N(Node_N):
-    """Terminal AST-node"""
-    def __init__(self, value):
-        self.value = value
-
+class RealLiteral_N(Literal_N):
+    """Terminal AST-node, representing a real (float) literal."""
     def __str__(self):
         return f"(RealLiteral {self.value})"
 
 
-class BoolLiteral_N(Node_N):
-    """Terminal AST-node"""
-    def __init__(self, value):
-        # Store as string, because we use lowercase, i.e.:
-        # 'true' & 'false', instead of
-        # 'True' & 'False' (which Python uses)
-        self.value = str(value)
+class BoolLiteral_N(Literal_N):
+    """
+    Terminal AST-node, representing a bool literal.
 
+    NOTE: In GeLB, we use lowercase ('true' & 'false'), unlike Python,
+    which capitalizes the first letter ('True' & 'False').
+    """
     def __str__(self):
         return f"(BoolLiteral {self.value})"
 
 
-class StringLiteral_N(Node_N):
-    """Terminal AST-node"""
-    def __init__(self, value, field_name=None):
-        self.value = value
-        self.field_name = field_name
+class StringLiteral_N(Literal_N):
+    """
+    Terminal AST-node, representing a string literal.
 
+    NOTE: In GeLB-v1, this class is only used for setting the name and the
+    description of the simulations.
+    """
     def __str__(self):
         return f"(StringLiteral {self.value})"
 
 
-# base-class for Array{1,2,3,4}DLiteral_N
-class ArrayLiteralBase_N(Node_N):
-    def __init__(self, value, dimensionality):
-        # value is a Python list, where the elements can be (depending on the
-        # dimensionality of the derived class):
-        # - IntLiteral_N @Array1DLiteral_N
-        #   TODO: replace with ScalarExpr_N or Expr_N later (general exprs).
-        # - Array1DLiteral_N @Array2DLiteral_N
-        # - Array2DLiteral_N @Array3DLiteral_N
-        # - Array3DLiteral_N @Array4DLiteral_N
-        self.value = value
-        self.dimensionality = dimensionality
+class ArrayLiteral_N(Literal_N):
+    """
+    Base-class for Array{1,2,3,4}DLiteral_N.
 
+    NOTE: value has a different type for each sub-class.
+    """
+    @abstractmethod
     def __str__(self):
-        result = f"(ArrayLiteral{str(self.dimensionality)}D"
-        for element in self.value:
-            result += f" {str(element)}"
-        result += ")"
-        return result
+        pass
 
 
-class Array1DLiteral_N(ArrayLiteralBase_N):
-    def __init__(self, value):
-        super().__init__(value, dimensionality=1)
+class Array1DLiteral_N(ArrayLiteral_N):
+    """
+    Represents a 1D array literal.
 
-
-class Array2DLiteral_N(ArrayLiteralBase_N):
-    def __init__(self, value):
-        super().__init__(value, dimensionality=2)
-
-
-class Array3DLiteral_N(ArrayLiteralBase_N):
-    def __init__(self, value):
-        super().__init__(value, dimensionality=3)
-
-
-class Array4DLiteral_N(ArrayLiteralBase_N):
-    def __init__(self, value):
-        super().__init__(value, dimensionality=4)
-
-
-# NOTE: later, we can distinguish (maybe) between:
-#       - intrinsic &
-#       - user-defined functions
-class FunctionCall_N(Node_N):
-    def __init__(self, args_list):
-        self.args_list = args_list  # TODO: make this a =List_N= !
-
-
-# TODO make Abstract Base Class
-class Stmt_N(Node_N):
+    NOTE: value is a List_N with elements of type Expr_N
+    """
     def __str__(self):
-        raise NotImplementedError()
+        return (
+            f"(ArrayLiteral1D"
+            f" {' '.join(f'{str(e)}' for e in self.value)})"
+        )
 
 
-# NOTE: declaration AND assignment!
+class Array2DLiteral_N(ArrayLiteral_N):
+    """
+    Represents a 2D array literal.
+
+    NOTE: value is a List_N with elements of type Array1DLiteral_N.
+    """
+    def __str__(self):
+        return (
+            f"(ArrayLiteral2D"
+            f" {' '.join(f'{str(e)}' for e in self.value)})"
+        )
+
+
+class Array3DLiteral_N(ArrayLiteral_N):
+    """
+    Represents a 3D array literal.
+
+    NOTE: value is a List_N with elements of type Array2DLiteral_N.
+    """
+    def __str__(self):
+        return (
+            f"(ArrayLiteral3D"
+            f" {' '.join(f'{str(e)}' for e in self.value)})"
+        )
+
+
+class Array4DLiteral_N(ArrayLiteral_N):
+    """
+    Represents a 4D array literal.
+
+    NOTE: value is a List_N with elements of type Array3DLiteral_N.
+    """
+    def __str__(self):
+        return (
+            f"(ArrayLiteral4D"
+            f" {' '.join(f'{str(e)}' for e in self.value)})"
+        )
+
+
+# class FunctionCall_N(Node_N):
+#     """
+#     Represents a call of an intrinsic / user-defined function.
+#     """
+#     def __init__(self, code_range, args_list):
+#         super().__init__(code_range)
+#         self.args_list = args_list  # TODO: make this a =List_N= !
+
+
 class ConstantDefinitionStmt_N(Stmt_N):
-    def __init__(self, data_type, name, value):
+    """
+    Represents a constant-definition statement.
+
+    NOTE: declaration AND immediate assignment!
+    """
+    def __init__(self, code_range, data_type, name, value):
+        super().__init__(code_range)
         self.data_type = data_type
         self.name = name
         self.value = value
 
     def __str__(self):
         return (
-            f"(ConstantDefinitionStmt {self.name} {self.data_type} {self.value})"
+            f"(ConstantDefinitionStmt"
+            f" {self.name} {self.data_type} {self.value}"
+            f")"
         )
 
 
 class VariableDeclarationStmt_N(Stmt_N):
-    def __init__(self, data_type, name):
+    def __init__(self, code_range, data_type, name):
+        super().__init__(code_range)
         self.data_type = data_type
         self.name = name
 
@@ -493,49 +602,40 @@ class VariableDeclarationStmt_N(Stmt_N):
 
 
 class AssignmentStmt_N(Stmt_N):
-    def __init__(self, lhs, rhs):
+    def __init__(self, code_range, lhs, rhs):
+        super().__init__(code_range)
         self.lhs = lhs
         self.rhs = rhs
 
+    @abstractmethod
+    def __str__(self):
+        pass
+
 
 class PaintNodesStmt_N(AssignmentStmt_N):
-    def __init__(self, node_class, spatial_ranges):
-        super().__init__(node_class, spatial_ranges)
+    """
+    Represents a node-painting statement (@GeometryBlock).
 
+    NOTE: - lhs = spatial_ranges
+          - rhs = node_class
+    """
     def __str__(self):
-        result = f"(PaintNodesStmt {self.lhs}"
-        for range in self.rhs:
-            result += f" {range}"
-        result += ")"
-        return result
+        return (
+            f"(PaintNodesStmt"
+            f" {self.lhs}"
+            f" {self.rhs})"
+        )
 
 
 class VariableAssignmentStmt_N(AssignmentStmt_N):
-    def __init__(self, lhs, rhs):
-        super().__init__(lhs, rhs)
-
     def __str__(self):
         return (
             f"(VariableAssignmentStmt {self.lhs} {self.rhs})"
         )
 
 
-class LatticeAssignmentStmt_N(AssignmentStmt_N):
-    def __init__(self, lhs, rhs):
-        super().__init__(lhs, rhs)
-
+class LatticeOutSelectionAssignmentStmt_N(AssignmentStmt_N):
     def __str__(self):
         return (
-            f"(LatticeAssignmentStmt {self.lhs} {self.rhs})"
+            f"(LatticeOutSelectionAssignmentStmt {self.lhs} {self.rhs})"
         )
-
-
-# TODO only allow inside UserFunctionBlock_N
-class ReturnStmt_N(Node_N):
-    pass
-
-
-# TODO: implement this, based on GaugeBlock_N (only that here we also have inputs)
-class FunctionBlock_N(Node_N):
-    def __init__(self):
-        raise NotImplementedError()

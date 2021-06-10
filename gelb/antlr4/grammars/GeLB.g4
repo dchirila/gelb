@@ -61,14 +61,24 @@ lattice_insta_stmt :                   // Example:
  	//COMMA expr                           //   periodicity=false
  	PAREN_CLOSE SEMICOLON ;              // );
 
+// TODO
+block_stmt : constant_definition_stmt
+           | variable_declaration_stmt
+           // BEGIN :: assignment stmts //
+           | lattice_out_selection_assignment_stmt
+           | variable_assignment_stmt
+//           | array_selection_assignment_stmt
+           // END :: assignment stmts //
+           ;
+
 initializer_block :
     INITIALIZER identifier CURLY_OPEN
- 	lattice_assignment_stmt+
+ 	block_stmt+
  	CURLY_CLOSE ;
 
 dynamic_block :
     DYNAMIC identifier CURLY_OPEN
- 	lattice_assignment_stmt+
+ 	block_stmt+
     CURLY_CLOSE ;
 
 gauge_block :
@@ -81,7 +91,7 @@ gauge_block :
     CURLY_CLOSE PAREN_CLOSE       // })
     // END :: Interface //
     CURLY_OPEN
-    variable_assignment_stmt+  // core statements
+    block_stmt+  // core statements
     CURLY_CLOSE ;
 
 node_classes_block : NODE_CLASSES CURLY_OPEN  // node_classes {
@@ -104,7 +114,7 @@ paint_nodes_stmt : NODES BRACKET_OPEN  // nodes[
     BRACKET_CLOSE OP_ASSIGN           // ] =
     identifier SEMICOLON ;            // BULK ;
 
-lattice_assignment_stmt :
+lattice_out_selection_assignment_stmt :
     rect_sel_of_lattice_out_dfs
     OP_ASSIGN
     expr
@@ -122,6 +132,11 @@ rect_sel_of_lattice_in_dfs:
     BRACKET_OPEN
     coords_range (COMMA coords_range)*  // spatial ranges
     lattice_dfs_range
+    BRACKET_CLOSE ;
+
+rect_sel_of_array_elems :
+    identifier BRACKET_OPEN
+    coords_range (COMMA coords_range)*
     BRACKET_CLOSE ;
 
 /*
@@ -224,5 +239,6 @@ expr : PAREN_OPEN expr PAREN_CLOSE                # parensExpr
      | array_literal_1d  # arrayLiteralExpr
      // END :: literals //
      | rect_sel_of_lattice_in_dfs  # rectSelOfLatticeInDFsExpr
+     | rect_sel_of_array_elems     # rectSelOfArrayElems
      | identifier  # identifierExpr
      ;

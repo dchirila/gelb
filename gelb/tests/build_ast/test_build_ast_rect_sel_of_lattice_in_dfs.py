@@ -12,6 +12,7 @@ def test_01():
     # Assert
     assert str(ast) == (
         "(RectSelOfLatticeInDFs"
+        " (Identifier f)"
         " (Range (Identifier x) (Identifier x))"
         " (Range (IntLiteral 0) (IntLiteral 0))"
         ")"
@@ -19,12 +20,13 @@ def test_01():
 
 def test_02():
     # Arrange
-    test_string = "f.in[x+1, y-1 | :]"
+    test_string = "g.in[x+1, y-1 | :]"
     # Act
     ast = get_ast("rect_sel_of_lattice_in_dfs", test_string)
     # Assert
     assert str(ast) == (
         "(RectSelOfLatticeInDFs"
+        " (Identifier g)"
         " (Range"
             " (Add"
                 " (Identifier x)"
@@ -51,12 +53,13 @@ def test_02():
 
 def test_03():
     # Arrange
-    test_string = "f.in[-1+x, 3-y, z-x | 3:Q]"
+    test_string = "ugly_lattice_name.in[-1+x, 3-y, z-x | 3:Q]"
     # Act
     ast = get_ast("rect_sel_of_lattice_in_dfs", test_string)
     # Assert
     assert str(ast) == (
         "(RectSelOfLatticeInDFs"
+        " (Identifier ugly_lattice_name)"
         " (Range"
         " (Add (UnaryMinusExpr (IntLiteral 1)) (Identifier x))"
         " (Add (UnaryMinusExpr (IntLiteral 1)) (Identifier x))"

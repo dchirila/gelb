@@ -17,8 +17,8 @@ def test_simple():
     assert str(ast) == (
         "(GeometryBlock"
             " (PaintNodesStmt"
+            " (List (Range (RangePlaceholder Min) (RangePlaceholder Max)))"
             " (Identifier BULK)"
-            " (Range (RangePlaceholder Min) (RangePlaceholder Max))"
             ")"
         ")"
     )

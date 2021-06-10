@@ -13,7 +13,9 @@ def test_simple():
     # Act (trigger parsing & building of sub-AST)
     ast = get_ast("set_simulation_description_stmt", test_string)
     # Assert (test the (sub-)AST, based on string representation)
-    assert str(ast) == "(StringLiteral \"test_1\")"
+    assert str(ast) == (
+        "(SetSimulationDescriptionStmt (StringLiteral \"test_1\"))"
+    )
 
 def test_with_comments():
     # Arrange
@@ -28,4 +30,6 @@ def test_with_comments():
     # Act (trigger parsing & building of sub-AST)
     ast = get_ast("set_simulation_description_stmt", test_string)
     # Assert (test the (sub-)AST, based on string representation)
-    assert str(ast) == "(StringLiteral \"test\n 2\")"
+    assert str(ast) == (
+        "(SetSimulationDescriptionStmt (StringLiteral \"test\n 2\"))"
+    )

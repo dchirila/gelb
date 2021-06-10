@@ -7,13 +7,14 @@ from gelb.stage1_frontend import ASTBuilderVisitor, get_ast
 def test_simple():
     # Arrange
     test_string = """
-    simulation_name("test_1");
+    simulation_name(
+    "test_1");
     """
     ast_builder = ASTBuilderVisitor()
     # Act (trigger parsing & building of sub-AST)
     ast = get_ast("set_simulation_name_stmt", test_string)
     # Assert (test the (sub-)AST, based on string representation)
-    assert str(ast) == "(StringLiteral \"test_1\")"
+    assert str(ast) == "(SetSimulationNameStmt (StringLiteral \"test_1\"))"
 
 
 def test_with_comments():
@@ -28,4 +29,4 @@ def test_with_comments():
     # Act (trigger parsing & building of sub-AST)
     ast = get_ast("set_simulation_name_stmt", test_string)
     # Assert (test the (sub-)AST, based on string representation)
-    assert str(ast) == "(StringLiteral \"test 2\")"
+    assert str(ast) == "(SetSimulationNameStmt (StringLiteral \"test 2\"))"

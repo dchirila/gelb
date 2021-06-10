@@ -3,7 +3,7 @@
 from gelb.ASTNodes import *
 
 
-class ASTBaseVisitor(object):
+class ASTBaseVisitor:
     """
     Abstract base-class for all AST node-visitors.
     """

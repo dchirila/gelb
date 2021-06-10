@@ -8,7 +8,7 @@ def test_simple():
     # Arrange
     test_string = """
     gauge CurrentState(out = {int state;}) { //
-      state = f.in[x | 0];
+      state = g.in[x | 0];
     }
     """
     # Act
@@ -24,6 +24,7 @@ def test_simple():
         " (VariableAssignmentStmt"
             " (Identifier state)"
             " (RectSelOfLatticeInDFs"
+                " (Identifier g)"
                 " (Range (Identifier x) (Identifier x))"
                 " (Range (IntLiteral 0) (IntLiteral 0))"
                 ")"

@@ -4,7 +4,7 @@ from gelb.ASTBaseVisitor import ASTBaseVisitor
 from gelb.ASTNodes import *
 
 
-class ValidationVisitor(object):
+class ValidationVisitor:
     """
     Concrete visitor for initial AST validation
     """
@@ -69,8 +69,20 @@ class ValidationVisitor(object):
     # def visitRectSelOfArrayElems_N(node:RectSelOfArrayElems_N):
     #     raise NotImplementedError()
 
-    # def visitScalarDataType_N(node:ScalarDataType_N):
-    #     raise NotImplementedError()
+    def visitScalarDataType_N(node:ScalarDataType_N):
+        supported_scalar_types = [
+            'bool',  # boolean
+            'int64', 'int32', 'int16', 'int8', 'int',  # integer
+            'real64', 'real32', 'real16', 'real'  # real
+        ]
+        if node.data_type not in supported_scalar_types:
+            raise TypeError(
+                f"<<<GeLB-Error>>> {str(node.data_type)} is not a valid"
+                f" scalar data-type!"
+                f"\nHint: you can use one of the following values: "
+                f"{supported_scalar_types}"
+            )
+
 
     # def visitArrayDataType_N(node:ArrayDataType_N):
     #     raise NotImplementedError()

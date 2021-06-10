@@ -17,8 +17,9 @@ def test_simple():
     assert str(ast) == (
         "(Dynamic"
         " (Identifier SetDFsToOne)"
-        " (LatticeAssignmentStmt"
+        " (LatticeOutSelectionAssignmentStmt"
         " (RectSelOfLatticeOutDFs"
+        " (Identifier f)"
         " (Range (Identifier x) (Identifier x))"
         " (Range (IntLiteral 0) (IntLiteral 0))"
         ")"

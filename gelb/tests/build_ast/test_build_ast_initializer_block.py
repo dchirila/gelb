@@ -8,7 +8,7 @@ def test_simple():
     # Arrange
     test_string = """
     initializer ToZero {
-      f.out[x | :] = 0;
+      h.out[x | :] = 0;
     }
     """
     # Act
@@ -17,8 +17,9 @@ def test_simple():
     assert str(ast) == (
         "(Initializer"
         " (Identifier ToZero)"
-        " (LatticeAssignmentStmt"
+        " (LatticeOutSelectionAssignmentStmt"
             " (RectSelOfLatticeOutDFs"
+                " (Identifier h)"
                 " (Range (Identifier x) (Identifier x))"
                 " (Range (RangePlaceholder Min) (RangePlaceholder Max))"
             ")"

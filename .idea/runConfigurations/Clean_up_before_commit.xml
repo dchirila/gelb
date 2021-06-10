@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="Clean-up before commit" type="ShConfigurationType">
-    <option name="SCRIPT_TEXT" value="rm -rf antlr4/generated_code/{CommonLexerRules.{interp,java,tokens},GeLB.{interp,tokens},GeLBLexer.{interp,tokens,py},GeLBParser.py,GeLBVisitor.py}; rm -rf antlr4/grammars/{CommonLexerRules.{interp,java,tokens},GeLB.{interp,tokens},GeLBLexer.{interp,tokens,java}}; rm -rf $(find . -type d -name __pycache__)" />
+    <option name="SCRIPT_TEXT" value="rm -rf antlr4/generated_code/{CommonLexerRules.{interp,java,tokens},GeLB.{interp,tokens},GeLBLexer.{interp,tokens,py},GeLBParser.py,GeLBVisitor.py}; rm -rf antlr4/grammars/{CommonLexerRules.{interp,java,tokens},GeLB.{interp,tokens},GeLBLexer.{interp,tokens,java}}; rm -rf $(find . -type d -name __pycache__); exit" />
     <option name="INDEPENDENT_SCRIPT_PATH" value="true" />
     <option name="SCRIPT_PATH" value="" />
     <option name="SCRIPT_OPTIONS" value="" />

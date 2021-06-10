@@ -53,6 +53,7 @@ def test_rhs_rect_sel_of_lattice_in_dfs():
         "(VariableAssignmentStmt"
         " (Identifier state)"
         " (RectSelOfLatticeInDFs"
+            " (Identifier f)"
             " (Range (Identifier x) (Identifier x))"
             " (Range (IntLiteral 0) (IntLiteral 0))"
         ")"

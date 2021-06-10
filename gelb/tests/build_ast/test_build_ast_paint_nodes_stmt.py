@@ -12,7 +12,7 @@ def test_simple():
     # Assert
     assert str(ast) == (
         "(PaintNodesStmt"
+        " (List (Range (RangePlaceholder Min) (RangePlaceholder Max)))"
         " (Identifier BULK)"
-        " (Range (RangePlaceholder Min) (RangePlaceholder Max))"
         ")"
     )
