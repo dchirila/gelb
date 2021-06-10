@@ -87,6 +87,13 @@ class Stmt_N(Node_N):
         pass
 
 
+class Expr_N(Node_N):
+    """Base-class for all types of GeLB expression-elements."""
+    @abstractmethod
+    def __str__(self):
+        pass
+
+
 class SetSimulationNameStmt_N(Stmt_N):
     """
     Represents an instruction to set the simulation name.
@@ -270,7 +277,7 @@ class GeometryBlock_N(Block_N):
         )
 
 
-class Identifier_N(Node_N):
+class Identifier_N(Expr_N):
     """Terminal AST-node"""
     def __init__(self, code_range, name):
         super().__init__(code_range)
@@ -292,7 +299,7 @@ class Range_N(Node_N):
         return f"(Range {low_repres} {high_repres})"
 
 
-class RectSel_N(Node_N):
+class RectSel_N(Expr_N):
     """
     Base-class for rectangular selections of elements.
     """
@@ -396,7 +403,7 @@ class ArrayDataType_N(DataType_N):
         )
 
 
-class BinaryExpr_N(Node_N):
+class BinaryExpr_N(Expr_N):
     def __init__(self, code_range, left, right):
         super().__init__(code_range)
         self.left = left
@@ -432,7 +439,7 @@ class Pow_N(BinaryExpr_N):
         return f"(Pow {self.left} {self.right})"
 
 
-class UnaryExpr_N(Node_N):
+class UnaryExpr_N(Expr_N):
     def __init__(self, code_range, value):
         super().__init__(code_range)
         self.value = value
@@ -452,7 +459,7 @@ class UnaryMinusExpr_N(UnaryExpr_N):
         return f"(UnaryMinusExpr {self.value})"
 
 
-class Literal_N(Node_N):
+class Literal_N(Expr_N):
     """Base-class for terminal AST-nodes."""
     def __init__(self, code_range, value):
         super().__init__(code_range)

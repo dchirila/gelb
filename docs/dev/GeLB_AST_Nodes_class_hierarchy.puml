@@ -21,6 +21,9 @@ abstract class Node_N {
 class Stmt_N {
 }
 
+class Expr_N {
+}
+
 class SetSimulationNameStmt_N #palegreen;line:green;text:black {
     + name
 
@@ -329,9 +332,10 @@ Block_N <|-- InitializerBlock_N
 Block_N <|-- DynamicBlock_N
 Block_N <|-- GaugeBlock_N
 Block_N <|-- GeometryBlock_N
-Node_N <|-- Identifier_N
+Node_N <|-- Expr_N
+Expr_N <|-- Identifier_N
 Node_N <|-- Range_N
-Node_N <|-- RectSel_N
+Expr_N <|-- RectSel_N
 RectSel_N <|-- RectSelOfLatticeDFs_N
 RectSelOfLatticeDFs_N <|-- RectSelOfLatticeInDFs_N
 RectSelOfLatticeDFs_N <|-- RectSelOfLatticeOutDFs_N
@@ -339,16 +343,16 @@ RectSel_N <|-- RectSelOfArrayElems_N
 Node_N <|-- DataType_N
 DataType_N <|-- ScalarDataType_N
 DataType_N <|-- ArrayDataType_N
-Node_N <|-- BinaryExpr_N
+Expr_N <|-- BinaryExpr_N
 BinaryExpr_N <|-- Mul_N
 BinaryExpr_N <|-- Div_N
 BinaryExpr_N <|-- Add_N
 BinaryExpr_N <|-- Sub_N
 BinaryExpr_N <|-- Pow_N
-Node_N <|-- UnaryExpr_N
+Expr_N <|-- UnaryExpr_N
 UnaryExpr_N <|-- NotExpr_N
 UnaryExpr_N <|-- UnaryMinusExpr_N
-Node_N <|-- Literal_N
+Expr_N <|-- Literal_N
 Literal_N <|-- IntLiteral_N
 Literal_N <|-- RealLiteral_N
 Literal_N <|-- BoolLiteral_N
