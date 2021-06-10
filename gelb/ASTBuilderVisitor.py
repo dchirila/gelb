@@ -435,6 +435,36 @@ class ASTBuilderVisitor(GeLBVisitor):
             ranges
         )
 
+    # Visit a parse tree produced by GeLBParser#rect_sel_of_array_elems.
+    def visitRect_sel_of_array_elems(
+            self,
+            ctx: GeLBParser.Rect_sel_of_array_elemsContext
+    ):
+        name = self.visit(ctx.identifier())
+        ranges = List_N(code_range_from_ctx(ctx.coords_range()))
+        for r in ctx.coords_range():
+            ranges.append(self.visit(r))
+        return RectSelOfArrayElems_N(
+            code_range_from_ctx(ctx),
+            name,
+            ranges
+        )
+
+    # Visit a parse tree produced by GeLBParser#rectSelOfArrayElemsExpr.
+    # def visitRectSelOfArrayElemsExpr(
+    #         self,
+    #         ctx: GeLBParser.RectSelOfArrayElemsExprContext
+    # ):
+    #     name = self.visit(ctx.identifier())
+    #     ranges = List_N(code_range_from_ctx(ctx.coords_range()))
+    #     for r in ctx.coords_range():
+    #         ranges.append(self.visit(r))
+    #     return RectSelOfLatticeOutDFs_N(
+    #         code_range_from_ctx(ctx),
+    #         name,
+    #         ranges
+    #     )
+
     # Visit a parse tree produced by GeLBParser#constant_definition_stmt.
     def visitConstant_definition_stmt(
             self,

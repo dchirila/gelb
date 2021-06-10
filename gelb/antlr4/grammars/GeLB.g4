@@ -239,6 +239,6 @@ expr : PAREN_OPEN expr PAREN_CLOSE                # parensExpr
      | array_literal_1d  # arrayLiteralExpr
      // END :: literals //
      | rect_sel_of_lattice_in_dfs  # rectSelOfLatticeInDFsExpr
-     | rect_sel_of_array_elems     # rectSelOfArrayElems
+     | rect_sel_of_array_elems     # rectSelOfArrayElemsExpr
      | identifier  # identifierExpr
      ;
