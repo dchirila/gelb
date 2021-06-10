@@ -1,147 +1,195 @@
 #!/usr/bin/env python3
 
+from abc import ABC, abstractmethod
+
 from gelb.ASTNodes import *
 
 
-class ASTBaseVisitor:
+class ASTBaseVisitor(ABC):
     """
     Abstract base-class for all AST node-visitors.
     """
 
+    @abstractmethod
     def __init__(self):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitList_N(node:List_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitProgram_N(node:Program_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitGlobalConstantsBlock_N(node:GlobalConstantsBlock_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitLatticeConstantsBlock_N(node:LatticeConstantsBlock_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitLatticesBlock_N(node:LatticesBlock_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitLatticeInstaStmt_N(node:LatticeInstaStmt_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitNodeClassesBlock_N(node:NodeClassesBlock_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitNodeClassInstaStmt_N(node:NodeClassInstaStmt_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitInitializerBlock_N(node:InitializerBlock_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitDynamicBlock_N(node:DynamicBlock_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitGaugeBlock_N(node:GaugeBlock_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitGeometryBlock_N(node:GeometryBlock_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitIdentifier_N(node:Identifier_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitRange_N(node:Range_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitRectSelOfLatticeDFs_N(node:RectSelOfLatticeDFs_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitRectSelOfLatticeInDFs_N(node:RectSelOfLatticeInDFs_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitRectSelOfLatticeOutDFs_N(node:RectSelOfLatticeOutDFs_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitRectSelOfArrayElems_N(node:RectSelOfArrayElems_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitScalarDataType_N(node:ScalarDataType_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitArrayDataType_N(node:ArrayDataType_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitBinaryExpr_N(node:BinaryExpr_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitMul_N(node:Mul_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitDiv_N(node:Div_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitAdd_N(node:Add_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitSub_N(node:Sub_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitPow_N(node:Pow_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitNotExpr_N(node:NotExpr_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitUnaryMinusExpr_N(node:UnaryMinusExpr_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitIntLiteral_N(node:IntLiteral_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitRealLiteral_N(node:RealLiteral_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitBoolLiteral_N(node:BoolLiteral_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitStringLiteral_N(node:StringLiteral_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitArray1DLiteral_N(node:Array1DLiteral_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitArray2DLiteral_N(node:Array2DLiteral_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitArray3DLiteral_N(node:Array3DLiteral_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitArray4DLiteral_N(node:Array4DLiteral_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitFunctionCall_N(node:FunctionCall_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitConstantDefinitionStmt_N(node:ConstantDefinitionStmt_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitVariableDeclarationStmt_N(node:VariableDeclarationStmt_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitPaintNodesStmt_N(node:PaintNodesStmt_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitVariableAssignmentStmt_N(node:VariableAssignmentStmt_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitLatticeAssignmentStmt_N(node:LatticeAssignmentStmt_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitReturnStmt_N(node:ReturnStmt_N):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def visitFunctionBlock_N(node:FunctionBlock_N):
-        raise NotImplementedError()
+        pass
 
+    # @abstractmethod
     # def visitTODO(node:TODO):
-    #     raise NotImplementedError()
+    #     pass
