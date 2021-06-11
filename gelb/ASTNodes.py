@@ -179,6 +179,9 @@ class LatticeConstantsBlock_N(Block_N):
 
 
 class LatticesBlock_N(Block_N):
+    """
+    Represents the block (one per program) of lattice-instantiations.
+    """
     def __str__(self):
         return (
             f"(LatticesBlock {' '.join(f'{e}' for e in self.stmts)})"
@@ -187,6 +190,9 @@ class LatticesBlock_N(Block_N):
 
 # TODO only allow inside LatticesBlock_N
 class LatticeInstaStmt_N(Node_N):
+    """
+    Represents a lattice-instantiation statement.
+    """
     def __init__(self, code_range, name, d, q, df_type, size):
         super().__init__(code_range)
         self.name = name
@@ -203,6 +209,9 @@ class LatticeInstaStmt_N(Node_N):
 
 
 class NodeClassesBlock_N(Block_N):
+    """
+    Represents the block (one per program) of node-classes.
+    """
     def __str__(self):
         return (
             f"(NodeClassesBlock {' '.join(f'{e}' for e in self.stmts)})"
@@ -212,6 +221,9 @@ class NodeClassesBlock_N(Block_N):
 # TODO only allow inside NodeClassesBlock_N
 # TODO allow multiple {initializers, dynamics, gauges}
 class NodeClassInstaStmt_N(Node_N):
+    """
+    Represents a node-class-instantiation statement.
+    """
     def __init__(self, code_range, name, initializer, dynamic, gauge):
         super().__init__(code_range)
         self.name = name
@@ -230,6 +242,9 @@ class NodeClassInstaStmt_N(Node_N):
 
 
 class InitializerBlock_N(Block_N):
+    """
+    Represents an initializer-block (one or more per program).
+    """
     def __init__(self, code_range, name, stmts):
         super().__init__(code_range, stmts)
         self.name = name
@@ -243,6 +258,9 @@ class InitializerBlock_N(Block_N):
 
 
 class DynamicBlock_N(Block_N):
+    """
+    Represents a dynamic-block (one or more per program).
+    """
     def __init__(self, code_range, name, stmts):
         super().__init__(code_range, stmts)
         self.name = name
@@ -256,6 +274,9 @@ class DynamicBlock_N(Block_N):
 
 
 class GaugeBlock_N(Block_N):
+    """
+    Represents a gauge-block (one or more per program).
+    """
     def __init__(self, code_range, name, outputs, stmts):
         super().__init__(code_range, stmts)
         self.name = name
@@ -271,6 +292,9 @@ class GaugeBlock_N(Block_N):
 
 
 class GeometryBlock_N(Block_N):
+    """
+    Represents the block (one per program) of node-painting statements.
+    """
     def __str__(self):
         return (
             f"(GeometryBlock {' '.join(f'{e}' for e in self.stmts)})"
@@ -278,7 +302,9 @@ class GeometryBlock_N(Block_N):
 
 
 class Identifier_N(Expr_N):
-    """Terminal AST-node"""
+    """
+    Represents an identifier.
+    """
     def __init__(self, code_range, name):
         super().__init__(code_range)
         self.name = name
@@ -288,6 +314,9 @@ class Identifier_N(Expr_N):
 
 
 class Range_N(Node_N):
+    """
+    Represents an index-range.
+    """
     def __init__(self, code_range, low, high):
         super().__init__(code_range)
         self.low = low
@@ -378,6 +407,9 @@ class RectSelOfArrayElems_N(RectSel_N):
 
 
 class DataType_N(Node_N):
+    """
+    Base-class for all GeLB data-types.
+    """
     def __init__(self, code_range, scalar_dtype):
         super().__init__(code_range)
         self.scalar_dtype = scalar_dtype
@@ -388,11 +420,17 @@ class DataType_N(Node_N):
 
 
 class ScalarDataType_N(DataType_N):
+    """
+    Represents a scalar data-type (for variables & constants).
+    """
     def __str__(self):
         return f"(ScalarDataType {self.scalar_dtype})"
 
 
 class ArrayDataType_N(DataType_N):
+    """
+    Represents an array data-type (for variables & constants).
+    """
     def __init__(self, code_range, scalar_dtype, shape):
         super().__init__(code_range, scalar_dtype)
         self.shape = shape  # might be either Array1DLiteral_N or IntLiteral_N
@@ -404,6 +442,9 @@ class ArrayDataType_N(DataType_N):
 
 
 class BinaryExpr_N(Expr_N):
+    """
+    Base-class for all GeLB binary expressions.
+    """
     def __init__(self, code_range, left, right):
         super().__init__(code_range)
         self.left = left
@@ -415,31 +456,49 @@ class BinaryExpr_N(Expr_N):
 
 
 class Mul_N(BinaryExpr_N):
+    """
+    Represents a multiplication (*) binary expression.
+    """
     def __str__(self):
         return f"(Mul {self.left} {self.right})"
 
 
 class Div_N(BinaryExpr_N):
+    """
+    Represents a division (/) binary expression.
+    """
     def __str__(self):
         return f"(Div {self.left} {self.right})"
 
 
 class Add_N(BinaryExpr_N):
+    """
+    Represents an addition (+) binary expression.
+    """
     def __str__(self):
         return f"(Add {self.left} {self.right})"
 
 
 class Sub_N(BinaryExpr_N):
+    """
+    Represents a subtraction (-) binary expression.
+    """
     def __str__(self):
         return f"(Sub {self.left} {self.right})"
 
 
 class Pow_N(BinaryExpr_N):
+    """
+    Represents a raise-to-power (^) binary expression.
+    """
     def __str__(self):
         return f"(Pow {self.left} {self.right})"
 
 
 class UnaryExpr_N(Expr_N):
+    """
+    Base-class for all GeLB unary expressions.
+    """
     def __init__(self, code_range, value):
         super().__init__(code_range)
         self.value = value
@@ -450,17 +509,28 @@ class UnaryExpr_N(Expr_N):
 
 
 class NotExpr_N(UnaryExpr_N):
+    """
+    Represents a logical negation (not) unary expression.
+    """
     def __str__(self):
         return f"(NotExpr {self.value})"
 
 
 class UnaryMinusExpr_N(UnaryExpr_N):
+    """
+    Represents an arithmetic negation (-) unary expression.
+
+    NOTE: This is how negative numbers are represented in GeLB (since the
+    lexer only knows about positive numbers).
+    """
     def __str__(self):
         return f"(UnaryMinusExpr {self.value})"
 
 
 class Literal_N(Expr_N):
-    """Base-class for terminal AST-nodes."""
+    """
+    Base-class for all GeLB literals.
+    """
     def __init__(self, code_range, value):
         super().__init__(code_range)
         self.value = value
@@ -471,20 +541,24 @@ class Literal_N(Expr_N):
 
 
 class IntLiteral_N(Literal_N):
-    """Terminal AST-node, representing an integer literal."""
+    """
+    Represents an integer literal.
+    """
     def __str__(self):
         return f"(IntLiteral {self.value})"
 
 
 class RealLiteral_N(Literal_N):
-    """Terminal AST-node, representing a real (float) literal."""
+    """
+    Represents a real literal.
+    """
     def __str__(self):
         return f"(RealLiteral {self.value})"
 
 
 class BoolLiteral_N(Literal_N):
     """
-    Terminal AST-node, representing a bool literal.
+    Represents a boolean literal.
 
     NOTE: In GeLB, we use lowercase ('true' & 'false'), unlike Python,
     which capitalizes the first letter ('True' & 'False').
@@ -495,7 +569,7 @@ class BoolLiteral_N(Literal_N):
 
 class StringLiteral_N(Literal_N):
     """
-    Terminal AST-node, representing a string literal.
+    Represents a string literal.
 
     NOTE: In GeLB-v1, this class is only used for setting the name and the
     description of the simulations.
@@ -597,6 +671,12 @@ class ConstantDefinitionStmt_N(Stmt_N):
 
 
 class VariableDeclarationStmt_N(Stmt_N):
+    """
+    Represents a variable-declaration statement.
+
+    NOTE: No immediate assignment -- in GeLB-v0, we separate the variable
+    declaration from the assignment.
+    """
     def __init__(self, code_range, data_type, name):
         super().__init__(code_range)
         self.data_type = data_type
@@ -609,6 +689,9 @@ class VariableDeclarationStmt_N(Stmt_N):
 
 
 class AssignmentStmt_N(Stmt_N):
+    """
+    Base-class for all GeLB assignment statements.
+    """
     def __init__(self, code_range, lhs, rhs):
         super().__init__(code_range)
         self.lhs = lhs
@@ -635,6 +718,9 @@ class PaintNodesStmt_N(AssignmentStmt_N):
 
 
 class VariableAssignmentStmt_N(AssignmentStmt_N):
+    """
+    Represents a variable-assignment statement.
+    """
     def __str__(self):
         return (
             f"(VariableAssignmentStmt {self.lhs} {self.rhs})"
@@ -642,6 +728,9 @@ class VariableAssignmentStmt_N(AssignmentStmt_N):
 
 
 class LatticeOutSelectionAssignmentStmt_N(AssignmentStmt_N):
+    """
+    Represents an assignment to a lattice-out (rectangular) selection.
+    """
     def __str__(self):
         return (
             f"(LatticeOutSelectionAssignmentStmt {self.lhs} {self.rhs})"
