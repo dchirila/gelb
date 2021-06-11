@@ -188,10 +188,11 @@ class LatticesBlock_N(Block_N):
         )
 
 
-# TODO only allow inside LatticesBlock_N
 class LatticeInstaStmt_N(Node_N):
     """
     Represents a lattice-instantiation statement.
+
+    TODO (validation): only allow inside LatticesBlock_N
     """
     def __init__(self, code_range, name, d, q, df_type, size):
         super().__init__(code_range)
@@ -218,11 +219,12 @@ class NodeClassesBlock_N(Block_N):
         )
 
 
-# TODO only allow inside NodeClassesBlock_N
-# TODO allow multiple {initializers, dynamics, gauges}
 class NodeClassInstaStmt_N(Node_N):
     """
     Represents a node-class-instantiation statement.
+
+    TODO (validation): only allow inside NodeClassesBlock_N
+    TODO (GeLB-v1): allow multiple {initializers, dynamics, gauges}
     """
     def __init__(self, code_range, name, initializer, dynamic, gauge):
         super().__init__(code_range)

@@ -15,181 +15,291 @@ class ASTBaseVisitor(ABC):
         pass
 
     @abstractmethod
-    def visitList_N(node:List_N):
+    def visitList_N(
+            self,
+            node: List_N
+    ):
         pass
 
     @abstractmethod
-    def visitProgram_N(node:Program_N):
+    def visitProgram_N(
+            self,
+            node: Program_N
+    ):
         pass
 
     @abstractmethod
-    def visitGlobalConstantsBlock_N(node:GlobalConstantsBlock_N):
+    def visitSetSimulationNameStmt_N(
+            self,
+            node: SetSimulationNameStmt_N
+    ):
         pass
 
     @abstractmethod
-    def visitLatticeConstantsBlock_N(node:LatticeConstantsBlock_N):
+    def visitSetSimulationDescriptionStmt_N(
+            self,
+            node: SetSimulationDescriptionStmt_N):
         pass
 
     @abstractmethod
-    def visitLatticesBlock_N(node:LatticesBlock_N):
+    def visitGlobalConstantsBlock_N(
+            self,
+            node: GlobalConstantsBlock_N
+    ):
         pass
 
     @abstractmethod
-    def visitLatticeInstaStmt_N(node:LatticeInstaStmt_N):
+    def visitLatticeConstantsBlock_N(
+            self,
+            node: LatticeConstantsBlock_N
+    ):
         pass
 
     @abstractmethod
-    def visitNodeClassesBlock_N(node:NodeClassesBlock_N):
+    def visitLatticesBlock_N(
+            self,
+            node: LatticesBlock_N
+    ):
         pass
 
     @abstractmethod
-    def visitNodeClassInstaStmt_N(node:NodeClassInstaStmt_N):
+    def visitLatticeInstaStmt_N(
+            self,
+            node: LatticeInstaStmt_N
+    ):
         pass
 
     @abstractmethod
-    def visitInitializerBlock_N(node:InitializerBlock_N):
+    def visitNodeClassesBlock_N(
+            self,
+            node: NodeClassesBlock_N
+    ):
         pass
 
     @abstractmethod
-    def visitDynamicBlock_N(node:DynamicBlock_N):
+    def visitNodeClassInstaStmt_N(
+            self,
+            node: NodeClassInstaStmt_N
+    ):
         pass
 
     @abstractmethod
-    def visitGaugeBlock_N(node:GaugeBlock_N):
+    def visitInitializerBlock_N(
+            self,
+            node: InitializerBlock_N
+    ):
         pass
 
     @abstractmethod
-    def visitGeometryBlock_N(node:GeometryBlock_N):
+    def visitDynamicBlock_N(
+            self,
+            node: DynamicBlock_N
+    ):
         pass
 
     @abstractmethod
-    def visitIdentifier_N(node:Identifier_N):
+    def visitGaugeBlock_N(
+            self,
+            node: GaugeBlock_N
+    ):
         pass
 
     @abstractmethod
-    def visitRange_N(node:Range_N):
+    def visitGeometryBlock_N(
+            self,
+            node: GeometryBlock_N
+    ):
         pass
 
     @abstractmethod
-    def visitRectSelOfLatticeDFs_N(node:RectSelOfLatticeDFs_N):
+    def visitIdentifier_N(
+            self,
+            node: Identifier_N
+    ):
         pass
 
     @abstractmethod
-    def visitRectSelOfLatticeInDFs_N(node:RectSelOfLatticeInDFs_N):
+    def visitRange_N(
+            self,
+            node: Range_N
+    ):
         pass
 
     @abstractmethod
-    def visitRectSelOfLatticeOutDFs_N(node:RectSelOfLatticeOutDFs_N):
+    def visitRectSelOfLatticeInDFs_N(
+            self,
+            node: RectSelOfLatticeInDFs_N
+    ):
         pass
 
     @abstractmethod
-    def visitRectSelOfArrayElems_N(node:RectSelOfArrayElems_N):
+    def visitRectSelOfLatticeOutDFs_N(
+            self,
+            node: RectSelOfLatticeOutDFs_N
+    ):
         pass
 
     @abstractmethod
-    def visitScalarDataType_N(node:ScalarDataType_N):
+    def visitRectSelOfArrayElems_N(
+            self,
+            node: RectSelOfArrayElems_N
+    ):
         pass
 
     @abstractmethod
-    def visitArrayDataType_N(node:ArrayDataType_N):
+    def visitScalarDataType_N(
+            self,
+            node: ScalarDataType_N
+    ):
         pass
 
     @abstractmethod
-    def visitBinaryExpr_N(node:BinaryExpr_N):
+    def visitArrayDataType_N(
+            self,
+            node: ArrayDataType_N
+    ):
         pass
 
     @abstractmethod
-    def visitMul_N(node:Mul_N):
+    def visitMul_N(
+            self,
+            node: Mul_N
+    ):
         pass
 
     @abstractmethod
-    def visitDiv_N(node:Div_N):
+    def visitDiv_N(
+            self,
+            node: Div_N
+    ):
         pass
 
     @abstractmethod
-    def visitAdd_N(node:Add_N):
+    def visitAdd_N(
+            self,
+            node: Add_N
+    ):
         pass
 
     @abstractmethod
-    def visitSub_N(node:Sub_N):
+    def visitSub_N(
+            self,
+            node: Sub_N
+    ):
         pass
 
     @abstractmethod
-    def visitPow_N(node:Pow_N):
+    def visitPow_N(
+            self,
+            node: Pow_N
+    ):
         pass
 
     @abstractmethod
-    def visitNotExpr_N(node:NotExpr_N):
+    def visitNotExpr_N(
+            self,
+            node: NotExpr_N
+    ):
         pass
 
     @abstractmethod
-    def visitUnaryMinusExpr_N(node:UnaryMinusExpr_N):
+    def visitUnaryMinusExpr_N(
+            self,
+            node: UnaryMinusExpr_N
+    ):
         pass
 
     @abstractmethod
-    def visitIntLiteral_N(node:IntLiteral_N):
+    def visitIntLiteral_N(
+            self,
+            node: IntLiteral_N
+    ):
         pass
 
     @abstractmethod
-    def visitRealLiteral_N(node:RealLiteral_N):
+    def visitRealLiteral_N(
+            self,
+            node: RealLiteral_N
+    ):
         pass
 
     @abstractmethod
-    def visitBoolLiteral_N(node:BoolLiteral_N):
+    def visitBoolLiteral_N(
+            self,
+            node: BoolLiteral_N
+    ):
         pass
 
     @abstractmethod
-    def visitStringLiteral_N(node:StringLiteral_N):
+    def visitStringLiteral_N(
+            self,
+            node: StringLiteral_N
+    ):
         pass
 
     @abstractmethod
-    def visitArray1DLiteral_N(node:Array1DLiteral_N):
+    def visitArray1DLiteral_N(
+            self,
+            node: Array1DLiteral_N
+    ):
         pass
 
     @abstractmethod
-    def visitArray2DLiteral_N(node:Array2DLiteral_N):
+    def visitArray2DLiteral_N(
+            self,
+            node: Array2DLiteral_N
+    ):
         pass
 
     @abstractmethod
-    def visitArray3DLiteral_N(node:Array3DLiteral_N):
+    def visitArray3DLiteral_N(
+            self,
+            node: Array3DLiteral_N
+    ):
         pass
 
     @abstractmethod
-    def visitArray4DLiteral_N(node:Array4DLiteral_N):
+    def visitArray4DLiteral_N(
+            self,
+            node: Array4DLiteral_N
+    ):
         pass
 
     @abstractmethod
-    def visitFunctionCall_N(node:FunctionCall_N):
+    def visitConstantDefinitionStmt_N(
+            self,
+            node: ConstantDefinitionStmt_N
+    ):
         pass
 
     @abstractmethod
-    def visitConstantDefinitionStmt_N(node:ConstantDefinitionStmt_N):
+    def visitVariableDeclarationStmt_N(
+            self,
+            node: VariableDeclarationStmt_N
+    ):
         pass
 
     @abstractmethod
-    def visitVariableDeclarationStmt_N(node:VariableDeclarationStmt_N):
+    def visitPaintNodesStmt_N(
+            self,
+            node: PaintNodesStmt_N
+    ):
         pass
 
     @abstractmethod
-    def visitPaintNodesStmt_N(node:PaintNodesStmt_N):
+    def visitVariableAssignmentStmt_N(
+            self,
+            node: VariableAssignmentStmt_N
+    ):
         pass
 
     @abstractmethod
-    def visitVariableAssignmentStmt_N(node:VariableAssignmentStmt_N):
-        pass
-
-    @abstractmethod
-    def visitLatticeAssignmentStmt_N(node:LatticeAssignmentStmt_N):
-        pass
-
-    @abstractmethod
-    def visitReturnStmt_N(node:ReturnStmt_N):
-        pass
-
-    @abstractmethod
-    def visitFunctionBlock_N(node:FunctionBlock_N):
+    def visitLatticeOutSelectionAssignmentStmt_N(
+            self,
+            node: LatticeOutSelectionAssignmentStmt_N
+    ):
         pass
 
     # @abstractmethod
-    # def visitTODO(node:TODO):
+    # def visitTODO(node: TODO):
     #     pass

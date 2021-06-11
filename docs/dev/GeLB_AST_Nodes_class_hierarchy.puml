@@ -312,7 +312,7 @@ class VariableAssignmentStmt_N #palegreen;line:green;text:black {
     + __str__(self)
 }
 
-class LatticeAssignmentStmt_N #palegreen;line:green;text:black {
+class LatticeOutSelectionAssignmentStmt_N #palegreen;line:green;text:black {
     + __str__(self)
 }
 
@@ -369,6 +369,6 @@ Stmt_N <|-- VariableDeclarationStmt_N
 Stmt_N <|-- AssignmentStmt_N
 AssignmentStmt_N <|-- PaintNodesStmt_N
 AssignmentStmt_N <|-- VariableAssignmentStmt_N
-AssignmentStmt_N <|-- LatticeAssignmentStmt_N
+AssignmentStmt_N <|-- LatticeOutSelectionAssignmentStmt_N
 
 @enduml

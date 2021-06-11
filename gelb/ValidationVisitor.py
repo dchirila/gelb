@@ -159,9 +159,6 @@ class ValidationVisitor:
     # def visitLatticeAssignmentStmt_N(node:LatticeAssignmentStmt_N):
     #     raise NotImplementedError()
 
-    # def visitReturnStmt_N(node:ReturnStmt_N):
-    #     raise NotImplementedError()
-
     # def visitFunctionBlock_N(node:FunctionBlock_N):
     #     raise NotImplementedError()
 
