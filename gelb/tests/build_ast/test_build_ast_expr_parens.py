@@ -75,3 +75,58 @@ def test_simple_negative_real():
     ast = get_ast("expr", test_string)
     # Assert
     assert str(ast) == "(UnaryMinusExpr (RealLiteral 3.1415926539))"
+
+def test_int_plus_int():
+    # Arrange
+    test_string = "((3)) + 1"
+    # Act
+    ast = get_ast("expr", test_string)
+    # Assert
+    assert str(ast) == "(Add (IntLiteral 3) (IntLiteral 1))"
+
+def test_real_divided_by_int():
+    # Arrange
+    test_string = "12.34e19 / (((321)))"
+    # Act
+    ast = get_ast("expr", test_string)
+    # Assert
+    assert str(ast) == "(Div (RealLiteral 1.234e+20) (IntLiteral 321))"
+
+def test_mix_01():
+    # Arrange
+    test_string = "1 * 2 + 3 / 4"
+    # Act
+    ast = get_ast("expr", test_string)
+    # Assert
+    assert str(ast) == (
+        "(Add"
+        " (Mul (IntLiteral 1) (IntLiteral 2))"
+        " (Div (IntLiteral 3) (IntLiteral 4))"
+        ")"
+    )
+
+def test_mix_02():
+    # Arrange
+    test_string = "(1* 2)+(3 /4)"
+    # Act
+    ast = get_ast("expr", test_string)
+    # Assert
+    assert str(ast) == (
+        "(Add"
+        " (Mul (IntLiteral 1) (IntLiteral 2))"
+        " (Div (IntLiteral 3) (IntLiteral 4))"
+        ")"
+    )
+
+def test_mix_03():
+    # Arrange
+    test_string = "1.23 / 2 - 3 * 4.56e2"
+    # Act
+    ast = get_ast("expr", test_string)
+    # Assert
+    assert str(ast) == (
+        "(Sub"
+        " (Div (RealLiteral 1.23) (IntLiteral 2))"
+        " (Mul (IntLiteral 3) (RealLiteral 456.0))"
+        ")"
+    )
