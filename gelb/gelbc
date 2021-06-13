@@ -36,11 +36,6 @@ from gelb.stage1_frontend import (get_ast, validate_ast)
 
 @click.command()
 @click.option(
-    "-v",
-    is_flag=True,
-    help="Make the compiler more verbose (useful for debugging)"
-)
-@click.option(
     "-t",
     is_flag=True,
     help="Display traceback (for debugging the compiler itself)"
@@ -62,7 +57,7 @@ from gelb.stage1_frontend import (get_ast, validate_ast)
     default='cpu_c_serial',
     help="Which backend to use for code-generation"
 )
-def cli(v, t, input_file, backend):
+def cli(t, input_file, backend):
     """
 gelbc -- reference compiler (actually: "transpiler") for the GeLB DSL.
 
@@ -72,10 +67,8 @@ through the various stages of the compiler.
     if not t:  # disable the traceback by default
         sys.tracebacklimit = 0
     # Stage 1 :: FrontEnd
-    src_raw = load_file(input_file, v)
-    # TODO add support for verbose flag
-    # ast = get_ast("gelb_program", src_raw, v)
-    ast = get_ast("gelb_program", src_raw, v)
+    src_raw = load_file(input_file)
+    ast = get_ast("gelb_program", src_raw)
     # print(ast)  # TODO RM debugging print
     validate_ast(ast)
 

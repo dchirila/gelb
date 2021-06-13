@@ -12,12 +12,12 @@ from gelb.utils.exceptions import *
 import gelb.utils.config
 
 
-def ensure_input_file_has_gelb_extension(input_file, verbose):
+def ensure_input_file_has_gelb_extension(input_file):
     if not fnmatch(input_file, "*.gelb"):
         raise GeLBExIncorrectInputFileExtension(input_file)
 
 
-def ensure_input_file_exists_and_get_full_path(input_file, verbose):
+def ensure_input_file_exists_and_get_full_path(input_file):
     try:
         path = Path(input_file).resolve(strict=True)
         return path
@@ -26,7 +26,7 @@ def ensure_input_file_exists_and_get_full_path(input_file, verbose):
     raise GeLBExCouldNotFindInputFile(input_file, suggest_files)
 
 
-def cleanup_antlr4_generated_files(output_dir, verbose=False):
+def cleanup_antlr4_generated_files(output_dir):
     run(["rm", "-f", output_dir / "GeLB.interp"])
     run(["rm", "-f", output_dir / "GeLB.tokens"])
     run(["rm", "-f", output_dir / "GeLBLexer.interp"])
@@ -37,7 +37,7 @@ def cleanup_antlr4_generated_files(output_dir, verbose=False):
     run(["rm", "-f", output_dir / "GeLBVisitor.py"])
 
 
-def find_antlr4_tool_path(verbose=False):
+def find_antlr4_tool_path():
     # check that the ANTLR4 Java-lib is present
     # NOTE: To avoid possible issues with incompatible ANTLR4 versions, this
     # Java library is included within the GeLB repository (so normally it
@@ -62,7 +62,7 @@ def ensure_python3_package_is_present(package_name):
         raise GeLBExPython3PackageMissing(package_name)
 
 
-def invoke_antlr4_tool(verbose=False):
+def invoke_antlr4_tool():
     """
     Invoke the ANTLR4 Java tool.
 
@@ -93,9 +93,9 @@ def invoke_antlr4_tool(verbose=False):
         raise GeLBExAntlr4JavaToolFailed(antlr4_tool_stat)
 
 
-def load_file(input_file, verbose=False):
-    ensure_input_file_has_gelb_extension(input_file, verbose)
-    path = ensure_input_file_exists_and_get_full_path(input_file, verbose)
+def load_file(input_file):
+    ensure_input_file_has_gelb_extension(input_file)
+    path = ensure_input_file_exists_and_get_full_path(input_file)
 
     try:
         gelb.utils.config.GELB_SRC_RAW = path.read_text(encoding='utf-8')
@@ -115,7 +115,7 @@ def find_gelb_files_in_cwd():
     return gelb_files_in_cwd
 
 
-def ensure_file_is_not_empty_or_whitespace(file_as_string, verbose):
+def ensure_file_is_not_empty_or_whitespace(file_as_string):
     if len(file_as_string) == 0:
         raise GeLBExEmptyInputFile()
 

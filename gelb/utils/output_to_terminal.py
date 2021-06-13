@@ -21,7 +21,6 @@ def error_with_hint_to_term(error_message, hint_message):
     click.echo(f" {hint_message}")
 
 
-def info_to_term(message, verbose):
-    if verbose:
-        click.echo(Fore.BLUE + "gelbc-INFO:" + Style.RESET_ALL, nl=False)
-        click.echo(f" {message}")
+def info_to_term(message):
+    click.echo(Fore.BLUE + "gelbc-INFO:" + Style.RESET_ALL, nl=False)
+    click.echo(f" {message}")

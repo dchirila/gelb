@@ -24,9 +24,6 @@ from gelb.ASTValidationVisitor import ASTValidationVisitor
 from gelb.ParsingError import ParsingError
 from gelb.utils.exceptions import *
 from gelb.utils.misc import ensure_file_is_not_empty_or_whitespace
-from gelb.utils.output_to_terminal import (
-    info_to_term,
-)
 
 
 def get_cst_as_string(start_rule, input_string):
@@ -46,13 +43,8 @@ def get_cst_as_string(start_rule, input_string):
         raise GeLBExInvalidGrammarRule(start_rule)
 
 
-def get_ast(start_rule, input_string, verbose=False):
-    ensure_file_is_not_empty_or_whitespace(input_string, verbose)
-
-    info_to_term(
-        "[stage 1] building the initial abstract syntax tree (AST)...",
-        verbose
-    )
+def get_ast(start_rule, input_string):
+    ensure_file_is_not_empty_or_whitespace(input_string)
 
     input_stream = a4.InputStream(input_string)
     lexer = GeLBLexer(input_stream)
@@ -80,7 +72,7 @@ def get_ast(start_rule, input_string, verbose=False):
         raise GeLBExInvalidGrammarRule(start_rule)
 
 
-def validate_ast(ast, verbose=False):
+def validate_ast(ast):
     # try:
     ast_visitor = ASTValidationVisitor()
     ast_visitor.visit(ast)
