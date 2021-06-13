@@ -2,7 +2,6 @@
 
 from gelb.ASTBaseVisitor import ASTBaseVisitor
 from gelb.ASTNodes import *
-from gelb.utils.misc import GELB_KEYWORDS
 
 
 class ASTValidationVisitor(ASTBaseVisitor):

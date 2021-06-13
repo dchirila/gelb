@@ -32,17 +32,6 @@ def error_with_hint_to_term(error_message, hint_message):
     click.echo(f" {hint_message}")
 
 
-def verbose_progress_message(message, verbose):
-    if verbose:
-        if message == "OK":
-            click.echo(Fore.GREEN + f"{message}" + Style.RESET_ALL)
-        elif message == "FAIL":
-            click.echo(Fore.RED + f"{message}" + Style.RESET_ALL)
-        else:
-            click.echo(Fore.BLUE + "gelbc-INFO:" + Style.RESET_ALL, nl=False)
-            click.echo(f" {message} ... ", nl=False)
-
-
 def info_to_term(message, verbose):
     if verbose:
         click.echo(Fore.BLUE + "gelbc-INFO:" + Style.RESET_ALL, nl=False)

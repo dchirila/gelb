@@ -3,7 +3,7 @@
 import os
 import gelb.utils.config
 from gelb.utils.output_to_terminal import error_with_hint_to_term
-from gelb.utils.misc import (
+from gelb.utils.error_utils import (
     feedback_on_slack_hint,
     learning_gelb_hint,
     show_error_in_src
@@ -62,7 +62,8 @@ class GeLBExMissingCSTVisitationMethod(GeLBException):
 
 class GeLBExMissingASTVisitationMethod(GeLBException):
     """
-    TODO
+    GeLB exception, for attempting to invoke an AST visitation method which
+    has not been defined.
     """
     def __init__(self, visitor_subclass_name, visitation_method_name):
         error = (
@@ -81,7 +82,7 @@ class GeLBExMissingASTVisitationMethod(GeLBException):
 
 class GeLBExSyntaxError(GeLBException):
     """
-    TODO
+    GeLB exception, for catching syntax errors raised by the generated parser.
     """
     def __init__(self, line, column, error, hint):
         self.line = line
@@ -98,7 +99,8 @@ class GeLBExSyntaxError(GeLBException):
 
 class GeLBExInvalidNoOfBlockOccurrences(GeLBException):
     """
-    TODO
+    GeLB exception, for signaling an invalid number of high-level block
+    occurrences.
     """
     def __init__(self, block_name, min_no, max_no, line, column):
         self.line = line
@@ -128,3 +130,69 @@ class GeLBExInvalidNoOfBlockOccurrences(GeLBException):
         show_error_in_src(self.line, self.column, self.error, self.hint)
         if gelb.utils.config.GELB_PRODUCTION_MODE:
             os._exit(1)  # really abort
+
+
+class GeLBExIncorrectInputFileExtension(GeLBException):
+    """
+    GeLB exception, for signaling an incorrect input-file extension.
+    """
+    def __init__(self, input_file_name):
+        error = (
+            f"[Problem] We notice that your input file \"{input_file_name}\""
+            f" does not have the \".gelb\" extension."
+        )
+        hint = (
+            f"[Hint] Please speficy a file that ends in \".gelb\""
+        )
+        super().__init__(error, hint)
+
+
+class GeLBExCouldNotFindInputFile(GeLBException):
+    """
+    GeLB exception, for signaling that the input file could not be found.
+    """
+    def __init__(self, input_file_name, suggest_files):
+        error = (
+            f"[Problem] We could not find the input file \"{input_file_name}\"."
+        )
+        hint = (
+            f"[Hint] Please specify a file that exists."
+        )
+        if suggest_files:
+            hint += (
+                f" Maybe you meant one of the following files?"
+                f" {suggest_files}"
+            )
+        super().__init__(error, hint)
+
+
+class GeLBExCouldNotReadInputFile(GeLBException):
+    """
+    GeLB exception, for signaling that the input file could not be read (
+    presumably due to file-permission errors).
+    """
+    def __init__(self, input_file_name):
+        error = (
+            f"[Problem] We could not read the input file \"{input_file_name}\"."
+        )
+        hint = (
+            f"[Hint] Change permissions for file \"{input_file_name}\","
+            f" to allow gelbc to read it."
+        )
+        super().__init__(error, hint)
+
+
+class GeLBExEmptyInputFile(GeLBException):
+    """
+    GeLB exception, for signaling that the input file does not contain any
+    code (could be empty, or just whitespace).
+    """
+    def __init__(self, input_file_name=None):
+        error = (
+            f"[Problem] The input file \"{input_file_name}\" does not"
+            f" contain any GeLB code."
+        )
+        hint = (
+            f"[Hint] {learning_gelb_hint}"
+        )
+        super().__init__(error, hint)
