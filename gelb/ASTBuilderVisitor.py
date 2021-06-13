@@ -320,9 +320,6 @@ class ASTBuilderVisitor(GeLBVisitor):
                 None,
                 None
             )
-        else:
-            print("<<<GeLB-Error>>> Invalid coordinates range!")
-            raise TypeError()
 
     # Visit a parse tree produced by GeLBParser#initializer_block.
     def visitInitializer_block(
@@ -567,10 +564,6 @@ class ASTBuilderVisitor(GeLBVisitor):
             return ScalarDataType_N(code_range_from_ctx(ctx), "int8")
         elif ctx.INT():
             return ScalarDataType_N(code_range_from_ctx(ctx), "int")
-        else:
-            raise TypeError(
-                "<<<GeLB-Error>>> Invalid scalar INTEGER data-type specified!"
-            )
 
     # Visit a parse tree produced by GeLBParser#scalar_real_data_type.
     def visitScalar_real_data_type(
@@ -585,10 +578,6 @@ class ASTBuilderVisitor(GeLBVisitor):
             return ScalarDataType_N(code_range_from_ctx(ctx), "real16")
         elif ctx.REAL():
             return ScalarDataType_N(code_range_from_ctx(ctx), "real")
-        else:
-            raise TypeError(
-                "<<<GeLB-Error>>> Invalid scalar REAL data-type specified!"
-            )
 
     # Visit a parse tree produced by GeLBParser#array_data_type.
     def visitArray_data_type(
@@ -674,9 +663,6 @@ class ASTBuilderVisitor(GeLBVisitor):
             return self.visitInfixExpr(ctx)
         elif isinstance(ctx, GeLBParser.IdentifierExprContext):
             return self.visitIdentifierExpr(ctx)
-        else:
-            print("<<<GeLB-Error>>> Invalid expression type!")
-            raise TypeError()
 
     # Visit a parse tree produced by GeLBParser#parensExpr.
     def visitParensExpr(
@@ -714,9 +700,6 @@ class ASTBuilderVisitor(GeLBVisitor):
                 self.visit(ctx.left),
                 self.visit(ctx.right)
             )
-        else:
-            print("<<<GeLB-Error>>> Invalid infix expression!")
-            raise TypeError()
 
     # Visit a parse tree produced by GeLBParser#unaryExpr.
     def visitUnaryExpr(
@@ -735,9 +718,6 @@ class ASTBuilderVisitor(GeLBVisitor):
                 code_range_from_ctx(ctx),
                 self.visit(ctx.expr())
             )
-        else:
-            print("<<<GeLB-Error>>> Invalid unary expression type!")
-            raise TypeError()
 
     # Visit a parse tree produced by GeLBParser#nonNegRealLiteralExpr.
     def visitNonNegRealLiteralExpr(
@@ -760,9 +740,6 @@ class ASTBuilderVisitor(GeLBVisitor):
             return self.visitArray_literal_2d(ctx.array_literal_2d())
         elif ctx.array_literal_1d():
             return self.visitArray_literal_1d(ctx.array_literal_1d())
-        else:
-            print("<<<GeLB-Error>>> Invalid array literal expression!")
-            raise TypeError()
 
     # Visit a parse tree produced by GeLBParser#powExpr.
     def visitPowExpr(
