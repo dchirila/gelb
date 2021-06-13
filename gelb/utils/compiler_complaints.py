@@ -8,16 +8,30 @@ generic_hint = (
 )
 
 
-def complain_about_missing_visitor_method(rule, visitor_method_name):
+def complain_about_missing_cst_visitation_method(rule, visitation_method_name):
     fatal_error_with_hint_to_term(
-        f"(internal) can't find method \"{visitor_method_name}\""
+        f"(internal) can't find method \"{visitation_method_name}\""
         f"@ASTBuilderVisitor",
         # hint
         f"If you are a GeLB developer, please check whether rule"
         f" \"{rule}\" is part of the grammar (look @\"GeLB.g4\""
         f" file). Also, check that the ANTLR4 Java tool actually"
-        f" generated a method named \"{visitor_method_name}\" (look"
+        f" generated a method named \"{visitation_method_name}\" (look"
         f" @\"GeLBVisitor.py\").\n\n"
+        f"If you are a GeLB user, please report this error on our"
+        f" Slack #feedback channel (https://gelb-devs.slack.com)."
+    )
+
+
+def complain_about_missing_ast_visitation_method(class_name,
+                                                 visitation_method_name):
+    fatal_error_with_hint_to_term(
+        f"(internal) can't find method \"{visitation_method_name}\""
+        f"@{class_name}",
+        # hint
+        f"If you are a GeLB developer (maybe implementing a new compiler "
+        f"pass) please check whether you actually defined the appropriate "
+        f"method in your ASTBaseVisitor subclass (i.e. \"{class_name}\").\n\n"
         f"If you are a GeLB user, please report this error on our"
         f" Slack #feedback channel (https://gelb-devs.slack.com)."
     )

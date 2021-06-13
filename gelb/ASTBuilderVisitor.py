@@ -25,6 +25,24 @@ from gelb.utils.CodeRange import code_range_from_ctx
 # INPUT: ANTLR4-generated ParseTree
 # OUTPUT: GeLB AST (*root* node)
 class ASTBuilderVisitor(GeLBVisitor):
+    """
+    Visitor for the ANTLR4-generated concrete syntax tree (CST), also known
+    sometimes as "syntax trees".
+
+    When we invoke the ``visitGelb_program`` method, we get a complete initial
+    abstract syntax tree (AST) for a GeLB program. When we invoke one of the
+    other ``visitX`` methods, we get GeLB AST sub-trees.
+
+    NOTE: Unfortunately, there is a lot of confusion related to CSTs and ASTs,
+    with people confusing these two (related) concepts. In GeLB, we denote the
+    result produced by the ANTLR4-generated parser the CST. This
+    ``ASTBuilderVisitor`` class takes that CST and builds the AST, which is a
+    customized (manually-designed) tree of nodes, which serves as the
+    intermediate representation (IR) for the whole ``gelbc`` compiler. The other
+    visitors (derived from ``ASTBaseVisitor``) implement operations on the AST
+    (and have no knowledge of the CST).
+    """
+
     def __init__(self):
         self.instances_set_simulation_name_stmt = 0
         self.instances_set_simulation_description_stmt = 0

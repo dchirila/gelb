@@ -20,6 +20,7 @@ except ModuleNotFoundError:
     )
 
 from gelb.ASTBuilderVisitor import ASTBuilderVisitor
+from gelb.ASTValidationVisitor import ASTValidationVisitor
 from gelb.ParsingError import ParsingError
 from gelb.utils.misc import ensure_file_is_not_empty_or_whitespace
 from gelb.utils.compiler_complaints import *
@@ -74,7 +75,7 @@ def get_ast(start_rule, input_string, verbose=False):
         func_start_rule = getattr(parser, start_rule)
 
         verbose_progress_message(
-            "\t\tgenerating concrete syntax tree (CST)",
+            "\t\tgenerating the concrete syntax tree (CST)",
             verbose
         )
         try:
@@ -83,15 +84,36 @@ def get_ast(start_rule, input_string, verbose=False):
         except:
             verbose_progress_message("FAIL", verbose)
 
-        ast_builder = ASTBuilderVisitor()
-        visitor_method_name = f"visit{start_rule.capitalize()}"
-        if hasattr(ast_builder, visitor_method_name):
-            # TODO: trigger creation of (sub-)AST & return
-            visitor_method = getattr(ast_builder, visitor_method_name)
-            ast = visitor_method(cst)
-            return ast
-        else:
-            complain_about_missing_visitor_method(start_rule,
-                                                  visitor_method_name)
+        verbose_progress_message(
+            "\tgenerating the abstract syntax tree (AST)",
+            verbose
+        )
+        try:
+            ast_builder = ASTBuilderVisitor()
+            visitation_method_name = f"visit{start_rule.capitalize()}"
+            if hasattr(ast_builder, visitation_method_name):
+                # TODO: trigger creation of (sub-)AST & return
+                visitation_method = getattr(ast_builder, visitation_method_name)
+                ast = visitation_method(cst)
+                verbose_progress_message("OK", verbose)
+                return ast
+            else:
+                complain_about_missing_cst_visitation_method(
+                    start_rule,
+                    visitation_method_name
+                )
+        except:
+            verbose_progress_message("FAIL", verbose)
     else:
         complain_about_invalid_grammar_rule(start_rule)
+
+
+def validate_ast(ast, verbose=False):
+    verbose_progress_message("\tvalidating the AST", verbose)
+    # try:
+    ast_visitor = ASTValidationVisitor()
+    ast_visitor.visit(ast)
+    verbose_progress_message("OK", verbose)
+    # except:
+    #     verbose_progress_message("FAIL", verbose)
+    #     fatal_error_to_term("\tthe AST is invalid")

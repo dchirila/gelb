@@ -31,7 +31,7 @@ except:
 
 # If we reached this point, we should be able to import GeLB modules
 from gelb.utils.misc import load_file
-from gelb.stage1_frontend import get_ast
+from gelb.stage1_frontend import (get_ast, validate_ast)
 
 
 @click.command()
@@ -69,7 +69,9 @@ through the various stages of the compiler.
     # TODO add support for verbose flag
     # ast = get_ast("gelb_program", src_raw, v)
     ast = get_ast("gelb_program", src_raw, v)
-    print(ast)
+    # print(ast)  # TODO RM debugging print
+    validate_ast(ast)
+
     # ... TODO semantic analysis, checks, etc.
 
     # Stage 2 :: MidWare

@@ -9,6 +9,47 @@ import pkg_resources
 
 from gelb.utils.output_to_terminal import *
 from gelb.utils.compiler_complaints import generic_hint
+import gelb.utils.config
+
+GELB_KEYWORDS = [
+    'array',
+    'bool',
+    'const',
+    'dot_product',
+    'down_stream_df',
+    'dynamic',
+    'dynamics',
+    'gauge',
+    'gauges',
+    'geometry',
+    'global_constants',
+    'in',
+    'initializer',
+    'initializers',
+    'int',
+    'int16',
+    'int32',
+    'int64',
+    'int8',
+    'lattice',
+    'lattice_constants',
+    'lattices',
+    'node_class',
+    'node_classes',
+    'nodes',
+    'opposite_df',
+    'out',
+    'periodicity',
+    'real',
+    'real16',
+    'real32',
+    'real64',
+    'simulation_description',
+    'simulation_name',
+    'size',
+    'up_stream_df',
+    'vector_product'
+]
 
 
 def ensure_input_file_has_gelb_extension(input_file, verbose):
@@ -125,9 +166,9 @@ def load_file(input_file, verbose=False):
 
     verbose_progress_message(f"loading input-file (=\"{path}\")", verbose)
     try:
-        src_raw = path.read_text(encoding='utf-8')
+        gelb.utils.config.GELB_SRC_RAW = path.read_text(encoding='utf-8')
         verbose_progress_message("OK", verbose)
-        return src_raw
+        return gelb.utils.config.GELB_SRC_RAW
     except OSError:
         verbose_progress_message("FAIL", verbose)
         fatal_error_with_hint_to_term(
@@ -137,8 +178,20 @@ def load_file(input_file, verbose=False):
         )
 
 
-def print_error_context(input_file):
-    src_raw = load_file()
+def iterate_over_lines_in_src():
+    # iterate over lines in GELB_SRC_RAW
+    current_lineno = 1
+    previous_nl = -1
+    while True:
+        next_nl = gelb.utils.config.GELB_SRC_RAW.find('\n', previous_nl + 1)
+        if next_nl < 0: break
+        yield (current_lineno,
+               gelb.utils.config.GELB_SRC_RAW[(previous_nl + 1): next_nl])
+        previous_nl = next_nl
+        current_lineno += 1
+
+def print_error_context(input_file, line, column):
+    raise NotImplementedError()
 
 
 def find_gelb_files_in_cwd():
@@ -175,3 +228,13 @@ def ensure_file_is_not_empty_or_whitespace(file_as_string, verbose):
             "input file contains only whitespace",
             generic_hint
         )
+
+
+def really_abort():
+    """
+    Function to really abort compilation.
+
+    NOTE: sys.exit() doesn't always quit immediately.
+    """
+    import os
+    os._exit(1);

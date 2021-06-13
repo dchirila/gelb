@@ -14,6 +14,19 @@ class Node_N(ABC):
     def __str__(self):
         pass
 
+    def get_ast_fields(self):
+        return [
+            field for field in dir(self) if not (
+                field.startswith('_') or
+                field.startswith('code_range') or
+                field.startswith('get_ast_fields') or
+                field.startswith('append')  # from List_N
+            )
+        ]
+
+    # def accept(self, visitor):
+    #     raise NotImplementedError()
+
     # @abstractmethod
     # def eval(self):
     #     pass
