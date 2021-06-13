@@ -20,7 +20,7 @@ except ModuleNotFoundError:
     )
 
 from gelb.ASTBuilderVisitor import ASTBuilderVisitor
-from gelb.ASTValidationVisitor import ASTValidationVisitor
+from gelb.ASTInitialValidationVisitor import ASTInitialValidationVisitor
 from gelb.ParsingError import ParsingError
 from gelb.utils.exceptions import *
 from gelb.utils.misc import ensure_file_is_not_empty_or_whitespace
@@ -74,7 +74,7 @@ def get_ast(start_rule, input_string):
 
 def validate_ast(ast):
     # try:
-    ast_visitor = ASTValidationVisitor()
+    ast_visitor = ASTInitialValidationVisitor()
     ast_visitor.visit(ast)
     # except:
     #     fatal_error_to_term("\tthe AST is invalid")

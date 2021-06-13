@@ -4,7 +4,7 @@ from gelb.ASTBaseVisitor import ASTBaseVisitor
 from gelb.ASTNodes import *
 
 
-class ASTValidationVisitor(ASTBaseVisitor):
+class ASTInitialValidationVisitor(ASTBaseVisitor):
     """
     Concrete visitor for initial AST validation
     """
