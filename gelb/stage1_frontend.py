@@ -26,7 +26,6 @@ from gelb.utils.exceptions import *
 from gelb.utils.misc import ensure_file_is_not_empty_or_whitespace
 from gelb.utils.output_to_terminal import (
     info_to_term,
-    fatal_error_to_term
 )
 
 
@@ -55,18 +54,14 @@ def get_ast(start_rule, input_string, verbose=False):
         verbose
     )
 
-    try:
-        input_stream = a4.InputStream(input_string)
-        lexer = GeLBLexer(input_stream)
-        token_stream = a4.CommonTokenStream(lexer)
-        token_stream.fill()
-        parser = GeLBParser(token_stream)
-        parser.removeErrorListeners()
-        parser.addErrorListener(ParsingError())
-    except:
-        fatal_error_to_term("\tfailed to prepare parser")
+    input_stream = a4.InputStream(input_string)
+    lexer = GeLBLexer(input_stream)
+    token_stream = a4.CommonTokenStream(lexer)
+    token_stream.fill()
+    parser = GeLBParser(token_stream)
+    parser.removeErrorListeners()
+    parser.addErrorListener(ParsingError())
 
-    info_to_term("\tparsing your file...", verbose)
     if hasattr(parser, start_rule):
         func_start_rule = getattr(parser, start_rule)
 

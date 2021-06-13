@@ -2,7 +2,6 @@
 
 from antlr4.error.ErrorListener import ErrorListener
 
-from gelb.utils.output_to_terminal import error_with_hint_to_term
 from gelb.utils.exceptions import *
 
 

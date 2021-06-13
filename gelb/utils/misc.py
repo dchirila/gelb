@@ -45,17 +45,21 @@ def find_antlr4_tool_path(verbose=False):
     lib_dir = pathlib.Path(__file__).parent.parent.parent / 'lib'
     antlr4_lib_path = lib_dir / 'antlr-4.9.2-complete.jar'
     if not antlr4_lib_path.is_file():
-        fatal_error_to_term("Antlr4 java library file not found")
-    else:
-        return antlr4_lib_path
+        raise GeLBExAntlr4JavaLibNotFound(antlr4_lib_path)
+    return antlr4_lib_path
 
 
-def ensure_antlr4_python3_runtime_is_present(verbose=False):
-    # check that the =antlr4-python3-runtime= Python package is installed
+def ensure_python3_package_is_present(package_name):
+    """
+    Generic utility-function, for checking that a Python3 package required by
+    GeLB is actually installed.
+
+    NOTE: The users should not encounter this problem, because =pip install=
+    should take care of the package-dependencies.
+    """
     installed_packages = {pkg.key for pkg in pkg_resources.working_set}
-    if "antlr4-python3-runtime" not in installed_packages:
-        fatal_error_to_term("Python3 package \"antlr4-python3-runtime\""
-                            " not installed")
+    if package_name not in installed_packages:
+        raise GeLBExPython3PackageMissing(package_name)
 
 
 def invoke_antlr4_tool(verbose=False):
@@ -65,13 +69,13 @@ def invoke_antlr4_tool(verbose=False):
     This generates =GeLB{Lexer,Parser,Visitor}.py=, based on the =GeLB.g4= grammar.
     """
     antlr4_lib_path = find_antlr4_tool_path()
-    ensure_antlr4_python3_runtime_is_present()
+    ensure_python3_package_is_present("antlr4-python3-runtime")
     # infer the path to the GeLB language grammar
     grammar_dir = pathlib.Path(__file__).parent.parent / 'antlr4' / 'grammars'
     output_dir = pathlib.Path(__file__).parent.parent / 'antlr4' / 'generated_code'
     grammar_path = grammar_dir / "GeLB.g4"
     if not grammar_path.is_file():
-        fatal_error_to_term(f"{grammar_path} grammar file not found")
+        raise GeLBExGrammarFileNotFound(grammar_path)
     cleanup_antlr4_generated_files(output_dir)  # to be on the safe side
 
     ## invoke ANTLR4 Java tool
@@ -86,13 +90,7 @@ def invoke_antlr4_tool(verbose=False):
                             output_dir,
                             grammar_path])
     if antlr4_tool_stat.returncode != 0:
-        error_with_hint_to_term(
-            f"ANTLR4 Java tool failed to compile the grammar\n"
-            f"\n\treturn code: {antlr4_tool_stat.returncode}"
-            f"\n\tstdout: {antlr4_tool_stat.stdout}"
-            f"\n\tstderr: {antlr4_tool_stat.stderr}",
-            "fix the grammar file(s)"
-        )
+        raise GeLBExAntlr4JavaToolFailed(antlr4_tool_stat)
 
 
 def load_file(input_file, verbose=False):

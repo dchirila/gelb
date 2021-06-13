@@ -196,3 +196,72 @@ class GeLBExEmptyInputFile(GeLBException):
             f"[Hint] {learning_gelb_hint}"
         )
         super().__init__(error, hint)
+
+
+class GeLBExAntlr4JavaLibNotFound(GeLBException):
+    """
+    GeLB exception, for signaling that the ANTLR4 Java library (jar) file
+    isn't where we expect it to be.
+    """
+    def __init__(self, antlr4_lib_path):
+        error = (
+            f"[Problem] We could not find the Antlr4 java library file"
+            f" (expecting location was \"{antlr4_lib_path}\")."
+        )
+        hint = (
+            f"[Hint] Download the file from"
+            f" https://antlr.org and copy it to the expected location."
+        )
+        super().__init__(error, hint)
+
+
+class GeLBExPython3PackageMissing(GeLBException):
+    """
+    GeLB exception, for signaling that a Python3 package is missing.
+    """
+    def __init__(self, package_name):
+        error = (
+            f"[Problem] We could not find the \"{package_name}\" Python3 "
+            f"package."
+        )
+        hint = (
+            f"[Hint] If you are a GeLB developer, please install "
+            f"Anaconda and run the command"
+            f" \"conda env create -f gelb.yml\" from the root-dir of your"
+            f" GeLB repository clone. " + feedback_on_slack_hint
+        )
+        super().__init__(error, hint)
+
+
+class GeLBExGrammarFileNotFound(GeLBException):
+    """
+    GeLB exception, for signaling that the GeLB.g4 grammar file is missing.
+    """
+    def __init__(self, grammar_path):
+        error = (
+            f"[Problem] We could not find the \"{grammar_path}\" file."
+        )
+        hint = (
+                f"[Hint] If you are a GeLB developer, you can try"
+                f" restoring it with \"git checkout\". " +
+                feedback_on_slack_hint
+        )
+        super().__init__(error, hint)
+
+
+class GeLBExAntlr4JavaToolFailed(GeLBException):
+    """
+    GeLB exception, for signaling that the ANTLR4 Java tool failed to compile
+    the grammar.
+    """
+    def __init__(self, antlr4_tool_stat):
+        error = (
+            f"[Problem] The ANTLR4 Java tool failed to compile the "
+            f"\"GeLB.g4\" grammar."
+        )
+        hint = (
+                f"[Hint] If you are a GeLB developer (perhaps working on the "
+                f"grammar), try to compile it manually.\n\n" +
+                feedback_on_slack_hint
+        )
+        super().__init__(error, hint)
