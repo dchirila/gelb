@@ -8,7 +8,6 @@ import os
 import pkg_resources
 
 from gelb.utils.output_to_terminal import *
-from gelb.utils.compiler_complaints import generic_hint
 import gelb.utils.config
 
 GELB_KEYWORDS = [
@@ -51,6 +50,16 @@ GELB_KEYWORDS = [
     'vector_product'
 ]
 
+feedback_on_slack_hint = (
+    f"If you are a GeLB user, please report this error on our"
+    f" Slack #feedback channel (https://gelb-devs.slack.com)."
+)
+
+learning_gelb_hint = (
+    f"Please visit https://gelb-lang.org to learn how to write your first "
+    f"GeLB programs."
+)
+
 
 def ensure_input_file_has_gelb_extension(input_file, verbose):
     verbose_progress_message(
@@ -59,7 +68,7 @@ def ensure_input_file_has_gelb_extension(input_file, verbose):
     )
     if not fnmatch(input_file, "*.gelb"):
         verbose_progress_message("FAIL", verbose)
-        fatal_error_with_hint_to_term(
+        error_with_hint_to_term(
             f"input-file \"{input_file}\" does not have the \".gelb\" extension",
             f"give me a file that ends in \".gelb\""
         )
@@ -85,7 +94,7 @@ def ensure_input_file_exists_and_get_full_path(input_file, verbose):
             )
         else:
             extra_hint = ""
-        fatal_error_with_hint_to_term(
+        error_with_hint_to_term(
             f"couldn't read input file \"{input_file}\"",
             f"specify a file which exists.{extra_hint}"
         )
@@ -151,7 +160,7 @@ def invoke_antlr4_tool(verbose=False):
                             output_dir,
                             grammar_path])
     if antlr4_tool_stat.returncode != 0:
-        fatal_error_with_hint_to_term(
+        error_with_hint_to_term(
             f"ANTLR4 Java tool failed to compile the grammar\n"
             f"\n\treturn code: {antlr4_tool_stat.returncode}"
             f"\n\tstdout: {antlr4_tool_stat.stdout}"
@@ -171,7 +180,7 @@ def load_file(input_file, verbose=False):
         return gelb.utils.config.GELB_SRC_RAW
     except OSError:
         verbose_progress_message("FAIL", verbose)
-        fatal_error_with_hint_to_term(
+        error_with_hint_to_term(
             f"couldn't read input file \"{path}\"",
             f"change permissions for file \"{path}\", "
             f"to allow gelbc to read it"
@@ -211,9 +220,9 @@ def ensure_file_is_not_empty_or_whitespace(file_as_string, verbose):
         verbose_progress_message("OK", verbose)
     else:
         verbose_progress_message("FAIL", verbose)
-        fatal_error_with_hint_to_term(
+        error_with_hint_to_term(
             "input file is empty",
-            generic_hint
+            learning_gelb_hint
         )
 
     verbose_progress_message(
@@ -224,17 +233,55 @@ def ensure_file_is_not_empty_or_whitespace(file_as_string, verbose):
         verbose_progress_message("OK", verbose)
     else:
         verbose_progress_message("FAIL", verbose)
-        fatal_error_with_hint_to_term(
+        error_with_hint_to_term(
             "input file contains only whitespace",
-            generic_hint
+            learning_gelb_hint
         )
 
 
-def really_abort():
-    """
-    Function to really abort compilation.
+def show_error_in_src(line, column, error, hint):
+    lines_in_file = 0
+    for (lineno, line_text) in iterate_over_lines_in_src():
+        lines_in_file += 1
 
-    NOTE: sys.exit() doesn't always quit immediately.
-    """
-    import os
-    os._exit(1);
+    click.echo()  # newline
+    # print top gutter (..., if lines of context are not near the start)
+    if line > (gelb.utils.config.GELB_ERROR_CONTEXT + 1):
+        click.echo(' ' * 6 + Fore.BLUE + '...' + Style.RESET_ALL)
+    # iterate over all lines in the file
+    for (lineno, line_text) in iterate_over_lines_in_src():
+        # check whether problematic line is part of the context we want
+        # to show (i.e. a few lines before & after problematic line)
+        if (abs(lineno - line) <= gelb.utils.config.GELB_ERROR_CONTEXT):
+            # print each of the selected lines of context
+            if lineno == line:
+                # special treatment for the problematic line
+                line_width = len(line_text)
+                click.echo(
+                    Fore.RED + f"{lineno:>4}->{line_text}" +
+                    Style.RESET_ALL
+                )
+
+                click.echo(' ' * (column + 6), nl=False)
+                click.echo(
+                    Fore.RED + ("^^" + (" " * (line_width - 1))) +
+                    f"{error}" +
+                    Style.RESET_ALL
+                )
+
+                click.echo(' ' * (column + 6), nl=False)
+                click.echo(
+                    Fore.GREEN + (
+                            " " * (line_width + 1) +
+                            f"{hint}"
+                    ) +
+                    Style.RESET_ALL
+                )
+            else:
+                # normal print, for non-problematic line
+                click.echo(
+                    Fore.BLUE + f"{lineno:>4}  {line_text}" + Style.RESET_ALL
+                )
+    # print bottom gutter (..., if lines of context are not near the end)
+    if (lines_in_file - line) > gelb.utils.config.GELB_ERROR_CONTEXT:
+        click.echo(' ' * 6 + Fore.BLUE + '...' + Style.RESET_ALL)

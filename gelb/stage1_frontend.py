@@ -22,11 +22,10 @@ except ModuleNotFoundError:
 from gelb.ASTBuilderVisitor import ASTBuilderVisitor
 from gelb.ASTValidationVisitor import ASTValidationVisitor
 from gelb.ParsingError import ParsingError
+from gelb.utils.exceptions import *
 from gelb.utils.misc import ensure_file_is_not_empty_or_whitespace
-from gelb.utils.compiler_complaints import *
 from gelb.utils.output_to_terminal import (
     info_to_term,
-    verbose_progress_message,
     fatal_error_to_term
 )
 
@@ -45,7 +44,7 @@ def get_cst_as_string(start_rule, input_string):
         cst = func_start_rule()
         return cst.toStringTree(recog=parser)
     else:
-        complain_about_invalid_grammar_rule(start_rule)
+        raise GeLBExInvalidGrammarRule(start_rule)
 
 
 def get_ast(start_rule, input_string, verbose=False):
@@ -56,7 +55,6 @@ def get_ast(start_rule, input_string, verbose=False):
         verbose
     )
 
-    verbose_progress_message("\tpreparing parser", verbose)
     try:
         input_stream = a4.InputStream(input_string)
         lexer = GeLBLexer(input_stream)
@@ -65,55 +63,31 @@ def get_ast(start_rule, input_string, verbose=False):
         parser = GeLBParser(token_stream)
         parser.removeErrorListeners()
         parser.addErrorListener(ParsingError())
-        verbose_progress_message("OK", verbose)
     except:
-        verbose_progress_message("FAIL", verbose)
         fatal_error_to_term("\tfailed to prepare parser")
 
     info_to_term("\tparsing your file...", verbose)
     if hasattr(parser, start_rule):
         func_start_rule = getattr(parser, start_rule)
 
-        verbose_progress_message(
-            "\t\tgenerating the concrete syntax tree (CST)",
-            verbose
-        )
-        try:
-            cst = func_start_rule()
-            verbose_progress_message("OK", verbose)
-        except:
-            verbose_progress_message("FAIL", verbose)
+        cst = func_start_rule()
 
-        verbose_progress_message(
-            "\tgenerating the abstract syntax tree (AST)",
-            verbose
-        )
-        try:
-            ast_builder = ASTBuilderVisitor()
-            visitation_method_name = f"visit{start_rule.capitalize()}"
-            if hasattr(ast_builder, visitation_method_name):
-                # TODO: trigger creation of (sub-)AST & return
-                visitation_method = getattr(ast_builder, visitation_method_name)
-                ast = visitation_method(cst)
-                verbose_progress_message("OK", verbose)
-                return ast
-            else:
-                complain_about_missing_cst_visitation_method(
-                    start_rule,
-                    visitation_method_name
-                )
-        except:
-            verbose_progress_message("FAIL", verbose)
+        ast_builder = ASTBuilderVisitor()
+        visitation_method_name = f"visit{start_rule.capitalize()}"
+        if hasattr(ast_builder, visitation_method_name):
+            # TODO: trigger creation of (sub-)AST & return
+            visitation_method = getattr(ast_builder, visitation_method_name)
+            ast = visitation_method(cst)
+            return ast
+        else:
+            raise GeLBExMissingCSTVisitationMethod(start_rule)
     else:
-        complain_about_invalid_grammar_rule(start_rule)
+        raise GeLBExInvalidGrammarRule(start_rule)
 
 
 def validate_ast(ast, verbose=False):
-    verbose_progress_message("\tvalidating the AST", verbose)
     # try:
     ast_visitor = ASTValidationVisitor()
     ast_visitor.visit(ast)
-    verbose_progress_message("OK", verbose)
     # except:
-    #     verbose_progress_message("FAIL", verbose)
     #     fatal_error_to_term("\tthe AST is invalid")

@@ -40,6 +40,11 @@ from gelb.stage1_frontend import (get_ast, validate_ast)
     is_flag=True,
     help="Make the compiler more verbose (useful for debugging)"
 )
+@click.option(
+    "-t",
+    is_flag=True,
+    help="Display traceback (for debugging the compiler itself)"
+)
 @click.argument(
     "input_file",
     # not using click.Path(), s.t. we can show nicer error-message
@@ -57,13 +62,15 @@ from gelb.stage1_frontend import (get_ast, validate_ast)
     default='cpu_c_serial',
     help="Which backend to use for code-generation"
 )
-def cli(v, input_file, backend):
+def cli(v, t, input_file, backend):
     """
 gelbc -- reference compiler (actually: "transpiler") for the GeLB DSL.
 
 This is the compiler-driver, which reads a "*.gelb" file and passes it
 through the various stages of the compiler.
     """
+    if not t:  # disable the traceback by default
+        sys.tracebacklimit = 0
     # Stage 1 :: FrontEnd
     src_raw = load_file(input_file, v)
     # TODO add support for verbose flag

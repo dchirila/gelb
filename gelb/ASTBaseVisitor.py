@@ -3,9 +3,7 @@
 from abc import ABC, abstractmethod
 
 from gelb.ASTNodes import *
-from gelb.utils.compiler_complaints import (
-    complain_about_missing_ast_visitation_method
-)
+from gelb.utils.exceptions import *
 
 
 class ASTBaseVisitor(ABC):
@@ -35,7 +33,7 @@ class ASTBaseVisitor(ABC):
             result = visitation_method(node)
             return result
         else:
-            complain_about_missing_ast_visitation_method(
+            raise GeLBExMissingASTVisitationMethod(
                 visitor_subclass_name,
                 visitation_method_name
             )
