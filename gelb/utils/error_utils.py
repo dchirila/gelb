@@ -2,7 +2,7 @@
 
 import click
 from colorama import Fore, Style
-
+import gelb.utils.config
 
 GELB_KEYWORDS = [
     'array',
@@ -94,7 +94,7 @@ def show_error_in_src(line, column, error, hint):
                 click.echo(' ' * (column + 6), nl=False)
                 click.echo(
                     Fore.RED + ("^^" + (" " * (line_width - 1))) +
-                    f"{error}" +
+                    f"[Problem] {error}" +
                     Style.RESET_ALL
                 )
 
@@ -102,7 +102,7 @@ def show_error_in_src(line, column, error, hint):
                 click.echo(
                     Fore.GREEN + (
                             " " * (line_width + 1) +
-                            f"{hint}"
+                            f"[Hint] {hint}"
                     ) +
                     Style.RESET_ALL
                 )

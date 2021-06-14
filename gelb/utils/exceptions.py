@@ -97,37 +97,183 @@ class GeLBExSyntaxError(GeLBException):
             os._exit(1)  # really abort
 
 
-class GeLBExInvalidNoOfBlockOccurrences(GeLBException):
+class GeLBExInvalidNoOfOccurrences(GeLBException):
     """
     GeLB exception, for signaling an invalid number of high-level block
     occurrences.
     """
-    def __init__(self, block_name, min_no, max_no, line, column):
+    def __init__(self, block_name, no_occurrences,
+                 line, column):
         self.line = line
         self.column = column
-        if (max_no == 1):
+
+        if block_name == "set_simulation_name_stmt":
+            if no_occurrences == 0:
+                error = (
+                    f"We see that you do not specify a \"simulation_name\""
+                    f" statement."
+                )
+                hint = (
+                    f"Every GeLB program needs to have a line like the"
+                    f" following:\n\n"
+                    f"simulation_name(\"my_simulation_name\");\n\n" +
+                    learning_gelb_hint
+                )
+            elif no_occurrences > 1:
+                error = (
+                    f"We see that you specify more than one \"simulation_name\""
+                    f" statement."
+                )
+                hint = (
+                    f"Every GeLB program needs to have exactly *one* such"
+                    f" statement. " + learning_gelb_hint
+                )
+        elif block_name == "set_simulation_description_stmt":
+            if no_occurrences == 0:
+                error = (
+                    f"We see that you do not specify a"
+                    f" \"simulation_description\" statement."
+                )
+                hint = (
+                        f"Every GeLB program needs to have a line like the"
+                        f" following:\n\n"
+                        f"simulation_description(\"my_simulation_description\");"
+                        f"\n\n" +
+                        learning_gelb_hint
+                )
+            elif no_occurrences > 1:
+                error = (
+                    f"We see that you specify more than one"
+                    f" \"simulation_description\" statement."
+                )
+                hint = (
+                        f"Every GeLB program needs to have exactly"
+                        f" *one* such statement. " + learning_gelb_hint
+                )
+        elif block_name == "global_constants_block":
+            if no_occurrences > 1:
+                error = (
+                    f"We see that you specify more than one"
+                    f" \"global_constants\" block."
+                )
+                hint = (
+                        f"Every GeLB program may contain at most"
+                        f" *one* such block. " +
+                        learning_gelb_hint
+                )
+        elif block_name == "lattices_block":
+            if no_occurrences == 0:
+                error = (
+                    f"We see that you do not specify a"
+                    f" \"lattices\" block."
+                )
+                hint = (
+                        f"Every GeLB program needs to have exactly"
+                        f" *one* lattices block. " +
+                        learning_gelb_hint
+                )
+            elif no_occurrences > 1:
+                error = (
+                    f"We see that you specify more than one"
+                    f" \"lattices\" block."
+                )
+                hint = (
+                        f"Every GeLB program needs to have exactly"
+                        f" *one* such block. " + learning_gelb_hint
+                )
+        elif block_name == "initializer_block":
+            if no_occurrences == 0:
+                error = (
+                    f"We see that you do not specify any"
+                    f" \"initializer\" block."
+                )
+                hint = (
+                        f"Every GeLB program needs to have *at "
+                        f"least one* initializer block. " +
+                        learning_gelb_hint
+                )
+        elif block_name == "dynamic_block":
+            if no_occurrences == 0:
+                error = (
+                    f"We see that you do not specify any"
+                    f" \"dynamic\" block."
+                )
+                hint = (
+                        f"Every GeLB program needs to have *at "
+                        f"least one* dynamic block. " +
+                        learning_gelb_hint
+                )
+        elif block_name == "gauge_block":
+            if no_occurrences == 0:
+                error = (
+                    f"We see that you do not specify any"
+                    f" \"gauge\" block."
+                )
+                hint = (
+                        f"Every GeLB program needs to have *at "
+                        f"least one* gauge block. " +
+                        learning_gelb_hint
+                )
+        elif block_name == "node_classes_block":
+            if no_occurrences == 0:
+                error = (
+                    f"We see that you do not specify a"
+                    f" \"node_classes\" block."
+                )
+                hint = (
+                        f"Every GeLB program needs to have exactly"
+                        f" *one* node_classes block. " +
+                        learning_gelb_hint
+                )
+            elif no_occurrences > 1:
+                error = (
+                    f"We see that you specify more than one"
+                    f" \"node_classes\" block."
+                )
+                hint = (
+                        f"Every GeLB program needs to have exactly"
+                        f" *one* such block. " + learning_gelb_hint
+                )
+        elif block_name == "geometry_block":
+            if no_occurrences == 0:
+                error = (
+                    f"We see that you do not specify a"
+                    f" \"geometry\" block."
+                )
+                hint = (
+                        f"Every GeLB program needs to have exactly"
+                        f" *one* geometry block. " +
+                        learning_gelb_hint
+                )
+            elif no_occurrences > 1:
+                error = (
+                    f"We see that you specify more than one"
+                    f" \"geometry\" block."
+                )
+                hint = (
+                        f"Every GeLB program needs to have exactly"
+                        f" *one* such block. " + learning_gelb_hint
+                )
+        else:
             error = (
-                f"We see that you declare the \"{block_name}\" more than once."
+                f"(internal) GeLBExInvalidNoOfOccurrences cannot handle"
+                f" \"{block_name}\"."
             )
-            if (min_no == 1):
-                hint = (
-                    f"[Hint] We expect exactly one instance of"
-                    f" \"{block_name}\". " + learning_gelb_hint
-                )
-            elif (min_no == 0):
-                hint = (
-                    f"[Hint] We expect at most one instance of"
-                    f" \"{block_name}\" (or none -- it is optonal, because"
-                    f" not all simulations need it). " + learning_gelb_hint
-                )
-        else:  # max_no > 1
-            raise NotImplementedError()
+            hint = (
+                feedback_on_slack_hint
+            )
         super().__init__(error, hint)
         print(self)
 
     def __str__(self):
-        """Override base-class's __str__, because we want to print the code"""
-        show_error_in_src(self.line, self.column, self.error, self.hint)
+        """
+        Override base-class's __str__, because we want to print the code (but
+        only sometimes).
+        """
+        if (self.line is not None) and (self.column is not None):
+            show_error_in_src(self.line, self.column, self.error, self.hint)
+        else:
+            super().__str__()
         if gelb.utils.config.GELB_PRODUCTION_MODE:
             os._exit(1)  # really abort
 

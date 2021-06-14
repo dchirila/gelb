@@ -54,7 +54,7 @@ class ASTBuilderVisitor(GeLBVisitor):
         self.instances_initializer_block = 0
         self.instances_dynamic_block = 0
         self.instances_gauge_block = 0
-        self.instances_function_block = 0
+        # self.instances_function_block = 0
         self.instances_node_classes_block = 0
         self.instances_geometry_block = 0
 
@@ -67,11 +67,9 @@ class ASTBuilderVisitor(GeLBVisitor):
         During this stage, we are accepting all possible high-level blocks,
         and constructing the whole-program AST.
         """
-        result = Program_N(code_range_from_ctx(ctx))  # creates empty
-        # =Program_N=
-        # TODO check that all mandatory elements are present
-        # TODO check that each element is present a valid number of times
-        # TODO add =valid_number_of_occurrences= @ASTNodes-classes?!?
+        result = Program_N(  # creates empty =Program_N=
+            code_range_from_ctx(ctx)
+        )
         list_of_children_sub_asts = self.get_list_of_children_sub_asts(ctx)
         for child in list_of_children_sub_asts:
             if isinstance(child, SetSimulationNameStmt_N):
@@ -121,12 +119,57 @@ class ASTBuilderVisitor(GeLBVisitor):
                 result.node_classes = child
             elif isinstance(child, GeometryBlock_N):
                 result.geometry = child
-            else:
-                # TODO raise exception - unrecognized block
-                print(type(child), "\t", child)
-                print()
-                raise NotImplementedError()
-        # result.validate()
+
+        # ensure that no mandatory block is missing
+        if (self.instances_set_simulation_name_stmt == 0):
+            raise GeLBExInvalidNoOfOccurrences(
+                "set_simulation_name_stmt",
+                self.instances_set_simulation_name_stmt,
+                None, None
+            )
+        if (self.instances_set_simulation_description_stmt == 0):
+            raise GeLBExInvalidNoOfOccurrences(
+                "set_simulation_description_stmt",
+                self.instances_set_simulation_description_stmt,
+                None, None
+            )
+        if (self.instances_lattices_block == 0):
+            raise GeLBExInvalidNoOfOccurrences(
+                "lattices_block",
+                self.instances_lattices_block,
+                None, None
+            )
+        if (self.instances_initializer_block == 0):
+            raise GeLBExInvalidNoOfOccurrences(
+                "initializer_block",
+                self.instances_initializer_block,
+                None, None
+            )
+        if (self.instances_dynamic_block == 0):
+            raise GeLBExInvalidNoOfOccurrences(
+                "dynamic_block",
+                self.instances_dynamic_block,
+                None, None
+            )
+        if (self.instances_gauge_block == 0):
+            raise GeLBExInvalidNoOfOccurrences(
+                "gauge_block",
+                self.instances_gauge_block,
+                None, None
+            )
+        if (self.instances_node_classes_block == 0):
+            raise GeLBExInvalidNoOfOccurrences(
+                "node_classes_block",
+                self.instances_node_classes_block,
+                None, None
+            )
+        if (self.instances_geometry_block == 0):
+            raise GeLBExInvalidNoOfOccurrences(
+                "geometry_block",
+                self.instances_geometry_block,
+                None, None
+            )
+
         return result
 
     # Visit a parse tree produced by GeLBParser#set_simulation_name_stmt.
@@ -134,57 +177,57 @@ class ASTBuilderVisitor(GeLBVisitor):
             self,
             ctx: GeLBParser.Set_simulation_name_stmtContext
     ):
-        if self.instances_set_simulation_name_stmt == 0:
-            self.instances_set_simulation_name_stmt += 1
-            return SetSimulationNameStmt_N(
-                code_range_from_ctx(ctx),
-                StringLiteral_N(None, ctx.STRING().getText())
-            )
-        else:
-            raise GeLBExInvalidNoOfBlockOccurrences(
-                "simulation_name",
-                1, 1,
+        self.instances_set_simulation_name_stmt += 1
+        # prevent more than one instance
+        if self.instances_set_simulation_name_stmt > 1:
+            raise GeLBExInvalidNoOfOccurrences(
+                "set_simulation_name_stmt",
+                self.instances_set_simulation_name_stmt,
                 ctx.start.line,
                 ctx.start.column
             )
+        return SetSimulationNameStmt_N(
+            code_range_from_ctx(ctx),
+            StringLiteral_N(None, ctx.STRING().getText())
+        )
 
     # Visit a parse tree produced by GeLBParser#set_simulation_description_stmt.
     def visitSet_simulation_description_stmt(
             self,
             ctx: GeLBParser.Set_simulation_description_stmtContext
     ):
-        if self.instances_set_simulation_description_stmt == 0:
-            self.instances_set_simulation_description_stmt += 1
-            return SetSimulationDescriptionStmt_N(
-                code_range_from_ctx(ctx),
-                StringLiteral_N(None, ctx.STRING().getText())
-            )
-        else:
-            raise GeLBExInvalidNoOfBlockOccurrences(
-                "simulation_description",
-                1, 1,
+        self.instances_set_simulation_description_stmt += 1
+        # prevent more than one instance
+        if self.instances_set_simulation_description_stmt > 1:
+            raise GeLBExInvalidNoOfOccurrences(
+                "set_simulation_description_stmt",
+                self.instances_set_simulation_description_stmt,
                 ctx.start.line,
                 ctx.start.column
             )
+        return SetSimulationDescriptionStmt_N(
+            code_range_from_ctx(ctx),
+            StringLiteral_N(None, ctx.STRING().getText())
+        )
 
     # Visit a parse tree produced by GeLBParser#global_constants_block.
     def visitGlobal_constants_block(
             self,
             ctx: GeLBParser.Global_constants_blockContext
     ):
-        if self.instances_global_constants_block == 0:
-            self.instances_global_constants_block += 1
-            return GlobalConstantsBlock_N(
-                code_range_from_ctx(ctx),
-                self.get_list_of_children_sub_asts(ctx)
-            )
-        else:
-            raise GeLBExInvalidNoOfBlockOccurrences(
-                "global_constants",
+        self.instances_global_constants_block += 1
+        # prevent more than one instance
+        if self.instances_global_constants_block > 1:
+            raise GeLBExInvalidNoOfOccurrences(
+                "global_constants_block",
                 0, 1,
                 ctx.start.line,
                 ctx.start.column
             )
+        return GlobalConstantsBlock_N(
+            code_range_from_ctx(ctx),
+            self.get_list_of_children_sub_asts(ctx)
+        )
 
     # Visit a parse tree produced by GeLBParser#lattice_constants_block.
     def visitLattice_constants_block(
@@ -208,19 +251,19 @@ class ASTBuilderVisitor(GeLBVisitor):
             self,
             ctx: GeLBParser.Lattices_blockContext
     ):
-        if self.instances_lattices_block == 0:
-            self.instances_lattices_block += 1
-            return LatticesBlock_N(
-                code_range_from_ctx(ctx),
-                self.get_list_of_children_sub_asts(ctx)
-            )
-        else:
-            raise GeLBExInvalidNoOfBlockOccurrences(
-                "lattices",
-                1, 1,
+        self.instances_lattices_block += 1
+        # prevent more than one instance
+        if self.instances_lattices_block > 1:
+            raise GeLBExInvalidNoOfOccurrences(
+                "lattices_block",
+                self.instances_lattices_block,
                 ctx.start.line,
                 ctx.start.column
             )
+        return LatticesBlock_N(
+            code_range_from_ctx(ctx),
+            self.get_list_of_children_sub_asts(ctx)
+        )
 
     # Visit a parse tree produced by GeLBParser#lattice_insta_stmt.
     def visitLattice_insta_stmt(
@@ -330,6 +373,7 @@ class ASTBuilderVisitor(GeLBVisitor):
         stmts = List_N(code_range_from_ctx(ctx))
         for stmt in ctx.block_stmt():
             stmts.append(self.visit(stmt))
+        self.instances_initializer_block += 1
         return InitializerBlock_N(code_range_from_ctx(ctx), name, stmts)
 
     # Visit a parse tree produced by GeLBParser#dynamic_block.
@@ -341,6 +385,7 @@ class ASTBuilderVisitor(GeLBVisitor):
         stmts = List_N(code_range_from_ctx(ctx))
         for stmt in ctx.block_stmt():
             stmts.append(self.visit(stmt))
+        self.instances_dynamic_block += 1
         return DynamicBlock_N(code_range_from_ctx(ctx), name, stmts)
 
     # Visit a parse tree produced by GeLBParser#gauge_block.
@@ -355,6 +400,7 @@ class ASTBuilderVisitor(GeLBVisitor):
         stmts = List_N(code_range_from_ctx(ctx.block_stmt()))
         for stmt in ctx.block_stmt():
             stmts.append(self.visit(stmt))
+        self.instances_gauge_block += 1
         return GaugeBlock_N(
             code_range_from_ctx(ctx),
             name,
@@ -367,19 +413,20 @@ class ASTBuilderVisitor(GeLBVisitor):
             self,
             ctx: GeLBParser.Node_classes_blockContext
     ):
-        if self.instances_node_classes_block == 0:
-            node_classes = List_N(code_range_from_ctx(ctx))
-            for node_class in ctx.node_class_insta_stmt():
-                node_classes.append(self.visit(node_class))
-            self.instances_node_classes_block += 1
-            return NodeClassesBlock_N(code_range_from_ctx(ctx), node_classes)
-        else:
-            raise GeLBExInvalidNoOfBlockOccurrences(
-                "node_classes",
-                1, 1,
+        self.instances_node_classes_block += 1
+        # prevent more than one instance
+        if self.instances_node_classes_block > 1:
+            raise GeLBExInvalidNoOfOccurrences(
+                "node_classes_block",
+                self.instances_node_classes_block,
                 ctx.start.line,
                 ctx.start.column
             )
+        node_classes = List_N(code_range_from_ctx(ctx))
+        for node_class in ctx.node_class_insta_stmt():
+            node_classes.append(self.visit(node_class))
+        self.instances_node_classes_block += 1
+        return NodeClassesBlock_N(code_range_from_ctx(ctx), node_classes)
 
     # Visit a parse tree produced by GeLBParser#node_class_insta_stmt.
     def visitNode_class_insta_stmt(
@@ -398,19 +445,20 @@ class ASTBuilderVisitor(GeLBVisitor):
             self,
             ctx: GeLBParser.Geometry_blockContext
     ):
-        if self.instances_geometry_block == 0:
-            stmts = List_N(code_range_from_ctx(ctx))
-            for stmt in ctx.paint_nodes_stmt():
-                stmts.append(self.visit(stmt))
-            self.instances_geometry_block += 1
-            return GeometryBlock_N(code_range_from_ctx(ctx), stmts)
-        else:
-            raise GeLBExInvalidNoOfBlockOccurrences(
-                "geometry",
-                1, 1,
+        self.instances_geometry_block += 1
+        # prevent more than one instance
+        if self.instances_geometry_block > 1:
+            raise GeLBExInvalidNoOfOccurrences(
+                "geometry_block",
+                self.instances_geometry_block,
                 ctx.start.line,
                 ctx.start.column
             )
+        stmts = List_N(code_range_from_ctx(ctx))
+        for stmt in ctx.paint_nodes_stmt():
+            stmts.append(self.visit(stmt))
+        self.instances_geometry_block += 1
+        return GeometryBlock_N(code_range_from_ctx(ctx), stmts)
 
     # Visit a parse tree produced by GeLBParser#paint_nodes_stmt.
     def visitPaint_nodes_stmt(
