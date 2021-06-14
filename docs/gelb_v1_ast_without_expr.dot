@@ -80,12 +80,6 @@ digraph GeLB_AST {
     global_const_decl_0_lhs [label="Id_N"];
     global_const_decl_0_rhs [label="Expr_N", fillcolor=salmon2];
 
-    listof_lattice_constants [label="List_N"];
-    lattice_constants_0 [label="LatticeConstantsBlock_N"];
-    lattice_constants_0_id [label="Id_N"];
-    lattice_constants_0_listof_const_decls [label="List_N"];
-    lattice_constants_0_const_decl_0 [label="ConstantDeclaration_N"];
-
     listof_lattice_instances [label="List_N"];
     lattice_instance_0 [label="LatticeInstance_N"];
     lattice_instance_0_id [label="Id_N"];
@@ -198,16 +192,6 @@ digraph GeLB_AST {
         global_const_decl_0_dtype_shape -> global_const_decl_0_dtype_shape_0 [xlabel="\[0\]..."];
         global_const_decl_0 -> global_const_decl_0_lhs [xlabel=".lhs_id"];
         global_const_decl_0 -> global_const_decl_0_rhs [xlabel=".rhs_expr"];
-    }
-
-    program -> listof_lattice_constants [xlabel=".listof_lattice_constants"];
-    subgraph cluster_3 {
-        style=filled;
-        color=yellow2;
-        listof_lattice_constants -> lattice_constants_0 [xlabel="\[0\]..."];
-        lattice_constants_0 -> lattice_constants_0_id [xlabel=".id"];
-        lattice_constants_0 -> lattice_constants_0_listof_const_decls [xlabel="List_N"];
-        lattice_constants_0_listof_const_decls -> lattice_constants_0_const_decl_0 [xlabel="\[0\]..."];
     }
 
     program -> listof_lattice_instances [xlabel=".listof_lattice_instances"];

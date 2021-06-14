@@ -64,7 +64,6 @@ class Program_N(Node_N):
         self.simulation_name = None
         self.simulation_description = None
         self.global_constants = None
-        self.lattice_constants_blocks = None
         self.lattices = None
         self.initializers = None
         self.dynamics = None
@@ -81,8 +80,6 @@ class Program_N(Node_N):
         )
         if self.global_constants is not None:
             result += f" {str(self.global_constants)}"
-        if self.lattice_constants_blocks:  # if list is not empty...
-            result += f" {str(self.lattice_constants_blocks)}"
         result += f" {str(self.lattices)}"
         result += f" {str(self.initializers)}"
         result += f" {str(self.dynamics)}"
@@ -169,25 +166,6 @@ class GlobalConstantsBlock_N(Block_N):
     def __str__(self):
         return (
             f"(GlobalConstantsBlock {' '.join(f'{e}' for e in self.stmts)})"
-        )
-
-
-class LatticeConstantsBlock_N(Block_N):
-    """
-    Represents a block of constants for a specific lattice.
-
-    The constants defined within such a block are visible using the syntax
-    LATTICE_NAME.CONSTANT_NAME.
-    """
-    def __init__(self, code_range, name, stmts):
-        super().__init__(code_range, stmts)
-        self.name = name
-
-    def __str__(self):
-        return (
-            f"(LatticeConstantsBlock"
-            f" {self.name}"
-            f" {' '.join(f'{e}' for e in self.stmts)})"
         )
 
 

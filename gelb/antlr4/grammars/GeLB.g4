@@ -15,7 +15,6 @@ gelb_program : // Valid # of occurrences (as interval)
 	( set_simulation_name_stmt         // [1, 1]
 	| set_simulation_description_stmt  // [1, 1]
 	| global_constants_block           // [0, 1]
-	| lattice_constants_block          // [0, oo)
 	| lattices_block                   // [1. 1]
     | initializer_block                // [1, oo)
 	| dynamic_block                    // [1, oo)
@@ -36,12 +35,6 @@ PAREN_CLOSE SEMICOLON ;
 
 // When this optional block is present...
 global_constants_block: GLOBAL_CONSTANTS CURLY_OPEN
-    // it should contain at least one constant definition
-    constant_definition_stmt+
-CURLY_CLOSE ;
-
-// When this optional block is present...
-lattice_constants_block : LATTICE_CONSTANTS identifier CURLY_OPEN
     // it should contain at least one constant definition
     constant_definition_stmt+
 CURLY_CLOSE ;

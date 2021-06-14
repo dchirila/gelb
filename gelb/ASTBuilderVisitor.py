@@ -49,7 +49,6 @@ class ASTBuilderVisitor(GeLBVisitor):
         self.instances_set_simulation_name_stmt = 0
         self.instances_set_simulation_description_stmt = 0
         self.instances_global_constants_block = 0
-        self.instances_lattice_constants_block = 0
         self.instances_lattices_block = 0
         self.instances_initializer_block = 0
         self.instances_dynamic_block = 0
@@ -78,40 +77,33 @@ class ASTBuilderVisitor(GeLBVisitor):
                 result.simulation_description = child.description
             elif isinstance(child, GlobalConstantsBlock_N):
                 result.global_constants = child
-            elif isinstance(child, LatticeConstantsBlock_N):
-                if result.lattice_constants_blocks is None:
-                    result.lattice_constants_blocks = List_N(
-                        # In the case of blocks which may have several
-                        # instances (such as =LatticeConstantsBlock_N=,
-                        # =InitializerBlock_N=, =DynamicBlock_N=, =GaugeBlock_N=
-                        # and =FunctionBlock_N=), we have no guarantee that
-                        # all blocks of the same type are provided in the
-                        # program one after the other, so it makes no sense
-                        # to define a =code_range= for the list of blocks of
-                        # these types -> we simply pass =None=.
-                        code_range=None
-                    )
-                result.lattice_constants_blocks.append(child)
             elif isinstance(child, LatticesBlock_N):
                 result.lattices = child
             elif isinstance(child, InitializerBlock_N):
                 if result.initializers is None:
                     result.initializers = List_N(
-                        # see comment for =result.lattice_constants_blocks=
+                        # In the case of blocks which may have several
+                        # instances (such as =InitializerBlock_N=,
+                        # =DynamicBlock_N=, =GaugeBlock_N= and (later)
+                        # =FunctionBlock_N=), we have no guarantee that all
+                        # blocks of the same type are provided in the program
+                        # one after the other, so it makes no sense to define
+                        # a =code_range= for the list of blocks of these
+                        # types -> we simply pass =None=.
                         code_range=None
                     )
                 result.initializers.append(child)
             elif isinstance(child, DynamicBlock_N):
                 if result.dynamics is None:
                     result.dynamics = List_N(
-                        # see comment for =result.lattice_constants_blocks=
+                        # see comment for =result.initializers=
                         code_range=None
                     )
                 result.dynamics.append(child)
             elif isinstance(child, GaugeBlock_N):
                 if result.gauges is None:
                     result.gauges = List_N(
-                        # see comment for =result.lattice_constants_blocks=
+                        # see comment for =result.initializers=
                         code_range=None
                     )
                 result.gauges.append(child)
@@ -227,23 +219,6 @@ class ASTBuilderVisitor(GeLBVisitor):
         return GlobalConstantsBlock_N(
             code_range_from_ctx(ctx),
             self.get_list_of_children_sub_asts(ctx)
-        )
-
-    # Visit a parse tree produced by GeLBParser#lattice_constants_block.
-    def visitLattice_constants_block(
-            self,
-            ctx: GeLBParser.Lattice_constants_blockContext
-    ):
-        list_of_children_sub_asts = self.get_list_of_children_sub_asts(ctx)
-        # we can have any number of occurrences for =lattice_constants_block=,
-        # so no reason to ever complain; however, we need to keep track how
-        # many there are
-        # TODO: keep pointers to the instances
-        self.instances_lattice_constants_block += 1
-        return LatticeConstantsBlock_N(
-            code_range_from_ctx(ctx),
-            list_of_children_sub_asts[0],
-            list_of_children_sub_asts[1:]
         )
 
     # Visit a parse tree produced by GeLBParser#lattices_block.

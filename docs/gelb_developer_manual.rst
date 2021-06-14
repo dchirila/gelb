@@ -74,7 +74,6 @@ NOTEs:
 
   - simulation_name -> **StringLit**
   - simulation_description -> **StringLit**
-  - lattice_constants -> **List** (**TODO (ConstantDefinitionStmt_N?)**)
   - lattices -> **List** (**Lattice** )
   - node_classes -> **List** (**NodeClass**)
   - initializers -> **List** (**Initializer**)

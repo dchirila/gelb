@@ -52,7 +52,6 @@ class Program_N #palegreen;line:green;text:black {
     + simulation_name
     + simulation_description
     + global_constants
-    + lattice_constants_blocks
     + lattices
     + initializers
     + dynamics
@@ -74,13 +73,6 @@ class GlobalConstantsBlock_N #palegreen;line:green;text:black {
     + __str__(self)
 }
 
-class LatticeConstantsBlock_N #palegreen;line:green;text:black {
-    + name
-
-    + __init__(self, code_range, name, stmts)
-    + __str__(self)
-}
-
 class LatticesBlock_N #palegreen;line:green;text:black {
     + __str__(self)
 }
@@ -93,10 +85,6 @@ class LatticeInstaStmt_N #palegreen;line:green;text:black {
     + size
 
     + __init__(self, code_range, name, d, q, df_type, size)
-    + __str__(self)
-}
-
-class NodeClassesBlock_N #palegreen;line:green;text:black {
     + __str__(self)
 }
 
@@ -129,6 +117,10 @@ class GaugeBlock_N #palegreen;line:green;text:black {
     + outputs
 
     + __init__(self, code_range, name, outputs, stmts)
+    + __str__(self)
+}
+
+class NodeClassesBlock_N #palegreen;line:green;text:black {
     + __str__(self)
 }
 
@@ -321,7 +313,6 @@ Node_N <|-- List_N
 Node_N <|-- Program_N
 Node_N <|-- Block_N
 Block_N <|-- GlobalConstantsBlock_N
-Block_N <|-- LatticeConstantsBlock_N
 Block_N <|-- LatticesBlock_N
 Stmt_N <|-- SetSimulationNameStmt_N
 Stmt_N <|-- SetSimulationDescriptionStmt_N

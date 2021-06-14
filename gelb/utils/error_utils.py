@@ -25,7 +25,6 @@ GELB_KEYWORDS = [
     'int64',
     'int8',
     'lattice',
-    'lattice_constants',
     'lattices',
     'node_class',
     'node_classes',

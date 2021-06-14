@@ -1,5 +1,0 @@
-// this version also has comments inside the code
-lattice_constants = {                                       //
-  const int C1 = 2, /* comments allowed even like this */ C2 = 1; /* A more
-      complex comment, just because we can. */
-}

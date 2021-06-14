@@ -92,12 +92,6 @@ class ASTInitialValidationVisitor(ASTBaseVisitor):
     ):
         raise NotImplementedError()
 
-    def visitLatticeConstantsBlock_N(
-            self,
-            node: LatticeConstantsBlock_N
-    ):
-        raise NotImplementedError()
-
     def visitLatticesBlock_N(
             self,
             node: LatticesBlock_N
