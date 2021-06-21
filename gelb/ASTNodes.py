@@ -95,6 +95,9 @@ class List_N(Node_N):
     def __len__(self):
         return len(self.elements)
 
+    def __setitem__(self, key, value):
+        self.elements[key] = value
+
     def __str__(self):
         return f"(List {' '.join(f'{e}' for e in self.elements)})"
 

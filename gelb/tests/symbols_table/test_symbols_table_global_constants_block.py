@@ -19,14 +19,14 @@ def test_valid():
     ast = build_symbols_tables(ast)
     assert repr(ast.symbols) == (
         "(CX"
-        " \"(ScalarDataType int)\""
+        " \"constant definition\""
         " (ConstantDefinitionStmt"
         " (Identifier CX)"
         " (ScalarDataType int)"
         " (IntLiteral 0)"
         "))"
         " (Z"
-        " \"(ScalarDataType real64)\""
+        " \"constant definition\""
         " (ConstantDefinitionStmt"
         " (Identifier Z)"
         " (ScalarDataType real64)"
@@ -35,6 +35,11 @@ def test_valid():
     )
 
 def test_invalid():
+    """
+    Invalid because we re-define NX.
+
+    Should raise a GeLBExSymbolExists exception.
+    """
     # Arrange
     test_string = """
     global_constants {

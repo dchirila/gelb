@@ -50,6 +50,11 @@ def test_valid():
 
 
 def test_invalid():
+    """
+    Invalid because we re-define f.
+
+    Should raise a GeLBExSymbolExists exception.
+    """
     # Arrange
     test_string = """
     lattices {

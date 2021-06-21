@@ -45,6 +45,8 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
             # ... add initializer-names to the program's global symbols table
             if node.initializers is not None:
                 for index, initializer in enumerate(node.initializers):
+                    # add symbol for initializer itself to the global symbols
+                    # table
                     symbol_dict = {
                         'name': initializer.name.name,
                         'type': "initializer",
@@ -52,9 +54,16 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                     }
                     node.symbols.add_symbol(symbol_dict)
 
+                    # trigger symbols-table creation @initializer
+                    node.initializers[index] = self.visit(
+                        node.initializers[index], ast_root_node
+                    )
+
             # ... add dynamic-names to the program's global symbols table
             if node.dynamics is not None:
                 for index, dynamic in enumerate(node.dynamics):
+                    # add symbol for dynamic itself to the global symbols
+                    # table
                     symbol_dict = {
                         'name': dynamic.name.name,
                         'type': "dynamic",
@@ -62,26 +71,30 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                     }
                     node.symbols.add_symbol(symbol_dict)
 
+                    # trigger symbols-table creation @dynamic
+                    node.dynamics[index] = self.visit(
+                        node.dynamics[index], ast_root_node
+                    )
+
             # ... add gauge-names to the program's global symbols table
             if node.gauges is not None:
                 for index, gauge in enumerate(node.gauges):
+                    # add symbol for gauge itself to the global symbols
+                    # table
                     symbol_dict = {
                         'name': gauge.name.name,
                         'type': "gauge",
                         'value': gauge
                     }
                     node.symbols.add_symbol(symbol_dict)
+
+                    # trigger symbols-table creation @gauge
+                    node.gauges[index] = self.visit(
+                        node.gauges[index], ast_root_node
+                    )
             # END :: build global (program-wide) symbols table #
 
-            print(node.symbols)
-            # raise TypeError()
-        # TODO ... first, place the {initer, dyn, gauge}s into program's
-        #  self.symbols field
-
-        # TODO ... visit each of the {initer, dyn, gauge}s, to trigger
-        #  building of local symbols tables for each of them.
-
-        # TODO ... visit more nodes, to build more symbols tables ...
+            # TODO ... visit more nodes, to build more symbols tables ...
 
         return node
 
@@ -96,7 +109,7 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
             for constant_insta_stmt in node.stmts:
                 symbol_dict = {
                     'name': constant_insta_stmt.name.name,
-                    'type': constant_insta_stmt.data_type,
+                    'type': "constant definition",
                     'value': constant_insta_stmt
                 }
                 node.symbols.add_symbol(symbol_dict)
@@ -117,4 +130,79 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                     'value': lattice_insta_stmt
                 }
                 node.symbols.add_symbol(symbol_dict)
+        return node
+
+    def visitInitializerBlock_N(
+            self,
+            node: InitializerBlock_N,
+            ast_root_node: Program_N
+    ):
+        if node.symbols is None:
+            node.symbols = SymbolsTable()
+
+            for stmt in node.stmts:
+                if isinstance(stmt, ConstantDefinitionStmt_N):
+                    symbol_dict = {
+                        'name': stmt.name.name,
+                        'type': "constant definition",
+                        'value': stmt
+                    }
+                    node.symbols.add_symbol(symbol_dict)
+                elif isinstance(stmt, VariableDeclarationStmt_N):
+                    symbol_dict = {
+                        'name': stmt.name.name,
+                        'type': "variable declaration",
+                        'value': stmt
+                    }
+                    node.symbols.add_symbol(symbol_dict)
+        return node
+
+    def visitDynamicBlock_N(
+            self,
+            node: DynamicBlock_N,
+            ast_root_node: Program_N
+    ):
+        if node.symbols is None:
+            node.symbols = SymbolsTable()
+
+            for stmt in node.stmts:
+                if isinstance(stmt, ConstantDefinitionStmt_N):
+                    symbol_dict = {
+                        'name': stmt.name.name,
+                        'type': "constant definition",
+                        'value': stmt
+                    }
+                    node.symbols.add_symbol(symbol_dict)
+                elif isinstance(stmt, VariableDeclarationStmt_N):
+                    symbol_dict = {
+                        'name': stmt.name.name,
+                        'type': "variable declaration",
+                        'value': stmt
+                    }
+                    node.symbols.add_symbol(symbol_dict)
+        return node
+
+    def visitGaugeBlock_N(
+            self,
+            node: GaugeBlock_N,
+            ast_root_node: Program_N
+    ):
+        if node.symbols is None:
+            node.symbols = SymbolsTable()
+
+            for stmt in node.stmts:
+                if isinstance(stmt, ConstantDefinitionStmt_N):
+                    symbol_dict = {
+                        'name': stmt.name.name,
+                        'type': "constant definition",
+                        'value': stmt
+                    }
+                    node.symbols.add_symbol(symbol_dict)
+                elif isinstance(stmt, VariableDeclarationStmt_N):
+                    symbol_dict = {
+                        'name': stmt.name.name,
+                        'type': "variable declaration",
+                        'value': stmt
+                    }
+                    node.symbols.add_symbol(symbol_dict)
         return node
