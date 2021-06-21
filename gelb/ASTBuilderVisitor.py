@@ -661,7 +661,7 @@ class ASTBuilderVisitor(GeLBVisitor):
             self,
             ctx: GeLBParser.IdentifierContext
     ):
-        return Identifier_N(code_range_from_ctx(ctx), ctx.ID())
+        return Identifier_N(code_range_from_ctx(ctx), str(ctx.ID()))
 
     # Visit a parse tree produced by GeLBParser#expr.
     def visitExpr(

@@ -21,6 +21,7 @@ except ModuleNotFoundError:
 
 from gelb.ASTBuilderVisitor import ASTBuilderVisitor
 from gelb.ASTInitialValidationVisitor import ASTInitialValidationVisitor
+from gelb.SymbolsTablesBuilderVisitor import SymbolsTablesBuilderVisitor
 from gelb.ParsingError import ParsingError
 from gelb.utils.exceptions import *
 from gelb.utils.misc import ensure_file_is_not_empty_or_whitespace
@@ -72,9 +73,11 @@ def get_ast(start_rule, input_string):
         raise GeLBExInvalidGrammarRule(start_rule)
 
 
+def build_symbols_tables(ast):
+    ast_visitor = SymbolsTablesBuilderVisitor()
+    return ast_visitor.visit(ast, ast)
+
+
 def validate_ast(ast):
-    # try:
     ast_visitor = ASTInitialValidationVisitor()
     ast_visitor.visit(ast)
-    # except:
-    #     fatal_error_to_term("\tthe AST is invalid")

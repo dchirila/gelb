@@ -6,7 +6,8 @@ from gelb.utils.output_to_terminal import error_with_hint_to_term
 from gelb.utils.error_utils import (
     feedback_on_slack_hint,
     learning_gelb_hint,
-    show_error_in_src
+    show_error_in_src,
+    show_double_definition_error
 )
 
 class GeLBException(Exception):
@@ -18,8 +19,8 @@ class GeLBException(Exception):
         self.hint = hint
 
     def __str__(self):
-        error_with_hint_to_term(self.error, self.hint)
         if gelb.utils.config.GELB_PRODUCTION_MODE:
+            error_with_hint_to_term(self.error, self.hint)
             os._exit(1)  # really abort
 
 
@@ -92,8 +93,8 @@ class GeLBExSyntaxError(GeLBException):
 
     def __str__(self):
         """Override base-class's __str__, because we want to print the code"""
-        show_error_in_src(self.line, self.column, self.error, self.hint)
         if gelb.utils.config.GELB_PRODUCTION_MODE:
+            show_error_in_src(self.line, self.column, self.error, self.hint)
             os._exit(1)  # really abort
 
 
@@ -270,11 +271,11 @@ class GeLBExInvalidNoOfOccurrences(GeLBException):
         Override base-class's __str__, because we want to print the code (but
         only sometimes).
         """
-        if (self.line is not None) and (self.column is not None):
-            show_error_in_src(self.line, self.column, self.error, self.hint)
-        else:
-            super().__str__()
         if gelb.utils.config.GELB_PRODUCTION_MODE:
+            if (self.line is not None) and (self.column is not None):
+                show_error_in_src(self.line, self.column, self.error, self.hint)
+            else:
+                super().__str__()
             os._exit(1)  # really abort
 
 
@@ -411,3 +412,41 @@ class GeLBExAntlr4JavaToolFailed(GeLBException):
                 feedback_on_slack_hint
         )
         super().__init__(error, hint)
+
+
+class GeLBExSymbolExists(GeLBException):
+    """
+    GeLB exception, for signaling that another symbol with the same name
+    exists within the same scope.
+    """
+    def __init__(self, curr_instance, prev_instance):
+        self.prev_instance = prev_instance
+        self.curr_instance = curr_instance
+        error = (
+            f"We see that you define a {curr_instance['type']}"
+            f" named \"{curr_instance['name']}\"."
+            f" However, you are using that name (for a "
+            f"{prev_instance['type']}) already."
+        )
+        hint = (
+            f"Rename (or remove) one of the instances of"
+            f" \"{curr_instance['name']}\"."
+        )
+        super().__init__(error, hint)
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            print(self)
+
+    def __str__(self):
+        """Override base-class's __str__, because we want to print the code"""
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            show_double_definition_error(
+                self.curr_instance['value'].code_range.start_line,
+                self.curr_instance['value'].code_range.start_col,
+                self.prev_instance['value'].code_range.start_line,
+                self.prev_instance['value'].code_range.start_col,
+                self.prev_instance['name'],
+                self.prev_instance['type']
+            )
+            super().__str__()
+            os._exit(1)  # really abort
+

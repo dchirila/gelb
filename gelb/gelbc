@@ -31,7 +31,11 @@ except:
 
 # If we reached this point, we should be able to import GeLB modules
 from gelb.utils.misc import load_file
-from gelb.stage1_frontend import (get_ast, validate_ast)
+from gelb.stage1_frontend import (
+    get_ast,
+    build_symbols_tables,
+    validate_ast
+)
 
 
 @click.command()
@@ -69,7 +73,11 @@ through the various stages of the compiler.
     # Stage 1 :: FrontEnd
     src_raw = load_file(input_file)
     ast = get_ast("gelb_program", src_raw)
-    print(ast)  # TODO RM debugging print
+    # print(ast)  # TODO RM debugging print
+    # ast.iterate_over_ast_fields()
+
+    ast = build_symbols_tables(ast)
+
     # validate_ast(ast)
 
     # ... TODO semantic analysis, checks, etc.

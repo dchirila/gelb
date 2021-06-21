@@ -15,7 +15,7 @@ class ASTBaseVisitor(ABC):
     # def __init__(self):
     #     pass
 
-    def visit(self, node):
+    def visit(self, node, ast_root_node):
         """
         Visit a node.
 
@@ -23,6 +23,10 @@ class ASTBaseVisitor(ABC):
         where ``NODE_CLASS_NAME`` is the node's class.
 
         :param node: The node to visit.
+        :param ast_root_node: The root node for the entire program.
+               NOTE: To avoid having the AST as a global constant, we always
+               pass the ast_root_node to the visitor-methods (some of which
+               need to access information available near the top of the tree).
         :return: The return value of the called visitation method.
         """
         node_class_name = type(node).__name__
@@ -30,7 +34,7 @@ class ASTBaseVisitor(ABC):
         visitation_method_name = f"visit{node_class_name}"
         if hasattr(self, visitation_method_name):
             visitation_method = getattr(self, visitation_method_name, None)
-            result = visitation_method(node)
+            result = visitation_method(node, ast_root_node)
             return result
         else:
             raise GeLBExMissingASTVisitationMethod(
@@ -40,242 +44,283 @@ class ASTBaseVisitor(ABC):
 
     # def visitList_N(
     #         self,
-    #         node: List_N
+    #         node: List_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitProgram_N(
     #         self,
-    #         node: Program_N
+    #         node: Program_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitSetSimulationNameStmt_N(
     #         self,
-    #         node: SetSimulationNameStmt_N
+    #         node: SetSimulationNameStmt_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitSetSimulationDescriptionStmt_N(
     #         self,
-    #         node: SetSimulationDescriptionStmt_N):
+    #         node: SetSimulationDescriptionStmt_N):,
+    #         ast_root_node: Program_N
     #     raise NotImplementedError()
     #
     # def visitGlobalConstantsBlock_N(
     #         self,
-    #         node: GlobalConstantsBlock_N
+    #         node: GlobalConstantsBlock_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitLatticesBlock_N(
     #         self,
-    #         node: LatticesBlock_N
+    #         node: LatticesBlock_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitLatticeInstaStmt_N(
     #         self,
-    #         node: LatticeInstaStmt_N
+    #         node: LatticeInstaStmt_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitNodeClassesBlock_N(
     #         self,
-    #         node: NodeClassesBlock_N
+    #         node: NodeClassesBlock_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitNodeClassInstaStmt_N(
     #         self,
-    #         node: NodeClassInstaStmt_N
+    #         node: NodeClassInstaStmt_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitInitializerBlock_N(
     #         self,
-    #         node: InitializerBlock_N
+    #         node: InitializerBlock_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitDynamicBlock_N(
     #         self,
-    #         node: DynamicBlock_N
+    #         node: DynamicBlock_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitGaugeBlock_N(
     #         self,
-    #         node: GaugeBlock_N
+    #         node: GaugeBlock_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitGeometryBlock_N(
     #         self,
-    #         node: GeometryBlock_N
+    #         node: GeometryBlock_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitIdentifier_N(
     #         self,
-    #         node: Identifier_N
+    #         node: Identifier_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitRange_N(
     #         self,
-    #         node: Range_N
+    #         node: Range_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitRectSelOfLatticeInDFs_N(
     #         self,
-    #         node: RectSelOfLatticeInDFs_N
+    #         node: RectSelOfLatticeInDFs_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitRectSelOfLatticeOutDFs_N(
     #         self,
-    #         node: RectSelOfLatticeOutDFs_N
+    #         node: RectSelOfLatticeOutDFs_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitRectSelOfArrayElems_N(
     #         self,
-    #         node: RectSelOfArrayElems_N
+    #         node: RectSelOfArrayElems_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitScalarDataType_N(
     #         self,
-    #         node: ScalarDataType_N
+    #         node: ScalarDataType_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitArrayDataType_N(
     #         self,
-    #         node: ArrayDataType_N
+    #         node: ArrayDataType_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitMul_N(
     #         self,
-    #         node: Mul_N
+    #         node: Mul_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitDiv_N(
     #         self,
-    #         node: Div_N
+    #         node: Div_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitAdd_N(
     #         self,
-    #         node: Add_N
+    #         node: Add_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitSub_N(
     #         self,
-    #         node: Sub_N
+    #         node: Sub_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitPow_N(
     #         self,
-    #         node: Pow_N
+    #         node: Pow_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitNotExpr_N(
     #         self,
-    #         node: NotExpr_N
+    #         node: NotExpr_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitUnaryMinusExpr_N(
     #         self,
-    #         node: UnaryMinusExpr_N
+    #         node: UnaryMinusExpr_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitIntLiteral_N(
     #         self,
-    #         node: IntLiteral_N
+    #         node: IntLiteral_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitRealLiteral_N(
     #         self,
-    #         node: RealLiteral_N
+    #         node: RealLiteral_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitBoolLiteral_N(
     #         self,
-    #         node: BoolLiteral_N
+    #         node: BoolLiteral_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitStringLiteral_N(
     #         self,
-    #         node: StringLiteral_N
+    #         node: StringLiteral_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitArray1DLiteral_N(
     #         self,
-    #         node: Array1DLiteral_N
+    #         node: Array1DLiteral_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitArray2DLiteral_N(
     #         self,
-    #         node: Array2DLiteral_N
+    #         node: Array2DLiteral_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitArray3DLiteral_N(
     #         self,
-    #         node: Array3DLiteral_N
+    #         node: Array3DLiteral_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitArray4DLiteral_N(
     #         self,
-    #         node: Array4DLiteral_N
+    #         node: Array4DLiteral_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitConstantDefinitionStmt_N(
     #         self,
-    #         node: ConstantDefinitionStmt_N
+    #         node: ConstantDefinitionStmt_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitVariableDeclarationStmt_N(
     #         self,
-    #         node: VariableDeclarationStmt_N
+    #         node: VariableDeclarationStmt_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitPaintNodesStmt_N(
     #         self,
-    #         node: PaintNodesStmt_N
+    #         node: PaintNodesStmt_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitVariableAssignmentStmt_N(
     #         self,
-    #         node: VariableAssignmentStmt_N
+    #         node: VariableAssignmentStmt_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
     #
     # def visitLatticeOutSelectionAssignmentStmt_N(
     #         self,
-    #         node: LatticeOutSelectionAssignmentStmt_N
+    #         node: LatticeOutSelectionAssignmentStmt_N,
+    #         ast_root_node: Program_N
     # ):
     #     raise NotImplementedError()
 
-    # def visitTODO(node: TODO):
+    # def visitTODO(node: TODO):,
+    #         ast_root_node: Program_N
     #     raise NotImplementedError()

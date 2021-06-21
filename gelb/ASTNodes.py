@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from abc import ABC, abstractmethod
+from gelb.SymbolsTable import SymbolsTable
 
 
 class Node_N(ABC):
@@ -9,20 +10,64 @@ class Node_N(ABC):
     """
     def __init__(self, code_range):
         self.code_range = code_range
+        self.symbols = SymbolsTable()
 
     @abstractmethod
     def __str__(self):
         pass
 
     def get_ast_fields(self):
-        return [
-            field for field in dir(self) if not (
-                field.startswith('_') or
-                field.startswith('code_range') or
-                field.startswith('get_ast_fields') or
-                field.startswith('append')  # from List_N
-            )
-        ]
+        # special treatment for List_N
+        if isinstance(self, List_N):
+            return self.elements
+        else:
+            return [
+                field for field in dir(self) if not (
+                        field.startswith('_') or
+                        field.startswith('code_range') or
+                        field.startswith('get_ast_fields') or
+                        field.startswith('iterate_over_ast_fields') or
+                        field.startswith('is_terminal_node') or
+                        field.startswith('append') or  # from List_N
+                        field.startswith('symbols')  # exclude the symbol-table
+                )
+            ]
+
+    def iterate_over_ast_fields(self):
+        # print self
+        print()
+        print("<<<DEBUG-1>>> ", self.__class__.__name__)
+        print("<<<DEBUG-2>>> ", self)
+        # iterate over fields
+        list_of_fields = None
+        if isinstance(self, List_N):
+            list_of_fields = self.elements
+        else:
+            list_of_fields = self.get_ast_fields()
+
+        for field in list_of_fields:
+            print("<<<DEBUG-3>>> ", field, type(field))
+            if isinstance(field, Node_N):
+                print("<<<DEBUG-4>>> ", field, type(field))
+                if field.is_terminal_node():
+                    print("<<<DEBUG-5>>> ", field, type(field))
+                else:
+                    print("<<<DEBUG-6>>> ", field, type(field))
+                    field.iterate_over_ast_fields()
+            else:
+                if hasattr(self, field):
+                    field = getattr(self, field)
+                    print("<<<DEBUG-7>>> ", field, type(field))
+                    if field.is_terminal_node():
+                        print("<<<DEBUG-8>>> ", field, type(field))
+                    else:
+                        print("<<<DEBUG-9>>> ", field, type(field))
+                        field.iterate_over_ast_fields()
+                else:
+                    raise TypeError("<<<DEBUG>>> abnormal AST node field")
+
+    def is_terminal_node(self):
+        return False  # False unless otherwise
 
     # def accept(self, visitor):
     #     raise NotImplementedError()
@@ -151,6 +196,7 @@ class Block_N(Node_N):
     def __init__(self, code_range, stmts):
         super().__init__(code_range)
         self.stmts = stmts
+        self.symbols = None
 
     @abstractmethod
     def __str__(self):
@@ -305,6 +351,9 @@ class Identifier_N(Expr_N):
     def __str__(self):
         return f"(Identifier {self.name})"
 
+    def is_terminal_node(self):
+        return True
+
 
 class Range_N(Node_N):
     """
@@ -419,6 +468,9 @@ class ScalarDataType_N(DataType_N):
     def __str__(self):
         return f"(ScalarDataType {self.scalar_dtype})"
 
+    def is_terminal_node(self):
+        return True
+
 
 class ArrayDataType_N(DataType_N):
     """
@@ -531,6 +583,9 @@ class Literal_N(Expr_N):
     @abstractmethod
     def __str__(self):
         pass
+
+    def is_terminal_node(self):
+        return True
 
 
 class IntLiteral_N(Literal_N):
