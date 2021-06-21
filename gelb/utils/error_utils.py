@@ -75,87 +75,8 @@ def count_lines_in_program():
     return no_lines
 
 
-def show_double_definition_error(
-        curr_line,
-        curr_column,
-        prev_line,
-        prev_column,
-        symbol_name, symbol_type):
-    lines_in_file = count_lines_in_program()
-
-    click.echo()  # newline
-    # print previous definition
-    # print top gutter (..., if lines of context are not near the start)
-    if prev_line > (gelb.utils.config.GELB_ERROR_CONTEXT + 1):
-        click.echo(' ' * 6 + Fore.BLUE + '...' + Style.RESET_ALL)
-    # iterate over all lines in the file
-    for (lineno, line_text) in iterate_over_lines_in_src():
-        # check whether problematic line is part of the context we want
-        # to show (i.e. a few lines before & after problematic line)
-        if (abs(lineno - prev_line) <= gelb.utils.config.GELB_ERROR_CONTEXT):
-            # print each of the selected lines of context
-            if lineno == prev_line:
-                # special treatment for the problematic line
-                line_width = len(line_text)
-                click.echo(
-                    Fore.BLUE + f"{lineno:>4}->{line_text}" +
-                    Style.RESET_ALL
-                )
-
-                click.echo(' ' * (prev_column + 6), nl=False)
-                click.echo(
-                    Fore.BLUE + ("^^" + (" " * (line_width - 1))) + (
-                            f"[Problem] Previous definition of \""
-                            f"{symbol_name}\" (as a {symbol_type}) here."
-                    ) +
-                    Style.RESET_ALL
-                )
-            else:
-                # normal print, for non-problematic line
-                click.echo(
-                    Fore.BLUE + f"{lineno:>4}  {line_text}" + Style.RESET_ALL
-                )
-    # print bottom gutter (..., if lines of context are not near the end)
-    if (lines_in_file - prev_line) > gelb.utils.config.GELB_ERROR_CONTEXT:
-        click.echo(' ' * 6 + Fore.BLUE + '...' + Style.RESET_ALL)
-
-    click.echo()  # newline
-    # print current definition
-    # print top gutter (..., if lines of context are not near the start)
-    if curr_line > (gelb.utils.config.GELB_ERROR_CONTEXT + 1):
-        click.echo(' ' * 6 + Fore.BLUE + '...' + Style.RESET_ALL)
-    # iterate over all lines in the file
-    for (lineno, line_text) in iterate_over_lines_in_src():
-        # check whether problematic line is part of the context we want
-        # to show (i.e. a few lines before & after problematic line)
-        if (abs(lineno - curr_line) <= gelb.utils.config.GELB_ERROR_CONTEXT):
-            # print each of the selected lines of context
-            if lineno == curr_line:
-                # special treatment for the problematic line
-                line_width = len(line_text)
-                click.echo(
-                    Fore.RED + f"{lineno:>4}->{line_text}" +
-                    Style.RESET_ALL
-                )
-
-                click.echo(' ' * (curr_column + 6), nl=False)
-                click.echo(
-                    Fore.RED + ("^^" + (" " * (line_width - 1))) + (
-                        f"[Problem] Re-definition of \"{symbol_name}\" here."
-                    ) +
-                    Style.RESET_ALL
-                )
-            else:
-                # normal print, for non-problematic line
-                click.echo(
-                    Fore.BLUE + f"{lineno:>4}  {line_text}" + Style.RESET_ALL
-                )
-    # print bottom gutter (..., if lines of context are not near the end)
-    if (lines_in_file - prev_line) > gelb.utils.config.GELB_ERROR_CONTEXT:
-        click.echo(' ' * 6 + Fore.BLUE + '...' + Style.RESET_ALL)
-
-
-def show_error_in_src(line, column, error, hint):
+def show_source_with_annotation(line, column, click_color,
+                                annotation, hint=None):
     lines_in_file = count_lines_in_program()
 
     click.echo()  # newline
@@ -178,19 +99,20 @@ def show_error_in_src(line, column, error, hint):
 
                 click.echo(' ' * (column + 6), nl=False)
                 click.echo(
-                    Fore.RED + ("^^" + (" " * (line_width - 1))) +
-                    f"[Problem] {error}" +
+                    click_color + ("^^" + (" " * (line_width - 1))) +
+                    f"[Problem] {annotation}" +
                     Style.RESET_ALL
                 )
 
-                click.echo(' ' * (column + 6), nl=False)
-                click.echo(
-                    Fore.GREEN + (
-                            " " * (line_width + 1) +
-                            f"[Hint] {hint}"
-                    ) +
-                    Style.RESET_ALL
-                )
+                if hint:
+                    click.echo(' ' * (column + 6), nl=False)
+                    click.echo(
+                        Fore.GREEN + (
+                                " " * (line_width + 1) +
+                                f"[Hint] {hint}"
+                        ) +
+                        Style.RESET_ALL
+                    )
             else:
                 # normal print, for non-problematic line
                 click.echo(
@@ -199,3 +121,26 @@ def show_error_in_src(line, column, error, hint):
     # print bottom gutter (..., if lines of context are not near the end)
     if (lines_in_file - line) > gelb.utils.config.GELB_ERROR_CONTEXT:
         click.echo(' ' * 6 + Fore.BLUE + '...' + Style.RESET_ALL)
+
+
+def show_error_in_src(line, column, error, hint):
+    show_source_with_annotation(line, column, Fore.RED, error, hint)
+
+def show_double_definition_error(
+        curr_line,
+        curr_column,
+        prev_line,
+        prev_column,
+        symbol_name, symbol_type):
+    show_source_with_annotation(
+        prev_line,
+        prev_column,
+        Fore.BLUE,
+        f"Previous definiton of \"{symbol_name}\" (as a {symbol_type}) here."
+    )
+    show_source_with_annotation(
+        curr_line,
+        curr_column,
+        Fore.RED,
+        f"Re-definition of \"{symbol_name}\" here."
+    )
