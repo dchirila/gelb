@@ -68,15 +68,20 @@ def iterate_over_lines_in_src():
         current_lineno += 1
 
 
+def count_lines_in_program():
+    no_lines = 0
+    for (lineno, line_text) in iterate_over_lines_in_src():
+        no_lines += 1
+    return no_lines
+
+
 def show_double_definition_error(
         curr_line,
         curr_column,
         prev_line,
         prev_column,
         symbol_name, symbol_type):
-    lines_in_file = 0
-    for (lineno, line_text) in iterate_over_lines_in_src():
-        lines_in_file += 1
+    lines_in_file = count_lines_in_program()
 
     click.echo()  # newline
     # print previous definition
@@ -151,9 +156,7 @@ def show_double_definition_error(
 
 
 def show_error_in_src(line, column, error, hint):
-    lines_in_file = 0
-    for (lineno, line_text) in iterate_over_lines_in_src():
-        lines_in_file += 1
+    lines_in_file = count_lines_in_program()
 
     click.echo()  # newline
     # print top gutter (..., if lines of context are not near the start)
