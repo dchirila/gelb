@@ -10,7 +10,6 @@ class Node_N(ABC):
     """
     def __init__(self, code_range):
         self.code_range = code_range
-        self.symbols = SymbolsTable()
 
     @abstractmethod
     def __str__(self):

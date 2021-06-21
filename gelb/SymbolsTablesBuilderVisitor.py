@@ -40,12 +40,30 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
 
         return node
 
+    def visitGlobalConstantsBlock_N(
+            self,
+            node: GlobalConstantsBlock_N,
+            ast_root_node: Program_N
+    ):
+        # guard against attempts to build the symbols-table twice
+        if node.symbols is None:
+            node.symbols = SymbolsTable()  # new SymbolsTable
+
+            for constant_insta_stmt in node.stmts:
+                symbol_dict = {
+                    'name': constant_insta_stmt.name.name,
+                    'type': constant_insta_stmt.data_type,
+                    'value': constant_insta_stmt
+                }
+                node.symbols.add_symbol(symbol_dict)
+        return node
+
     def visitLatticesBlock_N(
             self,
             node: LatticesBlock_N,
             ast_root_node: Program_N
     ):
-        # guard against attempts to build the symbol-table twice
+        # guard against attempts to build the symbols-table twice
         if node.symbols is None:
             node.symbols = SymbolsTable()  # new SymbolsTable
 
@@ -56,8 +74,4 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                     'value': lattice_insta_stmt
                 }
                 node.symbols.add_symbol(symbol_dict)
-            return node
-
-        else:  # symbols-table already exists
-            return node
-
+        return node
