@@ -115,6 +115,7 @@ class Program_N(Node_N):
         # self.functions = None
         self.node_classes = None
         self.geometry = None
+        self.symbols = None  # symbols table (built after AST construction)
 
     def __str__(self):
         result = (

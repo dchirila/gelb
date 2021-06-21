@@ -136,7 +136,8 @@ def show_double_definition_error(
         prev_line,
         prev_column,
         Fore.BLUE,
-        f"Previous definiton of \"{symbol_name}\" (as a {symbol_type}) here."
+        f"Previous definiton of \"{symbol_name}\" (as {symbol_type}) "
+        f"here."
     )
     show_source_with_annotation(
         curr_line,

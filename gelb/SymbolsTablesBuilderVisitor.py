@@ -29,12 +29,57 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
         # same as the node argument). However, we keep it for consistency (it
         # is NOT the same as node for sub-ast nodes).
 
-        # first of all, build global (program-wide) symbols table
-        if node.global_constants is not None:
-            node.global_constants = self.visit(node.global_constants,
-                                               ast_root_node)
-        if node.lattices is not None:
-            node.lattices = self.visit(node.lattices, ast_root_node)
+        # guard against attempts to build the symbols-table more than once
+        if node.symbols is None:
+            node.symbols = SymbolsTable()  # new SymbolsTable
+
+            if node.global_constants is not None:
+                # trigger symbols-table creation @global constants block
+                node.global_constants = self.visit(node.global_constants,
+                                                   ast_root_node)
+            if node.lattices is not None:
+                # trigger symbols-table creation @lattices block
+                node.lattices = self.visit(node.lattices, ast_root_node)
+
+            # BEGIN :: build global (program-wide) symbols table #
+            # ... add initializer-names to the program's global symbols table
+            if node.initializers is not None:
+                for index, initializer in enumerate(node.initializers):
+                    symbol_dict = {
+                        'name': initializer.name.name,
+                        'type': "initializer",
+                        'value': initializer
+                    }
+                    node.symbols.add_symbol(symbol_dict)
+
+            # ... add dynamic-names to the program's global symbols table
+            if node.dynamics is not None:
+                for index, dynamic in enumerate(node.dynamics):
+                    symbol_dict = {
+                        'name': dynamic.name.name,
+                        'type': "dynamic",
+                        'value': dynamic
+                    }
+                    node.symbols.add_symbol(symbol_dict)
+
+            # ... add gauge-names to the program's global symbols table
+            if node.gauges is not None:
+                for index, gauge in enumerate(node.gauges):
+                    symbol_dict = {
+                        'name': gauge.name.name,
+                        'type': "gauge",
+                        'value': gauge
+                    }
+                    node.symbols.add_symbol(symbol_dict)
+            # END :: build global (program-wide) symbols table #
+
+            print(node.symbols)
+            # raise TypeError()
+        # TODO ... first, place the {initer, dyn, gauge}s into program's
+        #  self.symbols field
+
+        # TODO ... visit each of the {initer, dyn, gauge}s, to trigger
+        #  building of local symbols tables for each of them.
 
         # TODO ... visit more nodes, to build more symbols tables ...
 
@@ -45,9 +90,8 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
             node: GlobalConstantsBlock_N,
             ast_root_node: Program_N
     ):
-        # guard against attempts to build the symbols-table twice
         if node.symbols is None:
-            node.symbols = SymbolsTable()  # new SymbolsTable
+            node.symbols = SymbolsTable()
 
             for constant_insta_stmt in node.stmts:
                 symbol_dict = {
@@ -63,9 +107,8 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
             node: LatticesBlock_N,
             ast_root_node: Program_N
     ):
-        # guard against attempts to build the symbols-table twice
         if node.symbols is None:
-            node.symbols = SymbolsTable()  # new SymbolsTable
+            node.symbols = SymbolsTable()
 
             for lattice_insta_stmt in node.stmts:
                 symbol_dict = {

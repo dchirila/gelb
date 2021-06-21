@@ -425,7 +425,7 @@ class GeLBExSymbolExists(GeLBException):
         error = (
             f"We see that you define a {curr_instance['type']}"
             f" named \"{curr_instance['name']}\"."
-            f" However, you are using that name (for a "
+            f" However, you are using that name (as "
             f"{prev_instance['type']}) already."
         )
         hint = (
