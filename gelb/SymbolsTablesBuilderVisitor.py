@@ -189,3 +189,19 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                         'value': stmt
                     })
         return node
+
+    def visitNodeClassesBlock_N(
+            self,
+            node: NodeClassesBlock_N,
+            ast_root_node: Program_N
+    ):
+        if node.symbols is None:
+            node.symbols = SymbolsTable()
+
+            for node_class_insta_stmt in node.stmts:
+                node.symbols.add_symbol({
+                    'name': node_class_insta_stmt.name.name,
+                    'tag': 'node class',
+                    'value': node_class_insta_stmt
+                })
+        return node
