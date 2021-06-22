@@ -19,8 +19,3 @@ def error_with_hint_to_term(error_message, hint_message):
     show_fatal_error_message_without_abort(error_message)
     # display the hint
     click.echo(Fore.GREEN + f"[Hint] {hint_message}" + Style.RESET_ALL)
-
-
-def info_to_term(message):
-    click.echo(Fore.BLUE + "gelbc-INFO:" + Style.RESET_ALL, nl=False)
-    click.echo(f" {message}")
