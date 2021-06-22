@@ -9,15 +9,7 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
     Concrete visitor for adding the symbols tables to the AST nodes which
     need them.
 
-    We need to distinguish between {global,local} symbols tables:
-
-    (1) Global symbols tables:
-
-        TODO
-
-    (2) Local symbols tables:
-
-        TODO
+    We need to distinguish between {global,local} symbols tables.
     """
 
     def visitProgram_N(
@@ -91,7 +83,9 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                     )
             # END :: build global (program-wide) symbols table #
 
-            # TODO ... visit more nodes, to build more symbols tables ...
+            if node.node_classes is not None:
+                # trigger symbols-table creation @node-classes block
+                node.node_classes = self.visit(node.node_classes, ast_root_node)
 
         return node
 

@@ -31,6 +31,7 @@ except:
 
 # If we reached this point, we should be able to import GeLB modules
 from gelb.utils.misc import load_file
+import gelb.utils.config
 from gelb.stage1_frontend import (
     get_ast,
     build_symbols_tables,
@@ -71,6 +72,8 @@ through the various stages of the compiler.
     if not t:  # disable the traceback by default
         sys.tracebacklimit = 0
     # Stage 1 :: FrontEnd
+    # ... save file-name as global variable
+    gelb.utils.config.GELB_FILE_NAME = input_file
     src_raw = load_file(input_file)
     ast = get_ast("gelb_program", src_raw)
     # print(ast)  # TODO RM debugging print

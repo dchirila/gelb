@@ -33,13 +33,21 @@ class GeLBExInvalidGrammarRule(GeLBException):
     the grammar.
     """
     def __init__(self, rule_name):
-        error = f"(internal) can't find rule \"{rule_name}\" @GeLBParser"
+        error = (
+            f"(internal) can't find rule"
+            f" {click.style(rule_name, underline=True) + Fore.RED}"
+            f" @GeLBParser"
+        )
         hint = (
             f"If you are a GeLB developer, please check whether rule"
-            f" \"{rule_name}\" is part of the grammar (look @\"GeLB.g4\""
+            f" {click.style(rule_name, underline=True) + Fore.GREEN}"
+            f" is part of the grammar (look @"
+            f"{click.style('GeLB.g4', underline=True) + Fore.GREEN}"
             f" file). " + feedback_on_slack_hint
         )
         super().__init__(error, hint)
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            print(self)
 
 
 class GeLBExMissingCSTVisitationMethod(GeLBException):
@@ -50,18 +58,25 @@ class GeLBExMissingCSTVisitationMethod(GeLBException):
     def __init__(self, rule_name):
         visitation_method_name = f"visit{rule_name.capitalize()}"
         error = (
-            f"(internal) can't find method \"{visitation_method_name}\""
-            f"@ASTBuilderVisitor"
+            f"(internal) can't find method"
+            f" {click.style(visitation_method_name, underline=True) + Fore.RED}"
+            f" @{click.style('ASTBuilderVisitor', underline=True) + Fore.RED}"
         )
         hint = (
             f"If you are a GeLB developer, please check whether rule"
-            f" \"{rule_name}\" is part of the grammar (look @\"GeLB.g4\""
+            f" {click.style(rule_name, underline=True) + Fore.GREEN}"
+            f" is part of the grammar (look "
+            f"@{click.style('GeLB.g4', underline=True) + Fore.GREEN}"
             f" file). Also, check that the ANTLR4 Java tool actually"
-            f" generated a method named \"{visitation_method_name}\" (look"
-            f" @\"GeLBVisitor.py\"). " + feedback_on_slack_hint
-
+            f" generated a method named "
+            f"{click.style(visitation_method_name, underline=True) + Fore.GREEN}"
+            f" (look"
+            f" @{click.style('GeLBVisitor.py', underline=True) + Fore.GREEN}"
+            f"). " + feedback_on_slack_hint
         )
         super().__init__(error, hint)
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            print(self)
 
 
 class GeLBExMissingASTVisitationMethod(GeLBException):
@@ -71,17 +86,23 @@ class GeLBExMissingASTVisitationMethod(GeLBException):
     """
     def __init__(self, visitor_subclass_name, visitation_method_name):
         error = (
-            f"(internal) can't find method \"{visitation_method_name}\""
-            f"@{visitor_subclass_name}"
+            f"(internal) can't find method "
+            f"{click.style(visitation_method_name, underline=True) + Fore.RED}"
+            f" @"
+            f"{click.style(visitor_subclass_name, underline=True) + Fore.RED}"
         )
         hint = (
             f"If you are a GeLB developer (maybe implementing a new compiler "
             f"pass) please check whether you actually defined the appropriate "
             f"method in your ASTBaseVisitor subclass"
-            f" (i.e. \"{visitor_subclass_name}\"). " + feedback_on_slack_hint
+            f" (i.e. "
+            f"{click.style(visitor_subclass_name, underline=True) + Fore.GREEN}"
+            f"). " + feedback_on_slack_hint
 
         )
         super().__init__(error, hint)
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            print(self)
 
 
 class GeLBExSyntaxError(GeLBException):
@@ -92,7 +113,8 @@ class GeLBExSyntaxError(GeLBException):
         self.line = line
         self.column = column
         super().__init__(error, hint)
-        print(self)
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            print(self)
 
     def __str__(self):
         """Override base-class's __str__, because we want to print the code"""
@@ -112,9 +134,11 @@ class GeLBExInvalidNoOfOccurrences(GeLBException):
         self.column = column
 
         if block_name == "set_simulation_name_stmt":
+            informal_name = "simulation_name"
             if no_occurrences == 0:
                 error = (
-                    f"We see that you do not specify a \"simulation_name\""
+                    f"We see that you do not specify a "
+                    f"{click.style(informal_name, underline=True) + Fore.RED}"
                     f" statement."
                 )
                 hint = (
@@ -125,7 +149,8 @@ class GeLBExInvalidNoOfOccurrences(GeLBException):
                 )
             elif no_occurrences > 1:
                 error = (
-                    f"We see that you specify more than one \"simulation_name\""
+                    f"We see that you specify more than one "
+                    f"{click.style(informal_name, underline=True) + Fore.RED}"
                     f" statement."
                 )
                 hint = (
@@ -133,141 +158,162 @@ class GeLBExInvalidNoOfOccurrences(GeLBException):
                     f" statement. " + learning_gelb_hint
                 )
         elif block_name == "set_simulation_description_stmt":
+            informal_name = "simulation_description"
             if no_occurrences == 0:
                 error = (
                     f"We see that you do not specify a"
-                    f" \"simulation_description\" statement."
+                    f" {click.style(informal_name, underline=True) + Fore.RED}"
+                    f" statement."
                 )
                 hint = (
-                        f"Every GeLB program needs to have a line like the"
-                        f" following:\n\n"
-                        f"simulation_description(\"my_simulation_description\");"
-                        f"\n\n" +
-                        learning_gelb_hint
+                    f"Every GeLB program needs to have a line like the"
+                    f" following:\n\n"
+                    f"simulation_description(\"my_simulation_description\");"
+                    f"\n\n" + learning_gelb_hint
                 )
             elif no_occurrences > 1:
                 error = (
                     f"We see that you specify more than one"
-                    f" \"simulation_description\" statement."
+                    f" {click.style(informal_name, underline=True) + Fore.RED}"
+                    f" statement."
                 )
                 hint = (
-                        f"Every GeLB program needs to have exactly"
-                        f" *one* such statement. " + learning_gelb_hint
+                    f"Every GeLB program needs to have exactly"
+                    f" *one* such statement. " + learning_gelb_hint
                 )
         elif block_name == "global_constants_block":
+            informal_name = "global_constants"
             if no_occurrences > 1:
                 error = (
                     f"We see that you specify more than one"
-                    f" \"global_constants\" block."
+                    f" {click.style(informal_name, underline=True) + Fore.RED}"
+                    f" block."
                 )
                 hint = (
-                        f"Every GeLB program may contain at most"
-                        f" *one* such block. " +
-                        learning_gelb_hint
+                    f"Every GeLB program may contain at most"
+                    f" *one* such block. " + learning_gelb_hint
                 )
         elif block_name == "lattices_block":
             if no_occurrences == 0:
                 error = (
                     f"We see that you do not specify a"
-                    f" \"lattices\" block."
+                    f" {click.style('lattices', underline=True) + Fore.RED}"
+                    f" block."
                 )
                 hint = (
-                        f"Every GeLB program needs to have exactly"
-                        f" *one* lattices block. " +
-                        learning_gelb_hint
+                    f"Every GeLB program needs to have exactly"
+                    f" *one* "
+                    f" {click.style('lattices', underline=True) + Fore.GREEN}"
+                    f" block. " + learning_gelb_hint
                 )
             elif no_occurrences > 1:
                 error = (
-                    f"We see that you specify more than one"
-                    f" \"lattices\" block."
+                    f"We see that you specify more than one "
+                    f" {click.style('lattices', underline=True) + Fore.RED}"
+                    f" block."
                 )
                 hint = (
-                        f"Every GeLB program needs to have exactly"
-                        f" *one* such block. " + learning_gelb_hint
+                    f"Every GeLB program needs to have exactly *one* "
+                    f" {click.style('lattices', underline=True) + Fore.GREEN}"
+                    f" block. " + learning_gelb_hint
                 )
         elif block_name == "initializer_block":
             if no_occurrences == 0:
                 error = (
-                    f"We see that you do not specify any"
-                    f" \"initializer\" block."
+                    f"We see that you do not specify any "
+                    f"{click.style('initializer', underline=True) + Fore.RED}"
+                    f" block."
                 )
                 hint = (
-                        f"Every GeLB program needs to have *at "
-                        f"least one* initializer block. " +
-                        learning_gelb_hint
+                    f"Every GeLB program needs to have *at "
+                    f"least one* "
+                    f"{click.style('initializer', underline=True) + Fore.GREEN}"
+                    f" block. " + learning_gelb_hint
                 )
         elif block_name == "dynamic_block":
             if no_occurrences == 0:
                 error = (
-                    f"We see that you do not specify any"
-                    f" \"dynamic\" block."
+                    f"We see that you do not specify any "
+                    f"{click.style('dynamic', underline=True) + Fore.RED}"
+                    f" block."
                 )
                 hint = (
-                        f"Every GeLB program needs to have *at "
-                        f"least one* dynamic block. " +
-                        learning_gelb_hint
+                    f"Every GeLB program needs to have *at "
+                    f"least one* "
+                    f"{click.style('dynamic', underline=True) + Fore.GREEN}"
+                    f" block. " + learning_gelb_hint
                 )
         elif block_name == "gauge_block":
             if no_occurrences == 0:
                 error = (
-                    f"We see that you do not specify any"
-                    f" \"gauge\" block."
+                    f"We see that you do not specify any "
+                    f"{click.style('gauge', underline=True) + Fore.RED}"
+                    f" block."
                 )
                 hint = (
                         f"Every GeLB program needs to have *at "
-                        f"least one* gauge block. " +
-                        learning_gelb_hint
+                        f"least one* "
+                        f"{click.style('gauge', underline=True) + Fore.GREEN}"
+                        f" block. " + learning_gelb_hint
                 )
         elif block_name == "node_classes_block":
+            informal_name = "node_classes"
             if no_occurrences == 0:
                 error = (
-                    f"We see that you do not specify a"
-                    f" \"node_classes\" block."
+                    f"We see that you do not specify a "
+                    f"{click.style(informal_name, underline=True) + Fore.RED}"
+                    f" block."
                 )
                 hint = (
-                        f"Every GeLB program needs to have exactly"
-                        f" *one* node_classes block. " +
-                        learning_gelb_hint
+                    f"Every GeLB program needs to have exactly *one* "
+                    f"{click.style(informal_name, underline=True) + Fore.GREEN}"
+                    f" block. " + learning_gelb_hint
                 )
             elif no_occurrences > 1:
                 error = (
-                    f"We see that you specify more than one"
-                    f" \"node_classes\" block."
+                    f"We see that you specify more than one "
+                    f"{click.style(informal_name, underline=True) + Fore.RED}"
+                    f" block."
                 )
                 hint = (
-                        f"Every GeLB program needs to have exactly"
-                        f" *one* such block. " + learning_gelb_hint
+                        f"Every GeLB program needs to have exactly *one* "
+                        f"{click.style(informal_name, underline=True) + Fore.GREEN}"
+                        f" block. " + learning_gelb_hint
                 )
         elif block_name == "geometry_block":
             if no_occurrences == 0:
                 error = (
-                    f"We see that you do not specify a"
-                    f" \"geometry\" block."
+                    f"We see that you do not specify a "
+                    f"{click.style('geometry', underline=True) + Fore.RED}"
+                    f" block."
                 )
                 hint = (
-                        f"Every GeLB program needs to have exactly"
-                        f" *one* geometry block. " +
-                        learning_gelb_hint
+                    f"Every GeLB program needs to have exactly *one* "
+                    f"{click.style('geometry', underline=True) + Fore.GREEN}"
+                    f" block. " + learning_gelb_hint
                 )
             elif no_occurrences > 1:
                 error = (
-                    f"We see that you specify more than one"
-                    f" \"geometry\" block."
+                    f"We see that you specify more than one "
+                    f"{click.style('geometry', underline=True) + Fore.RED}"
+                    f" block."
                 )
                 hint = (
-                        f"Every GeLB program needs to have exactly"
-                        f" *one* such block. " + learning_gelb_hint
+                        f"Every GeLB program needs to have exactly *one* "
+                        f"{click.style('geometry', underline=True) + Fore.GREEN}"
+                        f" block. " + learning_gelb_hint
                 )
         else:
             error = (
-                f"(internal) GeLBExInvalidNoOfOccurrences cannot handle"
-                f" \"{block_name}\"."
+                f"(internal) GeLBExInvalidNoOfOccurrences cannot handle "
+                f"{click.style(block_name, underline=True) + Fore.RED}."
             )
             hint = (
                 feedback_on_slack_hint
             )
         super().__init__(error, hint)
-        print(self)
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            print(self)
 
     def __str__(self):
         """
@@ -288,13 +334,19 @@ class GeLBExIncorrectInputFileExtension(GeLBException):
     """
     def __init__(self, input_file_name):
         error = (
-            f"[Problem] We notice that your input file \"{input_file_name}\""
-            f" does not have the \".gelb\" extension."
+            f"We notice that your input file "
+            f"{click.style(input_file_name, underline=True) + Fore.RED}"
+            f" does not have the "
+            f"{click.style('.gelb', underline=True) + Fore.RED}"
+            f" extension."
         )
         hint = (
-            f"[Hint] Please speficy a file that ends in \".gelb\""
+            f"Please speficy a file that ends in "
+            f"{click.style('.gelb', underline=True) + Fore.RED}"
         )
         super().__init__(error, hint)
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            print(self)
 
 
 class GeLBExCouldNotFindInputFile(GeLBException):
@@ -303,10 +355,11 @@ class GeLBExCouldNotFindInputFile(GeLBException):
     """
     def __init__(self, input_file_name, suggest_files):
         error = (
-            f"[Problem] We could not find the input file \"{input_file_name}\"."
+            f"We could not find the input file "
+            f"{click.style(input_file_name, underline=True) + Fore.RED}."
         )
         hint = (
-            f"[Hint] Please specify a file that exists."
+            f"Please specify a file that exists."
         )
         if suggest_files:
             hint += (
@@ -314,6 +367,8 @@ class GeLBExCouldNotFindInputFile(GeLBException):
                 f" {suggest_files}"
             )
         super().__init__(error, hint)
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            print(self)
 
 
 class GeLBExCouldNotReadInputFile(GeLBException):
@@ -323,13 +378,17 @@ class GeLBExCouldNotReadInputFile(GeLBException):
     """
     def __init__(self, input_file_name):
         error = (
-            f"[Problem] We could not read the input file \"{input_file_name}\"."
+            f"We could not read the input file "
+            f"{click.style(input_file_name, underline=True) + Fore.RED}."
         )
         hint = (
-            f"[Hint] Change permissions for file \"{input_file_name}\","
+            f"Change permissions for file "
+            f"{click.style(input_file_name, underline=True) + Fore.GREEN},"
             f" to allow gelbc to read it."
         )
         super().__init__(error, hint)
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            print(self)
 
 
 class GeLBExEmptyInputFile(GeLBException):
@@ -339,13 +398,16 @@ class GeLBExEmptyInputFile(GeLBException):
     """
     def __init__(self, input_file_name=None):
         error = (
-            f"[Problem] The input file \"{input_file_name}\" does not"
-            f" contain any GeLB code."
+            f"The input file "
+            f"{click.style(input_file_name, underline=True) + Fore.RED}"
+            f" does not contain any GeLB code."
         )
         hint = (
-            f"[Hint] {learning_gelb_hint}"
+            f"{learning_gelb_hint}"
         )
         super().__init__(error, hint)
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            print(self)
 
 
 class GeLBExAntlr4JavaLibNotFound(GeLBException):
@@ -355,14 +417,17 @@ class GeLBExAntlr4JavaLibNotFound(GeLBException):
     """
     def __init__(self, antlr4_lib_path):
         error = (
-            f"[Problem] We could not find the Antlr4 java library file"
-            f" (expecting location was \"{antlr4_lib_path}\")."
+            f"We could not find the Antlr4 java library file"
+            f" (expected location was "
+            f"{click.style(antlr4_lib_path, underline=True) + Fore.RED})."
         )
         hint = (
-            f"[Hint] Download the file from"
-            f" https://antlr.org and copy it to the expected location."
+            f"Download the file from https://antlr.org and"
+            f" copy it to the expected location."
         )
         super().__init__(error, hint)
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            print(self)
 
 
 class GeLBExPython3PackageMissing(GeLBException):
@@ -371,16 +436,19 @@ class GeLBExPython3PackageMissing(GeLBException):
     """
     def __init__(self, package_name):
         error = (
-            f"[Problem] We could not find the \"{package_name}\" Python3 "
-            f"package."
+            f"We could not find the "
+            f"{click.style(package_name, underline=True) + Fore.RED}"
+            f" Python3 package."
         )
         hint = (
-            f"[Hint] If you are a GeLB developer, please install "
+            f"If you are a GeLB developer, please install "
             f"Anaconda and run the command"
             f" \"conda env create -f gelb.yml\" from the root-dir of your"
             f" GeLB repository clone. " + feedback_on_slack_hint
         )
         super().__init__(error, hint)
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            print(self)
 
 
 class GeLBExGrammarFileNotFound(GeLBException):
@@ -389,14 +457,17 @@ class GeLBExGrammarFileNotFound(GeLBException):
     """
     def __init__(self, grammar_path):
         error = (
-            f"[Problem] We could not find the \"{grammar_path}\" file."
+            f"We could not find the "
+            f"{click.style(grammar_path, underline=True) + Fore.RED}"
+            f" file."
         )
         hint = (
-                f"[Hint] If you are a GeLB developer, you can try"
-                f" restoring it with \"git checkout\". " +
-                feedback_on_slack_hint
+            f"If you are a GeLB developer, you can try"
+            f" restoring it with \"git checkout\". " + feedback_on_slack_hint
         )
         super().__init__(error, hint)
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            print(self)
 
 
 class GeLBExAntlr4JavaToolFailed(GeLBException):
@@ -406,15 +477,18 @@ class GeLBExAntlr4JavaToolFailed(GeLBException):
     """
     def __init__(self, antlr4_tool_stat):
         error = (
-            f"[Problem] The ANTLR4 Java tool failed to compile the "
-            f"\"GeLB.g4\" grammar."
+            f"The ANTLR4 Java tool failed to compile the "
+            f"{click.style('GeLB.g4', underline=True) + Fore.RED}"
+            f" grammar."
         )
         hint = (
-                f"[Hint] If you are a GeLB developer (perhaps working on the "
-                f"grammar), try to compile it manually.\n\n" +
-                feedback_on_slack_hint
+            f"If you are a GeLB developer (perhaps working on the "
+            f"grammar), try to compile it manually.\n\n" +
+            feedback_on_slack_hint
         )
         super().__init__(error, hint)
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            print(self)
 
 
 class GeLBExSymbolExists(GeLBException):

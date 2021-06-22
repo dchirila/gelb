@@ -5,6 +5,8 @@
 #   easy access to the original source-code (for error-messages)
 GELB_SRC_RAW = None
 
+GELB_FILE_NAME = None
+
 GELB_ERROR_CONTEXT = 2
 # Default mode is normal compilation, which makes any GeLB exceptions fatal (
 # causing the compiler to abort ASAP). However, we don't want this behavior

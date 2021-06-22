@@ -116,8 +116,10 @@ def find_gelb_files_in_cwd():
 
 
 def ensure_file_is_not_empty_or_whitespace(file_as_string):
-    if len(file_as_string) == 0:
-        raise GeLBExEmptyInputFile()
-
-    if file_as_string.isspace():
-        raise GeLBExEmptyInputFile()
+    if (len(file_as_string) == 0) or file_as_string.isspace():
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            raise GeLBExEmptyInputFile(
+                gelb.utils.config.GELB_FILE_NAME
+            )
+        else:  # testing, so probably no filename
+            raise GeLBExEmptyInputFile()

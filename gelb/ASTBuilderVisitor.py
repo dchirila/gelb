@@ -212,7 +212,7 @@ class ASTBuilderVisitor(GeLBVisitor):
         if self.instances_global_constants_block > 1:
             raise GeLBExInvalidNoOfOccurrences(
                 "global_constants_block",
-                0, 1,
+                self.instances_global_constants_block,
                 ctx.start.line,
                 ctx.start.column
             )
