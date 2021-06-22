@@ -9,7 +9,7 @@ class SymbolsTable:
     The table is stored as a list-of-dictionaries, where each dictionary
     contains three entries:
     - name
-    - type
+    - tag
     - value
     """
     def __init__(self):
@@ -33,12 +33,12 @@ class SymbolsTable:
 
     def __str__(self):
         """Pretty-printed representation (in table format)."""
-        result =  f"{'name'.ljust(20)}|{'type'.ljust(20)}| value\n"
+        result =  f"{'name'.ljust(20)}|{'tag'.ljust(20)}| value\n"
         result += f"{'-'*20}|{'-'*20}|{'-'*40}\n"
         for d in self.lod:
             result += (
                 f"{str(d['name']).ljust(20)}|"
-                f"{str(d['type']).ljust(20)}|"
+                f"{str(d['tag']).ljust(20)}|"
                 f" {d['value']}\n"
             )
         return result
@@ -49,7 +49,7 @@ class SymbolsTable:
         for d in self.lod:
             if result != "":  # add a space (but not for 1st instance)
                 result += " "
-            result += f"({str(d['name'])} \"{str(d['type'])}\" {d['value']})"
+            result += f"({str(d['name'])} \"{str(d['tag'])}\" {d['value']})"
         return result
 
 

@@ -47,12 +47,11 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                 for index, initializer in enumerate(node.initializers):
                     # add symbol for initializer itself to the global symbols
                     # table
-                    symbol_dict = {
+                    node.symbols.add_symbol({
                         'name': initializer.name.name,
-                        'type': "initializer",
+                        'tag': "initializer",
                         'value': initializer
-                    }
-                    node.symbols.add_symbol(symbol_dict)
+                    })
 
                     # trigger symbols-table creation @initializer
                     node.initializers[index] = self.visit(
@@ -64,12 +63,11 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                 for index, dynamic in enumerate(node.dynamics):
                     # add symbol for dynamic itself to the global symbols
                     # table
-                    symbol_dict = {
+                    node.symbols.add_symbol({
                         'name': dynamic.name.name,
-                        'type': "dynamic",
+                        'tag': "dynamic",
                         'value': dynamic
-                    }
-                    node.symbols.add_symbol(symbol_dict)
+                    })
 
                     # trigger symbols-table creation @dynamic
                     node.dynamics[index] = self.visit(
@@ -81,12 +79,11 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                 for index, gauge in enumerate(node.gauges):
                     # add symbol for gauge itself to the global symbols
                     # table
-                    symbol_dict = {
+                    node.symbols.add_symbol({
                         'name': gauge.name.name,
-                        'type': "gauge",
+                        'tag': "gauge",
                         'value': gauge
-                    }
-                    node.symbols.add_symbol(symbol_dict)
+                    })
 
                     # trigger symbols-table creation @gauge
                     node.gauges[index] = self.visit(
@@ -107,12 +104,11 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
             node.symbols = SymbolsTable()
 
             for constant_insta_stmt in node.stmts:
-                symbol_dict = {
+                node.symbols.add_symbol({
                     'name': constant_insta_stmt.name.name,
-                    'type': "constant definition",
+                    'tag': "constant definition",
                     'value': constant_insta_stmt
-                }
-                node.symbols.add_symbol(symbol_dict)
+                })
         return node
 
     def visitLatticesBlock_N(
@@ -124,12 +120,11 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
             node.symbols = SymbolsTable()
 
             for lattice_insta_stmt in node.stmts:
-                symbol_dict = {
+                node.symbols.add_symbol({
                     'name': lattice_insta_stmt.name.name,
-                    'type': 'lattice instance',
+                    'tag': 'lattice instance',
                     'value': lattice_insta_stmt
-                }
-                node.symbols.add_symbol(symbol_dict)
+                })
         return node
 
     def visitInitializerBlock_N(
@@ -142,19 +137,17 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
 
             for stmt in node.stmts:
                 if isinstance(stmt, ConstantDefinitionStmt_N):
-                    symbol_dict = {
+                    node.symbols.add_symbol({
                         'name': stmt.name.name,
-                        'type': "constant definition",
+                        'tag': "constant definition",
                         'value': stmt
-                    }
-                    node.symbols.add_symbol(symbol_dict)
+                    })
                 elif isinstance(stmt, VariableDeclarationStmt_N):
-                    symbol_dict = {
+                    node.symbols.add_symbol({
                         'name': stmt.name.name,
-                        'type': "variable declaration",
+                        'tag': "variable declaration",
                         'value': stmt
-                    }
-                    node.symbols.add_symbol(symbol_dict)
+                    })
         return node
 
     def visitDynamicBlock_N(
@@ -167,19 +160,17 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
 
             for stmt in node.stmts:
                 if isinstance(stmt, ConstantDefinitionStmt_N):
-                    symbol_dict = {
+                    node.symbols.add_symbol({
                         'name': stmt.name.name,
-                        'type': "constant definition",
+                        'tag': "constant definition",
                         'value': stmt
-                    }
-                    node.symbols.add_symbol(symbol_dict)
+                    })
                 elif isinstance(stmt, VariableDeclarationStmt_N):
-                    symbol_dict = {
+                    node.symbols.add_symbol({
                         'name': stmt.name.name,
-                        'type': "variable declaration",
+                        'tag': "variable declaration",
                         'value': stmt
-                    }
-                    node.symbols.add_symbol(symbol_dict)
+                    })
         return node
 
     def visitGaugeBlock_N(
@@ -192,17 +183,15 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
 
             for stmt in node.stmts:
                 if isinstance(stmt, ConstantDefinitionStmt_N):
-                    symbol_dict = {
+                    node.symbols.add_symbol({
                         'name': stmt.name.name,
-                        'type': "constant definition",
+                        'tag': "constant definition",
                         'value': stmt
-                    }
-                    node.symbols.add_symbol(symbol_dict)
+                    })
                 elif isinstance(stmt, VariableDeclarationStmt_N):
-                    symbol_dict = {
+                    node.symbols.add_symbol({
                         'name': stmt.name.name,
-                        'type': "variable declaration",
+                        'tag': "variable declaration",
                         'value': stmt
-                    }
-                    node.symbols.add_symbol(symbol_dict)
+                    })
         return node

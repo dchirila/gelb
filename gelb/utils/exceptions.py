@@ -427,11 +427,11 @@ class GeLBExSymbolExists(GeLBException):
         self.curr_instance = curr_instance
         name = curr_instance['name']
         error = (
-            f"We see that you define a {curr_instance['type']}"
+            f"We see that you define a {curr_instance['tag']}"
             f" named"
             f" {click.style(name, underline=True) + Fore.RED}."
             f" However, you are using that name (as "
-            f"{prev_instance['type']}) already."
+            f"{prev_instance['tag']}) already."
         )
         hint = (
             f"Rename (or remove) one of the instances of "
@@ -451,7 +451,7 @@ class GeLBExSymbolExists(GeLBException):
                 self.prev_instance['value'].code_range.start_line,
                 self.prev_instance['value'].code_range.start_col,
                 self.prev_instance['name'],
-                self.prev_instance['type']
+                self.prev_instance['tag']
             )
             super().__str__()
             os._exit(1)  # really abort

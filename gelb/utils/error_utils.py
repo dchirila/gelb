@@ -131,7 +131,7 @@ def show_double_definition_error(
         curr_column,
         prev_line,
         prev_column,
-        symbol_name, symbol_type):
+        symbol_name, symbol_tag):
     show_source_with_annotation(
         prev_line,
         prev_column,
@@ -139,7 +139,7 @@ def show_double_definition_error(
         f"Previous definiton of"
         f" "
         f"{click.style(symbol_name, underline=True) + Fore.BLUE}"
-        f" (as {symbol_type}) here."
+        f" (as {symbol_tag}) here."
     )
     show_source_with_annotation(
         curr_line,
