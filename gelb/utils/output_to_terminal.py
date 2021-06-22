@@ -9,9 +9,9 @@ def show_fatal_error_message_without_abort(error_message):
     # display the error message
     click.echo(Fore.RED + f"[Problem] {error_message}" + Style.RESET_ALL)
     # say that it was a fatal error
-    click.echo(Fore.RED + "\ngelbc-ERROR:", nl=False)
     click.echo(
-        " aborting compilation due to previous error\n" + Style.RESET_ALL
+        Fore.RED +
+        "\nAborting compilation due to previous error.\n" + Style.RESET_ALL
     )
 
 
