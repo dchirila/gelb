@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 
 import os
+import click
+from colorama import Fore, Style
+
 import gelb.utils.config
 from gelb.utils.output_to_terminal import error_with_hint_to_term
 from gelb.utils.error_utils import (
@@ -422,15 +425,18 @@ class GeLBExSymbolExists(GeLBException):
     def __init__(self, curr_instance, prev_instance):
         self.prev_instance = prev_instance
         self.curr_instance = curr_instance
+        name = curr_instance['name']
         error = (
             f"We see that you define a {curr_instance['type']}"
-            f" named \"{curr_instance['name']}\"."
+            f" named"
+            f" {click.style(name, underline=True) + Fore.RED}."
             f" However, you are using that name (as "
             f"{prev_instance['type']}) already."
         )
         hint = (
-            f"Rename (or remove) one of the instances of"
-            f" \"{curr_instance['name']}\"."
+            f"Rename (or remove) one of the instances of "
+            f"{click.style(name, underline=True) + Fore.GREEN}"
+            f"."
         )
         super().__init__(error, hint)
         if gelb.utils.config.GELB_PRODUCTION_MODE:
