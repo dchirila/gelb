@@ -2,7 +2,7 @@
 
 from gelb.utils.exceptions import *
 
-class Symbol:
+class SymbolDefinition:
     """
     Container for a single symbol in a GeLB program.
 

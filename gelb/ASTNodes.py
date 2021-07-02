@@ -30,7 +30,8 @@ class Node_N(ABC):
                         field.startswith('get_referenced_symbols') or
                         field.startswith('is_terminal_node') or
                         field.startswith('append') or  # from List_N
-                        field.startswith('symbol_defs')  # exclude the symbol-table
+                        # exclude the symbol-table
+                        field.startswith('symbol_defs')
                 )
             ]
 
@@ -120,7 +121,8 @@ class Program_N(Node_N):
         # self.functions = None
         self.node_classes = None
         self.geometry = None
-        self.symbol_defs = None  # symbol_defs table (built after AST construction)
+        # symbol_defs table (built after AST construction)
+        self.symbol_defs = None
 
     def __str__(self):
         result = (

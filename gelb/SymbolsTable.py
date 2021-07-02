@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
 from gelb.utils.exceptions import *
-from gelb.Symbol import Symbol
+from gelb.SymbolDefinition import SymbolDefinition
 
 class SymbolsTable:
     """
     Container for symbol_defs tables in GeLB.
 
-    The table is stored as a list of Symbol instances.
+    The table is stored as a list of SymbolDefinition instances.
     """
     def __init__(self):
         self.symbol_defs = []
@@ -32,16 +32,16 @@ class SymbolsTable:
 
     def contains(self, symbol_name):
         if self.symbol_defs:  # symbol_defs list is not empty
-            for s in self.symbol_defs:
-                if str(s.name) == symbol_name:
+            for sdef in self.symbol_defs:
+                if str(sdef.name) == symbol_name:
                     return True
         return False
 
     def get_symbol_definition(self, symbol_name):
         if self.symbol_defs:  # symbol_defs list is not empty
-            for s in self.symbol_defs:
-                if str(s.name) == symbol_name:
-                    return s
+            for sdef in self.symbol_defs:
+                if str(sdef.name) == symbol_name:
+                    return sdef
         return None
 
     def __str__(self):
@@ -59,10 +59,10 @@ class SymbolsTable:
     def __repr__(self):
         """Terse representation (for unit-testing)."""
         result = ""
-        for s in self.symbol_defs:
+        for sdef in self.symbol_defs:
             if result != "":  # add a space (but not for 1st instance)
                 result += " "
-            result += f"({str(s.name)} \"{str(s.tag)}\" {s.value})"
+            result += f"({str(sdef.name)} \"{str(sdef.tag)}\" {sdef.value})"
         return result
 
 

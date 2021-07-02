@@ -2,7 +2,7 @@
 
 from gelb.ASTBaseVisitor import ASTBaseVisitor
 from gelb.ASTNodes import *
-from gelb.Symbol import Symbol
+from gelb.SymbolDefinition import SymbolDefinition
 from gelb.utils.exceptions import (
     GeLBExSymbolUnknown, GeLBExSymbolConstantRecursion
 )
@@ -44,7 +44,7 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                     # add symbol for initializer itself to the global symbol_defs
                     # table
                     node.symbol_defs.append(
-                        Symbol(
+                        SymbolDefinition(
                             name = initializer.name.name,
                             tag = "initializer",
                             value = initializer
@@ -62,7 +62,7 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                     # add symbol for dynamic itself to the global symbol_defs
                     # table
                     node.symbol_defs.append(
-                        Symbol(
+                        SymbolDefinition(
                             name=dynamic.name.name,
                             tag="dynamic",
                             value=dynamic
@@ -80,7 +80,7 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                     # add symbol for gauge itself to the global symbol_defs
                     # table
                     node.symbol_defs.append(
-                        Symbol(
+                        SymbolDefinition(
                             name = gauge.name.name,
                             tag = "gauge",
                             value = gauge
@@ -109,7 +109,7 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
 
             for constant_insta_stmt in node.stmts:
                 node.symbol_defs.append(
-                    Symbol(
+                    SymbolDefinition(
                         name=constant_insta_stmt.name.name,
                         tag="constant definition",
                         value=constant_insta_stmt
@@ -118,8 +118,8 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
 
             # check that all used symbol_defs are defined
             referenced_symbols = set()
-            for symbol in node.symbol_defs:
-                referenced_symbols |= symbol.value.value.get_referenced_symbols()
+            for sdef in node.symbol_defs:
+                referenced_symbols |= sdef.value.value.get_referenced_symbols()
             # print(set().union(s.name for s in referenced_symbols))
 
             for symbol_ref in referenced_symbols:
@@ -127,10 +127,10 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                     raise GeLBExSymbolUnknown(symbol_ref)
 
             # check that no constant is defined in terms of itself
-            for symbol in node.symbol_defs:
-                referenced_symbols = symbol.value.value.get_referenced_symbols()
+            for sdef in node.symbol_defs:
+                referenced_symbols = sdef.value.value.get_referenced_symbols()
                 for symbol_ref in referenced_symbols:
-                    if symbol_ref.name == symbol.name:
+                    if symbol_ref.name == sdef.name:
                         raise GeLBExSymbolConstantRecursion(
                             symbol_ref
                         )
@@ -147,7 +147,7 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
 
             for lattice_insta_stmt in node.stmts:
                 node.symbol_defs.append(
-                    Symbol(
+                    SymbolDefinition(
                         name=lattice_insta_stmt.name.name,
                         tag='lattice instance',
                         value=lattice_insta_stmt
@@ -166,7 +166,7 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
             for stmt in node.stmts:
                 if isinstance(stmt, ConstantDefinitionStmt_N):
                     node.symbol_defs.append(
-                        Symbol(
+                        SymbolDefinition(
                             name=stmt.name.name,
                             tag="constant definition",
                             value=stmt
@@ -174,7 +174,7 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                     )
                 elif isinstance(stmt, VariableDeclarationStmt_N):
                     node.symbol_defs.append(
-                        Symbol(
+                        SymbolDefinition(
                             name=stmt.name.name,
                             tag="variable declaration",
                             value=stmt
@@ -193,7 +193,7 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
             for stmt in node.stmts:
                 if isinstance(stmt, ConstantDefinitionStmt_N):
                     node.symbol_defs.append(
-                        Symbol(
+                        SymbolDefinition(
                             name=stmt.name.name,
                             tag="constant definition",
                             value=stmt
@@ -201,7 +201,7 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                     )
                 elif isinstance(stmt, VariableDeclarationStmt_N):
                     node.symbol_defs.append(
-                        Symbol(
+                        SymbolDefinition(
                             name=stmt.name.name,
                             tag="variable declaration",
                             value=stmt
@@ -220,7 +220,7 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
             for stmt in node.stmts:
                 if isinstance(stmt, ConstantDefinitionStmt_N):
                     node.symbol_defs.append(
-                        Symbol(
+                        SymbolDefinition(
                             name=stmt.name.name,
                             tag="constant definition",
                             value=stmt
@@ -228,7 +228,7 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                     )
                 elif isinstance(stmt, VariableDeclarationStmt_N):
                     node.symbol_defs.append(
-                        Symbol(
+                        SymbolDefinition(
                             name=stmt.name.name,
                             tag="variable declaration",
                             value=stmt
@@ -246,7 +246,7 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
 
             for node_class_insta_stmt in node.stmts:
                 node.symbol_defs.append(
-                    Symbol(
+                    SymbolDefinition(
                         name=node_class_insta_stmt.name.name,
                         tag='node class',
                         value=node_class_insta_stmt
