@@ -1,55 +1,68 @@
 #!/usr/bin/env python3
 
 from gelb.utils.exceptions import *
+from gelb.Symbol import Symbol
 
 class SymbolsTable:
     """
-    Container for symbols tables in GeLB.
+    Container for symbol_defs tables in GeLB.
 
-    The table is stored as a list-of-dictionaries, where each dictionary
-    contains three entries:
-    - name
-    - tag
-    - value
+    The table is stored as a list of Symbol instances.
     """
     def __init__(self):
-        self.lod = []
+        self.symbol_defs = []
 
-    def add_symbol(self, curr_instance):
+    def __getitem__(self, item):
+        return self.symbol_defs[item]
+
+    def __len__(self):
+        return len(self.symbol_defs)
+
+    def __setitem__(self, key, value):
+        self.symbol_defs[key] = value
+
+    def append(self, curr_instance):
         # guard against appending a symbol twice
-        already_present, prev_instance = self.symbol_already_present(
-            curr_instance['name']
-        )
-        if already_present:
-            raise GeLBExSymbolExists(curr_instance, prev_instance)
-        self.lod.append(curr_instance)
+        if self.contains(curr_instance.name):
+            raise GeLBExSymbolExists(
+                curr_instance,
+                self.get_symbol_definition(curr_instance.name)
+            )
+        return self.symbol_defs.append(curr_instance)
 
-    def symbol_already_present(self, symbol_name):
-        if self.lod:  # lod is not empty
-            for d in self.lod:
-                if str(d['name']) == symbol_name:
-                    return True, d
-        return False, None
+    def contains(self, symbol_name):
+        if self.symbol_defs:  # symbol_defs list is not empty
+            for s in self.symbol_defs:
+                if str(s.name) == symbol_name:
+                    return True
+        return False
+
+    def get_symbol_definition(self, symbol_name):
+        if self.symbol_defs:  # symbol_defs list is not empty
+            for s in self.symbol_defs:
+                if str(s.name) == symbol_name:
+                    return s
+        return None
 
     def __str__(self):
         """Pretty-printed representation (in table format)."""
-        result =  f"{'name'.ljust(20)}|{'tag'.ljust(20)}| value\n"
-        result += f"{'-'*20}|{'-'*20}|{'-'*40}\n"
-        for d in self.lod:
+        result =  f"{'name'.ljust(30)}|{'tag'.ljust(30)}| value\n"
+        result += f"{'-'*30}|{'-'*30}|{'-'*40}\n"
+        for s in self.symbol_defs:
             result += (
-                f"{str(d['name']).ljust(20)}|"
-                f"{str(d['tag']).ljust(20)}|"
-                f" {d['value']}\n"
+                f"{str(s.name.ljust(20))}|"
+                f"{str(s.tag.ljust(20))}|"
+                f" {s.value}\n"
             )
         return result
 
     def __repr__(self):
         """Terse representation (for unit-testing)."""
         result = ""
-        for d in self.lod:
+        for s in self.symbol_defs:
             if result != "":  # add a space (but not for 1st instance)
                 result += " "
-            result += f"({str(d['name'])} \"{str(d['tag'])}\" {d['value']})"
+            result += f"({str(s.name)} \"{str(s.tag)}\" {s.value})"
         return result
 
 

@@ -499,13 +499,13 @@ class GeLBExSymbolExists(GeLBException):
     def __init__(self, curr_instance, prev_instance):
         self.prev_instance = prev_instance
         self.curr_instance = curr_instance
-        name = curr_instance['name']
+        name = curr_instance.name
         error = (
-            f"We see that you define a {curr_instance['tag']}"
+            f"We see that you define a {curr_instance.tag}"
             f" named"
             f" {click.style(name, underline=True) + Fore.RED}."
             f" However, you are using that name (as "
-            f"{prev_instance['tag']}) already."
+            f"{prev_instance.tag}) already."
         )
         hint = (
             f"Rename (or remove) one of the instances of "
@@ -520,13 +520,79 @@ class GeLBExSymbolExists(GeLBException):
         """Override base-class's __str__, because we want to print the code"""
         if gelb.utils.config.GELB_PRODUCTION_MODE:
             show_double_definition_error(
-                self.curr_instance['value'].code_range.start_line,
-                self.curr_instance['value'].code_range.start_col,
-                self.prev_instance['value'].code_range.start_line,
-                self.prev_instance['value'].code_range.start_col,
-                self.prev_instance['name'],
-                self.prev_instance['tag']
+                self.curr_instance.value.code_range.start_line,
+                self.curr_instance.value.code_range.start_col,
+                self.prev_instance.value.code_range.start_line,
+                self.prev_instance.value.code_range.start_col,
+                self.prev_instance.name,
+                self.prev_instance.tag
             )
             super().__str__()
+            os._exit(1)  # really abort
+
+
+class GeLBExSymbolUnknown(GeLBException):
+    """
+    GeLB exception, for signaling that a symbol is unknown.
+    """
+    def __init__(self, symbol_ref):
+        self.symbol_ref = symbol_ref
+        name = symbol_ref.name
+        error = (
+            f"We see that you mention "
+            f" {click.style(name, underline=True) + Fore.RED}."
+            f" However, you did not define it."
+        )
+        hint = (
+            f"Define "
+            f" {click.style(name, underline=True) + Fore.GREEN}."
+        )
+        super().__init__(error, hint)
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            print(self)
+
+    def __str__(self):
+        """Override base-class's __str__, because we want to print the code"""
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            show_error_in_src(
+                self.symbol_ref.code_range.start_line,
+                self.symbol_ref.code_range.start_col,
+                self.error, self.hint
+            )
+            # super().__str__()
+            os._exit(1)  # really abort
+
+
+class GeLBExSymbolConstantRecursion(GeLBException):
+    """
+    GeLB exception, for signaling that a symbol is defined in terms of itself.
+    """
+    def __init__(self, symbol_ref):
+        self.symbol_ref = symbol_ref
+        name = symbol_ref.name
+        error = (
+            f"We see that you define the constant"
+            f" {click.style(name, underline=True) + Fore.RED}"
+            f" with an expression which depends on"
+            f" {click.style(name, underline=True) + Fore.RED}"
+            f" itself."
+        )
+        hint = (
+            f"The expression assigned to a constant may depend only on"
+            f" literal values or on other (already-defined) constants."
+        )
+        super().__init__(error, hint)
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            print(self)
+
+    def __str__(self):
+        """Override base-class's __str__, because we want to print the code"""
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            show_error_in_src(
+                self.symbol_ref.code_range.start_line,
+                self.symbol_ref.code_range.start_col,
+                self.error, self.hint
+            )
+            # super().__str__()
             os._exit(1)  # really abort
 

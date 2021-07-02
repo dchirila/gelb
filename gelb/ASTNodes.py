@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from gelb.SymbolsTable import SymbolsTable
+from gelb.SymbolReference import SymbolReference
 
 
 class Node_N(ABC):
@@ -26,9 +27,10 @@ class Node_N(ABC):
                         field.startswith('code_range') or
                         field.startswith('get_ast_fields') or
                         field.startswith('iterate_over_ast_fields') or
+                        field.startswith('get_referenced_symbols') or
                         field.startswith('is_terminal_node') or
                         field.startswith('append') or  # from List_N
-                        field.startswith('symbols')  # exclude the symbol-table
+                        field.startswith('symbol_defs')  # exclude the symbol-table
                 )
             ]
 
@@ -36,7 +38,7 @@ class Node_N(ABC):
         # print self
         print()
         print("<<<DEBUG-1>>> ", self.__class__.__name__)
-        print("<<<DEBUG-2>>> ", self)
+        print("<<<DEBUG-2>>> ", self, self.code_range)
         # iterate over fields
         list_of_fields = None
         if isinstance(self, List_N):
@@ -118,7 +120,7 @@ class Program_N(Node_N):
         # self.functions = None
         self.node_classes = None
         self.geometry = None
-        self.symbols = None  # symbols table (built after AST construction)
+        self.symbol_defs = None  # symbol_defs table (built after AST construction)
 
     def __str__(self):
         result = (
@@ -150,6 +152,17 @@ class Expr_N(Node_N):
     @abstractmethod
     def __str__(self):
         pass
+
+    def get_referenced_symbols(self):
+        """
+        Returns *unique* set of referenced symbol_defs.
+        """
+        result = set()  # empty set
+        for child_name in self.get_ast_fields():
+            child = getattr(self, child_name)
+            if hasattr(child, 'get_referenced_symbols'):
+                result |= child.get_referenced_symbols()
+        return result
 
 
 class SetSimulationNameStmt_N(Stmt_N):
@@ -199,7 +212,7 @@ class Block_N(Node_N):
     def __init__(self, code_range, stmts):
         super().__init__(code_range)
         self.stmts = stmts
-        self.symbols = None
+        self.symbol_defs = None
 
     @abstractmethod
     def __str__(self):
@@ -353,6 +366,13 @@ class Identifier_N(Expr_N):
 
     def __str__(self):
         return f"(Identifier {self.name})"
+
+    def get_referenced_symbols(self):
+        result = set()
+        result.add(
+            SymbolReference(self.name, self.code_range)
+        )
+        return result
 
     def is_terminal_node(self):
         return True
@@ -598,6 +618,9 @@ class IntLiteral_N(Literal_N):
     def __str__(self):
         return f"(IntLiteral {self.value})"
 
+    def get_referenced_symbols(self):
+        return set()
+
 
 class RealLiteral_N(Literal_N):
     """
@@ -605,6 +628,9 @@ class RealLiteral_N(Literal_N):
     """
     def __str__(self):
         return f"(RealLiteral {self.value})"
+
+    def get_referenced_symbols(self):
+        return set()
 
 
 class BoolLiteral_N(Literal_N):
@@ -616,6 +642,9 @@ class BoolLiteral_N(Literal_N):
     """
     def __str__(self):
         return f"(BoolLiteral {self.value})"
+
+    def get_referenced_symbols(self):
+        return set()
 
 
 class StringLiteral_N(Literal_N):

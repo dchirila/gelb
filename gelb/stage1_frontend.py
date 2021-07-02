@@ -63,7 +63,7 @@ def get_ast(start_rule, input_string):
         ast_builder = ASTBuilderVisitor()
         visitation_method_name = f"visit{start_rule.capitalize()}"
         if hasattr(ast_builder, visitation_method_name):
-            # TODO: trigger creation of (sub-)AST & return
+            # trigger creation of (sub-)AST & return
             visitation_method = getattr(ast_builder, visitation_method_name)
             ast = visitation_method(cst)
             return ast

@@ -17,7 +17,7 @@ def test_valid():
     # Act
     ast = get_ast("node_classes_block", test_string)
     ast = build_symbols_tables(ast)
-    assert repr(ast.symbols) == (
+    assert repr(ast.symbol_defs) == (
         "(TOP"
         " \"node class\""
         " (NodeClassInstaStmt"

@@ -212,8 +212,6 @@ SEMICOLON ;
 identifier : ID ;
 
 /* TODO:
-   - allow expressions involving =array_selection=s
-   - allow expressions involving =lattice_in_selection=s
    - allow expressions involving built-in functions
    - allow expressions involving user-defined functions
  */
