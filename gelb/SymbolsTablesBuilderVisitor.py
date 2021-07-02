@@ -4,7 +4,9 @@ from gelb.ASTBaseVisitor import ASTBaseVisitor
 from gelb.ASTNodes import *
 from gelb.SymbolDefinition import SymbolDefinition
 from gelb.utils.exceptions import (
-    GeLBExSymbolUnknown, GeLBExSymbolConstantRecursion
+    GeLBExSymbolUnknown,
+    GeLBExSymbolConstantRecursion,
+    GeLBExIncorrectStagesOrdering
 )
 
 
@@ -15,6 +17,44 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
 
     We need to distinguish between {global,local} symbol_defs tables.
     """
+    def check_for_undefined_symbols(self, node):
+        if node.symbol_defs is not None:
+            # check that all used symbol_defs are defined
+            referenced_symbols = set()
+            for sdef in node.symbol_defs:
+                referenced_symbols |= sdef.value.value.get_referenced_symbols()
+            # print(set().union(s.name for s in referenced_symbols))
+            for symbol_ref in referenced_symbols:
+                if not node.symbol_defs.contains(symbol_ref.name):
+                    raise GeLBExSymbolUnknown(symbol_ref)
+        else:
+            raise GeLBExIncorrectStagesOrdering(
+                error = (
+                    f"Attempted to invoke \"check_for_undefined_symbols\","
+                    f" but the symbol-definitions table for {node} has not"
+                    f" been constructed yet."
+                )
+            )
+
+    def check_for_recursively_defined_symbols(self, node):
+        if node.symbol_defs is not None:
+            # check that no constant is defined in terms of itself
+            for sdef in node.symbol_defs:
+                referenced_symbols = sdef.value.value.get_referenced_symbols()
+                for symbol_ref in referenced_symbols:
+                    if symbol_ref.name == sdef.name:
+                        raise GeLBExSymbolConstantRecursion(
+                            symbol_ref
+                        )
+        else:
+            raise GeLBExIncorrectStagesOrdering(
+                error = (
+                    f"Attempted to invoke"
+                    f" \"check_for_recursively_defined_symbols\","
+                    f" but the symbol-definitions table for {node} has not"
+                    f" been constructed yet."
+                )
+            )
 
     def visitProgram_N(
             self,
@@ -116,24 +156,8 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                     )
                 )
 
-            # check that all used symbol_defs are defined
-            referenced_symbols = set()
-            for sdef in node.symbol_defs:
-                referenced_symbols |= sdef.value.value.get_referenced_symbols()
-            # print(set().union(s.name for s in referenced_symbols))
-
-            for symbol_ref in referenced_symbols:
-                if not node.symbol_defs.contains(symbol_ref.name):
-                    raise GeLBExSymbolUnknown(symbol_ref)
-
-            # check that no constant is defined in terms of itself
-            for sdef in node.symbol_defs:
-                referenced_symbols = sdef.value.value.get_referenced_symbols()
-                for symbol_ref in referenced_symbols:
-                    if symbol_ref.name == sdef.name:
-                        raise GeLBExSymbolConstantRecursion(
-                            symbol_ref
-                        )
+            self.check_for_undefined_symbols(node)
+            self.check_for_recursively_defined_symbols(node)
 
         return node
 

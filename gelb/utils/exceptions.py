@@ -27,6 +27,16 @@ class GeLBException(Exception):
             os._exit(1)  # really abort
 
 
+class GeLBExIncorrectStagesOrdering(GeLBException):
+    """
+    GeLB exception, for attempts to invoke a compiler stage before its time.
+    """
+    def __init__(self, error, hint=feedback_on_slack_hint):
+        super().__init__(error, hint)
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            print(self)
+
+
 class GeLBExInvalidGrammarRule(GeLBException):
     """
     GeLB exception, for attempts to use a parser rule which is not part of
