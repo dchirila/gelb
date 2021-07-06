@@ -147,7 +147,7 @@ class GeLBExInvalidNoOfOccurrences(GeLBException):
             informal_name = "simulation_name"
             if no_occurrences == 0:
                 error = (
-                    f"We see that you do not specify a "
+                    f"You do not specify a "
                     f"{click.style(informal_name, underline=True) + Fore.RED}"
                     f" statement."
                 )
@@ -159,7 +159,7 @@ class GeLBExInvalidNoOfOccurrences(GeLBException):
                 )
             elif no_occurrences > 1:
                 error = (
-                    f"We see that you specify more than one "
+                    f"You specify more than one "
                     f"{click.style(informal_name, underline=True) + Fore.RED}"
                     f" statement."
                 )
@@ -171,7 +171,7 @@ class GeLBExInvalidNoOfOccurrences(GeLBException):
             informal_name = "simulation_description"
             if no_occurrences == 0:
                 error = (
-                    f"We see that you do not specify a"
+                    f"You do not specify a"
                     f" {click.style(informal_name, underline=True) + Fore.RED}"
                     f" statement."
                 )
@@ -183,7 +183,7 @@ class GeLBExInvalidNoOfOccurrences(GeLBException):
                 )
             elif no_occurrences > 1:
                 error = (
-                    f"We see that you specify more than one"
+                    f"You specify more than one"
                     f" {click.style(informal_name, underline=True) + Fore.RED}"
                     f" statement."
                 )
@@ -195,7 +195,7 @@ class GeLBExInvalidNoOfOccurrences(GeLBException):
             informal_name = "global_constants"
             if no_occurrences > 1:
                 error = (
-                    f"We see that you specify more than one"
+                    f"You specify more than one"
                     f" {click.style(informal_name, underline=True) + Fore.RED}"
                     f" block."
                 )
@@ -206,7 +206,7 @@ class GeLBExInvalidNoOfOccurrences(GeLBException):
         elif block_name == "lattices_block":
             if no_occurrences == 0:
                 error = (
-                    f"We see that you do not specify a"
+                    f"You do not specify a"
                     f" {click.style('lattices', underline=True) + Fore.RED}"
                     f" block."
                 )
@@ -218,7 +218,7 @@ class GeLBExInvalidNoOfOccurrences(GeLBException):
                 )
             elif no_occurrences > 1:
                 error = (
-                    f"We see that you specify more than one "
+                    f"You specify more than one "
                     f" {click.style('lattices', underline=True) + Fore.RED}"
                     f" block."
                 )
@@ -230,7 +230,7 @@ class GeLBExInvalidNoOfOccurrences(GeLBException):
         elif block_name == "initializer_block":
             if no_occurrences == 0:
                 error = (
-                    f"We see that you do not specify any "
+                    f"You do not specify any "
                     f"{click.style('initializer', underline=True) + Fore.RED}"
                     f" block."
                 )
@@ -243,7 +243,7 @@ class GeLBExInvalidNoOfOccurrences(GeLBException):
         elif block_name == "dynamic_block":
             if no_occurrences == 0:
                 error = (
-                    f"We see that you do not specify any "
+                    f"You do not specify any "
                     f"{click.style('dynamic', underline=True) + Fore.RED}"
                     f" block."
                 )
@@ -256,7 +256,7 @@ class GeLBExInvalidNoOfOccurrences(GeLBException):
         elif block_name == "gauge_block":
             if no_occurrences == 0:
                 error = (
-                    f"We see that you do not specify any "
+                    f"You do not specify any "
                     f"{click.style('gauge', underline=True) + Fore.RED}"
                     f" block."
                 )
@@ -270,7 +270,7 @@ class GeLBExInvalidNoOfOccurrences(GeLBException):
             informal_name = "node_classes"
             if no_occurrences == 0:
                 error = (
-                    f"We see that you do not specify a "
+                    f"You do not specify a "
                     f"{click.style(informal_name, underline=True) + Fore.RED}"
                     f" block."
                 )
@@ -281,7 +281,7 @@ class GeLBExInvalidNoOfOccurrences(GeLBException):
                 )
             elif no_occurrences > 1:
                 error = (
-                    f"We see that you specify more than one "
+                    f"You specify more than one "
                     f"{click.style(informal_name, underline=True) + Fore.RED}"
                     f" block."
                 )
@@ -293,7 +293,7 @@ class GeLBExInvalidNoOfOccurrences(GeLBException):
         elif block_name == "geometry_block":
             if no_occurrences == 0:
                 error = (
-                    f"We see that you do not specify a "
+                    f"You do not specify a "
                     f"{click.style('geometry', underline=True) + Fore.RED}"
                     f" block."
                 )
@@ -304,7 +304,7 @@ class GeLBExInvalidNoOfOccurrences(GeLBException):
                 )
             elif no_occurrences > 1:
                 error = (
-                    f"We see that you specify more than one "
+                    f"You specify more than one "
                     f"{click.style('geometry', underline=True) + Fore.RED}"
                     f" block."
                 )
@@ -344,7 +344,7 @@ class GeLBExIncorrectInputFileExtension(GeLBException):
     """
     def __init__(self, input_file_name):
         error = (
-            f"We notice that your input file "
+            f"Your input file "
             f"{click.style(input_file_name, underline=True) + Fore.RED}"
             f" does not have the "
             f"{click.style('.gelb', underline=True) + Fore.RED}"
@@ -365,7 +365,7 @@ class GeLBExCouldNotFindInputFile(GeLBException):
     """
     def __init__(self, input_file_name, suggest_files):
         error = (
-            f"We could not find the input file "
+            f"Could not find the input file "
             f"{click.style(input_file_name, underline=True) + Fore.RED}."
         )
         hint = (
@@ -388,7 +388,7 @@ class GeLBExCouldNotReadInputFile(GeLBException):
     """
     def __init__(self, input_file_name):
         error = (
-            f"We could not read the input file "
+            f"Could not read the input file "
             f"{click.style(input_file_name, underline=True) + Fore.RED}."
         )
         hint = (
@@ -427,7 +427,7 @@ class GeLBExAntlr4JavaLibNotFound(GeLBException):
     """
     def __init__(self, antlr4_lib_path):
         error = (
-            f"We could not find the Antlr4 java library file"
+            f"Could not find the Antlr4 java library file"
             f" (expected location was "
             f"{click.style(antlr4_lib_path, underline=True) + Fore.RED})."
         )
@@ -446,7 +446,7 @@ class GeLBExPython3PackageMissing(GeLBException):
     """
     def __init__(self, package_name):
         error = (
-            f"We could not find the "
+            f"Could not find the "
             f"{click.style(package_name, underline=True) + Fore.RED}"
             f" Python3 package."
         )
@@ -467,7 +467,7 @@ class GeLBExGrammarFileNotFound(GeLBException):
     """
     def __init__(self, grammar_path):
         error = (
-            f"We could not find the "
+            f"Could not find the "
             f"{click.style(grammar_path, underline=True) + Fore.RED}"
             f" file."
         )
@@ -511,7 +511,7 @@ class GeLBExSymbolExists(GeLBException):
         self.curr_instance = curr_instance
         name = curr_instance.name
         error = (
-            f"We see that you define a {curr_instance.tag}"
+            f"You define a {curr_instance.tag}"
             f" named"
             f" {click.style(name, underline=True) + Fore.RED}."
             f" However, you are using that name (as "
@@ -549,7 +549,7 @@ class GeLBExSymbolUnknown(GeLBException):
         self.symbol_ref = symbol_ref
         name = symbol_ref.name
         error = (
-            f"We see that you mention "
+            f"You mention "
             f" {click.style(name, underline=True) + Fore.RED}."
             f" However, you did not define it."
         )
@@ -581,7 +581,7 @@ class GeLBExSymbolConstantRecursion(GeLBException):
         self.symbol_ref = symbol_ref
         name = symbol_ref.name
         error = (
-            f"We see that you define the constant"
+            f"You define the constant"
             f" {click.style(name, underline=True) + Fore.RED}"
             f" with an expression which depends on"
             f" {click.style(name, underline=True) + Fore.RED}"
