@@ -17,16 +17,28 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
 
     We need to distinguish between {global,local} symbol_defs tables.
     """
-    def check_for_undefined_symbols(self, node):
+    def check_for_undefined_symbols(self, node, ast_root=None):
         if node.symbol_defs is not None:
-            # check that all used symbol_defs are defined
-            referenced_symbols = set()
-            for sdef in node.symbol_defs:
-                referenced_symbols |= sdef.value.value.get_referenced_symbols()
-            # print(set().union(s.name for s in referenced_symbols))
-            for symbol_ref in referenced_symbols:
-                if not node.symbol_defs.contains(symbol_ref.name):
-                    raise GeLBExSymbolUnknown(symbol_ref)
+            # check that all referenced symbols were actually defined
+            for sref in node.get_referenced_symbols():
+                if not node.symbol_defs.contains(sref.name):
+                    implicit_symbols = []
+                    if (
+                            isinstance(node, InitializerBlock_N) or
+                            isinstance(node, DynamicBlock_N) or
+                            isinstance(node, GaugeBlock_N)
+                    ):
+                        implicit_symbols = [
+                            # TODO un-define y, z, NY, Nz, depending on
+                            #  dimensionality (inferred from ast_root)
+                            "x", "y", "z", "Nx", "Ny", "Nz",
+                            # name of the {initializer/dynamic/gauge}
+                            str(node.name.name),
+                            # TODO support multiple lattices (@GeLB-v2)
+                            "f"  # name of the lattice (single @GeLB-v1)
+                        ]
+                    if sref.name not in implicit_symbols:
+                        raise GeLBExSymbolUnknown(sref)
         else:
             raise GeLBExIncorrectStagesOrdering(
                 error = (
@@ -38,14 +50,14 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
 
     def check_for_recursively_defined_symbols(self, node):
         if node.symbol_defs is not None:
-            # check that no constant is defined in terms of itself
             for sdef in node.symbol_defs:
-                referenced_symbols = sdef.value.value.get_referenced_symbols()
-                for symbol_ref in referenced_symbols:
-                    if symbol_ref.name == sdef.name:
-                        raise GeLBExSymbolConstantRecursion(
-                            symbol_ref
-                        )
+                if sdef.tag == "constant definition":
+                    # check that no constant is defined in terms of itself
+                    sdefval = sdef.value
+                    referenced_symbols = sdefval.value.get_referenced_symbols()
+                    for symbol_ref in referenced_symbols:
+                        if symbol_ref.name == sdef.name:
+                            raise GeLBExSymbolConstantRecursion(symbol_ref)
         else:
             raise GeLBExIncorrectStagesOrdering(
                 error = (
@@ -155,10 +167,8 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                         value=constant_insta_stmt
                     )
                 )
-
             self.check_for_undefined_symbols(node)
             self.check_for_recursively_defined_symbols(node)
-
         return node
 
     def visitLatticesBlock_N(
@@ -177,6 +187,7 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                         value=lattice_insta_stmt
                     )
                 )
+            self.check_for_undefined_symbols(node)
         return node
 
     def visitInitializerBlock_N(
@@ -204,6 +215,8 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                             value=stmt
                         )
                     )
+            self.check_for_undefined_symbols(node)
+            self.check_for_recursively_defined_symbols(node)
         return node
 
     def visitDynamicBlock_N(
@@ -231,6 +244,8 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                             value=stmt
                         )
                     )
+            self.check_for_undefined_symbols(node)
+            self.check_for_recursively_defined_symbols(node)
         return node
 
     def visitGaugeBlock_N(
@@ -258,6 +273,16 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                             value=stmt
                         )
                     )
+            for var_decl in node.outputs:
+                node.symbol_defs.append(
+                    SymbolDefinition(
+                        name=var_decl.name.name,
+                        tag="output variable declaration",
+                        value = var_decl
+                    )
+                )
+            self.check_for_undefined_symbols(node)
+            self.check_for_recursively_defined_symbols(node)
         return node
 
     def visitNodeClassesBlock_N(

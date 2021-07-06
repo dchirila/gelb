@@ -14,5 +14,5 @@ class SymbolReference:
         return (
             f"(SymbolReference"
             f" (Name \"{self.name}\")"
-            f" (CodeRange {self.code_range})"
+            f" (CodeRange {self.code_range}))"
         )

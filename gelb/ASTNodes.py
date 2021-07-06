@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 from gelb.SymbolsTable import SymbolsTable
 from gelb.SymbolReference import SymbolReference
+from gelb.ASTBaseVisitor import ASTBaseVisitor
 
 
 class Node_N(ABC):
@@ -16,16 +17,16 @@ class Node_N(ABC):
     def __str__(self):
         pass
 
-    def get_ast_fields(self):
+    def get_children(self):
         # special treatment for List_N
         if isinstance(self, List_N):
             return self.elements
         else:
-            return [
-                field for field in dir(self) if not (
+            children = [
+                getattr(self, field) for field in dir(self) if not (
                         field.startswith('_') or
                         field.startswith('code_range') or
-                        field.startswith('get_ast_fields') or
+                        field.startswith('get_children') or
                         field.startswith('iterate_over_ast_fields') or
                         field.startswith('get_referenced_symbols') or
                         field.startswith('is_terminal_node') or
@@ -34,39 +35,15 @@ class Node_N(ABC):
                         field.startswith('symbol_defs')
                 )
             ]
+            return children
 
-    def iterate_over_ast_fields(self):
-        # print self
-        print()
-        print("<<<DEBUG-1>>> ", self.__class__.__name__)
-        print("<<<DEBUG-2>>> ", self, self.code_range)
-        # iterate over fields
-        list_of_fields = None
-        if isinstance(self, List_N):
-            list_of_fields = self.elements
-        else:
-            list_of_fields = self.get_ast_fields()
-
-        for field in list_of_fields:
-            print("<<<DEBUG-3>>> ", field, type(field))
-            if isinstance(field, Node_N):
-                print("<<<DEBUG-4>>> ", field, type(field))
-                if field.is_terminal_node():
-                    print("<<<DEBUG-5>>> ", field, type(field))
-                else:
-                    print("<<<DEBUG-6>>> ", field, type(field))
-                    field.iterate_over_ast_fields()
-            else:
-                if hasattr(self, field):
-                    field = getattr(self, field)
-                    print("<<<DEBUG-7>>> ", field, type(field))
-                    if field.is_terminal_node():
-                        print("<<<DEBUG-8>>> ", field, type(field))
-                    else:
-                        print("<<<DEBUG-9>>> ", field, type(field))
-                        field.iterate_over_ast_fields()
-                else:
-                    raise TypeError("<<<DEBUG>>> abnormal AST node field")
+    def get_referenced_symbols(self):
+        result = set()
+        # recursive descend
+        for child in self.get_children():
+            if child is not None:
+                result |= child.get_referenced_symbols()
+        return result
 
     def is_terminal_node(self):
         return False  # False unless otherwise
@@ -154,17 +131,6 @@ class Expr_N(Node_N):
     @abstractmethod
     def __str__(self):
         pass
-
-    def get_referenced_symbols(self):
-        """
-        Returns *unique* set of referenced symbol_defs.
-        """
-        result = set()  # empty set
-        for child_name in self.get_ast_fields():
-            child = getattr(self, child_name)
-            if hasattr(child, 'get_referenced_symbols'):
-                result |= child.get_referenced_symbols()
-        return result
 
 
 class SetSimulationNameStmt_N(Stmt_N):
@@ -496,6 +462,9 @@ class ScalarDataType_N(DataType_N):
     def is_terminal_node(self):
         return True
 
+    def get_children(self):
+        return set()
+
 
 class ArrayDataType_N(DataType_N):
     """
@@ -658,6 +627,9 @@ class StringLiteral_N(Literal_N):
     """
     def __str__(self):
         return f"(StringLiteral {self.value})"
+
+    def get_children(self):
+        return set()
 
 
 class ArrayLiteral_N(Literal_N):

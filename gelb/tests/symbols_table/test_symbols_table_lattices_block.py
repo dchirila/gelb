@@ -2,7 +2,9 @@
 
 import pytest
 from gelb.stage1_frontend import get_ast, build_symbols_tables
-from gelb.utils.exceptions import GeLBExSymbolExists
+from gelb.utils.exceptions import (
+    GeLBExSymbolExists, GeLBExSymbolUnknown, GeLBExSymbolConstantRecursion
+)
 from gelb.SymbolsTable import SymbolsTable
 
 
@@ -49,7 +51,7 @@ def test_valid():
     )
 
 
-def test_invalid():
+def test_invalid1():
     """
     Invalid because we re-define f.
 
@@ -78,4 +80,70 @@ def test_invalid():
     # Act
     ast = get_ast("lattices_block", test_string)
     with pytest.raises(GeLBExSymbolExists):
+        ast = build_symbols_tables(ast)
+
+
+def test_invalid2():
+    """
+    Invalid because f depends on unknown symbol TWO.
+
+    Should raise a GeLBExSymbolUnknown exception.
+    """
+    # Arrange
+    test_string = """
+    lattices {
+      lattice f(1 + TWO,         // d
+                19,              // q
+                real64,          // df_type
+                {256, 256, 256}  // size
+      );
+    }
+    """
+    # Act
+    ast = get_ast("lattices_block", test_string)
+    with pytest.raises(GeLBExSymbolUnknown):
+        ast = build_symbols_tables(ast)
+
+
+def test_invalid3():
+    """
+    Invalid because f depends on unknown symbol TWO.
+
+    Should raise a GeLBExSymbolUnknown exception.
+    """
+    # Arrange
+    test_string = """
+    lattices {
+      lattice f(3,               // d
+                TWO +17,         // q
+                real64,          // df_type
+                {256, 256, 256}  // size
+      );
+    }
+    """
+    # Act
+    ast = get_ast("lattices_block", test_string)
+    with pytest.raises(GeLBExSymbolUnknown):
+        ast = build_symbols_tables(ast)
+
+
+def test_invalid4():
+    """
+    Invalid because f depends on unknown symbol TWO.
+
+    Should raise a GeLBExSymbolUnknown exception.
+    """
+    # Arrange
+    test_string = """
+    lattices {
+      lattice f(3,                   // d
+                19,                  // q
+                real64,              // df_type
+                {256, 254+TWO, 256}  // size
+      );
+    }
+    """
+    # Act
+    ast = get_ast("lattices_block", test_string)
+    with pytest.raises(GeLBExSymbolUnknown):
         ast = build_symbols_tables(ast)

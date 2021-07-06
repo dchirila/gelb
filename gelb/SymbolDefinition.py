@@ -4,9 +4,9 @@ from gelb.utils.exceptions import *
 
 class SymbolDefinition:
     """
-    Container for a single symbol in a GeLB program.
+    Container for a single symbol definition in a GeLB program.
 
-    Each Symbols has the following attributes:
+    Each SymbolDefinition has the following attributes:
     - name
     - tag
     - value
@@ -19,7 +19,7 @@ class SymbolDefinition:
     def __repr__(self):
         """Terse representation (for unit-testing)."""
         return (
-            f"(Symbol (Name \"{self.name}\")"
+            f"(SymbolDefinition (Name \"{self.name}\")"
             f" (Tag \"{self.tag}\")"
             f" (Value {self.value}))"
         )

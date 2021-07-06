@@ -2,7 +2,9 @@
 
 import pytest
 from gelb.stage1_frontend import get_ast, build_symbols_tables
-from gelb.utils.exceptions import GeLBExSymbolExists
+from gelb.utils.exceptions import (
+    GeLBExSymbolExists, GeLBExSymbolUnknown, GeLBExSymbolConstantRecursion
+)
 from gelb.SymbolsTable import SymbolsTable
 
 
@@ -29,7 +31,10 @@ def test_valid():
     )
 
 
-def test_invalid():
+def test_invalid1():
+    """
+    Invalid because we re-define PI.
+    """
     # Arrange
     test_string = """
     initializer SetDFsToConstant { //
@@ -42,4 +47,81 @@ def test_invalid():
     # Act
     ast = get_ast("initializer_block", test_string)
     with pytest.raises(GeLBExSymbolExists):
+        ast = build_symbols_tables(ast)
+
+
+def test_invalid2():
+    """
+    Invalid because we refer to unknown symbol PI.
+
+    Should raise a GeLBExSymbolUnknown exception.
+    """
+    # Arrange
+    test_string = """
+    initializer SetDFsToConstant { //
+      const int TWOPI = PI;
+      f.out[x, y, z | :] = TWOPI;
+    }
+    """
+    # Act
+    ast = get_ast("initializer_block", test_string)
+    with pytest.raises(GeLBExSymbolUnknown):
+        ast = build_symbols_tables(ast)
+
+
+def test_invalid3():
+    """
+    Invalid because we refer to unknown symbol TWOPI.
+
+    Should raise a GeLBExSymbolUnknown exception.
+    """
+    # Arrange
+    test_string = """
+    initializer SetDFsToConstant { //
+      f.out[x, y, z | :] = TWOPI;
+    }
+    """
+    # Act
+    ast = get_ast("initializer_block", test_string)
+    with pytest.raises(GeLBExSymbolUnknown):
+        ast = build_symbols_tables(ast)
+
+
+def test_invalid4():
+    """
+    Invalid because we refer to unknown symbol PI.
+
+    Should raise a GeLBExSymbolUnknown exception.
+    """
+    # Arrange
+    test_string = """
+    initializer SetDFsToConstant { //
+      int tutu;
+      tutu = PI;
+      f.out[x, y, z | :] = tutu;
+    }
+    """
+    # Act
+    ast = get_ast("initializer_block", test_string)
+    with pytest.raises(GeLBExSymbolUnknown):
+        ast = build_symbols_tables(ast)
+
+
+def test_invalid5():
+    """
+    Invalid because symbol NY refers to itself (infinite recursion).
+
+    Should raise a GeLBExSymbolRecursion exception.
+    """
+    # Arrange
+    test_string = """
+    initializer SetDFsToConstant { //
+      const int NX = 123;
+      const int NY = -2 * NY + NX;
+      f.out[x, y, z | :] = NY;
+    }
+    """
+    # Act
+    ast = get_ast("initializer_block", test_string)
+    with pytest.raises(GeLBExSymbolConstantRecursion):
         ast = build_symbols_tables(ast)

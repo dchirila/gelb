@@ -2,7 +2,9 @@
 
 import pytest
 from gelb.stage1_frontend import get_ast, build_symbols_tables
-from gelb.utils.exceptions import GeLBExSymbolExists
+from gelb.utils.exceptions import (
+    GeLBExSymbolExists, GeLBExSymbolUnknown, GeLBExSymbolConstantRecursion
+)
 from gelb.SymbolsTable import SymbolsTable
 
 
@@ -26,10 +28,17 @@ def test_valid():
         " (RealLiteral 3.141592653589793)"
         ")"
         ")"
+        " (state"
+        " \"output variable declaration\""
+        " (VariableDeclarationStmt"
+        " (Identifier state)"
+        " (ScalarDataType int)"
+        ")"
+        ")"
     )
 
 
-def test_invalid():
+def test_invalid1():
     """
     Invalid because we re-define PI.
 
@@ -47,4 +56,22 @@ def test_invalid():
     # Act
     ast = get_ast("gauge_block", test_string)
     with pytest.raises(GeLBExSymbolExists):
+        ast = build_symbols_tables(ast)
+
+
+def test_invalid2():
+    """
+    Invalid because we refer to unknown symbol PI.
+
+    Should raise a GeLBExSymbolUnknown exception.
+    """
+    # Arrange
+    test_string = """
+    gauge PiTimesCurrentState(out = {int state;}) { //
+      state = PI *f.in[x | 0];
+    }
+    """
+    # Act
+    ast = get_ast("gauge_block", test_string)
+    with pytest.raises(GeLBExSymbolUnknown):
         ast = build_symbols_tables(ast)

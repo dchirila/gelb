@@ -59,10 +59,10 @@ class ASTInitialValidationVisitor(ASTBaseVisitor):
             node: LatticeOutSelectionAssignmentStmt_N
     ):
         # (1) check that all required elements are present
-        # TODO ensure they are not None, by iterating over node.get_ast_fields()
+        # TODO ensure they are not None, by iterating over node.get_children()
 
         # (2) descend into child nodes, to check that they are valid
-        for field in node.get_ast_fields():
+        for field in node.get_children():
             print(f"<<<DEBUG>>> {field}, {type(getattr(node, field))}")
             self.visit(getattr(node, field))
 
@@ -72,7 +72,7 @@ class ASTInitialValidationVisitor(ASTBaseVisitor):
         # TODO
 
         # (2) descend into child nodes, to check that they are valid
-        for field in node.get_ast_fields():
+        for field in node.get_children():
             self.visit(getattr(node, field))
 
     def visitSetSimulationNameStmt_N(
@@ -127,10 +127,10 @@ class ASTInitialValidationVisitor(ASTBaseVisitor):
             node: DynamicBlock_N
     ):
         # (1) check that all required elements are present
-        # TODO ensure they are not None, by iterating over node.get_ast_fields()
+        # TODO ensure they are not None, by iterating over node.get_children()
 
         # (2) descend into child nodes, to check that they are valid
-        for field in node.get_ast_fields():
+        for field in node.get_children():
             self.visit(getattr(node, field))
 
     def visitGaugeBlock_N(

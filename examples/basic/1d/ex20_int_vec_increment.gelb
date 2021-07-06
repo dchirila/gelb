@@ -1,5 +1,8 @@
+simulation_name("ex20_int_vec_increment_one");
+simulation_description("None");
+
 lattices { //
-  lattice f(d = 1, q = 1, df_type = int, size = {32}, periodicity = {false});
+  lattice f(1, 1, int, 32);
 }
 
 initializer SetDFsToZero { //
@@ -10,7 +13,7 @@ dynamic IncrementDFs { //
   f.out[x | 0] = f.in[x | 0] + 1;
 }
 
-gauge CurrentState(out = {int state}) { //
+gauge CurrentState(out = {int state;}) { //
   state = f.in[x | 0];
 }
 
