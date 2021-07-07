@@ -29,31 +29,7 @@ class ImplicitConstantResolverVisitor(ASTBaseVisitor):
             node: Program_N,
             ast_root_node: Program_N
     ):
-        # generic error-message
-        error = "Your GeLB program contains a syntax error."
         for lattice_insta in node.lattices.stmts:
-            name = lattice_insta.name.name
-            hint_suffix = f" Please choose another identifier."
-            line = lattice_insta.name.code_range.start_line
-            column = lattice_insta.name.code_range.start_col
-            if name in ["x", "y", "z"]:
-                hint_prefix = (
-                    f"You cannot use"
-                    f" {click.style(name, underline=True) + Fore.GREEN}"
-                    f" as an identifier, because it is an implicit "
-                )
-                raise GeLBExSyntaxError(
-                    line, column,
-                    error,
-                    hint = (
-                        hint_prefix +
-                        f"variable"
-                        f" (representing the {name}-coordinate of lattice "
-                        f"nodes, inside initializers, dynamics & gauges)." +
-                        hint_suffix
-                    )
-                )
-            print(type(lattice_insta.name.name))
             print(
                 f"<<<DEBUG>>>"
                 f" ID = {lattice_insta.name}"

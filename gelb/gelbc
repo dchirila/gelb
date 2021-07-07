@@ -35,7 +35,9 @@ import gelb.utils.config
 from gelb.stage1_frontend import (
     get_ast,
     build_symbols_tables,
-    # validate_ast, resolve_implicit_constants,
+    validate_node_classes,
+    # validate_ast,
+    resolve_implicit_constants,
     prevent_clashes_of_ids_with_implicits
 )
 
@@ -84,9 +86,10 @@ through the various stages of the compiler.
     # - implicit constants {d, q, Nx , Ny , Nz}
     # - implicit variables {x, y, z}
     prevent_clashes_of_ids_with_implicits(ast)
-
     # ... resolve implicit constants
     # ast = resolve_implicit_constants(ast)
+    # ... validate node-classes
+    validate_node_classes(ast)
 
     # validate_ast(ast)
     # ast.iterate_over_ast_fields()
