@@ -35,7 +35,8 @@ import gelb.utils.config
 from gelb.stage1_frontend import (
     get_ast,
     build_symbols_tables,
-    validate_ast
+    # validate_ast, resolve_implicit_constants,
+    prevent_clashes_of_ids_with_implicits
 )
 
 
@@ -75,13 +76,20 @@ through the various stages of the compiler.
     # ... save file-name as global variable
     gelb.utils.config.GELB_FILE_NAME = input_file
     src_raw = load_file(input_file)
+    # ... get the initial AST
     ast = get_ast("gelb_program", src_raw)
-    # print(ast)  # TODO RM debugging print
-    # ast.iterate_over_ast_fields()
-
+    # ... build the symbols table
     ast = build_symbols_tables(ast)
+    # ... [validation] prevent clashes of user-defined symbols with the
+    # - implicit constants {d, q, Nx , Ny , Nz}
+    # - implicit variables {x, y, z}
+    prevent_clashes_of_ids_with_implicits(ast)
+
+    # ... resolve implicit constants
+    # ast = resolve_implicit_constants(ast)
 
     # validate_ast(ast)
+    # ast.iterate_over_ast_fields()
 
     # ... TODO semantic analysis, checks, etc.
 

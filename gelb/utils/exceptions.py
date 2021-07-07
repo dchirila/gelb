@@ -573,12 +573,12 @@ class GeLBExSymbolUnknown(GeLBException):
         self.symbol_ref = symbol_ref
         name = symbol_ref.name
         error = (
-            f"You mention "
+            f"You mention"
             f" {click.style(name, underline=True) + Fore.RED}."
             f" However, you did not define it."
         )
         hint = (
-            f"Define "
+            f"Define"
             f" {click.style(name, underline=True) + Fore.GREEN}."
         )
         super().__init__(error, hint)

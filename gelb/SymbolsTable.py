@@ -50,8 +50,8 @@ class SymbolsTable:
         result += f"{'-'*30}|{'-'*30}|{'-'*40}\n"
         for s in self.symbol_defs:
             result += (
-                f"{str(s.name.ljust(20))}|"
-                f"{str(s.tag.ljust(20))}|"
+                f"{str(s.name.ljust(30))}|"
+                f"{str(s.tag.ljust(30))}|"
                 f" {s.value}\n"
             )
         return result
