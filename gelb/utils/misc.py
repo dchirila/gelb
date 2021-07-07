@@ -5,6 +5,7 @@ from fnmatch import fnmatch
 from subprocess import run
 import pathlib
 import os
+import re
 import pkg_resources
 
 from gelb.utils.output_to_terminal import *
@@ -91,6 +92,26 @@ def invoke_antlr4_tool():
                             grammar_path])
     if antlr4_tool_stat.returncode != 0:
         raise GeLBExAntlr4JavaToolFailed(antlr4_tool_stat)
+
+    # obtain the list of reserved keywords (directly from the lexer); this
+    # has the advantage of always being up-to-date.
+    if gelb.utils.config.GELB_RESERVED_KEYWORDS is None:
+        # for auto-deducing reserved keywords
+        from gelb.antlr4.generated_code import GeLBLexer
+        literalNames = GeLBLexer.literalNames
+
+        reg = re.compile(r'^[a-zA-Z0-9\_]+$')
+        gelb.utils.config.GELB_RESERVED_KEYWORDS = list(
+            filter(
+                lambda kwd: bool(reg.match(kwd)),
+                list(
+                    filter(
+                        lambda kwd: 'INVALID' not in kwd,
+                        [kwd.replace("'", "") for kwd in literalNames]
+                    )
+                )
+            )
+        )
 
 
 def load_file(input_file):

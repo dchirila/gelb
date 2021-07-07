@@ -4,44 +4,6 @@ import click
 from colorama import Fore, Style
 import gelb.utils.config
 
-GELB_KEYWORDS = [
-    'array',
-    'bool',
-    'const',
-    'dot_product',
-    'down_stream_df',
-    'dynamic',
-    'dynamics',
-    'gauge',
-    'gauges',
-    'geometry',
-    'global_constants',
-    'in',
-    'initializer',
-    'initializers',
-    'int',
-    'int16',
-    'int32',
-    'int64',
-    'int8',
-    'lattice',
-    'lattices',
-    'node_class',
-    'node_classes',
-    'nodes',
-    'opposite_df',
-    'out',
-    'periodicity',
-    'real',
-    'real16',
-    'real32',
-    'real64',
-    'simulation_description',
-    'simulation_name',
-    'size',
-    'up_stream_df',
-    'vector_product'
-]
 
 feedback_on_slack_hint = (
     f"If you are a GeLB user, please report this error on our"

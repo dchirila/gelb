@@ -13,6 +13,7 @@ from gelb.utils.error_utils import (
     show_double_definition_error
 )
 
+
 class GeLBException(Exception):
     """Base-class for all GeLB exceptins."""
     def __init__(self, error, hint):
@@ -118,10 +119,33 @@ class GeLBExMissingASTVisitationMethod(GeLBException):
 class GeLBExSyntaxError(GeLBException):
     """
     GeLB exception, for catching syntax errors raised by the generated parser.
+
+    NOTE: Attempts to use a reserved keyword as an identifier are also
+    reported by ANTLR4 as plain syntax errors -- it is better to check for
+    that particular case, s.t. we give a better error-message.
     """
     def __init__(self, line, column, error, hint):
         self.line = line
         self.column = column
+
+        # check the special case of trying to use a reserved keyword as an
+        # identifier
+        import re
+        if re.search("^mismatched input \'.*\' expecting ID$", hint):
+            # extract keyword
+            keyword = re.sub(
+                "^mismatched input \'", "",
+                re.sub("\' expecting ID$", "", hint)
+            )
+            if keyword in gelb.utils.config.GELB_RESERVED_KEYWORDS:
+                # construct a better hint
+                hint = (
+                    f"You cannot use"
+                    f" {click.style(keyword, underline=True) + Fore.GREEN}"
+                    f" as an identifier, because it is a reserved keyword."
+                    f" Please choose another identifier."
+                )
+
         super().__init__(error, hint)
         if gelb.utils.config.GELB_PRODUCTION_MODE:
             print(self)

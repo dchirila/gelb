@@ -12,3 +12,5 @@ GELB_ERROR_CONTEXT = 2
 # causing the compiler to abort ASAP). However, we don't want this behavior
 # when testing -- in that case, this global variable will be set to True.
 GELB_PRODUCTION_MODE = True  # make GeLB exceptions fatal
+
+GELB_RESERVED_KEYWORDS = None  # will be filled-in as needed

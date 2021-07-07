@@ -7,6 +7,6 @@ from gelb.utils.exceptions import *
 
 class ParsingError(ErrorListener):
     def syntaxError(self, recognizer, offendingSymbol, line, column, msg, e):
-        error = "We found a syntax error in your file"
+        error = "Your GeLB program contains a syntax error."
         hint = f"{msg}"
         raise GeLBExSyntaxError(line, column, error, hint)
