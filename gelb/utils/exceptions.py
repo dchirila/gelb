@@ -630,3 +630,33 @@ class GeLBExSymbolConstantRecursion(GeLBException):
             # super().__str__()
             os._exit(1)  # really abort
 
+
+class GeLBExSymbolWrongType(GeLBException):
+    """
+    GeLB exception, for signaling that a symbol of the wrong type is used.
+    """
+    def __init__(self, symbol_ref, expected_type):
+        self.symbol_ref = symbol_ref
+        name = symbol_ref.name
+        error = (
+            f"You specify"
+            f" {click.style(name, underline=True) + Fore.RED}."
+            f" However, I expected the name of a"
+            f" {click.style(expected_type) + Fore.RED} here."
+        )
+        hint = f"Specify the name of a {expected_type}."
+        super().__init__(error, hint)
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            print(self)
+
+    def __str__(self):
+        """Override base-class's __str__, because we want to print the code"""
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            show_error_in_src(
+                self.symbol_ref.code_range.start_line,
+                self.symbol_ref.code_range.start_col,
+                self.error, self.hint
+            )
+            # super().__str__()
+            os._exit(1)  # really abort
+

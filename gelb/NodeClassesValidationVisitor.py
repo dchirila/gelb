@@ -8,6 +8,7 @@ from gelb.ASTNodes import *
 from gelb.SymbolDefinition import SymbolDefinition
 from gelb.utils.exceptions import (
     GeLBExSymbolUnknown,
+    GeLBExSymbolWrongType,
     GeLBExSymbolConstantRecursion,
     GeLBExIncorrectStagesOrdering, GeLBExSyntaxError
 )
@@ -31,13 +32,34 @@ class NodeClassesValidationVisitor(ASTBaseVisitor):
             initializer_name = node_class_insta.initializer.name
             if not node.symbol_defs.contains(initializer_name):
                 raise GeLBExSymbolUnknown(node_class_insta.initializer)
+            elif node.symbol_defs.get_symbol_definition(
+                initializer_name
+            ).tag != "initializer":
+                raise GeLBExSymbolWrongType(
+                    node_class_insta.initializer,
+                    "initializer"
+                )
             # check that name of dynamic is in the program's global
             # symbols table
             dynamic_name = node_class_insta.dynamic.name
             if not node.symbol_defs.contains(dynamic_name):
                 raise GeLBExSymbolUnknown(node_class_insta.dynamic)
+            elif node.symbol_defs.get_symbol_definition(
+                    dynamic_name
+            ).tag != "dynamic":
+                raise GeLBExSymbolWrongType(
+                    node_class_insta.dynamic,
+                    "dynamic"
+                )
             # check that name of gauge is in the program's global
             # symbols table
             gauge_name = node_class_insta.gauge.name
             if not node.symbol_defs.contains(gauge_name):
                 raise GeLBExSymbolUnknown(node_class_insta.gauge)
+            elif node.symbol_defs.get_symbol_definition(
+                    gauge_name
+            ).tag != "gauge":
+                raise GeLBExSymbolWrongType(
+                    node_class_insta.gauge,
+                    "gauge"
+                )
