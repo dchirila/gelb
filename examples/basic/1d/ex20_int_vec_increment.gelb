@@ -6,15 +6,15 @@ lattices { //
 }
 
 initializer SetDFsToZero { //
-  f.out[x | 0] = 0;
+  f.out[x, y, z | 0] = 0;
 }
 
 dynamic IncrementDFs { //
-  f.out[x | 0] = f.in[x | 0] + 1;
+  f.out[x, y, z | 0] = f.in[x | 0] + 1;
 }
 
 gauge CurrentState(out = {int state;}) { //
-  state = f.in[x | 0];
+  state = f.in[x, y, z | 0];
 }
 
 node_classes { //

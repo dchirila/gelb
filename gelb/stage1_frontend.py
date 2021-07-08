@@ -22,7 +22,8 @@ except ModuleNotFoundError:
 from gelb.ASTBuilderVisitor import ASTBuilderVisitor
 from gelb.ASTInitialValidationVisitor import ASTInitialValidationVisitor
 from gelb.SymbolsTablesBuilderVisitor import SymbolsTablesBuilderVisitor
-from gelb.ImplicitsClashPreventerVisitor import ImplicitsClashPreventerVisitor
+from gelb.ImplicitsRefsClashPreventerVisitor import ImplicitsRefsClashPreventerVisitor
+from gelb.ImplicitsDefsClashPreventerVisitor import ImplicitsDefsClashPreventerVisitor
 from gelb.NodeClassesValidationVisitor import NodeClassesValidationVisitor
 from gelb.GeometryInitialValidationVisitor import GeometryInitialValidationVisitor
 from gelb.ImplicitConstantResolverVisitor import ImplicitConstantResolverVisitor
@@ -82,8 +83,13 @@ def build_symbols_tables(ast):
     return ast_visitor.visit(ast, ast)
 
 
-def prevent_clashes_of_ids_with_implicits(ast):
-    ast_visitor = ImplicitsClashPreventerVisitor()
+def prevent_clashes_of_symbol_refs_with_implicits(ast):
+    ast_visitor = ImplicitsRefsClashPreventerVisitor()
+    ast_visitor.visit(ast, ast)  # nothing to return here
+
+
+def prevent_clashes_of_symbol_defs_with_implicits(ast):
+    ast_visitor = ImplicitsDefsClashPreventerVisitor()
     ast_visitor.visit(ast, ast)  # nothing to return here
 
 

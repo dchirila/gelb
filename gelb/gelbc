@@ -39,7 +39,8 @@ from gelb.stage1_frontend import (
     initial_validation_geometry,
     # validate_ast,
     resolve_implicit_constants,
-    prevent_clashes_of_ids_with_implicits
+    prevent_clashes_of_symbol_refs_with_implicits,
+    prevent_clashes_of_symbol_defs_with_implicits
 )
 
 
@@ -81,12 +82,17 @@ through the various stages of the compiler.
     src_raw = load_file(input_file)
     # ... get the initial AST
     ast = get_ast("gelb_program", src_raw)
+    # ... [validation] prevent clashes of symbol refs with implicits
+    # NOTE: it is OK to reference {x, y, z}
+    # @{initializer,dynamic,gauge} blocks, but NOT OK to reference them
+    # @{global_constants,lattices,node_classes,geometry} blocks
+    prevent_clashes_of_symbol_refs_with_implicits(ast)
     # ... build the symbols table
     ast = build_symbols_tables(ast)
     # ... [validation] prevent clashes of user-defined symbols with the
-    # - implicit constants {d, q, Nx , Ny , Nz}
+    # - implicit constants {Nx , Ny , Nz}
     # - implicit variables {x, y, z}
-    prevent_clashes_of_ids_with_implicits(ast)
+    prevent_clashes_of_symbol_defs_with_implicits(ast)
     # ... resolve implicit constants
     # ast = resolve_implicit_constants(ast)
     # ... validate node-classes
