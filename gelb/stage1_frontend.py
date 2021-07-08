@@ -24,6 +24,7 @@ from gelb.ASTInitialValidationVisitor import ASTInitialValidationVisitor
 from gelb.SymbolsTablesBuilderVisitor import SymbolsTablesBuilderVisitor
 from gelb.ImplicitsClashPreventerVisitor import ImplicitsClashPreventerVisitor
 from gelb.NodeClassesValidationVisitor import NodeClassesValidationVisitor
+from gelb.GeometryInitialValidationVisitor import GeometryInitialValidationVisitor
 from gelb.ImplicitConstantResolverVisitor import ImplicitConstantResolverVisitor
 from gelb.ParsingError import ParsingError
 from gelb.utils.exceptions import *
@@ -88,6 +89,11 @@ def prevent_clashes_of_ids_with_implicits(ast):
 
 def validate_node_classes(ast):
     ast_visitor = NodeClassesValidationVisitor()
+    ast_visitor.visit(ast, ast)  # nothing to return here
+
+
+def initial_validation_geometry(ast):
+    ast_visitor = GeometryInitialValidationVisitor()
     ast_visitor.visit(ast, ast)  # nothing to return here
 
 

@@ -36,6 +36,7 @@ from gelb.stage1_frontend import (
     get_ast,
     build_symbols_tables,
     validate_node_classes,
+    initial_validation_geometry,
     # validate_ast,
     resolve_implicit_constants,
     prevent_clashes_of_ids_with_implicits
@@ -90,6 +91,9 @@ through the various stages of the compiler.
     # ast = resolve_implicit_constants(ast)
     # ... validate node-classes
     validate_node_classes(ast)
+    # ... initial validation of geometry block (all referenced node-classes
+    # were defined in the node-classes block).
+    initial_validation_geometry(ast)
 
     # validate_ast(ast)
     # ast.iterate_over_ast_fields()
