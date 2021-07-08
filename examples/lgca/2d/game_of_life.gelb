@@ -6,8 +6,7 @@ global_constants { //
 }
 
 lattices { //
-  lattice f(d = 2, q = 1, df_type = bool, size = {40, 40},
-            periodicity = {true, true});
+  lattice f(2, 1, bool);
 }
 
 node_classes {
@@ -45,5 +44,7 @@ gauge CellStatus(out = {bool status}) { //
 }
 
 geometry { //
+  set_grid_size({40, 40});
+  set_grid_periodicity({true, true});
   nodes[:, :] = BULK;
 }

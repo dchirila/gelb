@@ -82,9 +82,8 @@ class LatticeInstaStmt_N #palegreen;line:green;text:black {
     + d
     + q
     + df_type
-    + size
 
-    + __init__(self, code_range, name, d, q, df_type, size)
+    + __init__(self, code_range, name, d, q, df_type)
     + __str__(self)
 }
 
@@ -125,7 +124,10 @@ class NodeClassesBlock_N #palegreen;line:green;text:black {
 }
 
 class GeometryBlock_N #palegreen;line:green;text:black {
-    + __str__(self)
+    + grid_size
+    + grid_periodicity
+
+    + __str__(self, code_range, grid_size, grid_periodicity, stmts)
 }
 
 class Identifier_N #palegreen;line:green;text:black {

@@ -249,14 +249,12 @@ class ASTBuilderVisitor(GeLBVisitor):
         d = self.visitExpr(ctx.expr()[0])
         q = self.visitExpr(ctx.expr()[1])
         df_type = self.visit(ctx.scalar_data_type())
-        lattice_size = self.visit(ctx.expr()[2])
         return LatticeInstaStmt_N(
             code_range_from_ctx(ctx),
             name,
             d,
             q,
-            df_type,
-            lattice_size
+            df_type
         )
 
     # Visit a parse tree produced by GeLBParser#singleElementRange.
@@ -429,11 +427,22 @@ class ASTBuilderVisitor(GeLBVisitor):
                 ctx.start.line,
                 ctx.start.column
             )
+        grid_size = self.visit(
+            ctx.set_grid_size_stmt().expr()
+        )
+        grid_periodicity = self.visit(
+            ctx.set_grid_periodicity_stmt().expr()
+        )
         stmts = List_N(code_range_from_ctx(ctx))
         for stmt in ctx.paint_nodes_stmt():
             stmts.append(self.visit(stmt))
         self.instances_geometry_block += 1
-        return GeometryBlock_N(code_range_from_ctx(ctx), stmts)
+        return GeometryBlock_N(
+            code_range_from_ctx(ctx),
+            grid_size,
+            grid_periodicity,
+            stmts
+        )
 
     # Visit a parse tree produced by GeLBParser#paint_nodes_stmt.
     def visitPaint_nodes_stmt(

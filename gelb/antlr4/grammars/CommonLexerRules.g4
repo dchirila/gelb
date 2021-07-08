@@ -51,6 +51,8 @@ GAUGE : 'gauge' ;
 
 NODE_CLASS : 'node_class' ;
 GEOMETRY : 'geometry' ;
+SET_GRID_SIZE : 'set_grid_size' ;
+SET_GRID_PERIODICITY : 'set_grid_periodicity' ;
 NODES : 'nodes' ;
 //                     END: Keywords                     //
 

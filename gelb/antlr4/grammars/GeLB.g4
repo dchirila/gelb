@@ -49,9 +49,6 @@ lattice_insta_stmt :                   // Example:
  	expr                                 //   d=2,
  	COMMA expr                           //   q=9,
  	COMMA scalar_data_type               //   df_type=int64,
- 	COMMA expr                           //   size=256
- 	// TODO add periodicity support below
- 	//COMMA expr                           //   periodicity=false
  	PAREN_CLOSE SEMICOLON ;              // );
 
 // TODO
@@ -99,8 +96,18 @@ node_class_insta_stmt : NODE_CLASS
     PAREN_CLOSE SEMICOLON ;
 
 geometry_block : GEOMETRY CURLY_OPEN
+    set_grid_size_stmt
+    set_grid_periodicity_stmt
     paint_nodes_stmt+
     CURLY_CLOSE ;
+
+set_grid_size_stmt : SET_GRID_SIZE PAREN_OPEN
+    expr
+    PAREN_CLOSE SEMICOLON ;
+
+set_grid_periodicity_stmt : SET_GRID_PERIODICITY PAREN_OPEN
+    expr
+    PAREN_CLOSE SEMICOLON ;
 
 paint_nodes_stmt : NODES BRACKET_OPEN  // nodes[
     coords_range (COMMA coords_range)*

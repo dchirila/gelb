@@ -2,7 +2,7 @@ simulation_name("ex20_int_vec_increment_one");
 simulation_description("None");
 
 lattices { //
-  lattice f(1, 1, int, 32);
+  lattice f(1, 1, int);
 }
 
 initializer SetDFsToZero { //
@@ -22,5 +22,7 @@ node_classes { //
 }
 
 geometry { //
+  set_grid_size(32);
+  set_grid_periodicity(false);
   nodes[:] = BULK;
 }
