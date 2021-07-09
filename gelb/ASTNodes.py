@@ -46,7 +46,14 @@ class Node_N(ABC):
         return result
 
     def is_terminal_node(self):
-        return False  # False unless otherwise
+        """
+        By definition, a terminal AST node does not have any children
+        which are themselves AST Nodes.
+        """
+        for child in self.get_children():
+            if isinstance(child, Node_N):
+                return False
+        return True
 
     # def accept(self, visitor):
     #     raise NotImplementedError()
@@ -349,9 +356,6 @@ class Identifier_N(Expr_N):
         )
         return result
 
-    def is_terminal_node(self):
-        return True
-
 
 class Range_N(Node_N):
     """
@@ -465,9 +469,6 @@ class ScalarDataType_N(DataType_N):
     """
     def __str__(self):
         return f"(ScalarDataType {self.scalar_dtype})"
-
-    def is_terminal_node(self):
-        return True
 
     def get_children(self):
         return set()
@@ -584,9 +585,6 @@ class Literal_N(Expr_N):
     @abstractmethod
     def __str__(self):
         pass
-
-    def is_terminal_node(self):
-        return True
 
 
 class IntLiteral_N(Literal_N):

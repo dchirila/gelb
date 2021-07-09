@@ -19,6 +19,7 @@ except ModuleNotFoundError:
         GeLBVisitor
     )
 
+from gelb.ASTNodes import ArrayLiteral_N
 from gelb.ASTBuilderVisitor import ASTBuilderVisitor
 from gelb.ASTInitialValidationVisitor import ASTInitialValidationVisitor
 from gelb.SymbolsTablesBuilderVisitor import SymbolsTablesBuilderVisitor
@@ -27,6 +28,7 @@ from gelb.ImplicitsDefsClashPreventerVisitor import ImplicitsDefsClashPreventerV
 from gelb.NodeClassesValidationVisitor import NodeClassesValidationVisitor
 from gelb.GeometryInitialValidationVisitor import GeometryInitialValidationVisitor
 from gelb.ImplicitConstantResolverVisitor import ImplicitConstantResolverVisitor
+from gelb.RectangularArraysEnforcerVisitor import RectangularArraysEnforcerVisitor
 from gelb.ParsingError import ParsingError
 from gelb.utils.exceptions import *
 from gelb.utils.misc import ensure_file_is_not_empty_or_whitespace
@@ -100,6 +102,11 @@ def validate_node_classes(ast):
 
 def initial_validation_geometry(ast):
     ast_visitor = GeometryInitialValidationVisitor()
+    ast_visitor.visit(ast, ast)  # nothing to return here
+
+
+def enforce_rectangular_array_literals(ast):
+    ast_visitor = RectangularArraysEnforcerVisitor()
     ast_visitor.visit(ast, ast)  # nothing to return here
 
 
