@@ -27,7 +27,7 @@ from gelb.ImplicitsRefsClashPreventerVisitor import ImplicitsRefsClashPreventerV
 from gelb.ImplicitsDefsClashPreventerVisitor import ImplicitsDefsClashPreventerVisitor
 from gelb.NodeClassesValidationVisitor import NodeClassesValidationVisitor
 from gelb.GeometryInitialValidationVisitor import GeometryInitialValidationVisitor
-from gelb.ImplicitConstantResolverVisitor import ImplicitConstantResolverVisitor
+from gelb.ConstantsResolverVisitor import ConstantsResolverVisitor
 from gelb.RectangularArraysEnforcerVisitor import RectangularArraysEnforcerVisitor
 from gelb.ParsingError import ParsingError
 from gelb.utils.exceptions import *
@@ -105,14 +105,14 @@ def initial_validation_geometry(ast):
     ast_visitor.visit(ast, ast)  # nothing to return here
 
 
+def resolve_all_constants(ast):
+    ast_visitor = ConstantsResolverVisitor()
+    return ast_visitor.visit(ast, ast)
+
+
 def enforce_rectangular_array_literals(ast):
     ast_visitor = RectangularArraysEnforcerVisitor()
     ast_visitor.visit(ast, ast)  # nothing to return here
-
-
-def resolve_implicit_constants(ast):
-    ast_visitor = ImplicitConstantResolverVisitor()
-    return ast_visitor.visit(ast, ast)
 
 
 def validate_ast(ast):

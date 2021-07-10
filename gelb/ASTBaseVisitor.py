@@ -29,9 +29,9 @@ class ASTBaseVisitor(ABC):
                need to access information available near the top of the tree).
         :return: The return value of the called visitation method.
         """
-        node_class_name = type(node).__name__
+        ast_node_type_name = type(node).__name__
         visitor_subclass_name = self.__class__.__name__
-        visitation_method_name = f"visit{node_class_name}"
+        visitation_method_name = f"visit{ast_node_type_name}"
         if hasattr(self, visitation_method_name):
             visitation_method = getattr(self, visitation_method_name, None)
             result = visitation_method(node, ast_root_node)

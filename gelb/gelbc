@@ -39,7 +39,7 @@ from gelb.stage1_frontend import (
     initial_validation_geometry,
     enforce_rectangular_array_literals,
     # validate_ast,
-    resolve_implicit_constants,
+    resolve_all_constants,
     prevent_clashes_of_symbol_refs_with_implicits,
     prevent_clashes_of_symbol_defs_with_implicits
 )
@@ -97,8 +97,8 @@ through the various stages of the compiler.
     # ... all array-literals should be rectangular (because we DO NOT support
     # ragged arrays in GeLB)
     # enforce_rectangular_array_literals(ast)
-    # ... resolve implicit constants
-    # ast = resolve_implicit_constants(ast)
+    # ... resolve ALL constants (explicit AND implicit, in ALL scopes)
+    ast = resolve_all_constants(ast)
     # ... validate node-classes
     validate_node_classes(ast)
     # ... initial validation of geometry block (all referenced node-classes

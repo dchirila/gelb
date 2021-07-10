@@ -17,33 +17,52 @@ class Node_N(ABC):
     def __str__(self):
         pass
 
+    def get_children_names(self):
+        return [
+            field for field in dir(self) if not (
+                    field.startswith('_') or
+                    field.startswith('code_range') or
+                    field.startswith('get_children') or
+                    field.startswith('iterate_over_ast_fields') or
+                    field.startswith('get_referenced_symbols') or
+                    field.startswith('replace_symbol_references') or
+                    field.startswith('is_terminal_node') or
+                    field.startswith('append') or  # from List_N
+                    # exclude the symbol-table
+                    field.startswith('symbol_defs')
+            )
+        ]
+
     def get_children(self):
         # special treatment for List_N
         if isinstance(self, List_N):
             return self.elements
         else:
-            children = [
-                getattr(self, field) for field in dir(self) if not (
-                        field.startswith('_') or
-                        field.startswith('code_range') or
-                        field.startswith('get_children') or
-                        field.startswith('iterate_over_ast_fields') or
-                        field.startswith('get_referenced_symbols') or
-                        field.startswith('is_terminal_node') or
-                        field.startswith('append') or  # from List_N
-                        # exclude the symbol-table
-                        field.startswith('symbol_defs')
-                )
+            return [
+                getattr(self, field) for field in self.get_children_names()
             ]
-            return children
 
     def get_referenced_symbols(self):
         result = set()
-        # recursive descend
+        # recursive descent
         for child in self.get_children():
             if child is not None:
                 result |= child.get_referenced_symbols()
         return result
+
+    def replace_symbol_references(self, symbol_name, replacement):
+        # recursive descent
+        for child_name in self.get_children_names():
+            child = getattr(self, child_name)
+            if isinstance(child, Identifier_N):
+                if child.name == symbol_name:
+                    self.__setattr__(child_name, replacement)
+            else:
+                if isinstance(child, Node_N):
+                    child.replace_symbol_references(
+                        symbol_name, replacement
+                    )
+
 
     def is_terminal_node(self):
         """
