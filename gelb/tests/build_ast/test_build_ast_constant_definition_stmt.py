@@ -23,7 +23,7 @@ def test_1d_array_real32_init_with_scalar():
     test_string = "const array<real32, 9> DFS = 1;"
     # Act (trigger parsing)
     ast = get_ast("constant_definition_stmt", test_string)
-    # Assert (test the parse tree)
+    # Assert (test the AST)
     assert str(ast) == (
             "(ConstantDefinitionStmt"
             " (Identifier DFS)"
@@ -37,7 +37,7 @@ def test_1d_array_real32_init_with_array_lit():
     test_string = "const array<real32, 3> TMP = {1, 0, 29};"
     # Act (trigger parsing)
     ast = get_ast("constant_definition_stmt", test_string)
-    # Assert (test the parse tree)
+    # Assert (test the AST)
     assert str(ast) == (
         "(ConstantDefinitionStmt"
         " (Identifier TMP)"
@@ -51,7 +51,7 @@ def test_2d_array_real_init_with_2d_array_lit():
     test_string = "const array<real, {2,2}> W = {{1,2}, {3,4}};"
     # Act (trigger parsing)
     ast = get_ast("constant_definition_stmt", test_string)
-    # Assert (test the parse tree)
+    # Assert (test the AST)
     assert str(ast) == (
         "(ConstantDefinitionStmt"
         " (Identifier W)"
@@ -71,7 +71,7 @@ def test_3d_array_real_init_with_3d_array_lit():
     test_string = "const array<real, {2,2,2}> Q = {{{1,2}, {3,4}}, {{5,6}, {7,8}}};"
     # Act (trigger parsing)
     ast = get_ast("constant_definition_stmt", test_string)
-    # Assert (test the parse tree)
+    # Assert (test the AST)
     assert str(ast) == (
         "(ConstantDefinitionStmt"
         " (Identifier Q)"

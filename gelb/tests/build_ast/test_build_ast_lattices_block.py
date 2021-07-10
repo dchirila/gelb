@@ -11,7 +11,7 @@ def test_one_lattice_instance_no_arg_keywords():
     }"""
     # Act
     ast = get_ast("lattices_block", test_string)
-    # Assert (test the parse tree)
+    # Assert (test the AST)
     assert str(ast) == (
         "(LatticesBlock"
         " (LatticeInstaStmt"
@@ -31,7 +31,7 @@ def test_two_lattice_instances_no_arg_keywords():
     }"""
     # Act
     ast = get_ast("lattices_block", test_string)
-    # Assert (test the parse tree)
+    # Assert (test the AST)
     assert str(ast) == (
         "(LatticesBlock"
         " (LatticeInstaStmt"

@@ -9,7 +9,7 @@ def test_1d_no_arg_keywords():
     test_string = "lattice f(2, 9, bool);"
     # Act
     ast = get_ast("lattice_insta_stmt", test_string)
-    # Assert (test the parse tree)
+    # Assert (test the AST)
     assert str(ast) == (
         "(LatticeInstaStmt"
         " (Identifier f)"
@@ -25,7 +25,7 @@ def test_2d_no_arg_keywords():
     test_string = "lattice g(2, 9, real32);"
     # Act
     ast = get_ast("lattice_insta_stmt", test_string)
-    # Assert (test the parse tree)
+    # Assert (test the AST)
     assert str(ast) == (
         "(LatticeInstaStmt"
         " (Identifier g)"

@@ -14,7 +14,7 @@ def test_simple():
     """
     # Act (trigger parsing)
     ast = get_ast("global_constants_block", test_string)
-    # Assert (test the parse tree)
+    # Assert (test the AST)
     assert str(ast) == (
         "(GlobalConstantsBlock"
         " (ConstantDefinitionStmt"
