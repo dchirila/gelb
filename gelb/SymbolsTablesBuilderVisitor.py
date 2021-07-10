@@ -5,6 +5,7 @@ from gelb.ASTNodes import *
 from gelb.SymbolDefinition import SymbolDefinition
 from gelb.utils.exceptions import (
     GeLBExSymbolUnknown,
+    GeLBExSymbolRefBeforeDef,
     GeLBExSymbolConstantRecursion,
     GeLBExIncorrectStagesOrdering
 )
@@ -17,7 +18,13 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
 
     We need to distinguish between {global,local} symbol_defs tables.
     """
-    def check_for_undefined_symbols(self, node, ast_root=None):
+    def check_for_undef_or_ref_before_def_symbols(self, node, ast_root=None):
+        """
+        Method to check for undefined (or referenced-before-defined) symbols.
+
+        NOTE: It is more efficient & convenient to perform the
+        referenced-before-defined check here.
+        """
         if node.symbol_defs is not None:
             # check that all referenced symbols were actually defined
             for sref in node.get_referenced_symbols():
@@ -39,10 +46,15 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                         ]
                     if sref.name not in implicit_symbols:
                         raise GeLBExSymbolUnknown(sref)
+                else:  # OK, symbol *is* in the symbols table (but is it
+                       # referenced before it is defined?)
+                    sdef = node.symbol_defs.get_symbol_definition(sref.name)
+                    if (sdef.value.code_range > sref.code_range):
+                        raise GeLBExSymbolRefBeforeDef(sref, sdef)
         else:
             raise GeLBExIncorrectStagesOrdering(
                 error = (
-                    f"Attempted to invoke \"check_for_undefined_symbols\","
+                    f"Attempted to invoke \"check_for_undef_or_ref_before_def_symbols\","
                     f" but the symbol-definitions table for {node} has not"
                     f" been constructed yet."
                 )
@@ -167,7 +179,7 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                         value=constant_insta_stmt
                     )
                 )
-            self.check_for_undefined_symbols(node)
+            self.check_for_undef_or_ref_before_def_symbols(node)
             self.check_for_recursively_defined_symbols(node)
         return node
 
@@ -187,7 +199,7 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                         value=lattice_insta_stmt
                     )
                 )
-            self.check_for_undefined_symbols(node)
+            self.check_for_undef_or_ref_before_def_symbols(node)
         return node
 
     def visitInitializerBlock_N(
@@ -215,7 +227,7 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                             value=stmt
                         )
                     )
-            self.check_for_undefined_symbols(node)
+            self.check_for_undef_or_ref_before_def_symbols(node)
             self.check_for_recursively_defined_symbols(node)
         return node
 
@@ -244,7 +256,7 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                             value=stmt
                         )
                     )
-            self.check_for_undefined_symbols(node)
+            self.check_for_undef_or_ref_before_def_symbols(node)
             self.check_for_recursively_defined_symbols(node)
         return node
 
@@ -281,7 +293,7 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                         value = var_decl
                     )
                 )
-            self.check_for_undefined_symbols(node)
+            self.check_for_undef_or_ref_before_def_symbols(node)
             self.check_for_recursively_defined_symbols(node)
         return node
 

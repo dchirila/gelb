@@ -3,7 +3,10 @@
 import pytest
 from gelb.stage1_frontend import get_ast, build_symbols_tables
 from gelb.utils.exceptions import (
-    GeLBExSymbolExists, GeLBExSymbolUnknown, GeLBExSymbolConstantRecursion
+    GeLBExSymbolExists,
+    GeLBExSymbolUnknown,
+    GeLBExSymbolConstantRecursion,
+    GeLBExSymbolRefBeforeDef
 )
 from gelb.SymbolsTable import SymbolsTable
 
@@ -87,4 +90,19 @@ def test_invalid3():
     # Act
     ast = get_ast("global_constants_block", test_string)
     with pytest.raises(GeLBExSymbolConstantRecursion):
+        ast = build_symbols_tables(ast)
+
+
+def test_invalid4():
+    """Invalid, because we refer to TWELVE before we define it. """
+    # Arrange
+    test_string = """
+    global_constants {
+      const int TWENTYFOUR = 2 * TWELVE + TWELVE;
+      const int TWELVE = 12;
+    }
+    """
+    # Act
+    ast = get_ast("global_constants_block", test_string)
+    with pytest.raises(GeLBExSymbolRefBeforeDef):
         ast = build_symbols_tables(ast)

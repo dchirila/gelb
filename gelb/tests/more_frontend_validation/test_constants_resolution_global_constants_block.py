@@ -8,7 +8,7 @@ from gelb.stage1_frontend import (
     resolve_all_constants
 )
 from gelb.utils.exceptions import (
-    GeLBExSyntaxError
+    GeLBExSymbolRefBeforeDef
 )
 
 
@@ -64,6 +64,5 @@ def test_valid2():
             " (ScalarDataType real64)"
             " (Mul (RealLiteral 3.141592653589793) (RealLiteral 10.0))))"
     )
-
 
 

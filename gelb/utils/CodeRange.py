@@ -8,6 +8,12 @@ class CodeRange:
         self.stop_line = stop_line
         self.stop_col = stop_col
 
+    def __gt__(self, other):
+        return (self.start_line > other.start_line) or (
+                (self.start_line == other.start_line) and
+                (self.start_col > other.start_col)
+        )
+
     def __str__(self):
         return (
             f"(CodeRange"

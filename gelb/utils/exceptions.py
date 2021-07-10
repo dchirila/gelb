@@ -10,6 +10,7 @@ from gelb.utils.error_utils import (
     feedback_on_slack_hint,
     learning_gelb_hint,
     show_error_in_src,
+    show_source_with_annotation,
     show_double_definition_error
 )
 
@@ -646,6 +647,44 @@ class GeLBExSymbolWrongType(GeLBException):
         )
         hint = f"Specify the name of a {expected_type}."
         super().__init__(error, hint)
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            print(self)
+
+    def __str__(self):
+        """Override base-class's __str__, because we want to print the code"""
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            show_error_in_src(
+                self.symbol_ref.code_range.start_line,
+                self.symbol_ref.code_range.start_col,
+                self.error, self.hint
+            )
+            # super().__str__()
+            os._exit(1)  # really abort
+
+
+class GeLBExSymbolRefBeforeDef(GeLBException):
+    """
+    GeLB exception, for signaling that a symbol is referenced before it is
+    defined.
+    """
+    def __init__(self, symbol_ref, symbol_def):
+        self.symbol_ref = symbol_ref
+        self.symbol_def = symbol_def
+        name = symbol_ref.name
+        def_line = symbol_def.value.code_range.start_line
+        self.error = (
+            f"You reference"
+            f" {click.style(name, underline=True) + Fore.RED}."
+            f" However, you only define it later (on line"
+            f" {click.style(def_line, underline=True) + Fore.RED}"
+            f")."
+        )
+        self.hint = (
+            f"Please move the definition (from line"
+            f" {click.style(def_line, underline=True) + Fore.GREEN})"
+            f" above the first reference."
+        )
+        super().__init__(self.error, self.hint)
         if gelb.utils.config.GELB_PRODUCTION_MODE:
             print(self)
 
