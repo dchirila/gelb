@@ -18,6 +18,12 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
 
     We need to distinguish between {global,local} symbol_defs tables.
     """
+    def __init__(self, symbol_to_ignore_for_testing=None):
+        if symbol_to_ignore_for_testing is not None:
+            self.implicit_symbols = [symbol_to_ignore_for_testing]
+        else:
+            self.implicit_symbols = []
+
     def check_for_undef_or_ref_before_def_symbols(self, node, ast_root=None):
         """
         Method to check for undefined (or referenced-before-defined) symbols.
@@ -29,22 +35,29 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
             # check that all referenced symbols were actually defined
             for sref in node.get_referenced_symbols():
                 if not node.symbol_defs.contains(sref.name):
-                    implicit_symbols = []
                     if (
                             isinstance(node, InitializerBlock_N) or
                             isinstance(node, DynamicBlock_N) or
                             isinstance(node, GaugeBlock_N)
                     ):
-                        implicit_symbols = [
+                        lattice_names = []
+                        if (
+                                (ast_root is not None) and
+                                isinstance(ast_root, Program_N)
+                        ):
+                            lattice_sdefs = ast_root.lattices.symbol_defs
+                            lattice_names = [
+                                lat_def.name for lat_def in lattice_sdefs
+                            ]
+                        self.implicit_symbols += [
                             # TODO un-define y, z, NY, Nz, depending on
                             #  dimensionality (inferred from ast_root)
                             "x", "y", "z", "Nx", "Ny", "Nz",
                             # name of the {initializer/dynamic/gauge}
-                            str(node.name.name),
-                            # TODO support multiple lattices (@GeLB-v2)
-                            "f"  # name of the lattice (single @GeLB-v1)
-                        ]
-                    if sref.name not in implicit_symbols:
+                            str(node.name.name)
+                        ] + lattice_names
+
+                    if sref.name not in self.implicit_symbols:
                         raise GeLBExSymbolUnknown(sref)
                 else:  # OK, symbol *is* in the symbols table (but is it
                        # referenced before it is defined?)
@@ -54,13 +67,14 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
         else:
             raise GeLBExIncorrectStagesOrdering(
                 error = (
-                    f"Attempted to invoke \"check_for_undef_or_ref_before_def_symbols\","
+                    f"Attempted to invoke"
+                    f" \"check_for_undef_or_ref_before_def_symbols\","
                     f" but the symbol-definitions table for {node} has not"
                     f" been constructed yet."
                 )
             )
 
-    def check_for_recursively_defined_symbols(self, node):
+    def check_for_recursively_defined_symbols(self, node, ast_root=None):
         if node.symbol_defs is not None:
             for sdef in node.symbol_defs:
                 if sdef.tag == "constant definition":
@@ -179,8 +193,8 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                         value=constant_insta_stmt
                     )
                 )
-            self.check_for_undef_or_ref_before_def_symbols(node)
-            self.check_for_recursively_defined_symbols(node)
+            self.check_for_undef_or_ref_before_def_symbols(node, ast_root_node)
+            self.check_for_recursively_defined_symbols(node, ast_root_node)
         return node
 
     def visitLatticesBlock_N(
@@ -199,7 +213,7 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                         value=lattice_insta_stmt
                     )
                 )
-            self.check_for_undef_or_ref_before_def_symbols(node)
+            self.check_for_undef_or_ref_before_def_symbols(node, ast_root_node)
         return node
 
     def visitInitializerBlock_N(
@@ -227,8 +241,8 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                             value=stmt
                         )
                     )
-            self.check_for_undef_or_ref_before_def_symbols(node)
-            self.check_for_recursively_defined_symbols(node)
+            self.check_for_undef_or_ref_before_def_symbols(node, ast_root_node)
+            self.check_for_recursively_defined_symbols(node, ast_root_node)
         return node
 
     def visitDynamicBlock_N(
@@ -256,8 +270,8 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                             value=stmt
                         )
                     )
-            self.check_for_undef_or_ref_before_def_symbols(node)
-            self.check_for_recursively_defined_symbols(node)
+            self.check_for_undef_or_ref_before_def_symbols(node, ast_root_node)
+            self.check_for_recursively_defined_symbols(node, ast_root_node)
         return node
 
     def visitGaugeBlock_N(
@@ -293,8 +307,8 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                         value = var_decl
                     )
                 )
-            self.check_for_undef_or_ref_before_def_symbols(node)
-            self.check_for_recursively_defined_symbols(node)
+            self.check_for_undef_or_ref_before_def_symbols(node, ast_root_node)
+            self.check_for_recursively_defined_symbols(node, ast_root_node)
         return node
 
     def visitNodeClassesBlock_N(

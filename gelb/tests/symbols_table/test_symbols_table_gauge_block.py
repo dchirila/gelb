@@ -18,7 +18,7 @@ def test_valid():
     """
     # Act
     ast = get_ast("gauge_block", test_string)
-    ast = build_symbols_tables(ast)
+    ast = build_symbols_tables(ast, symbol_to_ignore_for_testing="f")
     assert repr(ast.symbol_defs) == (
         "(PI"
         " \"constant definition\""
@@ -56,7 +56,7 @@ def test_invalid1():
     # Act
     ast = get_ast("gauge_block", test_string)
     with pytest.raises(GeLBExSymbolExists):
-        ast = build_symbols_tables(ast)
+        ast = build_symbols_tables(ast, "f")
 
 
 def test_invalid2():
@@ -74,4 +74,4 @@ def test_invalid2():
     # Act
     ast = get_ast("gauge_block", test_string)
     with pytest.raises(GeLBExSymbolUnknown):
-        ast = build_symbols_tables(ast)
+        ast = build_symbols_tables(ast, "f")

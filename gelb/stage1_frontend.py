@@ -80,8 +80,8 @@ def get_ast(start_rule, input_string):
         raise GeLBExInvalidGrammarRule(start_rule)
 
 
-def build_symbols_tables(ast):
-    ast_visitor = SymbolsTablesBuilderVisitor()
+def build_symbols_tables(ast, symbol_to_ignore_for_testing=None):
+    ast_visitor = SymbolsTablesBuilderVisitor(symbol_to_ignore_for_testing)
     return ast_visitor.visit(ast, ast)
 
 

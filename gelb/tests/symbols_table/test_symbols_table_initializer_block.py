@@ -18,7 +18,7 @@ def test_valid():
     """
     # Act
     ast = get_ast("initializer_block", test_string)
-    ast = build_symbols_tables(ast)
+    ast = build_symbols_tables(ast, symbol_to_ignore_for_testing="f")
     assert repr(ast.symbol_defs) == (
         "(PI"
         " \"constant definition\""
@@ -47,7 +47,7 @@ def test_invalid1():
     # Act
     ast = get_ast("initializer_block", test_string)
     with pytest.raises(GeLBExSymbolExists):
-        ast = build_symbols_tables(ast)
+        ast = build_symbols_tables(ast, "f")
 
 
 def test_invalid2():
@@ -66,7 +66,7 @@ def test_invalid2():
     # Act
     ast = get_ast("initializer_block", test_string)
     with pytest.raises(GeLBExSymbolUnknown):
-        ast = build_symbols_tables(ast)
+        ast = build_symbols_tables(ast, "f")
 
 
 def test_invalid3():
@@ -84,7 +84,7 @@ def test_invalid3():
     # Act
     ast = get_ast("initializer_block", test_string)
     with pytest.raises(GeLBExSymbolUnknown):
-        ast = build_symbols_tables(ast)
+        ast = build_symbols_tables(ast, "f")
 
 
 def test_invalid4():
@@ -104,7 +104,7 @@ def test_invalid4():
     # Act
     ast = get_ast("initializer_block", test_string)
     with pytest.raises(GeLBExSymbolUnknown):
-        ast = build_symbols_tables(ast)
+        ast = build_symbols_tables(ast, "f")
 
 
 def test_invalid5():
@@ -118,10 +118,10 @@ def test_invalid5():
     initializer SetDFsToConstant { //
       const int NX = 123;
       const int NY = -2 * NY + NX;
-      f.out[x, y, z | :] = NY;
+      g.out[x, y, z | :] = NY;
     }
     """
     # Act
     ast = get_ast("initializer_block", test_string)
     with pytest.raises(GeLBExSymbolConstantRecursion):
-        ast = build_symbols_tables(ast)
+        ast = build_symbols_tables(ast, "g")
