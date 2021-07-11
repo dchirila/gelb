@@ -699,3 +699,29 @@ class GeLBExSymbolRefBeforeDef(GeLBException):
             # super().__str__()
             os._exit(1)  # really abort
 
+
+class GeLBExSymbolNotAllowedHere(GeLBException):
+    """
+    GeLB exception, for signaling when a certain symbol is not allowed in a
+    particular block.
+    """
+    def __init__(self, symbol_ref, error, hint):
+        self.symbol_ref = symbol_ref
+        self.error = error
+        self.hint = hint
+
+        super().__init__(self.error, self.hint)
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            print(self)
+
+    def __str__(self):
+        """Override base-class's __str__, because we want to print the code"""
+        if gelb.utils.config.GELB_PRODUCTION_MODE:
+            show_error_in_src(
+                self.symbol_ref.code_range.start_line,
+                self.symbol_ref.code_range.start_col,
+                self.error, self.hint
+            )
+            # super().__str__()
+            os._exit(1)  # really abort
+
