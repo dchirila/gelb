@@ -25,6 +25,7 @@ from gelb.ASTInitialValidationVisitor import ASTInitialValidationVisitor
 from gelb.SymbolsTablesBuilderVisitor import SymbolsTablesBuilderVisitor
 from gelb.ImplicitsRefsClashPreventerVisitor import ImplicitsRefsClashPreventerVisitor
 from gelb.ImplicitsDefsClashPreventerVisitor import ImplicitsDefsClashPreventerVisitor
+from gelb.ImplicitSymbolsAdderVisitor import ImplicitSymbolsAdderVisitor
 from gelb.NodeClassesValidationVisitor import NodeClassesValidationVisitor
 from gelb.GeometryInitialValidationVisitor import GeometryInitialValidationVisitor
 from gelb.ConstantsResolverVisitor import ConstantsResolverVisitor
@@ -93,6 +94,11 @@ def prevent_clashes_of_symbol_refs_with_implicits(ast):
 def prevent_clashes_of_symbol_defs_with_implicits(ast):
     ast_visitor = ImplicitsDefsClashPreventerVisitor()
     ast_visitor.visit(ast, ast)  # nothing to return here
+
+
+def add_implicit_symbols(ast):
+    ast_visitor = ImplicitSymbolsAdderVisitor()
+    return ast_visitor.visit(ast, ast)
 
 
 def validate_node_classes(ast):

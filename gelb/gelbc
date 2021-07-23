@@ -41,7 +41,8 @@ from gelb.stage1_frontend import (
     # validate_ast,
     resolve_all_constants,
     prevent_clashes_of_symbol_refs_with_implicits,
-    prevent_clashes_of_symbol_defs_with_implicits
+    prevent_clashes_of_symbol_defs_with_implicits,
+    add_implicit_symbols
 )
 
 
@@ -94,6 +95,8 @@ through the various stages of the compiler.
     # - implicit constants {Nx , Ny , Nz}
     # - implicit variables {x, y, z}
     prevent_clashes_of_symbol_defs_with_implicits(ast)
+    # ... add symbols for implicit constants & variable (where they are needed)
+    ast = add_implicit_symbols(ast)
     # ... all array-literals should be rectangular (because we DO NOT support
     # ragged arrays in GeLB)
     # enforce_rectangular_array_literals(ast)
