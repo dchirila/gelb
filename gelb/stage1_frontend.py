@@ -19,7 +19,6 @@ except ModuleNotFoundError:
         GeLBVisitor
     )
 
-from gelb.ASTNodes import ArrayLiteral_N
 from gelb.ASTBuilderVisitor import ASTBuilderVisitor
 from gelb.ASTInitialValidationVisitor import ASTInitialValidationVisitor
 from gelb.SymbolsTablesBuilderVisitor import SymbolsTablesBuilderVisitor
@@ -123,4 +122,4 @@ def enforce_rectangular_array_literals(ast):
 
 def validate_ast(ast):
     ast_visitor = ASTInitialValidationVisitor()
-    ast_visitor.visit(ast)
+    ast_visitor.visit(ast, ast)

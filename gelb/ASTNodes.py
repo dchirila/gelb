@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 
 from abc import ABC, abstractmethod
-from gelb.SymbolsTable import SymbolsTable
 from gelb.SymbolReference import SymbolReference
-from gelb.ASTBaseVisitor import ASTBaseVisitor
 
 
 class Node_N(ABC):
@@ -62,7 +60,6 @@ class Node_N(ABC):
                     child.replace_symbol_references(
                         symbol_name, replacement
                     )
-
 
     def is_terminal_node(self):
         """

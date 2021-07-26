@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 
 import click
-from colorama import Fore, Style
+from colorama import Fore
 
 from gelb.ASTBaseVisitor import ASTBaseVisitor
 from gelb.ASTNodes import *
-from gelb.SymbolDefinition import SymbolDefinition
 from gelb.utils.exceptions import (
-    GeLBExSymbolUnknown,
-    GeLBExSymbolConstantRecursion,
-    GeLBExIncorrectStagesOrdering, GeLBExSyntaxError
+    GeLBExSyntaxError
 )
 
 
@@ -27,10 +24,10 @@ class ImplicitsDefsClashPreventerVisitor(ASTBaseVisitor):
             for symbol_def in node.symbol_defs:
                 self.check_id_for_clashes(symbol_def.value)
 
-    def check_id_for_clashes(self, id):
-        line = id.name.code_range.start_line
-        column = id.name.code_range.start_col
-        name = id.name.name
+    def check_id_for_clashes(self, identifier):
+        line = identifier.name.code_range.start_line
+        column = identifier.name.code_range.start_col
+        name = identifier.name.name
         if name in ["x", "y", "z"]:
             hint_prefix = (
                 f"You cannot use"
@@ -40,7 +37,7 @@ class ImplicitsDefsClashPreventerVisitor(ASTBaseVisitor):
             raise GeLBExSyntaxError(
                 line, column,
                 self.error,
-                hint = (
+                hint=(
                         hint_prefix +
                         f"variable"
                         f" (representing the {name}-coordinate of lattice "
@@ -57,7 +54,7 @@ class ImplicitsDefsClashPreventerVisitor(ASTBaseVisitor):
             raise GeLBExSyntaxError(
                 line, column,
                 self.error,
-                hint = (
+                hint=(
                         hint_prefix +
                         f"constant"
                         f" (representing the size of the simulation domain "

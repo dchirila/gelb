@@ -2,7 +2,7 @@
 
 import os
 import click
-from colorama import Fore, Style
+from colorama import Fore
 
 import gelb.utils.config
 from gelb.utils.output_to_terminal import error_with_hint_to_term
@@ -10,7 +10,6 @@ from gelb.utils.error_utils import (
     feedback_on_slack_hint,
     learning_gelb_hint,
     show_error_in_src,
-    show_source_with_annotation,
     show_double_definition_error
 )
 
@@ -167,6 +166,15 @@ class GeLBExInvalidNoOfOccurrences(GeLBException):
                  line, column):
         self.line = line
         self.column = column
+        # Initialize error & hint, for the case when an invalid number of
+        # occurrences is not (yet) properly handled by the code below.
+        error = (
+            f"(internal) GeLBExInvalidNoOfOccurrences cannot handle "
+            f"{click.style(block_name, underline=True) + Fore.RED}."
+        )
+        hint = (
+            feedback_on_slack_hint
+        )
 
         if block_name == "set_simulation_name_stmt":
             informal_name = "simulation_name"
@@ -338,14 +346,6 @@ class GeLBExInvalidNoOfOccurrences(GeLBException):
                         f"{click.style('geometry', underline=True) + Fore.GREEN}"
                         f" block. " + learning_gelb_hint
                 )
-        else:
-            error = (
-                f"(internal) GeLBExInvalidNoOfOccurrences cannot handle "
-                f"{click.style(block_name, underline=True) + Fore.RED}."
-            )
-            hint = (
-                feedback_on_slack_hint
-            )
         super().__init__(error, hint)
         if gelb.utils.config.GELB_PRODUCTION_MODE:
             print(self)

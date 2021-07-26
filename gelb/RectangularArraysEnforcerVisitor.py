@@ -1,16 +1,7 @@
 #!/usr/bin/env python3
 
-import click
-from colorama import Fore, Style
-
 from gelb.ASTBaseVisitor import ASTBaseVisitor
 from gelb.ASTNodes import *
-from gelb.SymbolDefinition import SymbolDefinition
-from gelb.utils.exceptions import (
-    GeLBExSymbolUnknown,
-    GeLBExSymbolConstantRecursion,
-    GeLBExIncorrectStagesOrdering, GeLBExSyntaxError
-)
 
 
 class RectangularArraysEnforcerVisitor(ASTBaseVisitor):

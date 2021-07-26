@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from gelb.utils.exceptions import *
-from gelb.SymbolDefinition import SymbolDefinition
+
 
 class SymbolsTable:
     """
@@ -46,7 +46,7 @@ class SymbolsTable:
 
     def __str__(self):
         """Pretty-printed representation (in table format)."""
-        result =  f"{'name'.ljust(30)}|{'tag'.ljust(30)}| value\n"
+        result = f"{'name'.ljust(30)}|{'tag'.ljust(30)}| value\n"
         result += f"{'-'*30}|{'-'*30}|{'-'*40}\n"
         for s in self.symbol_defs:
             result += (
@@ -64,7 +64,3 @@ class SymbolsTable:
                 result += " "
             result += f"({str(sdef.name)} \"{str(sdef.tag)}\" {sdef.value})"
         return result
-
-
-
-

@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
 
-import pytest
-
-import pathlib
-import subprocess
-
 from gelb.utils.misc import invoke_antlr4_tool
 import gelb.utils.config
 

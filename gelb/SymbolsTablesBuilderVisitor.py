@@ -2,6 +2,7 @@
 
 from gelb.ASTBaseVisitor import ASTBaseVisitor
 from gelb.ASTNodes import *
+from gelb.SymbolsTable import SymbolsTable
 from gelb.SymbolDefinition import SymbolDefinition
 from gelb.utils.exceptions import (
     GeLBExSymbolUnknown,
@@ -59,14 +60,15 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
 
                     if sref.name not in self.implicit_symbols:
                         raise GeLBExSymbolUnknown(sref)
-                else:  # OK, symbol *is* in the symbols table (but is it
-                       # referenced before it is defined?)
+                else:
+                    # OK, symbol *is* in the symbols table (but is it
+                    # referenced before it is defined?)
                     sdef = node.symbol_defs.get_symbol_definition(sref.name)
-                    if (sdef.value.code_range > sref.code_range):
+                    if sdef.value.code_range > sref.code_range:
                         raise GeLBExSymbolRefBeforeDef(sref, sdef)
         else:
             raise GeLBExIncorrectStagesOrdering(
-                error = (
+                error=(
                     f"Attempted to invoke"
                     f" \"check_for_undef_or_ref_before_def_symbols\","
                     f" but the symbol-definitions table for {node} has not"
@@ -86,7 +88,7 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                             raise GeLBExSymbolConstantRecursion(symbol_ref)
         else:
             raise GeLBExIncorrectStagesOrdering(
-                error = (
+                error=(
                     f"Attempted to invoke"
                     f" \"check_for_recursively_defined_symbols\","
                     f" but the symbol-definitions table for {node} has not"
@@ -116,16 +118,17 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                 node.lattices = self.visit(node.lattices, ast_root_node)
 
             # BEGIN :: build global (program-wide) symbol_defs table #
-            # ... add initializer-names to the program's global symbol_defs table
+            # ... add initializer-names to the program's global symbol_defs
+            # table
             if node.initializers is not None:
                 for index, initializer in enumerate(node.initializers):
-                    # add symbol for initializer itself to the global symbol_defs
-                    # table
+                    # add symbol for initializer itself to the global
+                    # symbol_defs table
                     node.symbol_defs.append(
                         SymbolDefinition(
-                            name = initializer.name.name,
-                            tag = "initializer",
-                            value = initializer
+                            name=initializer.name.name,
+                            tag="initializer",
+                            value=initializer
                         )
                     )
 
@@ -159,9 +162,9 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                     # table
                     node.symbol_defs.append(
                         SymbolDefinition(
-                            name = gauge.name.name,
-                            tag = "gauge",
-                            value = gauge
+                            name=gauge.name.name,
+                            tag="gauge",
+                            value=gauge
                         )
                     )
 
@@ -304,7 +307,7 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                     SymbolDefinition(
                         name=var_decl.name.name,
                         tag="output variable declaration",
-                        value = var_decl
+                        value=var_decl
                     )
                 )
             self.check_for_undef_or_ref_before_def_symbols(node, ast_root_node)

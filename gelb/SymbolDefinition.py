@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-from gelb.utils.exceptions import *
 
 class SymbolDefinition:
     """
@@ -23,4 +22,3 @@ class SymbolDefinition:
             f" (Tag \"{self.tag}\")"
             f" (Value {self.value}))"
         )
-

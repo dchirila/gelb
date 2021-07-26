@@ -4,11 +4,9 @@ from pathlib import Path
 from fnmatch import fnmatch
 from subprocess import run
 import pathlib
-import os
 import re
 import pkg_resources
 
-from gelb.utils.output_to_terminal import *
 from gelb.utils.exceptions import *
 import gelb.utils.config
 
@@ -67,19 +65,20 @@ def invoke_antlr4_tool():
     """
     Invoke the ANTLR4 Java tool.
 
-    This generates =GeLB{Lexer,Parser,Visitor}.py=, based on the =GeLB.g4= grammar.
+    This generates =GeLB{Lexer,Parser,Visitor}.py=, based on the =GeLB.g4=
+    grammar.
     """
     antlr4_lib_path = find_antlr4_tool_path()
     ensure_python3_package_is_present("antlr4-python3-runtime")
     # infer the path to the GeLB language grammar
-    grammar_dir = pathlib.Path(__file__).parent.parent / 'antlr4' / 'grammars'
-    output_dir = pathlib.Path(__file__).parent.parent / 'antlr4' / 'generated_code'
+    grammar_dir = pathlib.Path(__file__).parent.parent/'antlr4'/'grammars'
+    output_dir = pathlib.Path(__file__).parent.parent/'antlr4'/'generated_code'
     grammar_path = grammar_dir / "GeLB.g4"
     if not grammar_path.is_file():
         raise GeLBExGrammarFileNotFound(grammar_path)
     cleanup_antlr4_generated_files(output_dir)  # to be on the safe side
 
-    ## invoke ANTLR4 Java tool
+    # invoke ANTLR4 Java tool
     antlr4_tool_stat = run(["java",
                             "-Xmx500M",
                             "-jar", antlr4_lib_path,
@@ -98,16 +97,16 @@ def invoke_antlr4_tool():
     if gelb.utils.config.GELB_RESERVED_KEYWORDS is None:
         # for auto-deducing reserved keywords
         from gelb.antlr4.generated_code import GeLBLexer
-        literalNames = GeLBLexer.literalNames
+        literal_names = GeLBLexer.literalNames
 
-        reg = re.compile(r'^[a-zA-Z0-9\_]+$')
+        reg = re.compile(r'^[a-zA-Z0-9_]+$')
         gelb.utils.config.GELB_RESERVED_KEYWORDS = list(
             filter(
                 lambda kwd: bool(reg.match(kwd)),
                 list(
                     filter(
                         lambda kwd: 'INVALID' not in kwd,
-                        [kwd.replace("'", "") for kwd in literalNames]
+                        [kwd.replace("'", "") for kwd in literal_names]
                     )
                 )
             )

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-""" GeLB is a domain-specific language for Lattice Boltzmann (LB/LBM) simulations.
+
+"""
+GeLB is a domain-specific language for Lattice Boltzmann (LB/LBM) simulations.
 
 It provides:
 

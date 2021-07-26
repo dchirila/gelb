@@ -22,6 +22,7 @@ class CodeRange:
             f")"
         )
 
+
 def code_range_from_ctx(ctx_or_list_of_ctx):
     if isinstance(ctx_or_list_of_ctx, list):
         return CodeRange(

@@ -2,13 +2,6 @@
 
 from gelb.ASTBaseVisitor import ASTBaseVisitor
 from gelb.ASTNodes import *
-from gelb.SymbolDefinition import SymbolDefinition
-from gelb.utils.exceptions import (
-    GeLBExSymbolUnknown,
-    GeLBExSymbolRefBeforeDef,
-    GeLBExSymbolConstantRecursion,
-    GeLBExIncorrectStagesOrdering
-)
 
 
 class ImplicitSymbolsAdderVisitor(ASTBaseVisitor):

@@ -49,7 +49,7 @@ def show_source_with_annotation(line, column, click_color,
     for (lineno, line_text) in iterate_over_lines_in_src():
         # check whether problematic line is part of the context we want
         # to show (i.e. a few lines before & after problematic line)
-        if (abs(lineno - line) <= gelb.utils.config.GELB_ERROR_CONTEXT):
+        if abs(lineno - line) <= gelb.utils.config.GELB_ERROR_CONTEXT:
             # print each of the selected lines of context
             if lineno == line:
                 # special treatment for the problematic line
@@ -87,6 +87,7 @@ def show_source_with_annotation(line, column, click_color,
 
 def show_error_in_src(line, column, error, hint):
     show_source_with_annotation(line, column, Fore.RED, error, hint)
+
 
 def show_double_definition_error(
         curr_line,

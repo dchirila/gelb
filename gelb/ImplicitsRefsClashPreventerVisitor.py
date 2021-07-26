@@ -1,16 +1,11 @@
 #!/usr/bin/env python3
 
 import click
-from colorama import Fore, Style
+from colorama import Fore
 
 from gelb.ASTBaseVisitor import ASTBaseVisitor
 from gelb.ASTNodes import *
-from gelb.SymbolDefinition import SymbolDefinition
 from gelb.utils.exceptions import (
-    GeLBExSymbolUnknown,
-    GeLBExSymbolConstantRecursion,
-    GeLBExIncorrectStagesOrdering,
-    GeLBExSyntaxError,
     GeLBExSymbolNotAllowedHere
 )
 
@@ -24,10 +19,7 @@ class ImplicitsRefsClashPreventerVisitor(ASTBaseVisitor):
             self.check_ref_for_clashes(sref, node)
 
     def check_ref_for_clashes(self, ref, node):
-        line = ref.code_range.start_line
-        column = ref.code_range.start_col
         name = ref.name
-        block_type = node.__class__.__name__
 
         if name in ["x", "y", "z"]:
             if not (isinstance(node, InitializerBlock_N) or
@@ -41,8 +33,8 @@ class ImplicitsRefsClashPreventerVisitor(ASTBaseVisitor):
                 )
                 hint = (
                     f"{click.style(name, underline=True) + Fore.GREEN}"
-                    f" may be used *only* inside initializers, dynamics & gauges"
-                    f" blocks."
+                    f" may be used *only* inside initializers, dynamics &"
+                    f" gauges blocks."
                 )
                 if name == "x":
                     hint += "."
