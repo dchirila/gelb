@@ -42,7 +42,7 @@ def find_antlr4_tool_path():
     # Java library is included within the GeLB repository (so normally it
     # should be there, unless you removed it)
     lib_dir = pathlib.Path(__file__).parent.parent.parent / 'lib'
-    antlr4_lib_path = lib_dir / 'antlr-4.9.2-complete.jar'
+    antlr4_lib_path = lib_dir / 'antlr4-4.13.1-complete.jar'
     if not antlr4_lib_path.is_file():
         raise GeLBExAntlr4JavaLibNotFound(antlr4_lib_path)
     return antlr4_lib_path
