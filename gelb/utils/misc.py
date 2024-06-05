@@ -26,15 +26,12 @@ def ensure_input_file_exists_and_get_full_path(input_file):
 
 
 def cleanup_antlr4_generated_files(output_dir):
-    run(["rm", "-f", output_dir / "GeLB.interp"])
-    run(["rm", "-f", output_dir / "GeLB.tokens"])
-    run(["rm", "-f", output_dir / "GeLBLexer.interp"])
-    run(["rm", "-f", output_dir / "GeLBLexer.py"])
-    run(["rm", "-f", output_dir / "GeLBLexer.tokens"])
-    run(["rm", "-f", output_dir / "GeLBParser.py"])
-    run(["rm", "-f", output_dir / "GeLBListener.py"])
-    run(["rm", "-f", output_dir / "GeLBVisitor.py"])
-
+    files_to_remove = ["GeLB.interp", "GeLB.tokens", "GeLBLexer.interp", "GeLBLexer.py",
+                       "GeLBLexer.tokens", "GeLBParser.py", "GeLBListener.py", "GeLBVisitor.py"]
+    for file in files_to_remove:
+        file_path = os.path.join(output_dir, file)
+        if os.path.exists(file_path):
+            os.remove(file_path)
 
 def find_antlr4_tool_path():
     # check that the ANTLR4 Java-lib is present
