@@ -5,7 +5,7 @@ from fnmatch import fnmatch
 from subprocess import run
 import pathlib
 import re
-import pkg_resources
+from importlib.metadata import distributions
 
 from gelb.utils.exceptions import *
 import gelb.utils.config
@@ -53,7 +53,7 @@ def ensure_python3_package_is_present(package_name):
     NOTE: The users should not encounter this problem, because =pip install=
     should take care of the package-dependencies.
     """
-    installed_packages = {pkg.key for pkg in pkg_resources.working_set}
+    installed_packages = [str(d.metadata['Name']) for d in distributions()]
     if package_name not in installed_packages:
         raise GeLBExPython3PackageMissing(package_name)
 
