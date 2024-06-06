@@ -19,6 +19,10 @@ Features:
 - high performance (*almost* for free)
 - open-source and extensible
 
+# Requirements
+
+To use `GeLB`, you will need to have Python 3.8 or newer installed.
+
 # Using `GeLB` in your work
 
 If you have used `GeLB` to obtain results for your publications, we would
