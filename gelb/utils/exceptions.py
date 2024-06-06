@@ -4,14 +4,18 @@ import os
 import click
 from colorama import Fore
 
-import gelb.utils.config
-from gelb.utils.output_to_terminal import error_with_hint_to_term
-from gelb.utils.error_utils import (
+import utils.config
+from utils.output_to_terminal import error_with_hint_to_term
+from utils.error_utils import (
     feedback_on_slack_hint,
     learning_gelb_hint,
     show_error_in_src,
     show_double_definition_error
 )
+
+
+def running_within_pytest():
+    return "PYTEST_CURRENT_TEST" in os.environ
 
 
 class GeLBException(Exception):
@@ -23,7 +27,7 @@ class GeLBException(Exception):
         self.hint = hint
 
     def __str__(self):
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             error_with_hint_to_term(self.error, self.hint)
             os._exit(1)  # really abort
 
@@ -34,7 +38,7 @@ class GeLBExIncorrectStagesOrdering(GeLBException):
     """
     def __init__(self, error, hint=feedback_on_slack_hint):
         super().__init__(error, hint)
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             print(self)
 
 
@@ -57,7 +61,7 @@ class GeLBExInvalidGrammarRule(GeLBException):
             f" file). " + feedback_on_slack_hint
         )
         super().__init__(error, hint)
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             print(self)
 
 
@@ -86,7 +90,7 @@ class GeLBExMissingCSTVisitationMethod(GeLBException):
             f"). " + feedback_on_slack_hint
         )
         super().__init__(error, hint)
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             print(self)
 
 
@@ -112,7 +116,7 @@ class GeLBExMissingASTVisitationMethod(GeLBException):
 
         )
         super().__init__(error, hint)
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             print(self)
 
 
@@ -137,7 +141,7 @@ class GeLBExSyntaxError(GeLBException):
                 "^mismatched input \'", "",
                 re.sub("\' expecting ID$", "", hint)
             )
-            if keyword in gelb.utils.config.GELB_RESERVED_KEYWORDS:
+            if keyword in utils.config.GELB_RESERVED_KEYWORDS:
                 # construct a better hint
                 hint = (
                     f"You cannot use"
@@ -147,12 +151,12 @@ class GeLBExSyntaxError(GeLBException):
                 )
 
         super().__init__(error, hint)
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             print(self)
 
     def __str__(self):
         """Override base-class's __str__, because we want to print the code"""
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             show_error_in_src(self.line, self.column, self.error, self.hint)
             os._exit(1)  # really abort
 
@@ -347,7 +351,7 @@ class GeLBExInvalidNoOfOccurrences(GeLBException):
                         f" block. " + learning_gelb_hint
                 )
         super().__init__(error, hint)
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             print(self)
 
     def __str__(self):
@@ -355,7 +359,7 @@ class GeLBExInvalidNoOfOccurrences(GeLBException):
         Override base-class's __str__, because we want to print the code (but
         only sometimes).
         """
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             if (self.line is not None) and (self.column is not None):
                 show_error_in_src(self.line, self.column, self.error, self.hint)
             else:
@@ -380,7 +384,7 @@ class GeLBExIncorrectInputFileExtension(GeLBException):
             f"{click.style('.gelb', underline=True) + Fore.RED}"
         )
         super().__init__(error, hint)
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             print(self)
 
 
@@ -402,7 +406,7 @@ class GeLBExCouldNotFindInputFile(GeLBException):
                 f" {suggest_files}"
             )
         super().__init__(error, hint)
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             print(self)
 
 
@@ -422,7 +426,7 @@ class GeLBExCouldNotReadInputFile(GeLBException):
             f" to allow gelbc to read it."
         )
         super().__init__(error, hint)
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             print(self)
 
 
@@ -441,7 +445,7 @@ class GeLBExEmptyInputFile(GeLBException):
             f"{learning_gelb_hint}"
         )
         super().__init__(error, hint)
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             print(self)
 
 
@@ -461,7 +465,7 @@ class GeLBExAntlr4JavaLibNotFound(GeLBException):
             f" copy it to the expected location."
         )
         super().__init__(error, hint)
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             print(self)
 
 
@@ -482,7 +486,7 @@ class GeLBExPython3PackageMissing(GeLBException):
             f" GeLB repository clone. " + feedback_on_slack_hint
         )
         super().__init__(error, hint)
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             print(self)
 
 
@@ -501,7 +505,7 @@ class GeLBExGrammarFileNotFound(GeLBException):
             f" restoring it with \"git checkout\". " + feedback_on_slack_hint
         )
         super().__init__(error, hint)
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             print(self)
 
 
@@ -522,7 +526,7 @@ class GeLBExAntlr4JavaToolFailed(GeLBException):
             feedback_on_slack_hint
         )
         super().__init__(error, hint)
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             print(self)
 
 
@@ -548,12 +552,12 @@ class GeLBExSymbolExists(GeLBException):
             f"."
         )
         super().__init__(error, hint)
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             print(self)
 
     def __str__(self):
         """Override base-class's __str__, because we want to print the code"""
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             show_double_definition_error(
                 self.curr_instance.value.code_range.start_line,
                 self.curr_instance.value.code_range.start_col,
@@ -583,12 +587,12 @@ class GeLBExSymbolUnknown(GeLBException):
             f" {click.style(name, underline=True) + Fore.GREEN}."
         )
         super().__init__(error, hint)
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             print(self)
 
     def __str__(self):
         """Override base-class's __str__, because we want to print the code"""
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             show_error_in_src(
                 self.symbol_ref.code_range.start_line,
                 self.symbol_ref.code_range.start_col,
@@ -617,12 +621,12 @@ class GeLBExSymbolConstantRecursion(GeLBException):
             f" literal values or on other (already-defined) constants."
         )
         super().__init__(error, hint)
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             print(self)
 
     def __str__(self):
         """Override base-class's __str__, because we want to print the code"""
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             show_error_in_src(
                 self.symbol_ref.code_range.start_line,
                 self.symbol_ref.code_range.start_col,
@@ -647,12 +651,12 @@ class GeLBExSymbolWrongType(GeLBException):
         )
         hint = f"Specify the name of a {expected_type}."
         super().__init__(error, hint)
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             print(self)
 
     def __str__(self):
         """Override base-class's __str__, because we want to print the code"""
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             show_error_in_src(
                 self.symbol_ref.code_range.start_line,
                 self.symbol_ref.code_range.start_col,
@@ -685,12 +689,12 @@ class GeLBExSymbolRefBeforeDef(GeLBException):
             f" above the first reference."
         )
         super().__init__(self.error, self.hint)
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             print(self)
 
     def __str__(self):
         """Override base-class's __str__, because we want to print the code"""
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             show_error_in_src(
                 self.symbol_ref.code_range.start_line,
                 self.symbol_ref.code_range.start_col,
@@ -711,12 +715,12 @@ class GeLBExSymbolNotAllowedHere(GeLBException):
         self.hint = hint
 
         super().__init__(self.error, self.hint)
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             print(self)
 
     def __str__(self):
         """Override base-class's __str__, because we want to print the code"""
-        if gelb.utils.config.GELB_PRODUCTION_MODE:
+        if not running_within_pytest():
             show_error_in_src(
                 self.symbol_ref.code_range.start_line,
                 self.symbol_ref.code_range.start_col,

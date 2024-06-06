@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import pytest
-from gelb.stage1_frontend import get_ast
+from frontend.stage1_frontend import get_ast
 
 
 def test_1d_no_arg_keywords():

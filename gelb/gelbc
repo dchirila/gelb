@@ -1,38 +1,12 @@
 #!/usr/bin/env python3
 
-# BEGIN :: PYTHONPATH check #
-# NOTE: without PYTHONPATH set, we cannot import code from other parts of
-#       GeLB, which makes this code not-so-elegant.
 import click
-from colorama import Fore, Style
 import sys
-from os import environ
-try:
-    PYTHONPATH = environ['PYTHONPATH']
-except:
-    # display the error message
-    click.echo(Fore.RED + "gelbc-ERROR:" + Style.RESET_ALL, nl=False)
-    click.echo(f" PYTHONPATH env var not set\n")
-    # say that it was a fatal error
-    click.echo(Fore.RED + "gelbc-ERROR:" + Style.RESET_ALL, nl=False)
-    click.echo(" aborting compilation due to previous error\n")
-    # display a hint
-    click.echo(Fore.GREEN + "gelbc-HINT:" + Style.RESET_ALL, nl=False)
-    click.echo(
-        " This is a development version of gelbc, which requires you to add the"
-        " root directory of the repository to the PYTHONPATH environment"
-        " variable.\n\nFor example, I cloned the repo into the directory:\n\n"
-        "\"/home/dchirila/MyRepos/gelb\"\n\nso I added the line:\n\n"
-        "export PYTHONPATH=\"${PYTHONPATH}:/home/dchirila/MyRepos/gelb\"\n\n"
-        "to my ~/.zshrc file (also works with ~/.bashrc, if you use Bash)."
-    )
-    sys.exit(1)
-# END :: PYTHONPATH check #
 
 # If we reached this point, we should be able to import GeLB modules
-from gelb.utils.misc import load_file
-import gelb.utils.config
-from gelb.stage1_frontend import (
+from utils.misc import load_file
+import utils.config
+from frontend.stage1_frontend import (
     get_ast,
     build_symbols_tables,
     validate_node_classes,
@@ -80,7 +54,7 @@ through the various stages of the compiler.
         sys.tracebacklimit = 0
     # Stage 1 :: FrontEnd
     # ... save file-name as global variable
-    gelb.utils.config.GELB_FILE_NAME = input_file
+    utils.config.GELB_FILE_NAME = input_file
     src_raw = load_file(input_file)
     # ... get the initial AST
     ast = get_ast("gelb_program", src_raw)
@@ -118,6 +92,7 @@ through the various stages of the compiler.
 
     # Stage 3 :: BackEnd
     # ... TODO code-generation
+    print(ast)
 
 if __name__ == "__main__":
     cli()

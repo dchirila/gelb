@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
 import pytest
-from gelb.stage1_frontend import get_ast, build_symbols_tables
-from gelb.utils.exceptions import (
+from frontend.stage1_frontend import get_ast, build_symbols_tables
+from utils.exceptions import (
     GeLBExSymbolExists, GeLBExSymbolUnknown, GeLBExSymbolConstantRecursion
 )
-from gelb.SymbolsTable import SymbolsTable
+from frontend.SymbolsTable import SymbolsTable
 
 
 def test_valid():

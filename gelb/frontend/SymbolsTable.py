@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from gelb.utils.exceptions import *
+from utils.exceptions import *
 
 
 class SymbolsTable:

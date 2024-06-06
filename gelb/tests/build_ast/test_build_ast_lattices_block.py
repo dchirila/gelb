@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import pytest
-from gelb.stage1_frontend import ASTBuilderVisitor, get_ast
+from frontend.stage1_frontend import ASTBuilderVisitor, get_ast
 
 
 def test_one_lattice_instance_no_arg_keywords():

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
-from gelb.ASTBaseVisitor import ASTBaseVisitor
-from gelb.ASTNodes import *
-from gelb.SymbolsTable import SymbolsTable
-from gelb.SymbolDefinition import SymbolDefinition
-from gelb.utils.exceptions import (
+from frontend.ASTBaseVisitor import ASTBaseVisitor
+from gelb_ast.ASTNodes import *
+from frontend.SymbolsTable import SymbolsTable
+from gelb_ast.SymbolDefinition import SymbolDefinition
+from utils.exceptions import (
     GeLBExSymbolUnknown,
     GeLBExSymbolRefBeforeDef,
     GeLBExSymbolConstantRecursion,

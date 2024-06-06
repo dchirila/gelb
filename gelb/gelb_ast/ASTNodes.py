@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from abc import ABC, abstractmethod
-from gelb.SymbolReference import SymbolReference
+from gelb_ast.SymbolReference import SymbolReference
 
 
 class Node_N(ABC):

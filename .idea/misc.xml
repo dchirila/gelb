@@ -6,8 +6,8 @@
         <PerGrammarGenerationSettings>
           <option name="fileName" value="*" />
           <option name="autoGen" value="true" />
-          <option name="outputDir" value="$PROJECT_DIR$/gelb/antlr4/generated_code" />
-          <option name="libDir" value="$PROJECT_DIR$/gelb/antlr4/grammars" />
+          <option name="outputDir" value="$PROJECT_DIR$/gelb/antlr_part/generated_code" />
+          <option name="libDir" value="$PROJECT_DIR$/gelb/antlr_part/grammars" />
           <option name="encoding" value="" />
           <option name="pkg" value="" />
           <option name="language" value="" />

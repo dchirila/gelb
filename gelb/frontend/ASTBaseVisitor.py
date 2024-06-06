@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
-from gelb.ASTNodes import *
-from gelb.utils.exceptions import *
+from gelb_ast.ASTNodes import *
+from utils.exceptions import *
 
 
 class ASTBaseVisitor(ABC):

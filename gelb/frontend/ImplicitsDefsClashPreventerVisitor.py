@@ -3,9 +3,9 @@
 import click
 from colorama import Fore
 
-from gelb.ASTBaseVisitor import ASTBaseVisitor
-from gelb.ASTNodes import *
-from gelb.utils.exceptions import (
+from frontend.ASTBaseVisitor import ASTBaseVisitor
+from gelb_ast.ASTNodes import *
+from utils.exceptions import (
     GeLBExSyntaxError
 )
 

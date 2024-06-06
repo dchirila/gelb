@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from gelb.ASTBaseVisitor import ASTBaseVisitor
+from ASTBaseVisitor import ASTBaseVisitor
 
 
 class ArithmeticValidationVisitor(ASTBaseVisitor):

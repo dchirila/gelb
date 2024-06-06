@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
-from gelb.ASTBaseVisitor import ASTBaseVisitor
-from gelb.ASTNodes import *
-from gelb.utils.exceptions import (
+from frontend.ASTBaseVisitor import ASTBaseVisitor
+from gelb_ast.ASTNodes import *
+from utils.exceptions import (
     GeLBExSymbolUnknown,
 )
 

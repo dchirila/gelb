@@ -10,7 +10,7 @@ class SymbolReference:
         self.code_range = code_range
 
     def __repr__(self):
-        """Terese representation (for unit-testing)."""
+        """Terse representation (for unit-testing)."""
         return (
             f"(SymbolReference"
             f" (Name \"{self.name}\")"
