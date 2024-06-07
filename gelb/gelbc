@@ -35,12 +35,12 @@ from frontend.stage1_frontend import (
 @click.option(
     "--backend",
     type=click.Choice(
-        ['cpu_c_serial',
-         'cpu_c_parallel_openmp',
-         'gpu_c_parallel_opencl',
+        ['cpu_cpp_serial',
+         'cpu_cpp_parallel_openmp',
+         'gpu_cpp_parallel_opencl',
          ]
     ),
-    default='cpu_c_serial',
+    default='cpu_cpp_serial',
     help="Which backend to use for code-generation"
 )
 def cli(t, input_file, backend):
