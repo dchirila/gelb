@@ -53,32 +53,43 @@ def cli(t, input_file, backend):
 
     if not t:  # disable the traceback by default
         sys.tracebacklimit = 0
+
     # Stage 1 :: FrontEnd
+
     # ... save file-name as global variable
     utils.config.GELB_FILE_NAME = input_file
     src_raw = load_file(input_file)
+
     # ... get the initial AST
     ast = get_ast("gelb_program", src_raw)
+
     # ... [validation] prevent clashes of symbol refs with implicits
-    # NOTE: it is OK to reference {x, y, z}
+    # NOTE: it is OK to reference automatic {x, y, z} variables
     # @{initializer,dynamic,gauge} blocks, but NOT OK to reference them
     # @{global_constants,lattices,node_classes,geometry} blocks
     prevent_clashes_of_symbol_refs_with_implicits(ast)
+
     # ... build the symbols table
     ast = build_symbols_tables(ast)
+
     # ... [validation] prevent clashes of user-defined symbols with the
     # - implicit constants {Nx , Ny , Nz}
     # - implicit variables {x, y, z}
     prevent_clashes_of_symbol_defs_with_implicits(ast)
+
     # ... add symbols for implicit constants & variable (where they are needed)
-    ast = add_implicit_symbols(ast)
+    # ast = add_implicit_symbols(ast)
+
     # ... all array-literals should be rectangular (because we DO NOT support
     # ragged arrays in GeLB)
     # enforce_rectangular_array_literals(ast)
+
     # ... resolve ALL constants (explicit AND implicit, in ALL scopes)
     ast = resolve_all_constants(ast)
+
     # ... validate node-classes
     validate_node_classes(ast)
+
     # ... initial validation of geometry block (all referenced node-classes
     # were defined in the node-classes block).
     initial_validation_geometry(ast)
