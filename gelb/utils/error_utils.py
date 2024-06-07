@@ -12,8 +12,8 @@ feedback_on_slack_hint = (
 )
 
 learning_gelb_hint = (
-    f"Please visit https://gelb-lang.org to learn how to write your first "
-    f"GeLB programs."
+    f"Please visit https://gelb-lang.org to learn more about the GeLB "
+    f"programming language and about writing GeLB programs."
 )
 
 
