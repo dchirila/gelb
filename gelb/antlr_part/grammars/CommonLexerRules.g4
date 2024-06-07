@@ -114,7 +114,11 @@ SINGLE_LINE_COMMENT : '//' ~[\r\n]* '\r'? '\n' -> channel(HIDDEN);
 MULTI_LINE_COMMENT : '/*' .*? '*/' -> channel(HIDDEN);
 
 // Identifier (i.e. names for user-defined entities)
+//
 // Examples: f, SetDFsToZero, SetDFsToOne, CurrentState, state, BULK
+//
+// ATTENTION: always keep this after the keyword rules, to avoid matching language
+//            keywords as identifiers!
 ID : [a-zA-Z_] [a-zA-Z0-9_]* ;
 
 // Whitespace (to IGNORE)
