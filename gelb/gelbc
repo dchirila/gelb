@@ -45,11 +45,12 @@ from frontend.stage1_frontend import (
 )
 def cli(t, input_file, backend):
     """
-gelbc -- reference compiler (actually: "transpiler") for the GeLB DSL.
+    gelbc -- reference compiler (actually: "transpiler") for the GeLB DSL.
 
-This is the compiler-driver, which reads a "*.gelb" file and passes it
-through the various stages of the compiler.
+    This is the compiler-driver, which reads a "*.gelb" file and passes it
+    through the various stages of the compiler.
     """
+
     if not t:  # disable the traceback by default
         sys.tracebacklimit = 0
     # Stage 1 :: FrontEnd
