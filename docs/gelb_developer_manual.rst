@@ -41,6 +41,20 @@ Development Environment
       # On Unix/MacOS:
       ./scripts/cleanup_repo.sh
 
+* Regenerate ANTLR4 files:
+
+  .. code-block:: bash
+
+      # On Windows:
+      .\scripts\regenerate_antlr.ps1
+
+      # On Unix/MacOS:
+      ./scripts/regenerate_antlr.sh
+
+  Note: These scripts require the virtual environment to be set up first.
+  They will regenerate all ANTLR4-generated files based on the GeLB grammar.
+  The files are also automatically regenerated when running tests.
+
 * Update requirements.txt:
 
   .. code-block:: bash
