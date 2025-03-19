@@ -34,17 +34,6 @@ def cleanup_antlr4_generated_files(output_dir):
         if os.path.exists(file_path):
             os.remove(file_path)
 
-def find_antlr4_tool_path():
-    # check that the ANTLR4 Java-lib is present
-    # NOTE: To avoid possible issues with incompatible ANTLR4 versions, this
-    # Java library is included within the GeLB repository (so normally it
-    # should be there, unless you removed it)
-    lib_dir = pathlib.Path(__file__).parent.parent.parent / 'lib'
-    antlr4_lib_path = lib_dir / 'antlr4-4.13.2-complete.jar'
-    if not antlr4_lib_path.is_file():
-        raise utils.exceptions.GeLBExAntlr4JavaLibNotFound(antlr4_lib_path)
-    return antlr4_lib_path
-
 
 def ensure_python3_package_is_present(package_name):
     """
@@ -61,13 +50,14 @@ def ensure_python3_package_is_present(package_name):
 
 def invoke_antlr4_tool():
     """
-    Invoke the ANTLR4 Java tool.
+    Invoke the ANTLR4 tool using antlr4-tools package.
 
     This generates =GeLB{Lexer,Parser,Visitor}.py=, based on the =GeLB.g4=
     grammar.
     """
-    antlr4_lib_path = find_antlr4_tool_path()
+    ensure_python3_package_is_present("antlr4-tools")
     ensure_python3_package_is_present("antlr4-python3-runtime")
+    
     # infer the path to the GeLB language grammar
     grammar_dir = pathlib.Path(__file__).parent.parent/'antlr_part'/'grammars'
     output_dir = pathlib.Path(__file__).parent.parent/'antlr_part'/'generated_code'
@@ -76,17 +66,14 @@ def invoke_antlr4_tool():
         raise utils.exceptions.GeLBExGrammarFileNotFound(grammar_path)
     cleanup_antlr4_generated_files(output_dir)  # to be on the safe side
 
-    # invoke ANTLR4 Java tool
-    antlr4_tool_stat = run(["java",
-                            "-Xmx500M",
-                            "-jar", antlr4_lib_path,
-                            "-Werror",  # treat warnings as errors
-                            "-Dlanguage=Python3",
-                            "-no-listener",
-                            "-visitor",
-                            "-o",
-                            output_dir,
-                            grammar_path])
+    # invoke ANTLR4 tool via antlr4-tools
+    antlr4_tool_stat = run(["antlr4",
+                           "-Werror",  # treat warnings as errors
+                           "-Dlanguage=Python3",
+                           "-no-listener",
+                           "-visitor",
+                           "-o", str(output_dir),
+                           str(grammar_path)])
     if antlr4_tool_stat.returncode != 0:
         raise utils.exceptions.GeLBExAntlr4JavaToolFailed(antlr4_tool_stat)
 
