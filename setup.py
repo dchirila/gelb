@@ -20,6 +20,39 @@ distributed under the terms of the Mozilla Public License 2.0 (MPL-2.0).
 """
 DOCLINES = (__doc__ or '').split("\n")
 
-# TODO add more code here, to get the packaging in a functional state
-#      REFs: - modern guides on Python packaging & release via PyPI
-#            - setup.py from well-known packages (numpy?)
+from setuptools import setup, find_packages
+
+setup(
+    name="gelb",
+    description=DOCLINES[0],
+    long_description="\n".join(DOCLINES[2:]),
+    author="Dragos B. Chirila",
+    license="MPL-2.0",
+    packages=find_packages(),
+    python_requires=">=3.8",
+    install_requires=[
+        "antlr4-python3-runtime>=4.13.2",
+        "antlr4-tools>=0.2.1",
+        "click>=8.1.7",
+        "colorama>=0.4.6",
+        "Jinja2>=3.1.4",
+        "numpy>=1.26.4",
+        "sympy>=1.12",
+        "matplotlib>=3.8.0",
+        "netcdf4>=1.6.5",
+    ],
+    extras_require={
+        'dev': [
+            'pytest>=8.2.2',
+            'setuptools>=70.0.0',
+            'packaging>=24.0',
+            'pluggy>=1.5.0',
+            'iniconfig>=2.0.0',
+        ],
+    },
+    entry_points={
+        'console_scripts': [
+            'gelbc=gelb.gelbc:cli',
+        ],
+    },
+)

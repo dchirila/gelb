@@ -5,3 +5,8 @@
 
 # Ignore venv directory
 venv/
+
+# Python package build artifacts
+*.egg-info/
+dist/
+build/

@@ -32,9 +32,25 @@ if (Test-Path $antlrDir) {
 }
 
 # Remove ANTLR grammar cache
-$antlrGrammarCache = Join-Path $rootDir "gelb\antlr_part\grammars\.antlr"
-if (Test-Path $antlrGrammarCache) {
-    Remove-Item -Path $antlrGrammarCache -Recurse -Force
+Write-Host "Removing ANTLR grammar cache..."
+$antlrCache = Join-Path $rootDir ".antlr"
+if (Test-Path $antlrCache) {
+    Remove-Item -Path $antlrCache -Recurse -Force
+}
+
+# Remove Python package build artifacts
+Write-Host "Removing Python package build artifacts..."
+$eggInfo = Get-ChildItem -Path $rootDir -Directory -Filter "*.egg-info"
+if ($eggInfo) {
+    Remove-Item -Path $eggInfo.FullName -Recurse -Force
+}
+$dist = Join-Path $rootDir "dist"
+if (Test-Path $dist) {
+    Remove-Item -Path $dist -Recurse -Force
+}
+$build = Join-Path $rootDir "build"
+if (Test-Path $build) {
+    Remove-Item -Path $build -Recurse -Force
 }
 
 Write-Host "Repository cleanup complete!"

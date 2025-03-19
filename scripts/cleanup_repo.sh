@@ -24,4 +24,10 @@ rm -rf "$ROOT_DIR/gelb/antlr_part/generated_code/GeLB"{Lexer,Parser,Visitor}.py
 
 rm -rf "$ROOT_DIR/gelb/antlr_part/grammars/.antlr/"
 
+# Remove Python package build artifacts
+echo "Removing Python package build artifacts..."
+rm -rf "$ROOT_DIR"/*.egg-info
+rm -rf "$ROOT_DIR/dist"
+rm -rf "$ROOT_DIR/build"
+
 echo "Repository cleanup complete!"

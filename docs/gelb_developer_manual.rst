@@ -25,6 +25,27 @@ Development Environment
       # On Unix/MacOS:
       source venv/bin/activate
 
+* Install GeLB locally:
+
+  .. code-block:: bash
+
+      # Basic installation (core dependencies only)
+      pip install -e .
+
+      # Full installation with development tools
+      pip install -e .[dev]
+
+  After installation, the ``gelbc`` command-line tool will be available in your environment.
+  
+  The ``-e`` flag installs the package in "editable" mode, meaning:
+  
+  * Changes to Python code are immediately reflected without reinstallation
+  * However, you must reinstall (``pip install -e .``) if you modify:
+    
+    - ``setup.py`` (dependencies, entry points)
+    - Package metadata
+    - Non-Python files
+
 * Run the tests:
 
   .. code-block:: bash
