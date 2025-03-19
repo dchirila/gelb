@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
 import pytest
-from frontend.stage1_frontend import (
+from gelb.frontend.stage1_frontend import (
     ASTBuilderVisitor,
     get_ast,
     build_symbols_tables,
     resolve_all_constants
 )
-from utils.exceptions import (
+from gelb.utils.exceptions import (
     GeLBExSymbolRefBeforeDef
 )
 

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
 import pytest
-from frontend.stage1_frontend import (
+from gelb.frontend.stage1_frontend import (
     ASTBuilderVisitor,
     get_ast,
     prevent_clashes_of_symbol_refs_with_implicits
 )
-from utils.exceptions import (
+from gelb.utils.exceptions import (
     GeLBExSyntaxError,
     GeLBExSymbolNotAllowedHere
 )

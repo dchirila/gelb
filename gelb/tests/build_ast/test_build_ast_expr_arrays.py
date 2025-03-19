@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import pytest
-from frontend.stage1_frontend import ASTBuilderVisitor, get_ast
+from gelb.frontend.stage1_frontend import ASTBuilderVisitor, get_ast
 
 
 def test_simple_bool_elems():

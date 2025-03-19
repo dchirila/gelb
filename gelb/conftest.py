@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
-from utils.misc import invoke_antlr4_tool
-import utils.config
+from gelb.utils.misc import invoke_antlr4_tool
+import gelb.utils.config
 
 
 def pytest_sessionstart(session):

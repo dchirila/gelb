@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import pytest
-from frontend.stage1_frontend import get_cst_as_string
+from gelb.frontend.stage1_frontend import get_cst_as_string
 
 
 def test_simple():
