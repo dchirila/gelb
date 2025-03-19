@@ -5,23 +5,53 @@ GeLB developer manual
 Development Environment
 =====================
 
-* How to run the tests:
+* Set up the development environment:
 
-  ``cd $GELB_REPO_ROOT/gelb``
+  .. code-block:: bash
 
-  # Activate virtual environment
-  ``.\venv\Scripts\activate``  # Windows
-  ``source venv/bin/activate``  # Unix/MacOS
+      # On Windows:
+      .\scripts\gelb_bootstrap.ps1
 
-  ``pytest``
+      # On Unix/MacOS:
+      ./scripts/gelb_bootstrap.sh
 
-* How to update requirements.txt:
+* Activate the virtual environment:
 
-  ``pip freeze > requirements.txt``
+  .. code-block:: bash
 
-* How to render RST files to HTML:
+      # On Windows:
+      .\venv\Scripts\activate
 
-  ``rst2html.py FILE.rst FILE.html``
+      # On Unix/MacOS:
+      source venv/bin/activate
+
+* Run the tests:
+
+  .. code-block:: bash
+
+      pytest
+
+* Clean up generated files:
+
+  .. code-block:: bash
+
+      # On Windows:
+      .\scripts\cleanup_repo.ps1
+
+      # On Unix/MacOS:
+      ./scripts/cleanup_repo.sh
+
+* Update requirements.txt:
+
+  .. code-block:: bash
+
+      pip freeze > requirements.txt
+
+* Render RST files to HTML:
+
+  .. code-block:: bash
+
+      rst2html.py FILE.rst FILE.html
 
 
 Abstract Syntax Tree (AST)

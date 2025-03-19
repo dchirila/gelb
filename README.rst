@@ -111,30 +111,44 @@ Installation
 ============
 
 Although we have tried to make GeLB as self-contained as possible, it *does*
-depend on a fair number of libraries. The recommended way to install GeLB and all of
-its dependencies is to use Python's built-in venv module.
+depend on a fair number of libraries. GeLB provides convenient scripts to set up the
+development environment and manage dependencies.
 
-* Create and activate a virtual environment:
+* Setup the development environment:
 
   .. code-block:: bash
 
-      python -m venv venv
+      # On Windows:
+      .\scripts\gelb_bootstrap.ps1
+
+      # On Unix/MacOS:
+      ./scripts/gelb_bootstrap.sh
+
+* Activate the virtual environment:
+
+  .. code-block:: bash
+
       # On Windows:
       .\venv\Scripts\activate
+
       # On Unix/MacOS:
       source venv/bin/activate
-
-* Install the required dependencies:
-
-  .. code-block:: bash
-
-      pip install -r requirements.txt
 
 * Install GeLB in development mode:
 
   .. code-block:: bash
 
       pip install -e .
+
+* (Optional) Clean up generated files:
+
+  .. code-block:: bash
+
+      # On Windows:
+      .\scripts\cleanup_repo.ps1
+
+      # On Unix/MacOS:
+      ./scripts/cleanup_repo.sh
 
 Limitations of the GeLB language
 ================================
