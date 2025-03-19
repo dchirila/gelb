@@ -21,7 +21,7 @@ Features:
 
 # Requirements
 
-To use `GeLB`, you will need to have Python 3.8 or newer installed.
+To use `GeLB`, you will need to have Python 3.12.7 or newer installed.
 
 # Using `GeLB` in your work
 
