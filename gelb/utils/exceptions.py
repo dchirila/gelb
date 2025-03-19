@@ -4,9 +4,9 @@ import os
 import click
 from colorama import Fore
 
-import utils.config
-from utils.output_to_terminal import error_with_hint_to_term
-from utils.error_utils import (
+from gelb.utils import config
+from gelb.utils.output_to_terminal import error_with_hint_to_term
+from gelb.utils.error_utils import (
     feedback_on_slack_hint,
     learning_gelb_hint,
     show_error_in_src,
@@ -141,7 +141,7 @@ class GeLBExSyntaxError(GeLBException):
                 "^mismatched input \'", "",
                 re.sub("\' expecting ID$", "", hint)
             )
-            if keyword in utils.config.GELB_RESERVED_KEYWORDS:
+            if keyword in config.GELB_RESERVED_KEYWORDS:
                 # construct a better hint
                 hint = (
                     f"You cannot use"
@@ -728,4 +728,3 @@ class GeLBExSymbolNotAllowedHere(GeLBException):
             )
             # super().__str__()
             os._exit(1)  # really abort
-

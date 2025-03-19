@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
-from frontend.ASTBaseVisitor import ASTBaseVisitor
-from gelb_ast.ASTNodes import *
+from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
+from gelb.gelb_ast.ASTNodes import *
 
 
 class ConstantsResolverVisitor(ASTBaseVisitor):

@@ -4,9 +4,9 @@ import click
 import sys
 
 # If we reached this point, we should be able to import GeLB modules
-from utils.misc import load_file
-import utils.config
-from frontend.stage1_frontend import (
+from gelb.utils.misc import load_file
+import gelb.utils.config
+from gelb.frontend.stage1_frontend import (
     get_ast,
     build_symbols_tables,
     validate_node_classes,
@@ -57,7 +57,7 @@ def cli(t, input_file, backend):
     # Stage 1 :: FrontEnd
 
     # ... save file-name as global variable
-    utils.config.GELB_FILE_NAME = input_file
+    gelb.utils.config.GELB_FILE_NAME = input_file
     src_raw = load_file(input_file)
 
     # ... get the initial AST

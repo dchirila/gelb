@@ -3,9 +3,9 @@
 import click
 from colorama import Fore
 
-from frontend.ASTBaseVisitor import ASTBaseVisitor
-from gelb_ast.ASTNodes import *
-from utils.exceptions import (
+from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
+from gelb.gelb_ast.ASTNodes import *
+from gelb.utils.exceptions import (
     GeLBExSymbolNotAllowedHere
 )
 

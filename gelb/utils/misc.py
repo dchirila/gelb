@@ -8,13 +8,13 @@ import re
 import os
 from importlib.metadata import distributions
 
-import utils.exceptions
-import utils.config
+from gelb.utils import exceptions
+from gelb.utils import config
 
 
 def ensure_input_file_has_gelb_extension(input_file):
     if not fnmatch(input_file, "*.gelb"):
-        raise utils.exceptions.GeLBExIncorrectInputFileExtension(input_file)
+        raise exceptions.GeLBExIncorrectInputFileExtension(input_file)
 
 
 def ensure_input_file_exists_and_get_full_path(input_file):
@@ -23,7 +23,7 @@ def ensure_input_file_exists_and_get_full_path(input_file):
         return path
     except:
         suggest_files = find_gelb_files_in_cwd()
-    raise utils.exceptions.GeLBExCouldNotFindInputFile(input_file, suggest_files)
+    raise exceptions.GeLBExCouldNotFindInputFile(input_file, suggest_files)
 
 
 def cleanup_antlr4_generated_files(output_dir):
@@ -45,7 +45,7 @@ def ensure_python3_package_is_present(package_name):
     """
     installed_packages = [str(d.metadata['Name']) for d in distributions()]
     if package_name not in installed_packages:
-        raise utils.exceptions.GeLBExPython3PackageMissing(package_name)
+        raise exceptions.GeLBExPython3PackageMissing(package_name)
 
 
 def invoke_antlr4_tool():
@@ -63,7 +63,7 @@ def invoke_antlr4_tool():
     output_dir = pathlib.Path(__file__).parent.parent/'antlr_part'/'generated_code'
     grammar_path = grammar_dir / "GeLB.g4"
     if not grammar_path.is_file():
-        raise utils.exceptions.GeLBExGrammarFileNotFound(grammar_path)
+        raise exceptions.GeLBExGrammarFileNotFound(grammar_path)
     cleanup_antlr4_generated_files(output_dir)  # to be on the safe side
 
     # invoke ANTLR4 tool via antlr4-tools
@@ -75,17 +75,17 @@ def invoke_antlr4_tool():
                            "-o", str(output_dir),
                            str(grammar_path)])
     if antlr4_tool_stat.returncode != 0:
-        raise utils.exceptions.GeLBExAntlr4JavaToolFailed(antlr4_tool_stat)
+        raise exceptions.GeLBExAntlr4JavaToolFailed(antlr4_tool_stat)
 
     # obtain the list of reserved keywords (directly from the lexer); this
     # has the advantage of always being up-to-date.
-    if utils.config.GELB_RESERVED_KEYWORDS is None:
+    if config.GELB_RESERVED_KEYWORDS is None:
         # for auto-deducing reserved keywords
-        from antlr_part.generated_code.GeLBLexer import GeLBLexer
+        from gelb.antlr_part.generated_code.GeLBLexer import GeLBLexer
         literal_names = GeLBLexer.literalNames
 
         reg = re.compile(r'^[a-zA-Z0-9_]+$')
-        utils.config.GELB_RESERVED_KEYWORDS = list(
+        config.GELB_RESERVED_KEYWORDS = list(
             filter(
                 lambda kwd: bool(reg.match(kwd)),
                 list(
@@ -103,10 +103,10 @@ def load_file(input_file):
     path = ensure_input_file_exists_and_get_full_path(input_file)
 
     try:
-        utils.config.GELB_SRC_RAW = path.read_text(encoding='utf-8')
-        return utils.config.GELB_SRC_RAW
+        config.GELB_SRC_RAW = path.read_text(encoding='utf-8')
+        return config.GELB_SRC_RAW
     except OSError:
-        raise utils.exceptions.GeLBExCouldNotReadInputFile(path)
+        raise exceptions.GeLBExCouldNotReadInputFile(path)
 
 
 def find_gelb_files_in_cwd():
@@ -122,9 +122,9 @@ def find_gelb_files_in_cwd():
 
 def ensure_file_is_not_empty_or_whitespace(file_as_string):
     if (len(file_as_string) == 0) or file_as_string.isspace():
-        if not utils.exceptions.running_within_pytest():
-            raise utils.exceptions.GeLBExEmptyInputFile(
-                utils.config.GELB_FILE_NAME
+        if not exceptions.running_within_pytest():
+            raise exceptions.GeLBExEmptyInputFile(
+                config.GELB_FILE_NAME
             )
         else:  # testing, so probably no filename
-            raise utils.exceptions.GeLBExEmptyInputFile()
+            raise exceptions.GeLBExEmptyInputFile()

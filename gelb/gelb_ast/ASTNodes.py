@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from abc import ABC, abstractmethod
-from gelb_ast.SymbolReference import SymbolReference
+from gelb.gelb_ast.SymbolReference import SymbolReference
 
 
 class Node_N(ABC):
@@ -368,7 +368,7 @@ class Identifier_N(Expr_N):
     def get_referenced_symbols(self):
         result = set()
         result.add(
-            SymbolReference(self.name, self.code_range)
+            gelb.gelb_ast.SymbolReference.SymbolReference(self.name, self.code_range)
         )
         return result
 

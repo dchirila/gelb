@@ -2,7 +2,9 @@
 
 from antlr4.error.ErrorListener import ErrorListener
 
-from utils.exceptions import *
+from gelb.utils.exceptions import (
+    GeLBExSyntaxError
+)
 
 
 class ParsingError(ErrorListener):

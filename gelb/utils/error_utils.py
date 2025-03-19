@@ -3,7 +3,7 @@
 import click
 from colorama import Fore, Style
 
-import utils.config
+from gelb.utils import config
 
 
 feedback_on_slack_hint = (
@@ -22,11 +22,11 @@ def iterate_over_lines_in_src():
     current_lineno = 1
     previous_nl = -1
     while True:
-        next_nl = utils.config.GELB_SRC_RAW.find('\n', previous_nl + 1)
+        next_nl = config.GELB_SRC_RAW.find('\n', previous_nl + 1)
         if next_nl < 0:
             break
         yield (current_lineno,
-               utils.config.GELB_SRC_RAW[(previous_nl + 1): next_nl])
+               config.GELB_SRC_RAW[(previous_nl + 1): next_nl])
         previous_nl = next_nl
         current_lineno += 1
 
@@ -44,13 +44,13 @@ def show_source_with_annotation(line, column, click_color,
 
     click.echo()  # newline
     # print top gutter (..., if lines of context are not near the start)
-    if line > (utils.config.GELB_ERROR_CONTEXT + 1):
+    if line > (config.GELB_ERROR_CONTEXT + 1):
         click.echo(' ' * 6 + Fore.BLUE + '...' + Style.RESET_ALL)
     # iterate over all lines in the file
     for (lineno, line_text) in iterate_over_lines_in_src():
         # check whether problematic line is part of the context we want
         # to show (i.e. a few lines before & after problematic line)
-        if abs(lineno - line) <= utils.config.GELB_ERROR_CONTEXT:
+        if abs(lineno - line) <= config.GELB_ERROR_CONTEXT:
             # print each of the selected lines of context
             if lineno == line:
                 # special treatment for the problematic line
@@ -82,7 +82,7 @@ def show_source_with_annotation(line, column, click_color,
                     Fore.BLUE + f"{lineno:>4}  {line_text}" + Style.RESET_ALL
                 )
     # print bottom gutter (..., if lines of context are not near the end)
-    if (lines_in_file - line) > utils.config.GELB_ERROR_CONTEXT:
+    if (lines_in_file - line) > config.GELB_ERROR_CONTEXT:
         click.echo(' ' * 6 + Fore.BLUE + '...' + Style.RESET_ALL)
 
 
