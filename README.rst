@@ -51,7 +51,6 @@ encourage you to submit a bug report (or a pull request, in case you also found
 the solution). *However, make sure that your solution does not depend on
 optimizations which are "too narrow" (if unsure, submit the PR anyway :) ).*
 
-
 Why have you created this?
 ==========================
 
@@ -112,26 +111,30 @@ Installation
 ============
 
 Although we have tried to make GeLB as self-contained as possible, it *does*
-depend on a fair number of libraries. The easiest way to install GeLB and all of
-its dependencies is to use Anaconda.
+depend on a fair number of libraries. The recommended way to install GeLB and all of
+its dependencies is to use Python's built-in venv module.
 
-* Install Anaconda (see instructions `here
-  <https://www.anaconda.com/products/individual>`_)
+* Create and activate a virtual environment:
 
-* Open a terminal and perform the following steps:
+  .. code-block:: bash
 
-  * Clone this repository:
+      python -m venv venv
+      # On Windows:
+      .\venv\Scripts\activate
+      # On Unix/MacOS:
+      source venv/bin/activate
 
-    ``git clone https://github.com/dchirila/gelb.git``
+* Install the required dependencies:
 
-  * Change to the directory containing the local copy of the repository
+  .. code-block:: bash
 
-    ``cd git``
+      pip install -r requirements.txt
 
-  * Create ``conda`` environment from ``gelb.yml``:
+* Install GeLB in development mode:
 
-    ``conda env create --file gelb.yml``
+  .. code-block:: bash
 
+      pip install -e .
 
 Limitations of the GeLB language
 ================================

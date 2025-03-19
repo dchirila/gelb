@@ -2,22 +2,22 @@
 GeLB developer manual
 =====================
 
-* How to import the conda environment from ``gelb.yml``:
-  TODO
+Development Environment
+=====================
 
 * How to run the tests:
 
   ``cd $GELB_REPO_ROOT/gelb``
 
-  ``conda activate gelb``
+  # Activate virtual environment
+  ``.\venv\Scripts\activate``  # Windows
+  ``source venv/bin/activate``  # Unix/MacOS
 
   ``pytest``
 
+* How to update requirements.txt:
 
-* How to export the conda environment to ``gelb.yml`` (in case you install other packages within the environment):
-
-  ``conda env export --name gelb > gelb.yml``
-
+  ``pip freeze > requirements.txt``
 
 * How to render RST files to HTML:
 
