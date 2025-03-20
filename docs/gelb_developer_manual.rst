@@ -86,7 +86,7 @@ Development Environment
 
   .. code-block:: bash
 
-      rst2html.py FILE.rst FILE.html
+      rst2html FILE.rst FILE.html
 
 
 Abstract Syntax Tree (AST)
