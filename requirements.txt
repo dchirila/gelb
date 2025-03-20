@@ -14,3 +14,4 @@ numpy>=1.26.4
 sympy>=1.12
 matplotlib>=3.8.0
 netcdf4>=1.6.5
+docutils>=0.21.2
