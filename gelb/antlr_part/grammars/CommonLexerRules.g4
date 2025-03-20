@@ -67,7 +67,7 @@ OP_POW : '^' ;
 OP_LESS : '<' ;
 OP_GREATER : '>' ;
 // ... logical operators
-OP_NOT : '!' ;
+OP_NOT : '!' ; // Currently unused but reserved for future use
 //                     END: Operators                     //
 
 //                     BEGIN: Punctuation                     //
@@ -95,13 +95,15 @@ NON_NEGATIVE_REAL_LITERAL : [0-9]+ DOT [0-9]* EXPONENT?
                           | DOT [0-9]+ EXPONENT?
                           | NON_NEGATIVE_INT_LITERAL EXPONENT
                           ;
-EXPONENT : [Ee] (OP_ADD | OP_SUB)? [0-9]+ ;
+// Helper fragment for real literals
+fragment EXPONENT : [Ee] (OP_ADD | OP_SUB)? [0-9]+ ;
 // ... int
 NON_NEGATIVE_INT_LITERAL : '0' | ( [1-9] [0-9]* ) ;
 // ... bool
 BOOL_LITERAL : TRUE | FALSE ;
-TRUE : 'true' ;
-FALSE : 'false' ;
+// Helper fragments for boolean literals
+fragment TRUE : 'true' ;
+fragment FALSE : 'false' ;
 
  /* STRINGs-rule (valid for {single, multi}-line, double-quoted strings only)
     NOTE: No escape sequences are supported.
