@@ -10,3 +10,7 @@ venv/
 *.egg-info/
 dist/
 build/
+
+# Auto-generated HTML files from RST
+**/*.rst.html
+*.html
