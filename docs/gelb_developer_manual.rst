@@ -5,6 +5,18 @@ GeLB developer manual
 Development Environment
 =======================
 
+* Prerequisites:
+
+  - Python 3.12 or higher
+  - Git for version control
+  - Operating system: Windows, Linux, or macOS
+  - Disk space: At least 500MB for the virtual environment and dependencies
+  - Internet connection for the initial downloading of dependencies
+  - Text editor or IDE with RST support (recommended)
+  - Basic knowledge of command-line interfaces
+  
+  No Java installation is required as ANTLR4 tools are managed through Python packages.
+
 * Set up the development environment:
 
   .. code-block:: bash
