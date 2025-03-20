@@ -3,7 +3,7 @@ GeLB developer manual
 =====================
 
 Development Environment
-=====================
+=======================
 
 * Set up the development environment:
 
