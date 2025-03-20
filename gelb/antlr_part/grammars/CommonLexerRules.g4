@@ -103,10 +103,13 @@ BOOL_LITERAL : TRUE | FALSE ;
 TRUE : 'true' ;
 FALSE : 'false' ;
 
- /* STRINGs-rule (valid for {single, multi}-line strings)
-    NOTE: to simplify things, we only allow strings marked by DOUBLE-quotes
-          (unlike Python, which also allows strings marked by SINGLE-quotes) */
-STRING : '"' (~[\\"] | '\\' [\\"()])* '"' ;
+ /* STRINGs-rule (valid for {single, multi}-line, double-quoted strings only)
+    NOTE: No escape sequences are supported.
+    NOTE: Unlike Python (which also allows strings delimited by single-quotes),
+          strings in GeLB always use DOUBLE-quotes. Single-quotes can appear
+          inside strings without escaping.
+          */
+STRING : '"' (~["])* '"' ;
 //                     END: Scalar literals                     //
 
 // Comments (to IGNORE)
