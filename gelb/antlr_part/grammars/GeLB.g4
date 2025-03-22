@@ -12,8 +12,7 @@ import CommonLexerRules;
        e.g. that the number of occurrences of each block-type is valid.
  */
 gelb_program : // Valid # of occurrences (as interval)
-	( set_simulation_name_stmt         // [1, 1]
-	| set_simulation_description_stmt  // [1, 1]
+	( set_simulation_description_stmt  // [1, 1]
 	| global_constants_block           // [0, 1]
 	| lattices_block                   // [1. 1]
     | initializer_block                // [1, oo)
@@ -24,10 +23,6 @@ gelb_program : // Valid # of occurrences (as interval)
 	| geometry_block                   // [1, 1]
 	)*
 	EOF ;
-
-set_simulation_name_stmt : SIMULATION_NAME PAREN_OPEN
-    STRING
-PAREN_CLOSE SEMICOLON ;
 
 set_simulation_description_stmt : SIMULATION_DESCRIPTION PAREN_OPEN
     STRING

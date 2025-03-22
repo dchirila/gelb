@@ -1,4 +1,3 @@
-simulation_name("game_of_life_random_ICs");
 simulation_description("2D example, for simulating a cellular automaton");
 
 global_constants { //

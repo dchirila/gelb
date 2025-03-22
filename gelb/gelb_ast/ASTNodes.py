@@ -115,7 +115,6 @@ class Program_N(Node_N):
     """
     def __init__(self, code_range):
         super().__init__(code_range)
-        self.simulation_name = None
         self.simulation_description = None
         self.global_constants = None
         self.lattices = None
@@ -131,7 +130,6 @@ class Program_N(Node_N):
     def __str__(self):
         result = (
             f"(Program"
-            f" {str(self.simulation_name)}"
             f" {str(self.simulation_description)}"
         )
         if self.global_constants is not None:
@@ -158,22 +156,6 @@ class Expr_N(Node_N):
     @abstractmethod
     def __str__(self):
         pass
-
-
-class SetSimulationNameStmt_N(Stmt_N):
-    """
-    Represents an instruction to set the simulation name.
-
-    Example of corresponding code:
-
-    simulation_name("test");
-    """
-    def __init__(self, code_range, name):
-        super().__init__(code_range)
-        self.name = name
-
-    def __str__(self):
-        return f"(SetSimulationNameStmt {self.name})"
 
 
 class SetSimulationDescriptionStmt_N(Stmt_N):

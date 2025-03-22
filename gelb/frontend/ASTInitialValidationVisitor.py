@@ -67,10 +67,7 @@ class ASTInitialValidationVisitor(ASTBaseVisitor):
     # ):
     #     return (
     #             isinstance(node.value, str) and
-    #             isinstance(node.field_name, str) and (
-    #                     (node.field_name == "simulation_name") or
-    #                     (node.field_name == "simulation_description")
-    #             )
+    #             isinstance(node.field_name, str) and (node.field_name == "simulation_description")
     #     )
 
     def visitLatticeOutSelectionAssignmentStmt_N(
@@ -98,13 +95,6 @@ class ASTInitialValidationVisitor(ASTBaseVisitor):
         # (2) descend into child nodes, to check that they are valid
         for field in node.get_children():
             self.visit(getattr(node, field), ast_root_node)
-
-    def visitSetSimulationNameStmt_N(
-            self,
-            node: SetSimulationNameStmt_N,
-            ast_root_node: Program_N
-    ):
-        raise NotImplementedError()
 
     def visitSetSimulationDescriptionStmt_N(
             self,

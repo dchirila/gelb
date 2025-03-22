@@ -39,7 +39,6 @@ class ASTBuilderVisitor(GeLBVisitor):
     """
 
     def __init__(self):
-        self.instances_set_simulation_name_stmt = 0
         self.instances_set_simulation_description_stmt = 0
         self.instances_global_constants_block = 0
         self.instances_lattices_block = 0
@@ -65,9 +64,7 @@ class ASTBuilderVisitor(GeLBVisitor):
         list_of_children_sub_asts = self.get_list_of_children_sub_asts(ctx)
         
         for child in list_of_children_sub_asts:
-            if isinstance(child, SetSimulationNameStmt_N):
-                result.simulation_name = child.name
-            elif isinstance(child, SetSimulationDescriptionStmt_N):
+            if isinstance(child, SetSimulationDescriptionStmt_N):
                 result.simulation_description = child.description
             elif isinstance(child, GlobalConstantsBlock_N):
                 result.global_constants = child
@@ -107,12 +104,6 @@ class ASTBuilderVisitor(GeLBVisitor):
                 result.geometry = child
 
         # ensure that no mandatory block is missing
-        if self.instances_set_simulation_name_stmt == 0:
-            raise GeLBExInvalidNoOfOccurrences(
-                "set_simulation_name_stmt",
-                self.instances_set_simulation_name_stmt,
-                None, None
-            )
         if self.instances_set_simulation_description_stmt == 0:
             raise GeLBExInvalidNoOfOccurrences(
                 "set_simulation_description_stmt",
@@ -157,25 +148,6 @@ class ASTBuilderVisitor(GeLBVisitor):
             )
 
         return result
-
-    # Visit a parse tree produced by GeLBParser#set_simulation_name_stmt.
-    def visitSet_simulation_name_stmt(
-            self,
-            ctx: GeLBParser.Set_simulation_name_stmtContext
-    ):
-        self.instances_set_simulation_name_stmt += 1
-        # prevent more than one instance
-        if self.instances_set_simulation_name_stmt > 1:
-            raise GeLBExInvalidNoOfOccurrences(
-                "set_simulation_name_stmt",
-                self.instances_set_simulation_name_stmt,
-                ctx.start.line,
-                ctx.start.column
-            )
-        return SetSimulationNameStmt_N(
-            code_range_from_ctx(ctx),
-            StringLiteral_N(None, ctx.STRING().getText())
-        )
 
     # Visit a parse tree produced by GeLBParser#set_simulation_description_stmt.
     def visitSet_simulation_description_stmt(

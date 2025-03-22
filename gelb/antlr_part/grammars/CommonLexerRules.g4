@@ -1,7 +1,6 @@
 lexer grammar CommonLexerRules;
 
 //                     BEGIN: Keywords                     //
-SIMULATION_NAME : 'simulation_name' ;
 SIMULATION_DESCRIPTION : 'simulation_description' ;
 GLOBAL_CONSTANTS : 'global_constants' ;
 LATTICES : 'lattices' ;

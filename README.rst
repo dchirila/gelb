@@ -295,6 +295,10 @@ important changes are listed below:
   TODO: in the compiler, check whether a newer version of the compiler was
   published.
 
+* The `simulation_name` statement is no longer required (because the name of
+  the GeLB file is now used as the simulation name). This reduces the amount of
+  boilerplate code users need to write, and also makes the language more consistent.
+
 * In the `geometry` block, only rectangular node-selections are allowed, using
   the `nodes` statement (which is equivalent to the `node_range` statements in
   the thesis). The `node` statement is not needed (because it is just a special

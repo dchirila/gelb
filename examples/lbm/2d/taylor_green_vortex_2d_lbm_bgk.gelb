@@ -1,4 +1,4 @@
-simulation_name("taylor_green_vortex_2d_lbm_bgk");
+simulation_description("2D simulation of Taylor-Green vortex problem, using the LBM-BGK method");
 global_constants {
   const int SCALING = 32;
   const int N = 32 * SCALING;
