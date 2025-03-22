@@ -2,11 +2,21 @@
     "version": "2.2.4",
     "configurations": [
         {
+            "name": "Debug gelbc - ex0_int_vec_setto_one",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/gelb/gelbc.py",
+            // "args": ["${workspaceFolder}/examples/basic/1d/ex0_int_vec_setto_one.gelb"],
+            "args": ["${workspaceFolder}\\examples\\basic\\1d\\ex0_int_vec_setto_one.gelb"],
+            "cwd": "${workspaceFolder}",         // Sets the working directory to your project folder
+            "console": "integratedTerminal"
+        },
+        {
             "name": "Debug ANTLR4 grammar (gelb_program)",
             "type": "antlr-debug",
             "request": "launch",
-            "input": "gelb/antlr4/grammars/tmp_input.txt",
-            "grammar": "gelb/antlr4/grammars/GeLB.g4",
+            "input": "gelb/antlr4_part/grammars/tmp_input.txt",
+            "grammar": "gelb/antlr4_part/grammars/GeLB.g4",
             "startRule": "gelb_program",
             "printParseTree": true,
             "visualParseTree": true
@@ -15,8 +25,8 @@
             "name": "Debug ANTLR4 grammar (lattices_block)",
             "type": "antlr-debug",
             "request": "launch",
-            "input": "gelb/antlr4/grammars/tmp_input.txt",
-            "grammar": "gelb/antlr4/grammars/GeLB.g4",
+            "input": "gelb/antlr4_part/grammars/tmp_input.txt",
+            "grammar": "gelb/antlr4_part/grammars/GeLB.g4",
             "startRule": "lattices_block",
             "printParseTree": true,
             "visualParseTree": true
@@ -25,8 +35,8 @@
             "name": "Debug ANTLR4 grammar (lattice_assignment_stmt)",
             "type": "antlr-debug",
             "request": "launch",
-            "input": "gelb/antlr4/grammars/tmp_input.txt",
-            "grammar": "gelb/antlr4/grammars/GeLB.g4",
+            "input": "gelb/antlr4_part/grammars/tmp_input.txt",
+            "grammar": "gelb/antlr4_part/grammars/GeLB.g4",
             "startRule": "lattice_assignment_stmt",
             "printParseTree": true,
             "visualParseTree": true
@@ -35,8 +45,8 @@
             "name": "Debug ANTLR4 grammar (dfs_selection)",
             "type": "antlr-debug",
             "request": "launch",
-            "input": "gelb/antlr4/grammars/tmp_input.txt",
-            "grammar": "gelb/antlr4/grammars/GeLB.g4",
+            "input": "gelb/antlr4_part/grammars/tmp_input.txt",
+            "grammar": "gelb/antlr4_part/grammars/GeLB.g4",
             "startRule": "dfs_selection",
             "printParseTree": true,
             "visualParseTree": true
@@ -45,8 +55,8 @@
             "name": "Debug ANTLR4 grammar (initializer_block)",
             "type": "antlr-debug",
             "request": "launch",
-            "input": "gelb/antlr4/grammars/tmp_input.txt",
-            "grammar": "gelb/antlr4/grammars/GeLB.g4",
+            "input": "gelb/antlr4_part/grammars/tmp_input.txt",
+            "grammar": "gelb/antlr4_part/grammars/GeLB.g4",
             "startRule": "initializer_block",
             "printParseTree": true,
             "visualParseTree": true
@@ -55,8 +65,8 @@
             "name": "Debug ANTLR4 grammar (dynamic_block)",
             "type": "antlr-debug",
             "request": "launch",
-            "input": "gelb/antlr4/grammars/tmp_input.txt",
-            "grammar": "gelb/antlr4/grammars/GeLB.g4",
+            "input": "gelb/antlr4_part/grammars/tmp_input.txt",
+            "grammar": "gelb/antlr4_part/grammars/GeLB.g4",
             "startRule": "dynamic_block",
             "printParseTree": true,
             "visualParseTree": true
@@ -65,8 +75,8 @@
             "name": "Debug ANTLR4 grammar (gauge_block)",
             "type": "antlr-debug",
             "request": "launch",
-            "input": "gelb/antlr4/grammars/tmp_input.txt",
-            "grammar": "gelb/antlr4/grammars/GeLB.g4",
+            "input": "gelb/antlr4_part/grammars/tmp_input.txt",
+            "grammar": "gelb/antlr4_part/grammars/GeLB.g4",
             "startRule": "gauge_block",
             "printParseTree": true,
             "visualParseTree": true
@@ -75,8 +85,8 @@
             "name": "Debug ANTLR4 grammar (node_classes_block)",
             "type": "antlr-debug",
             "request": "launch",
-            "input": "gelb/antlr4/grammars/tmp_input.txt",
-            "grammar": "gelb/antlr4/grammars/GeLB.g4",
+            "input": "gelb/antlr4_part/grammars/tmp_input.txt",
+            "grammar": "gelb/antlr4_part/grammars/GeLB.g4",
             "startRule": "node_classes_block",
             "printParseTree": true,
             "visualParseTree": true
@@ -85,8 +95,8 @@
             "name": "Debug ANTLR4 grammar (geometry_block)",
             "type": "antlr-debug",
             "request": "launch",
-            "input": "gelb/antlr4/grammars/tmp_input.txt",
-            "grammar": "gelb/antlr4/grammars/GeLB.g4",
+            "input": "gelb/antlr4_part/grammars/tmp_input.txt",
+            "grammar": "gelb/antlr4_part/grammars/GeLB.g4",
             "startRule": "geometry_block",
             "printParseTree": true,
             "visualParseTree": true

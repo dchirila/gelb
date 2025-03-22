@@ -17,6 +17,10 @@ class SymbolsTable:
     def __getitem__(self, item):
         return self.symbol_defs[item]
 
+    def __iter__(self):
+        # return an iterator over the symbol_defs list
+        return iter(self.symbol_defs)
+
     def __len__(self):
         return len(self.symbol_defs)
 

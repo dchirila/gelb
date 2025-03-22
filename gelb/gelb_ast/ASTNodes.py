@@ -92,6 +92,10 @@ class List_N(Node_N):
     def append(self, element):
         self.elements.append(element)
 
+    def __iter__(self):
+        # return an iterator over the elements list
+        return iter(self.elements)
+
     def __getitem__(self, i):
         return self.elements[i]
 
