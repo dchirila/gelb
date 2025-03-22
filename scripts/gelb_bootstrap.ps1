@@ -14,7 +14,17 @@ $venvPath = Join-Path $rootDir "venv"
 # Remove existing venv if it exists
 if (Test-Path $venvPath) {
     Write-Host "Removing existing virtual environment..."
-    Remove-Item -Path $venvPath -Recurse -Force
+    try {
+        # First try to remove with normal force
+        Remove-Item -Path $venvPath -Recurse -Force -ErrorAction Stop
+    }
+    catch {
+        Write-Host "Warning: Unable to remove some files in the virtual environment. They may be in use." -ForegroundColor Yellow
+        Write-Host "Please close any applications that might be using the virtual environment and try again." -ForegroundColor Yellow
+        Write-Host "Alternatively, you can restart your computer and run this script again." -ForegroundColor Yellow
+        Write-Host "Error details: $_" -ForegroundColor Red
+        exit 1
+    }
 }
 
 # Create new virtual environment
@@ -35,8 +45,8 @@ if (Test-Path $requirementsPath) {
     Write-Host "Installing requirements..."
     pip install -r $requirementsPath
 } else {
-    Write-Host "Warning: requirements.txt not found at $requirementsPath"
+    Write-Host "Warning: requirements.txt not found at $requirementsPath" -ForegroundColor Yellow
     exit 1
 }
 
-Write-Host "GeLB development environment setup complete!"
+Write-Host "GeLB development environment setup complete!" -ForegroundColor Green
