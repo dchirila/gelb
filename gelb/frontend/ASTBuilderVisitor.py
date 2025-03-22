@@ -63,6 +63,7 @@ class ASTBuilderVisitor(GeLBVisitor):
             code_range_from_ctx(ctx)
         )
         list_of_children_sub_asts = self.get_list_of_children_sub_asts(ctx)
+        
         for child in list_of_children_sub_asts:
             if isinstance(child, SetSimulationNameStmt_N):
                 result.simulation_name = child.name
@@ -804,6 +805,7 @@ class ASTBuilderVisitor(GeLBVisitor):
         # ParseTreeVisitor.visitChildren), and append non-trivial children to
         # the list_of_children_sub_asts.
         n = ctx.getChildCount()
+        
         for i in range(n):
             c = ctx.getChild(i)
             # NOTE: boring children (i.e. syntax elements which don't belong
