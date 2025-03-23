@@ -180,31 +180,7 @@ class GeLBExInvalidNoOfOccurrences(GeLBException):
             feedback_on_slack_hint
         )
 
-        if block_name == "set_simulation_name_stmt":
-            informal_name = "simulation_name"
-            if no_occurrences == 0:
-                error = (
-                    f"You do not specify a "
-                    f"{click.style(informal_name, underline=True) + Fore.RED}"
-                    f" statement."
-                )
-                hint = (
-                    f"Every GeLB program needs to have a line like the"
-                    f" following:\n\n"
-                    f"simulation_name(\"my_simulation_name\");\n\n" +
-                    learning_gelb_hint
-                )
-            elif no_occurrences > 1:
-                error = (
-                    f"You specify more than one "
-                    f"{click.style(informal_name, underline=True) + Fore.RED}"
-                    f" statement."
-                )
-                hint = (
-                    f"Every GeLB program needs to have exactly *one* such"
-                    f" statement. " + learning_gelb_hint
-                )
-        elif block_name == "set_simulation_description_stmt":
+        if block_name == "set_simulation_description_stmt":
             informal_name = "simulation_description"
             if no_occurrences == 0:
                 error = (

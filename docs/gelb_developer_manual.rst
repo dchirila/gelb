@@ -149,7 +149,6 @@ NOTEs:
 
 - **Program**
 
-  - simulation_name -> **StringLit**
   - simulation_description -> **StringLit**
   - lattices -> **List** (**Lattice** )
   - node_classes -> **List** (**NodeClass**)

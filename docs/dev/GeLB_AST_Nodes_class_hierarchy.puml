@@ -24,13 +24,6 @@ class Stmt_N {
 class Expr_N {
 }
 
-class SetSimulationNameStmt_N #palegreen;line:green;text:black {
-    + name
-
-    + __init__(self, code_range, name)
-    + __str__(self)
-}
-
 class SetSimulationDescriptionStmt_N #palegreen;line:green;text:black {
     + description
 

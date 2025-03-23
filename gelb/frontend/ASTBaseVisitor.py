@@ -54,13 +54,6 @@ class ASTBaseVisitor(ABC):
     # ):
     #     raise NotImplementedError()
     #
-    # def visitSetSimulationNameStmt_N(
-    #         self,
-    #         node: SetSimulationNameStmt_N,
-    #         ast_root_node: Program_N
-    # ):
-    #     raise NotImplementedError()
-    #
     # def visitSetSimulationDescriptionStmt_N(
     #         self,
     #         node: SetSimulationDescriptionStmt_N):,

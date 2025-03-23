@@ -1,4 +1,3 @@
-simulation_name("ex20_int_vec_increment_one");
 simulation_description("None");
 
 lattices { //
