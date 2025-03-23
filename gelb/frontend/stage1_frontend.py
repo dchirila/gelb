@@ -50,11 +50,12 @@ def get_cst_as_string(start_rule, input_string):
 
 def get_ast(start_rule, input_string):
     ensure_file_is_not_empty_or_whitespace(input_string)
-
+    
     input_stream = a4.InputStream(input_string)
     lexer = GeLBLexer(input_stream)
     token_stream = a4.CommonTokenStream(lexer)
     token_stream.fill()
+    
     parser = GeLBParser(token_stream)
     parser.removeErrorListeners()
     parser.addErrorListener(ParsingError())
