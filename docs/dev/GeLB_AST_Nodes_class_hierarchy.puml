@@ -42,7 +42,6 @@ class List_N #palegreen;line:green;text:black {
 }
 
 class Program_N #palegreen;line:green;text:black {
-    + simulation_name
     + simulation_description
     + global_constants
     + lattices
@@ -309,7 +308,6 @@ Node_N <|-- Program_N
 Node_N <|-- Block_N
 Block_N <|-- GlobalConstantsBlock_N
 Block_N <|-- LatticesBlock_N
-Stmt_N <|-- SetSimulationNameStmt_N
 Stmt_N <|-- SetSimulationDescriptionStmt_N
 Stmt_N <|-- LatticeInstaStmt_N
 Block_N <|-- NodeClassesBlock_N
