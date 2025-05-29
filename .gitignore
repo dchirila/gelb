@@ -4,7 +4,6 @@
 **/__pycache__/
 
 # Ignore venv directory
-venv/
 .venv/
 
 # Python package build artifacts
