@@ -222,6 +222,8 @@ expr : PAREN_OPEN expr PAREN_CLOSE                # parensExpr
      | op=(OP_ADD | OP_SUB | OP_NOT) expr         # unaryExpr
      | left=expr op=(OP_MUL | OP_DIV) right=expr  # infixExpr
      | left=expr op=(OP_ADD | OP_SUB) right=expr  # infixExpr
+     | left=expr OP_AND right=expr                 # logicalAndExpr
+     | left=expr OP_OR right=expr                  # logicalOrExpr
      // BEGIN :: literals //
      | value=NON_NEGATIVE_REAL_LITERAL     # nonNegRealLiteralExpr
      | value=NON_NEGATIVE_INT_LITERAL      # nonNegIntLiteralExpr

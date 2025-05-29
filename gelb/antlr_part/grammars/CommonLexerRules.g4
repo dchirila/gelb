@@ -67,6 +67,8 @@ OP_LESS : '<' ;
 OP_GREATER : '>' ;
 // ... logical operators
 OP_NOT : '!' ; // Currently unused but reserved for future use
+OP_AND : '&&' ;
+OP_OR : '||' ;
 //                     END: Operators                     //
 
 //                     BEGIN: Punctuation                     //
