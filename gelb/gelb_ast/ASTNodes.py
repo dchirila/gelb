@@ -544,6 +544,72 @@ class Pow_N(BinaryExpr_N):
         return f"(Pow {self.left} {self.right})"
 
 
+# Comparison operators
+class Less_N(BinaryExpr_N):
+    """
+    Represents a less-than (<) comparison expression.
+    """
+    def __str__(self):
+        return f"(Less {self.left} {self.right})"
+
+
+class Greater_N(BinaryExpr_N):
+    """
+    Represents a greater-than (>) comparison expression.
+    """
+    def __str__(self):
+        return f"(Greater {self.left} {self.right})"
+
+
+class LessEqual_N(BinaryExpr_N):
+    """
+    Represents a less-than-or-equal (<=) comparison expression.
+    """
+    def __str__(self):
+        return f"(LessEqual {self.left} {self.right})"
+
+
+class GreaterEqual_N(BinaryExpr_N):
+    """
+    Represents a greater-than-or-equal (>=) comparison expression.
+    """
+    def __str__(self):
+        return f"(GreaterEqual {self.left} {self.right})"
+
+
+class Equal_N(BinaryExpr_N):
+    """
+    Represents an equality (==) comparison expression.
+    """
+    def __str__(self):
+        return f"(Equal {self.left} {self.right})"
+
+
+class NotEqual_N(BinaryExpr_N):
+    """
+    Represents a not-equal (!=) comparison expression.
+    """
+    def __str__(self):
+        return f"(NotEqual {self.left} {self.right})"
+
+
+# Logical operators
+class And_N(BinaryExpr_N):
+    """
+    Represents a logical AND (&&) expression.
+    """
+    def __str__(self):
+        return f"(And {self.left} {self.right})"
+
+
+class Or_N(BinaryExpr_N):
+    """
+    Represents a logical OR (||) expression.
+    """
+    def __str__(self):
+        return f"(Or {self.left} {self.right})"
+
+
 class UnaryExpr_N(Expr_N):
     """
     Base-class for all GeLB unary expressions.

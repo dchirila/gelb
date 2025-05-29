@@ -661,6 +661,20 @@ class ASTBuilderVisitor(GeLBVisitor):
             return self.visitInfixExpr(ctx)
         elif isinstance(ctx, GeLBParser.IdentifierExprContext):
             return self.visitIdentifierExpr(ctx)
+        elif isinstance(ctx, GeLBParser.ComparisonExprContext):
+            return self.visitComparisonExpr(ctx)
+        elif isinstance(ctx, GeLBParser.EqualityExprContext):
+            return self.visitEqualityExpr(ctx)
+        elif isinstance(ctx, GeLBParser.LogicalAndExprContext):
+            return self.visitLogicalAndExpr(ctx)
+        elif isinstance(ctx, GeLBParser.LogicalOrExprContext):
+            return self.visitLogicalOrExpr(ctx)
+        elif isinstance(ctx, GeLBParser.RectSelOfLatticeInDFsExprContext):
+            return self.visitRectSelOfLatticeInDFsExpr(ctx)
+        elif isinstance(ctx, GeLBParser.RectSelOfArrayElemsExprContext):
+            return self.visitRectSelOfArrayElemsExpr(ctx)
+        else:
+            assert False, "Unknown expression type: {}".format(type(ctx))
 
     # Visit a parse tree produced by GeLBParser#parensExpr.
     def visitParensExpr(
@@ -770,6 +784,80 @@ class ASTBuilderVisitor(GeLBVisitor):
             ctx: GeLBParser.IdentifierExprContext
     ):
         return self.visitIdentifier(ctx.identifier())
+
+    # Visit a parse tree produced by GeLBParser#comparisonExpr.
+    def visitComparisonExpr(
+            self,
+            ctx: GeLBParser.ComparisonExprContext
+    ):
+        if ctx.op.text == '<':
+            return Less_N(
+                code_range_from_ctx(ctx),
+                self.visit(ctx.left),
+                self.visit(ctx.right)
+            )
+        elif ctx.op.text == '>':
+            return Greater_N(
+                code_range_from_ctx(ctx),
+                self.visit(ctx.left),
+                self.visit(ctx.right)
+            )
+        elif ctx.op.text == '<=':
+            return LessEqual_N(
+                code_range_from_ctx(ctx),
+                self.visit(ctx.left),
+                self.visit(ctx.right)
+            )
+        elif ctx.op.text == '>=':
+            return GreaterEqual_N(
+                code_range_from_ctx(ctx),
+                self.visit(ctx.left),
+                self.visit(ctx.right)
+            )
+        else:
+            assert False, "Unknown comparison operator: {}".format(ctx.op.text)
+
+    # Visit a parse tree produced by GeLBParser#equalityExpr.
+    def visitEqualityExpr(
+            self,
+            ctx: GeLBParser.EqualityExprContext
+    ):
+        if ctx.op.text == '==':
+            return Equal_N(
+                code_range_from_ctx(ctx),
+                self.visit(ctx.left),
+                self.visit(ctx.right)
+            )
+        elif ctx.op.text == '!=':
+            return NotEqual_N(
+                code_range_from_ctx(ctx),
+                self.visit(ctx.left),
+                self.visit(ctx.right)
+            )
+        else:
+            assert False, "Unknown equality operator: {}".format(ctx.op.text)
+
+    # Visit a parse tree produced by GeLBParser#logicalAndExpr.
+    def visitLogicalAndExpr(
+            self,
+            ctx: GeLBParser.LogicalAndExprContext
+    ):
+        return And_N(
+            code_range_from_ctx(ctx),
+            self.visit(ctx.left),
+            self.visit(ctx.right)
+        )
+
+    # Visit a parse tree produced by GeLBParser#logicalOrExpr.
+    def visitLogicalOrExpr(
+            self,
+            ctx: GeLBParser.LogicalOrExprContext
+    ):
+        return Or_N(
+            code_range_from_ctx(ctx),
+            self.visit(ctx.left),
+            self.visit(ctx.right)
+        )
 
     def get_list_of_children_sub_asts(self, ctx):
         list_of_children_sub_asts = List_N(code_range_from_ctx(ctx))
