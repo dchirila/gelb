@@ -32,29 +32,29 @@ Development Environment
   .. code-block:: bash
 
       # On Windows:
-      .\venv\Scripts\activate
+      .\.venv\Scripts\activate
 
       # On Unix/MacOS:
-      source venv/bin/activate
+      source .venv/bin/activate
 
 * Install GeLB locally:
 
   .. code-block:: bash
 
       # Basic installation (core dependencies only)
-      pip install -e .
+      uv pip install -e .
 
       # Full installation with development tools
-      pip install -e .[dev]
+      uv sync --all-extras
 
   After installation, the ``gelbc`` command-line tool will be available in your environment.
   
   The ``-e`` flag installs the package in "editable" mode, meaning:
   
   * Changes to Python code are immediately reflected without reinstallation
-  * However, you must reinstall (``pip install -e .``) if you modify:
+  * However, you must reinstall (``uv pip install -e .``) if you modify:
     
-    - ``setup.py`` (dependencies, entry points)
+    - ``pyproject.toml`` (dependencies, entry points)
     - Package metadata
     - Non-Python files
 
@@ -88,11 +88,16 @@ Development Environment
   They will regenerate all ANTLR4-generated files based on the GeLB grammar.
   The files are also automatically regenerated when running tests.
 
-* Update requirements.txt:
+* Update dependencies:
 
   .. code-block:: bash
 
-      pip freeze > requirements.txt
+      # Dependencies are managed in pyproject.toml
+      # To add a new dependency:
+      uv add package-name
+      
+      # To add a development dependency:
+      uv add --dev package-name
 
 * Render RST files to HTML:
 

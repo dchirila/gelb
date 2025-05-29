@@ -40,7 +40,7 @@ least:
 
 The reference compiler was written as the
 [`gelb`](TODO-insert-link-to-gelb-at-pypi) Python 3 package (which you can
-install with the command `pip install gelb`).
+install using uv).
 
 When editing `.gelb` files, it is useful to have some support, in the form of:
 

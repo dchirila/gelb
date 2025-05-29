@@ -40,7 +40,7 @@ def ensure_python3_package_is_present(package_name):
     Generic utility-function, for checking that a Python3 package required by
     GeLB is actually installed.
 
-    NOTE: The users should not encounter this problem, because =pip install=
+    NOTE: The users should not encounter this problem, because =uv sync=
     should take care of the package-dependencies.
     """
     installed_packages = [str(d.metadata['Name']) for d in distributions()]

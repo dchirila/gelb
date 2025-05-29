@@ -1,15 +1,27 @@
 # Bootstrap script for GeLB development environment
-# Removes existing venv, creates a new one, and installs requirements
+# Removes existing venv, creates a new one, and installs requirements using uv
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "Setting up GeLB development environment..."
+Write-Host "Setting up GeLB development environment with uv..."
 
 # Get the root directory (parent of scripts directory)
 $rootDir = Split-Path -Parent $PSScriptRoot
 
 # Define venv path
-$venvPath = Join-Path $rootDir "venv"
+$venvPath = Join-Path $rootDir ".venv"
+
+# Check if uv is installed
+try {
+    uv --version | Out-Null
+}
+catch {
+    Write-Host "uv is not installed. Installing uv..."
+    # Install uv using the official installer
+    irm https://astral.sh/uv/install.ps1 | iex
+    # Refresh PATH
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+}
 
 # Remove existing venv if it exists
 if (Test-Path $venvPath) {
@@ -27,26 +39,11 @@ if (Test-Path $venvPath) {
     }
 }
 
-# Create new virtual environment
-Write-Host "Creating new virtual environment..."
-python -m venv $venvPath
-
-# Activate virtual environment
-Write-Host "Activating virtual environment..."
-& "$venvPath\Scripts\Activate.ps1"
-
-# Upgrade pip
-Write-Host "Upgrading pip..."
-python -m pip install --upgrade pip
-
-# Install requirements
-$requirementsPath = Join-Path $rootDir "requirements.txt"
-if (Test-Path $requirementsPath) {
-    Write-Host "Installing requirements..."
-    pip install -r $requirementsPath
-} else {
-    Write-Host "Warning: requirements.txt not found at $requirementsPath" -ForegroundColor Yellow
-    exit 1
-}
+# Create new virtual environment and install dependencies
+Write-Host "Creating virtual environment and installing dependencies..."
+Set-Location $rootDir
+uv venv
+uv sync --all-extras
 
 Write-Host "GeLB development environment setup complete!" -ForegroundColor Green
+Write-Host "To activate the environment, run: .venv\Scripts\activate" -ForegroundColor Green

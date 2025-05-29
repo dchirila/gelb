@@ -112,7 +112,7 @@ Installation
 
 Although we have tried to make GeLB as self-contained as possible, it *does*
 depend on a fair number of libraries. GeLB provides convenient scripts to set up the
-development environment and manage dependencies.
+development environment and manage dependencies using uv (a fast Python package manager).
 
 * Setup the development environment:
 
@@ -129,16 +129,16 @@ development environment and manage dependencies.
   .. code-block:: bash
 
       # On Windows:
-      .\venv\Scripts\activate
+      .\.venv\Scripts\activate
 
       # On Unix/MacOS:
-      source venv/bin/activate
+      source .venv/bin/activate
 
 * Install GeLB in development mode:
 
   .. code-block:: bash
 
-      pip install -e .
+      uv pip install -e .
 
 * (Optional) Clean up generated files:
 
