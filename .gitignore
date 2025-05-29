@@ -14,3 +14,8 @@ build/
 # Auto-generated HTML files from RST
 **/*.rst.html
 *.html
+
+# ANTLR generated files
+gelb/antlr_part/generated_code/*.interp
+gelb/antlr_part/generated_code/*.tokens
+gelb/antlr_part/generated_code/*.py
