@@ -62,9 +62,13 @@ OP_SUB : '-' ;
 OP_MUL : '*' ;
 OP_DIV : '/' ;
 OP_POW : '^' ;
-// ... chevrons (angle brackets)
+// ... comparison operators
 OP_LESS : '<' ;
 OP_GREATER : '>' ;
+OP_LESS_EQUAL : '<=' ;
+OP_GREATER_EQUAL : '>=' ;
+OP_EQUAL : '==' ;
+OP_NOT_EQUAL : '!=' ;
 // ... logical operators
 OP_NOT : '!' ; // Currently unused but reserved for future use
 OP_AND : '&&' ;

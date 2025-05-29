@@ -169,7 +169,7 @@ scalar_real_data_type : REAL64 | REAL32 | REAL16 | REAL ;
  scalar, and GeLB tries to be consistent with its rule of always preferring
  the lower-dimensional data-type that does the job.
 */
-array_data_type : ARRAY OP_LESS
+array_data_type : ARRAY BRACKET_OPEN
     scalar_data_type
     COMMA
     /* shape is (depending on dimensionality):
@@ -177,7 +177,7 @@ array_data_type : ARRAY OP_LESS
        - a expr (for dimensionality == 1)
      */
     (array_literal_1d | expr)
-OP_GREATER ;
+BRACKET_CLOSE ;
 
 /* Fixed-dimensionality array literals
    REFs: - Sec 2.4 @A4-book
@@ -222,6 +222,8 @@ expr : PAREN_OPEN expr PAREN_CLOSE                # parensExpr
      | op=(OP_ADD | OP_SUB | OP_NOT) expr         # unaryExpr
      | left=expr op=(OP_MUL | OP_DIV) right=expr  # infixExpr
      | left=expr op=(OP_ADD | OP_SUB) right=expr  # infixExpr
+     | left=expr op=(OP_LESS | OP_GREATER | OP_LESS_EQUAL | OP_GREATER_EQUAL) right=expr  # comparisonExpr
+     | left=expr op=(OP_EQUAL | OP_NOT_EQUAL) right=expr  # equalityExpr
      | left=expr OP_AND right=expr                 # logicalAndExpr
      | left=expr OP_OR right=expr                  # logicalOrExpr
      // BEGIN :: literals //

@@ -6,7 +6,7 @@ from gelb.frontend.stage1_frontend import ASTBuilderVisitor, get_ast
 
 def test_1d_array_type():
     # Arrange
-    test_string = "array<int64, 3>"
+    test_string = "array[int64, 3]"
     # Act
     ast = get_ast("array_data_type", test_string)
     # Assert
@@ -19,7 +19,7 @@ def test_1d_array_type():
 
 def test_2d_array_type():
     # Arrange
-    test_string = "array<real64, {2, 3}>"
+    test_string = "array[real64, {2, 3}]"
     # Act
     ast = get_ast("array_data_type", test_string)
     # Assert

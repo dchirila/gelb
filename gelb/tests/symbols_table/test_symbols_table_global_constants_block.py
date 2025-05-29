@@ -48,8 +48,8 @@ def test_invalid1():
     # Arrange
     test_string = """
     global_constants {
-      const array<int32, {23, 32}> NX = 32;
-      const array<real64, {23, 32}> NX = 3.14;
+      const array[int32, {23, 32}] NX = 32;
+      const array[real64, {23, 32}] NX = 3.14;
     }
     """
     # Act

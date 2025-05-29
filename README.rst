@@ -329,7 +329,7 @@ important changes are listed below:
   * `const real pi = 3.14;` (instead of `real_const pi = 3.14;`) to declare and
     initialize a constant real value and
 
-  * `const array<int, {2, 2} I = {{1, 0}, {0, 1}};` to declare and initialize a
+  * `const array[int, {2, 2}] I = {{1, 0}, {0, 1}};` to declare and initialize a
     constant array of integers.
 
 

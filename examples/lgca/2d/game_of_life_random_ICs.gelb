@@ -18,11 +18,11 @@ initializer RandomLife { //
 }
 
 dynamic LifeEvolve {
-  const array<bool, {N_NEAREST}> genesis = //
+  const array[bool, {N_NEAREST}] genesis = //
       {false, false, false,                //
        true,                               // genesis for 3 neighbors
        false, false, false, false, false};
-  const array<bool, {N_NEAREST}> deathOrSurvival = //
+  const array[bool, {N_NEAREST}] deathOrSurvival = //
       {false, false,                               // death by loneliness
        true,  true,                                // survival
        false, false, false, false, false};         // death by overcrowding

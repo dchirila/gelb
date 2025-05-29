@@ -1,1 +1,1 @@
-array<int, {D, Q}>
+array[int, {D, Q}]

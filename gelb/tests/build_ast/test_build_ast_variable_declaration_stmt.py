@@ -19,7 +19,7 @@ def test_scalar():
 
 def test_1d_array():
     # Arrange
-    test_string = "array<real, 2> x;"
+    test_string = "array[real, 2] x;"
     # Act
     ast = get_ast("variable_declaration_stmt", test_string)
     # Assert
@@ -35,7 +35,7 @@ def test_1d_array():
 
 def test_2d_array():
     # Arrange
-    test_string = "array<real, {2, 3}> y;"
+    test_string = "array[real, {2, 3}] y;"
     # Act
     ast = get_ast("variable_declaration_stmt", test_string)
     # Assert
