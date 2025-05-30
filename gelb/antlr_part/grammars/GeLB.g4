@@ -14,6 +14,12 @@ import CommonLexerRules;
  NOTE: This grammar uses ANTLR4 labels (= and +=) to make the generated parser
        more readable and the visitor code cleaner. For an explanation of ANTLR4
        labels, see docs/gelb_developer_manual.rst section "ANTLR4 Labels".
+       
+       IMPORTANT ANTLR4 Label Gotchas:
+       1. Labels that conflict with Python keywords get an underscore suffix
+          (e.g., 'type' becomes 'ctx.type_' in Python visitor code)
+       2. Labels cannot have the same name as existing grammar rules
+          (e.g., cannot use 'data_type=data_type')
  */
 gelb_program : // Valid # of occurrences (as interval)
 	( set_simulation_description_stmt  // [1, 1]
@@ -157,7 +163,8 @@ coords_range : low=expr                  # singleElementRange
              |          COLON            # allElementsRange
              ;
 
-constant_definition_stmt : CONST data_type variable_assignment_stmt ;
+// NOTE: Label 'type' becomes 'type_' in Python due to keyword conflict
+constant_definition_stmt : CONST type=data_type assignment=variable_assignment_stmt ;
 
 variable_declaration_stmt : data_type identifier SEMICOLON ;
 

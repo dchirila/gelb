@@ -203,6 +203,34 @@ Examples from GeLB Grammar
             | value=NON_NEGATIVE_INT_LITERAL              # nonNegIntLiteralExpr
             ;
 
+Important Gotchas
+-----------------
+
+When using ANTLR4 labels in Python projects, be aware of these potential issues:
+
+1. **Python Keyword Conflicts**: If you use a label name that conflicts with a Python keyword, ANTLR4 automatically adds an underscore suffix to the generated Python code.
+
+   Example::
+
+       // In grammar:
+       constant_definition_stmt : CONST type=data_type assignment=variable_assignment_stmt ;
+       
+       // In Python visitor:
+       data_type = self.visit(ctx.type_)  # Note: type_ not type
+
+   Common Python keywords to avoid: ``type``, ``class``, ``def``, ``if``, ``for``, ``while``, ``import``, etc.
+
+2. **Grammar Rule Name Conflicts**: You cannot use a label name that matches an existing grammar rule name.
+
+   Example::
+
+       // This will cause an error:
+       constant_definition_stmt : CONST data_type=data_type assignment=variable_assignment_stmt ;
+       //                              ^^^^^^^^^ label name conflicts with rule name
+       
+       // Correct approach:
+       constant_definition_stmt : CONST type=data_type assignment=variable_assignment_stmt ;
+
 Best Practices
 --------------
 
@@ -211,6 +239,8 @@ Best Practices
 3. Use ``+=`` for elements that can repeat
 4. Use ``#`` labels for alternatives that need different processing logic
 5. Don't overuse labels - only add them where they improve clarity
+6. Avoid Python keywords and existing grammar rule names when choosing label names
+7. Document any keyword conflicts with comments in both grammar and visitor code
 
 Abstract Syntax Tree (AST)
 ==========================

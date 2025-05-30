@@ -503,15 +503,14 @@ class ASTBuilderVisitor(GeLBVisitor):
             self,
             ctx: GeLBParser.Constant_definition_stmtContext
     ):
-        list_of_children_sub_asts = self.get_list_of_children_sub_asts(ctx)
-        data_type = list_of_children_sub_asts[0]
-        name = list_of_children_sub_asts[1].lhs
-        value = list_of_children_sub_asts[1].rhs
+        # NOTE: 'type' label becomes 'type_' due to Python keyword conflict
+        data_type = self.visit(ctx.type_)
+        assignment = self.visit(ctx.assignment)
         return ConstantDefinitionStmt_N(
             code_range_from_ctx(ctx),
             data_type,
-            name,
-            value
+            assignment.lhs,
+            assignment.rhs
         )
 
     # Visit a parse tree produced by GeLBParser#variable_assignment_stmt.
