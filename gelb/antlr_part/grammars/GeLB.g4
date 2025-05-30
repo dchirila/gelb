@@ -201,19 +201,19 @@ BRACKET_CLOSE ;
    the code also become easier to understand).
  */
 array_literal_4d : CURLY_OPEN
-    array_literal_3d (COMMA array_literal_3d)+
+    elements+=array_literal_3d (COMMA elements+=array_literal_3d)+
 CURLY_CLOSE ;
 
 array_literal_3d : CURLY_OPEN
-    array_literal_2d (COMMA array_literal_2d)+
+    elements+=array_literal_2d (COMMA elements+=array_literal_2d)+
 CURLY_CLOSE ;
 
 array_literal_2d : CURLY_OPEN
-    array_literal_1d (COMMA array_literal_1d)+
+    elements+=array_literal_1d (COMMA elements+=array_literal_1d)+
 CURLY_CLOSE ;
 
 array_literal_1d : CURLY_OPEN
-    expr (COMMA expr)+
+    elements+=expr (COMMA elements+=expr)+
 CURLY_CLOSE ;
 
 variable_assignment_stmt : identifier OP_ASSIGN

@@ -596,40 +596,40 @@ class ASTBuilderVisitor(GeLBVisitor):
             self,
             ctx: GeLBParser.Array_literal_4dContext
     ):
-        return Array4DLiteral_N(
-            code_range_from_ctx(ctx),
-            self.get_list_of_children_sub_asts(ctx)
-        )
+        elements = List_N(code_range_from_ctx(ctx))
+        for elem in ctx.elements:
+            elements.append(self.visit(elem))
+        return Array4DLiteral_N(code_range_from_ctx(ctx), elements)
 
     # Visit a parse tree produced by GeLBParser#array_literal_3d.
     def visitArray_literal_3d(
             self,
             ctx: GeLBParser.Array_literal_3dContext
     ):
-        return Array3DLiteral_N(
-            code_range_from_ctx(ctx),
-            self.get_list_of_children_sub_asts(ctx)
-        )
+        elements = List_N(code_range_from_ctx(ctx))
+        for elem in ctx.elements:
+            elements.append(self.visit(elem))
+        return Array3DLiteral_N(code_range_from_ctx(ctx), elements)
 
     # Visit a parse tree produced by GeLBParser#array_literal_2d.
     def visitArray_literal_2d(
             self,
             ctx: GeLBParser.Array_literal_2dContext
     ):
-        return Array2DLiteral_N(
-            code_range_from_ctx(ctx),
-            self.get_list_of_children_sub_asts(ctx)
-        )
+        elements = List_N(code_range_from_ctx(ctx))
+        for elem in ctx.elements:
+            elements.append(self.visit(elem))
+        return Array2DLiteral_N(code_range_from_ctx(ctx), elements)
 
     # Visit a parse tree produced by GeLBParser#array_literal_1d.
     def visitArray_literal_1d(
             self,
             ctx: GeLBParser.Array_literal_1dContext
     ):
-        return Array1DLiteral_N(
-            code_range_from_ctx(ctx),
-            self.get_list_of_children_sub_asts(ctx)
-        )
+        elements = List_N(code_range_from_ctx(ctx))
+        for elem in ctx.elements:
+            elements.append(self.visit(elem))
+        return Array1DLiteral_N(code_range_from_ctx(ctx), elements)
 
     # Visit a parse tree produced by GeLBParser#identifier.
     def visitIdentifier(
