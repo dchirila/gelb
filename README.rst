@@ -332,6 +332,13 @@ important changes are listed below:
   * `const array[int, {2, 2}] I = {{1, 0}, {0, 1}};` to declare and initialize a
     constant array of integers.
 
+* The syntax for declaring array types has changed from angle brackets to square
+  brackets. In the thesis, array types were declared as `array<element_type, shape>`,
+  but this conflicted with the less-than operator `<` when comparison operators were
+  added to the language. The new syntax uses square brackets: `array[element_type, shape]`.
+  This change makes the parser unambiguous and follows the convention used by many
+  other programming languages for array declarations.
+
 
 Upcoming features
 =================

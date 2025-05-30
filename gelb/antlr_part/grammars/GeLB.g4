@@ -72,7 +72,7 @@ gauge_block :
     PAREN_OPEN                    // (
     // Gauges only have outputs
     OUT OP_ASSIGN CURLY_OPEN      // out = {
-    variable_declaration_stmt+    // int x1; array<real64, 3> x2;
+    variable_declaration_stmt+    // int x1; array[real64, 3] x2;
     CURLY_CLOSE PAREN_CLOSE       // })
     // END :: Interface //
     CURLY_OPEN
