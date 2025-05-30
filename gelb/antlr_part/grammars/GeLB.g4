@@ -10,6 +10,10 @@ import CommonLexerRules;
 
        Later, in ASTBuilderVisitor.visitGelb_program, we enforce some rules,
        e.g. that the number of occurrences of each block-type is valid.
+       
+ NOTE: This grammar uses ANTLR4 labels (= and +=) to make the generated parser
+       more readable and the visitor code cleaner. For an explanation of ANTLR4
+       labels, see docs/gelb_developer_manual.rst section "ANTLR4 Labels".
  */
 gelb_program : // Valid # of occurrences (as interval)
 	( set_simulation_description_stmt  // [1, 1]
@@ -115,28 +119,28 @@ paint_nodes_stmt : NODES BRACKET_OPEN  // nodes[
     identifier SEMICOLON ;            // BULK ;
 
 lattice_out_selection_assignment_stmt :
-    rect_sel_of_lattice_out_dfs
+    lhs=rect_sel_of_lattice_out_dfs
     OP_ASSIGN
-    expr
+    rhs=expr
     SEMICOLON ;
 
 rect_sel_of_lattice_out_dfs:
-    identifier DOT OUT
+    lattice_name=identifier DOT OUT
     BRACKET_OPEN
-    coords_range (COMMA coords_range)*  // spatial ranges
-    lattice_dfs_range
+    spatial_ranges+=coords_range (COMMA spatial_ranges+=coords_range)*  // spatial ranges
+    dfs_range=lattice_dfs_range
     BRACKET_CLOSE ;
 
 rect_sel_of_lattice_in_dfs:
-    identifier DOT IN
+    lattice_name=identifier DOT IN
     BRACKET_OPEN
-    coords_range (COMMA coords_range)*  // spatial ranges
-    lattice_dfs_range
+    spatial_ranges+=coords_range (COMMA spatial_ranges+=coords_range)*  // spatial ranges
+    dfs_range=lattice_dfs_range
     BRACKET_CLOSE ;
 
 rect_sel_of_array_elems :
-    identifier BRACKET_OPEN
-    coords_range (COMMA coords_range)*
+    array_name=identifier BRACKET_OPEN
+    ranges+=coords_range (COMMA ranges+=coords_range)*
     BRACKET_CLOSE ;
 
 /*

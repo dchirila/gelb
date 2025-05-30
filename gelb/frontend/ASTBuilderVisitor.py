@@ -428,8 +428,8 @@ class ASTBuilderVisitor(GeLBVisitor):
             self,
             ctx: GeLBParser.Lattice_out_selection_assignment_stmtContext
     ):
-        lhs = self.visit(ctx.rect_sel_of_lattice_out_dfs())
-        rhs = self.visit(ctx.expr())
+        lhs = self.visit(ctx.lhs)
+        rhs = self.visit(ctx.rhs)
         return LatticeOutSelectionAssignmentStmt_N(
             code_range_from_ctx(ctx),
             lhs, rhs
@@ -440,11 +440,11 @@ class ASTBuilderVisitor(GeLBVisitor):
             self,
             ctx: GeLBParser.Rect_sel_of_lattice_in_dfsContext
     ):
-        name = self.visit(ctx.identifier())
-        ranges = List_N(code_range_from_ctx(ctx.coords_range()))
-        for r in ctx.coords_range():
+        name = self.visit(ctx.lattice_name)
+        ranges = List_N(code_range_from_ctx(ctx))
+        for r in ctx.spatial_ranges:
             ranges.append(self.visit(r))
-        ranges.append(self.visit(ctx.lattice_dfs_range()))
+        ranges.append(self.visit(ctx.dfs_range))
 
         return RectSelOfLatticeInDFs_N(
             code_range_from_ctx(ctx),
@@ -457,11 +457,11 @@ class ASTBuilderVisitor(GeLBVisitor):
             self,
             ctx: GeLBParser.Rect_sel_of_lattice_out_dfsContext
     ):
-        name = self.visit(ctx.identifier())
-        ranges = List_N(code_range_from_ctx(ctx.coords_range()))
-        for r in ctx.coords_range():
+        name = self.visit(ctx.lattice_name)
+        ranges = List_N(code_range_from_ctx(ctx))
+        for r in ctx.spatial_ranges:
             ranges.append(self.visit(r))
-        ranges.append(self.visit(ctx.lattice_dfs_range()))
+        ranges.append(self.visit(ctx.dfs_range))
         return RectSelOfLatticeOutDFs_N(
             code_range_from_ctx(ctx),
             name,
@@ -473,9 +473,9 @@ class ASTBuilderVisitor(GeLBVisitor):
             self,
             ctx: GeLBParser.Rect_sel_of_array_elemsContext
     ):
-        name = self.visit(ctx.identifier())
-        ranges = List_N(code_range_from_ctx(ctx.coords_range()))
-        for r in ctx.coords_range():
+        name = self.visit(ctx.array_name)
+        ranges = List_N(code_range_from_ctx(ctx))
+        for r in ctx.ranges:
             ranges.append(self.visit(r))
         return RectSelOfArrayElems_N(
             code_range_from_ctx(ctx),

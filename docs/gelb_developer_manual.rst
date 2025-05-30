@@ -106,6 +106,112 @@ Development Environment
       rst2html FILE.rst FILE.html
 
 
+ANTLR4 Labels
+=============
+
+This section explains ANTLR4 labels, which are used throughout the GeLB grammar to make the generated parser code more readable and the visitor implementation cleaner.
+
+What are ANTLR4 Labels?
+-----------------------
+
+ANTLR4 labels are annotations you can add to grammar rules to give names to rule elements. They make it easier to access specific parts of a parsed rule in your visitor or listener code.
+
+Types of Labels
+---------------
+
+1. **Simple Labels (=)**
+   
+   Used to label a single element in a rule::
+
+       variable_assignment_stmt :
+           lhs=identifier OP_ASSIGN rhs=expr SEMICOLON ;
+
+   In the visitor, you can access these as ``ctx.lhs`` and ``ctx.rhs`` instead of ``ctx.identifier()`` and ``ctx.expr()``.
+
+2. **List Labels (+=)**
+   
+   Used when an element can appear multiple times::
+
+       rect_sel_of_array_elems :
+           array_name=identifier BRACKET_OPEN
+           ranges+=coords_range (COMMA ranges+=coords_range)*
+           BRACKET_CLOSE ;
+
+   The ``+=`` operator collects all matching elements into a list. In the visitor, ``ctx.ranges`` will be a list containing all ``coords_range`` elements.
+
+3. **Alternative Labels (#)**
+   
+   Used to label alternatives in a rule::
+
+       coords_range : low=expr                  # singleElementRange
+                    | low=expr COLON high=expr  # lowhighBoundRange
+                    | low=expr COLON            # lowBoundRange
+                    |          COLON high=expr  # highBoundRange
+                    |          COLON            # allElementsRange
+                    ;
+
+   ANTLR generates separate visitor methods for each alternative: ``visitSingleElementRange()``, ``visitLowhighBoundRange()``, etc.
+
+Benefits of Using Labels
+------------------------
+
+1. **More Readable Code**: Instead of ``ctx.expr(0)`` and ``ctx.expr(1)``, you can use ``ctx.left`` and ``ctx.right``.
+
+2. **Self-Documenting Grammar**: Labels make the grammar easier to understand.
+
+3. **Type Safety**: With labels, you know exactly what type to expect.
+
+4. **Simplified Visitor Code**: Compare these two approaches:
+
+   Without labels::
+
+       def visitVariable_assignment_stmt(self, ctx):
+           lhs = self.visit(ctx.identifier())
+           rhs = self.visit(ctx.expr())
+
+   With labels::
+
+       def visitVariable_assignment_stmt(self, ctx):
+           lhs = self.visit(ctx.lhs)
+           rhs = self.visit(ctx.rhs)
+
+Examples from GeLB Grammar
+--------------------------
+
+1. **Assignment Statement**::
+
+       lattice_out_selection_assignment_stmt :
+           lhs=rect_sel_of_lattice_out_dfs
+           OP_ASSIGN
+           rhs=expr
+           SEMICOLON ;
+
+2. **Array Selection with List Labels**::
+
+       rect_sel_of_lattice_in_dfs:
+           lattice_name=identifier DOT IN
+           BRACKET_OPEN
+           spatial_ranges+=coords_range (COMMA spatial_ranges+=coords_range)*
+           dfs_range=lattice_dfs_range
+           BRACKET_CLOSE ;
+
+3. **Expression Alternatives**::
+
+       expr : PAREN_OPEN expr PAREN_CLOSE                # parensExpr
+            | left=expr op=(OP_MUL | OP_DIV) right=expr  # infixExpr
+            | left=expr OP_AND right=expr                 # logicalAndExpr
+            | value=NON_NEGATIVE_INT_LITERAL              # nonNegIntLiteralExpr
+            ;
+
+Best Practices
+--------------
+
+1. Use descriptive label names that indicate the role of the element
+2. Be consistent with naming across similar rules
+3. Use ``+=`` for elements that can repeat
+4. Use ``#`` labels for alternatives that need different processing logic
+5. Don't overuse labels - only add them where they improve clarity
+
 Abstract Syntax Tree (AST)
 ==========================
 
