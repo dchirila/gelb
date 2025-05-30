@@ -36,6 +36,11 @@ CURLY_CLOSE ;
 
 lattices_block : LATTICES CURLY_OPEN
     // NOTE: a program needs at least one lattice!
+    // DESIGN DECISION: Constants are not allowed in the lattices block.
+    // All constants must be defined either:
+    // - In the global_constants_block (for global constants)
+    // - Inside initializer/dynamic/gauge blocks (for local constants)
+    // This keeps the lattices block focused solely on lattice declarations.
 	lattice_insta_stmt+
 CURLY_CLOSE ;
 
