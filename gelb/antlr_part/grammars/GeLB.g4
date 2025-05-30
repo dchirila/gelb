@@ -223,8 +223,8 @@ array_literal_1d : CURLY_OPEN
     elements+=expr (COMMA elements+=expr)+
 CURLY_CLOSE ;
 
-variable_assignment_stmt : identifier OP_ASSIGN
-    expr
+variable_assignment_stmt : lhs=identifier OP_ASSIGN
+    rhs=expr
 SEMICOLON ;
 
 identifier : ID ;

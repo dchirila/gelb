@@ -518,11 +518,10 @@ class ASTBuilderVisitor(GeLBVisitor):
             self,
             ctx: GeLBParser.Variable_assignment_stmtContext
     ):
-        list_of_children_sub_asts = self.get_list_of_children_sub_asts(ctx)
         return VariableAssignmentStmt_N(
             code_range_from_ctx(ctx),
-            list_of_children_sub_asts[0],
-            list_of_children_sub_asts[1]
+            self.visit(ctx.lhs),
+            self.visit(ctx.rhs)
         )
 
     # Visit a parse tree produced by GeLBParser#variable_declaration_stmt.
