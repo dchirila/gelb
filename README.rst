@@ -359,3 +359,10 @@ Upcoming features
     arbitrary conditions (which produce a `bool` result, based on expressions
     involving the node coordinates); this would allow us to specify shapes
     such as spheres and cylinders within the GeLB files
+
+* Assignment statements:
+
+  * implement `array_selection_assignment_stmt` to allow direct assignment to
+    array element selections (e.g., `my_array[0:10, 5] = 42;`). This would
+    complement the existing `variable_assignment_stmt` and 
+    `lattice_out_selection_assignment_stmt`
