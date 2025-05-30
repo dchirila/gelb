@@ -581,14 +581,24 @@ class ASTBuilderVisitor(GeLBVisitor):
             self,
             ctx: GeLBParser.Array_data_typeContext
     ):
-        list_of_children_sub_asts = self.get_list_of_children_sub_asts(ctx)
         return ArrayDataType_N(
             code_range_from_ctx(ctx),
-            # should contain the element data-type
-            list_of_children_sub_asts[0],
-            # should contain the shape
-            list_of_children_sub_asts[1]
+            self.visit(ctx.element_type),
+            self.visit(ctx.shape)
         )
+
+    # Visit a parse tree produced by GeLBParser#array_shape.
+    def visitArray_shape(
+            self,
+            ctx: GeLBParser.Array_shapeContext
+    ):
+        # array_shape can be either array_literal_1d or expr
+        if ctx.array_literal_1d():
+            return self.visit(ctx.array_literal_1d())
+        elif ctx.expr():
+            return self.visit(ctx.expr())
+        else:
+            assert False, "Unknown array_shape alternative"
 
     # Visit a parse tree produced by GeLBParser#array_literal_4d.
     def visitArray_literal_4d(

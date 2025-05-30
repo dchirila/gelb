@@ -13,7 +13,7 @@ def test_1d_array_type():
     assert result == (
         "(array_data_type array [ "
             "(scalar_data_type (scalar_int_data_type int64)) , "
-            "(expr 3) "
+            "(array_shape (expr 3)) "
         "])")
 
 def test_2d_array_type():
@@ -25,5 +25,5 @@ def test_2d_array_type():
     assert result == (
             "(array_data_type array [ "
             "(scalar_data_type (scalar_real_data_type real64)) , "
-            "(array_literal_1d { (expr 2) , (expr 3) }) "
+            "(array_shape (array_literal_1d { (expr 2) , (expr 3) })) "
             "])")

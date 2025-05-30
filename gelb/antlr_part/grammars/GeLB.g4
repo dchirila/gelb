@@ -187,14 +187,12 @@ scalar_real_data_type : REAL64 | REAL32 | REAL16 | REAL ;
  the lower-dimensional data-type that does the job.
 */
 array_data_type : ARRAY BRACKET_OPEN
-    scalar_data_type
+    element_type=scalar_data_type
     COMMA
-    /* shape is (depending on dimensionality):
-       - a one-dimensional array (for dimensionality >= 2) or
-       - a expr (for dimensionality == 1)
-     */
-    (array_literal_1d | expr)
+    shape=array_shape
 BRACKET_CLOSE ;
+
+array_shape : array_literal_1d | expr ;
 
 /* Fixed-dimensionality array literals
    REFs: - Sec 2.4 @A4-book
