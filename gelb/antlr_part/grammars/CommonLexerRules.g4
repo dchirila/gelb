@@ -95,6 +95,11 @@ DOT : '.' ;
 
 //                     BEGIN: Scalar literals                     //
 // Numbers
+// DESIGN DECISION: Both integer and real literals are defined as NON_NEGATIVE only.
+// Negative numbers are created using the unary minus operator in the parser.
+// This avoids lexer ambiguity (e.g., "x-3" vs "x -3") and follows standard
+// compiler design practices used by C, Java, Python, etc.
+// Example: -3.14 is parsed as (UnaryMinus (RealLiteral 3.14))
 // ... real
 NON_NEGATIVE_REAL_LITERAL : [0-9]+ DOT [0-9]* EXPONENT?
                           | DOT [0-9]+ EXPONENT?

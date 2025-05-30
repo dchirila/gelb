@@ -232,6 +232,8 @@ expr : PAREN_OPEN expr PAREN_CLOSE                # parensExpr
      | left=expr OP_AND right=expr                 # logicalAndExpr
      | left=expr OP_OR right=expr                  # logicalOrExpr
      // BEGIN :: literals //
+     // NOTE: Negative numbers are handled via unary minus (see unaryExpr above)
+     // Example: -3.14 becomes (UnaryMinusExpr (RealLiteral 3.14))
      | value=NON_NEGATIVE_REAL_LITERAL     # nonNegRealLiteralExpr
      | value=NON_NEGATIVE_INT_LITERAL      # nonNegIntLiteralExpr
      | value=BOOL_LITERAL                  # boolLiteralExpr

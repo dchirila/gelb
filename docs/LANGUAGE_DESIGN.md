@@ -80,6 +80,36 @@ simulation_description("2D Taylor-Green vortex simulation");
 // description = "some text";  // Would cause parser error
 ```
 
+## Numeric Literals
+
+### Non-negative literals only
+
+**Decision**: The lexer only recognizes non-negative integer and real literals. Negative numbers are created using the unary minus operator.
+
+**Rationale**:
+- **Avoids lexer ambiguity**: In expressions like `x-3`, it's clear this is `x minus 3`, not `x followed by -3`
+- **Standard practice**: Used by C, Java, Python, and most other languages
+- **Simpler lexer**: No need for complex lookahead rules
+- **Consistent operator handling**: Unary minus works the same as other unary operators
+
+**Implementation**:
+- Lexer tokens: `NON_NEGATIVE_REAL_LITERAL` and `NON_NEGATIVE_INT_LITERAL`
+- Parser handles negation through `unaryExpr` rule
+- `-3.14` is parsed as `(UnaryMinusExpr (RealLiteral 3.14))`
+
+**Examples**:
+```gelb
+// These are all valid:
+x = 3.14;        // Positive literal
+y = -3.14;       // Unary minus applied to positive literal
+z = x - 3.14;    // Binary minus (subtraction)
+w = -(a + b);    // Unary minus applied to expression
+
+// AST representation:
+// -3.14 becomes: (UnaryMinusExpr (RealLiteral 3.14))
+// x-3.14 becomes: (Sub (Identifier x) (RealLiteral 3.14))
+```
+
 ## Assignment Statements
 
 ### Array selection assignments (Future consideration)
