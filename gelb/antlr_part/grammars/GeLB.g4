@@ -55,10 +55,10 @@ lattices_block : LATTICES CURLY_OPEN
 CURLY_CLOSE ;
 
 lattice_insta_stmt :                   // Example:
-    LATTICE identifier PAREN_OPEN        // lattice f(
- 	expr                                 //   d=2,
- 	COMMA expr                           //   q=9,
- 	COMMA scalar_data_type               //   df_type=int64,
+    LATTICE name=identifier PAREN_OPEN   // lattice f(
+ 	d=expr                               //   d=2,
+ 	COMMA q=expr                         //   q=9,
+ 	COMMA df_type=scalar_data_type       //   df_type=int64,
  	PAREN_CLOSE SEMICOLON ;              // );
 
 // TODO

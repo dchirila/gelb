@@ -211,16 +211,12 @@ class ASTBuilderVisitor(GeLBVisitor):
             self,
             ctx: GeLBParser.Lattice_insta_stmtContext
     ):
-        name = self.visit(ctx.identifier())
-        d = self.visitExpr(ctx.expr()[0])
-        q = self.visitExpr(ctx.expr()[1])
-        df_type = self.visit(ctx.scalar_data_type())
         return LatticeInstaStmt_N(
             code_range_from_ctx(ctx),
-            name,
-            d,
-            q,
-            df_type
+            self.visit(ctx.name),
+            self.visit(ctx.d),
+            self.visit(ctx.q),
+            self.visit(ctx.df_type)
         )
 
     # Visit a parse tree produced by GeLBParser#singleElementRange.
