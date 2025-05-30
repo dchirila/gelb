@@ -263,81 +263,22 @@ The GeLB framework was first mentioned in my PhD thesis
 TODO:insert-url-to-thesis (Chapter 4). In case you read that discussion and
 it piqued your interest, I am honored and humbled. In that write-up, I
 briefly described the most important concepts of the language, which have
-remained stable. That said, GeLB has evolved slightly from that initial
-implementation (used for generating the results in my thesis). The most
-important changes are listed below:
+remained stable. 
 
-* The first obvious change concerns the naming of the text files containing
-  user-written code to be processed by the GeLB compiler. In the thesis, I
-  was referring to these as "GeLB Description (GD) programs/files". However,
-  it turns out that there is no reason to burden the users with two acronyms
-  ("GeLB" and "GD"). Also, the file extension `.gd` is already taken by other
-  programming languages, which can create confusion. So, the decision has
-  been made to replace all mentions of "GD" with "GeLB" within the
-  documentation. Accordingly, the documentation now refers to "GeLB
-  programs", which are stored in "GeLB files", which have the `.gelb` file
-  extension. It is a trivial change which, however, hopefully saves you (and
-  me) some time later.
+That said, GeLB has evolved from that initial implementation (used for 
+generating the results in my thesis). For a comprehensive list of design 
+decisions and changes from the thesis version, please see 
+`docs/LANGUAGE_DESIGN.md <docs/LANGUAGE_DESIGN.md>`_.
 
-* Programs no longer need to include a `gelb_version` statement.
-  The idea behind this was to be able to specify which version of the language
-  we are using.
-  However, since **we do not plan to remove** any features from the language (at
-  least, for the foreseeable future), coercing users to always type this is just
-  pointless.
-  So, removing this feature simplifies the compiler a little and, most
-  importantly, it means that users have one less thing to worry about.
-  A situation that *will* probably occur is that users who have installed an
-  older version of `gelbc` attempt to use newer language features.
-  For such scenarios, it is good to give users a warning, if they use an older
-  version of the compiler.
+The most notable changes include:
+* Using "GeLB" consistently instead of "GD" (GeLB Description)
+* Removing the `gelb_version` and `simulation_name` statements
+* Changing array syntax from angle brackets to square brackets
+* Allowing multiple initializers per node-class
+* Moving lattice size/periodicity specifications to the lattices block
 
-  TODO: in the compiler, check whether a newer version of the compiler was
-  published.
-
-* The `simulation_name` statement is no longer required (because the name of
-  the GeLB file is now used as the simulation name). This reduces the amount of
-  boilerplate code users need to write, and also makes the language more consistent.
-
-* In the `geometry` block, only rectangular node-selections are allowed, using
-  the `nodes` statement (which is equivalent to the `node_range` statements in
-  the thesis). The `node` statement is not needed (because it is just a special
-  case of `nodes`), and the `read_geometry_from_file` statement needs more
-  testing (will be added back soon).
-
-* To avoid imposing one more constraint on the users, it is now possible to
-  specify more than one `initializer` for each node-class. In the thesis, only
-  one initializer was allowed for each node-class.
-
-* The `size` and `periodicity` of the lattice(s) are now specified during
-  lattice-instantiation (inside the `lattices` block). In the thesis, these
-  were specified within the `geometry` block.
-
-* The `gauge` out-specs and `function` {in,out}-specs are now given using
-  parentheses (instead of square brackets), to bring the syntax closer to
-  that of other programming languages.
-
-* When specifying size & periodicity of the lattice(s), I think it is more
-  natural to specify these during lattice-instantiation, so that we can have
-  two lattices with different sizes & periodicity traits.
-
-* The syntax for declaring *constant types* has changed slightly. Whereas in the
-  thesis I was relying on the `_const` suffix, which was appended to the scalar
-  data-types, in the final version of the language the `const` keyword is used,
-  to make the syntax more natural to some programmers. Therefore, we use:
-
-  * `const real pi = 3.14;` (instead of `real_const pi = 3.14;`) to declare and
-    initialize a constant real value and
-
-  * `const array[int, {2, 2}] I = {{1, 0}, {0, 1}};` to declare and initialize a
-    constant array of integers.
-
-* The syntax for declaring array types has changed from angle brackets to square
-  brackets. In the thesis, array types were declared as `array<element_type, shape>`,
-  but this conflicted with the less-than operator `<` when comparison operators were
-  added to the language. The new syntax uses square brackets: `array[element_type, shape]`.
-  This change makes the parser unambiguous and follows the convention used by many
-  other programming languages for array declarations.
+TODO: in the compiler, check whether a newer version of the compiler was
+published.
 
 
 Upcoming features
