@@ -222,6 +222,22 @@ identifier : ID ;
    - allow expressions involving built-in functions
    - allow expressions involving user-defined functions
  */
+/* OPERATOR PRECEDENCE (highest to lowest):
+   1. Parentheses, literals, identifiers, array/lattice selections
+   2. Power (^) - right associative
+   3. Unary operators (+, -, !)
+   4. Multiplication/Division (*, /)
+   5. Addition/Subtraction (+, -)
+   6. Comparison (<, >, <=, >=)
+   7. Equality (==, !=)
+   8. Logical AND (&&)
+   9. Logical OR (||)
+   
+   This precedence matches standard conventions from C/C++, Python, Java, and FORTRAN.
+   Examples: 2 + 3 * 4 = 14 (not 20)
+            x > 5 && y < 10 means (x > 5) && (y < 10)
+            a || b && c means a || (b && c)
+ */
 expr : PAREN_OPEN expr PAREN_CLOSE                # parensExpr
      | <assoc=right> left=expr OP_POW right=expr  # powExpr
      | op=(OP_ADD | OP_SUB | OP_NOT) expr         # unaryExpr

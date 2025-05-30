@@ -241,6 +241,46 @@ const array[int, {2, 2}] I = {{1, 0}, {0, 1}};
 
 **Implementation note**: See GeLB.g4 line 7 comment.
 
+## Expression Evaluation
+
+### Operator precedence
+
+**Decision**: Follow standard operator precedence from mainstream programming languages.
+
+**Precedence order** (highest to lowest):
+1. Parentheses, literals, identifiers, array/lattice selections
+2. Power (`^`) - right associative
+3. Unary operators (`+`, `-`, `!`)
+4. Multiplication/Division (`*`, `/`)
+5. Addition/Subtraction (`+`, `-`)
+6. Comparison (`<`, `>`, `<=`, `>=`)
+7. Equality (`==`, `!=`)
+8. Logical AND (`&&`)
+9. Logical OR (`||`)
+
+**Rationale**:
+- Matches conventions from C/C++, Python, Java, and FORTRAN
+- Follows standard mathematical precedence
+- Minimizes surprises for users coming from other languages
+- No need to memorize GeLB-specific rules
+
+**Examples**:
+```gelb
+// Mathematical precedence
+2 + 3 * 4        // = 14 (not 20)
+2 ^ 3 ^ 2        // = 512 (right associative: 2^(3^2) = 2^9)
+
+// Comparison before logical
+x > 5 && y < 10  // = (x > 5) && (y < 10)
+
+// AND before OR
+a || b && c      // = a || (b && c)
+
+// Unary has high precedence
+-x ^ 2           // = -(x^2), not (-x)^2
+!a && b          // = (!a) && b
+```
+
 ---
 
 *This document will be updated as new design decisions are made or existing ones are clarified.*
