@@ -165,7 +165,7 @@ class ASTBuilderVisitor(GeLBVisitor):
             )
         return SetSimulationDescriptionStmt_N(
             code_range_from_ctx(ctx),
-            StringLiteral_N(None, ctx.STRING().getText())
+            StringLiteral_N(None, ctx.STRING_LITERAL().getText())
         )
 
     # Visit a parse tree produced by GeLBParser#global_constants_block.

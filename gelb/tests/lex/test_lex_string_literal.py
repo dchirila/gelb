@@ -25,7 +25,7 @@ def test_empty_string():
     tokens = get_tokens(test_string)
     # Assert
     assert len(tokens) == 1
-    assert tokens[0].type == GeLBLexer.STRING
+    assert tokens[0].type == GeLBLexer.STRING_LITERAL
     assert tokens[0].text == '""'
 
 
@@ -36,7 +36,7 @@ def test_simple_string():
     tokens = get_tokens(test_string)
     # Assert
     assert len(tokens) == 1
-    assert tokens[0].type == GeLBLexer.STRING
+    assert tokens[0].type == GeLBLexer.STRING_LITERAL
     assert tokens[0].text == '"Hello, World!"'
 
 
@@ -47,7 +47,7 @@ def test_string_with_single_quotes():
     tokens = get_tokens(test_string)
     # Assert
     assert len(tokens) == 1
-    assert tokens[0].type == GeLBLexer.STRING
+    assert tokens[0].type == GeLBLexer.STRING_LITERAL
     assert tokens[0].text == '"Don\'t worry, be happy!"'
 
 
@@ -58,7 +58,7 @@ def test_multiline_string():
     tokens = get_tokens(test_string)
     # Assert
     assert len(tokens) == 1
-    assert tokens[0].type == GeLBLexer.STRING
+    assert tokens[0].type == GeLBLexer.STRING_LITERAL
     assert tokens[0].text == '"Line 1\nLine 2\nLine 3"'
 
 
@@ -69,7 +69,7 @@ def test_string_with_special_chars():
     tokens = get_tokens(test_string)
     # Assert
     assert len(tokens) == 1
-    assert tokens[0].type == GeLBLexer.STRING
+    assert tokens[0].type == GeLBLexer.STRING_LITERAL
     assert tokens[0].text == '"Special chars: @#$%^&*()[]{}|,./<>?`~"'
 
 
@@ -80,7 +80,7 @@ def test_string_with_backslash():
     tokens = get_tokens(test_string)
     # Assert
     assert len(tokens) == 1
-    assert tokens[0].type == GeLBLexer.STRING
+    assert tokens[0].type == GeLBLexer.STRING_LITERAL
     assert tokens[0].text == '"C:\\Program Files\\App"'
 
 
@@ -90,8 +90,8 @@ def test_invalid_string_missing_end_quote():
     # Act
     tokens = get_tokens(test_string)
     # Assert
-    # Since the string is not properly closed, it should not be recognized as a STRING token
-    assert not any(t.type == GeLBLexer.STRING for t in tokens)
+    # Since the string is not properly closed, it should not be recognized as a STRING_LITERAL token
+    assert not any(t.type == GeLBLexer.STRING_LITERAL for t in tokens)
 
 
 def test_invalid_string_missing_start_quote():
@@ -100,8 +100,8 @@ def test_invalid_string_missing_start_quote():
     # Act
     tokens = get_tokens(test_string)
     # Assert
-    # Since the string doesn't start with a quote, it should not be recognized as a STRING token
-    assert not any(t.type == GeLBLexer.STRING for t in tokens)
+    # Since the string doesn't start with a quote, it should not be recognized as a STRING_LITERAL token
+    assert not any(t.type == GeLBLexer.STRING_LITERAL for t in tokens)
 
 
 def test_invalid_string_single_quotes():
@@ -110,5 +110,5 @@ def test_invalid_string_single_quotes():
     # Act
     tokens = get_tokens(test_string)
     # Assert
-    # Since GeLB only supports double-quoted strings, this should not be recognized as a STRING token
-    assert not any(t.type == GeLBLexer.STRING for t in tokens)
+    # Since GeLB only supports double-quoted strings, this should not be recognized as a STRING_LITERAL token
+    assert not any(t.type == GeLBLexer.STRING_LITERAL for t in tokens)

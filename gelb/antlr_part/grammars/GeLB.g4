@@ -25,7 +25,7 @@ gelb_program : // Valid # of occurrences (as interval)
 	EOF ;
 
 set_simulation_description_stmt : SIMULATION_DESCRIPTION PAREN_OPEN
-    STRING
+    STRING_LITERAL
 PAREN_CLOSE SEMICOLON ;
 
 // When this optional block is present...
@@ -234,6 +234,9 @@ expr : PAREN_OPEN expr PAREN_CLOSE                # parensExpr
      | array_literal_3d  # arrayLiteralExpr
      | array_literal_2d  # arrayLiteralExpr
      | array_literal_1d  # arrayLiteralExpr
+     // NOTE: STRING_LITERAL is intentionally excluded from expressions
+     // to keep the language simpler. Strings are only used in specific
+     // contexts like simulation description.
      // END :: literals //
      | rect_sel_of_lattice_in_dfs  # rectSelOfLatticeInDFsExpr
      | rect_sel_of_array_elems     # rectSelOfArrayElemsExpr

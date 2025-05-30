@@ -116,7 +116,7 @@ fragment FALSE : 'false' ;
           strings in GeLB always use DOUBLE-quotes. Single-quotes can appear
           inside strings without escaping.
           */
-STRING : '"' (~["])* '"' ;
+STRING_LITERAL : '"' (~["])* '"' ;
 //                     END: Scalar literals                     //
 
 // Comments (to IGNORE)
