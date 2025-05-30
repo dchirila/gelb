@@ -32,16 +32,6 @@
             "visualParseTree": true
         },
         {
-            "name": "Debug ANTLR4 grammar (lattice_assignment_stmt)",
-            "type": "antlr-debug",
-            "request": "launch",
-            "input": "gelb/antlr4_part/grammars/tmp_input.txt",
-            "grammar": "gelb/antlr4_part/grammars/GeLB.g4",
-            "startRule": "lattice_assignment_stmt",
-            "printParseTree": true,
-            "visualParseTree": true
-        },
-        {
             "name": "Debug ANTLR4 grammar (dfs_selection)",
             "type": "antlr-debug",
             "request": "launch",
