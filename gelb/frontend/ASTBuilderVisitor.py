@@ -529,10 +529,11 @@ class ASTBuilderVisitor(GeLBVisitor):
             self,
             ctx: GeLBParser.Variable_declaration_stmtContext
     ):
+        # NOTE: 'type' label becomes 'type_' due to Python keyword conflict
         return VariableDeclarationStmt_N(
             code_range_from_ctx(ctx),
-            self.visit(ctx.data_type()),
-            self.visit(ctx.identifier())
+            self.visit(ctx.type_),
+            self.visit(ctx.name)
         )
 
     # Visit a parse tree produced by GeLBParser#scalar_bool_data_type.

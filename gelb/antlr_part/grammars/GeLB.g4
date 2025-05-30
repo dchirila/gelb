@@ -166,7 +166,8 @@ coords_range : low=expr                  # singleElementRange
 // NOTE: Label 'type' becomes 'type_' in Python due to keyword conflict
 constant_definition_stmt : CONST type=data_type assignment=variable_assignment_stmt ;
 
-variable_declaration_stmt : data_type identifier SEMICOLON ;
+// NOTE: Label 'type' becomes 'type_' in Python due to keyword conflict
+variable_declaration_stmt : type=data_type name=identifier SEMICOLON ;
 
 data_type : scalar_data_type
           | array_data_type ;
