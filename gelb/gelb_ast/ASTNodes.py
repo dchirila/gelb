@@ -52,6 +52,8 @@ class Node_N(ABC):
         # recursive descent
         for child_name in self.get_children_names():
             child = getattr(self, child_name)
+            if child is None:  # Handle None fields (e.g., in Range_N)
+                continue
             if isinstance(child, Identifier_N):
                 if child.name == symbol_name:
                     self.__setattr__(child_name, replacement)
@@ -67,7 +69,7 @@ class Node_N(ABC):
         which are themselves AST Nodes.
         """
         for child in self.get_children():
-            if isinstance(child, Node_N):
+            if child is not None and isinstance(child, Node_N):
                 return False
         return True
 

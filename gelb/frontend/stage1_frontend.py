@@ -25,6 +25,7 @@ from gelb.frontend.NodeClassesValidationVisitor import NodeClassesValidationVisi
 from gelb.frontend.GeometryInitialValidationVisitor import GeometryInitialValidationVisitor
 from gelb.frontend.ConstantsResolverVisitor import ConstantsResolverVisitor
 from gelb.frontend.RectangularArraysEnforcerVisitor import RectangularArraysEnforcerVisitor
+from gelb.frontend.RangeResolverVisitor import RangeResolverVisitor
 from gelb.frontend.ParsingError import ParsingError
 from gelb.utils.exceptions import *
 from gelb.utils.misc import ensure_file_is_not_empty_or_whitespace
@@ -111,6 +112,19 @@ def initial_validation_geometry(ast):
 def resolve_all_constants(ast):
     ast_visitor = ConstantsResolverVisitor()
     return ast_visitor.visit(ast, ast)
+
+
+def resolve_ranges(ast):
+    """
+    Replace None bounds in Range_N nodes with concrete values:
+    - None lower bound → 0
+    - None upper bound → Nx-1, Ny-1, or Nz-1 (based on dimension)
+    
+    Must run after symbol tables are built.
+    """
+    ast_visitor = RangeResolverVisitor()
+    ast_visitor.visit(ast, ast)
+    return ast
 
 
 def enforce_rectangular_array_literals(ast):

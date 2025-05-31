@@ -14,6 +14,7 @@ from gelb.frontend.stage1_frontend import (
     enforce_rectangular_array_literals,
     # validate_ast,
     resolve_all_constants,
+    resolve_ranges,
     prevent_clashes_of_symbol_refs_with_implicits,
     prevent_clashes_of_symbol_defs_with_implicits,
     add_implicit_symbols
@@ -88,6 +89,9 @@ def cli(t, input_file, backend):
 
     # ... resolve ALL constants (explicit AND implicit, in ALL scopes)
     ast = resolve_all_constants(ast)
+
+    # ... resolve range bounds (replace None with concrete values)
+    ast = resolve_ranges(ast)
 
     # ... validate node-classes
     validate_node_classes(ast)
