@@ -171,6 +171,9 @@ def generate_ast_visualization(ast, input_file, ast_output, ast_format, keep_dot
         visitor = ASTVisualizationVisitor()
         dot_content = visitor.generate_dot(ast)
         
+        # Get statistics
+        node_count, max_depth = visitor.get_statistics()
+        
         # Write DOT file (temporary)
         dot_file = output_path.with_suffix('.dot')
         with open(dot_file, 'w') as f:
@@ -189,6 +192,7 @@ def generate_ast_visualization(ast, input_file, ast_output, ast_format, keep_dot
         
         if result.returncode == 0:
             print(f"✅ AST visualization saved to: {output_path}")
+            print(f"📊 AST Statistics: {node_count} nodes, max depth: {max_depth}")
             # Clean up temporary DOT file unless asked to keep it
             if keep_dot:
                 print(f"📄 DOT file saved at: {dot_file}")

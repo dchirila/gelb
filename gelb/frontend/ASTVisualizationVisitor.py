@@ -18,6 +18,8 @@ class ASTVisualizationVisitor(ASTBaseVisitor):
         self.edges = []  # List of (parent_id, child_id, edge_label) tuples
         self.node_counter = 0
         self.node_to_id = {}  # Map AST nodes to unique IDs
+        self.depth_map = {}  # Map node IDs to their depth in the tree
+        self.max_depth = 0
         
     def generate_dot(self, ast_root):
         """
@@ -34,9 +36,11 @@ class ASTVisualizationVisitor(ASTBaseVisitor):
         self.edges = []
         self.node_counter = 0
         self.node_to_id = {}
+        self.depth_map = {}
+        self.max_depth = 0
         
         # Visit the AST and build graph structure
-        self.visit(ast_root, ast_root)
+        self._visit_with_depth(ast_root, 0)
         
         # Generate DOT format
         return self._generate_dot_string()
@@ -202,38 +206,54 @@ class ASTVisualizationVisitor(ASTBaseVisitor):
         lines.append("}")
         return "\n".join(lines)
     
-    def visit(self, node, ast_root_node):
+    def _visit_with_depth(self, node, depth):
         """
-        Visit a node and its children, building the visualization graph.
+        Visit a node and its children, tracking depth for statistics.
         """
         if node is None:
             return
         
         # Add this node to the visualization
-        self._add_node(node)
+        node_id = self._add_node(node)
+        self.depth_map[node_id] = depth
+        self.max_depth = max(self.max_depth, depth)
         
         # Handle List_N nodes specially
         if isinstance(node, List_N):
             for i, element in enumerate(node.elements):
                 if element is not None:
-                    self._add_node(element)
+                    child_id = self._add_node(element)
                     self._add_edge(node, element, f"[{i}]")
-                    self.visit(element, ast_root_node)
+                    self._visit_with_depth(element, depth + 1)
         else:
             # Visit all children of this node
             for child_name in node.get_children_names():
                 child = getattr(node, child_name, None)
                 if child is not None:
                     if isinstance(child, Node_N):
-                        self._add_node(child)
+                        child_id = self._add_node(child)
                         self._add_edge(node, child, child_name)
-                        self.visit(child, ast_root_node)
+                        self._visit_with_depth(child, depth + 1)
                     elif isinstance(child, list):
                         # Handle lists of AST nodes
                         for i, list_item in enumerate(child):
                             if isinstance(list_item, Node_N):
-                                self._add_node(list_item)
+                                child_id = self._add_node(list_item)
                                 self._add_edge(node, list_item, f"{child_name}[{i}]")
-                                self.visit(list_item, ast_root_node)
-        
+                                self._visit_with_depth(list_item, depth + 1)
+    
+    def visit(self, node, ast_root_node):
+        """
+        Legacy visit method for compatibility with base class.
+        """
+        self._visit_with_depth(node, 0)
         return node
+    
+    def get_statistics(self):
+        """
+        Get statistics about the AST.
+        
+        Returns:
+            tuple: (node_count, max_depth)
+        """
+        return len(self.nodes), self.max_depth
