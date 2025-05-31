@@ -9,8 +9,7 @@ lattices { //
 }
 
 node_classes {
-  node_class BULK(initializer = RandomLife, dynamics = LifeEvolve,
-                  gauges = CellStatus);
+  node_class BULK(RandomLife, LifeEvolve, CellStatus);
 }
 
 initializer RandomLife { //
