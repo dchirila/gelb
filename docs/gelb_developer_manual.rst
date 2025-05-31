@@ -333,3 +333,71 @@ NOTEs:
 
   - **StringLit**
     TODO
+
+
+Range Syntax and Resolution
+===========================
+
+GeLB supports flexible range syntax for selecting array elements, lattice sites, and distribution functions. Understanding how ranges work is crucial for compiler development.
+
+Range Syntax
+------------
+
+GeLB supports four range patterns:
+
+* ``:`` - All elements (e.g., ``nodes[:] = BULK``)
+* ``low:`` - From ``low`` to end (e.g., ``nodes[5:] = BULK``)
+* ``:high`` - From start to ``high`` (e.g., ``nodes[:10] = BULK``)
+* ``low:high`` - Specific range (e.g., ``nodes[5:10] = BULK``)
+
+Range patterns appear in multiple contexts:
+
+* Geometry: ``nodes[:, :] = BULK`` (2D all nodes)
+* Lattice selections: ``f.out[x, y | :]`` (all distribution functions)
+* Array access: ``f.E[0, :]`` (all elements in second dimension)
+
+AST Traversal Challenge
+-----------------------
+
+The range syntax creates ``Range_N`` AST nodes where missing bounds are represented as ``None``:
+
+* ``:`` creates ``Range_N(low=None, high=None)``
+* ``5:`` creates ``Range_N(low=5, high=None)``
+* ``:10`` creates ``Range_N(low=None, high=10)``
+
+This caused AST traversal methods to crash when encountering ``None`` values during recursive descent.
+
+Resolution Strategy
+-------------------
+
+The issue was resolved with a two-part approach:
+
+**Part 1: Defensive AST Methods**
+  Added ``None`` checks to base ``Node_N`` class methods (see ``gelb/gelb_ast/ASTNodes.py``)::
+
+    if child is None:  # Handle None fields
+        continue
+
+**Part 2: Range Resolution**
+  Implemented ``RangeResolverVisitor`` (see ``gelb/frontend/RangeResolverVisitor.py``) that replaces ``None`` bounds with concrete expressions:
+
+  * ``None`` lower bound → ``0``
+  * ``None`` upper bound → ``Nx-1``, ``Ny-1``, or ``Nz-1`` (spatial dimensions)
+  * ``None`` upper bound → ``q-1`` (distribution function ranges)
+
+Integration
+-----------
+
+Range resolution runs in the compilation pipeline after symbol table construction::
+
+    ast = build_symbols_tables(ast)
+    ast = resolve_all_constants(ast)
+    ast = resolve_ranges(ast)  # ← Range resolution here
+    validate_node_classes(ast)
+
+See ``gelb/gelbc.py`` for the complete pipeline and ``gelb/frontend/stage1_frontend.py`` for the ``resolve_ranges()`` function.
+
+Testing
+-------
+
+Comprehensive tests cover various range scenarios in ``gelb/tests/more_frontend_validation/test_range_resolver_visitor.py``. All GeLB examples now compile successfully with proper range resolution.
