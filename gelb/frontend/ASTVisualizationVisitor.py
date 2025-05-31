@@ -152,6 +152,10 @@ class ASTVisualizationVisitor(ASTBaseVisitor):
             # Operator nodes
             return f"{display_type}\\n{node.operator}"
         
+        elif hasattr(node, 'scalar_dtype'):
+            # ScalarDataType and ArrayDataType nodes
+            return f"{display_type}\\n{node.scalar_dtype}"
+        
         else:
             # Generic nodes - just show type
             return display_type
