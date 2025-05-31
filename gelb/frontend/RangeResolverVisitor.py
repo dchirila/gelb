@@ -2,7 +2,7 @@
 
 from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
 from gelb.gelb_ast.ASTNodes import (
-    Range_N, IntLiteral_N, Sub_N, Identifier_N,
+    Range_N, IntLiteral_N, Sub_N, Identifier_N, Div_N, Add_N, Mul_N,
     RectSelOfLatticeOutDFs_N, RectSelOfLatticeInDFs_N,
     RectSelOfArrayElems_N, PaintNodesStmt_N
 )
@@ -162,6 +162,10 @@ class RangeResolverVisitor(ASTBaseVisitor):
         # IntLiteral nodes don't need modification
         return node
         
+    def visitRealLiteral_N(self, node, ast_root_node):
+        # RealLiteral nodes don't need modification
+        return node
+        
     def visitIdentifier_N(self, node, ast_root_node):
         # Identifier nodes don't need modification
         return node
@@ -173,6 +177,18 @@ class RangeResolverVisitor(ASTBaseVisitor):
         return node
         
     def visitAdd_N(self, node, ast_root_node):
+        # Visit operands
+        self.visit(node.left, ast_root_node)
+        self.visit(node.right, ast_root_node)
+        return node
+        
+    def visitDiv_N(self, node, ast_root_node):
+        # Visit operands
+        self.visit(node.left, ast_root_node)
+        self.visit(node.right, ast_root_node)
+        return node
+        
+    def visitMul_N(self, node, ast_root_node):
         # Visit operands
         self.visit(node.left, ast_root_node)
         self.visit(node.right, ast_root_node)

@@ -10,9 +10,11 @@ class SymbolsTable:
     Container for symbol_defs tables in GeLB.
 
     The table is stored as a list of SymbolDefinition instances.
+    Supports hierarchical lookup through an optional parent table.
     """
-    def __init__(self):
+    def __init__(self, parent_table=None):
         self.symbol_defs = []
+        self.parent_table = parent_table
 
     def __getitem__(self, item):
         return self.symbol_defs[item]
@@ -28,26 +30,50 @@ class SymbolsTable:
         self.symbol_defs[key] = value
 
     def append(self, curr_instance):
-        # guard against appending a symbol twice
-        if self.contains(curr_instance.name):
+        # guard against appending a symbol twice (only check local scope)
+        if self.contains_local(curr_instance.name):
             raise GeLBExSymbolExists(
                 curr_instance,
-                self.get_symbol_definition(curr_instance.name)
+                self.get_symbol_definition_local(curr_instance.name)
             )
         return self.symbol_defs.append(curr_instance)
 
-    def contains(self, symbol_name):
+    def contains_local(self, symbol_name):
+        """Check if symbol exists in local scope only (no parent lookup)."""
         if self.symbol_defs:  # symbol_defs list is not empty
             for sdef in self.symbol_defs:
                 if str(sdef.name) == symbol_name:
                     return True
         return False
 
-    def get_symbol_definition(self, symbol_name):
+    def get_symbol_definition_local(self, symbol_name):
+        """Get symbol definition from local scope only (no parent lookup)."""
         if self.symbol_defs:  # symbol_defs list is not empty
             for sdef in self.symbol_defs:
                 if str(sdef.name) == symbol_name:
                     return sdef
+        return None
+
+    def contains(self, symbol_name):
+        # First check local scope
+        if self.symbol_defs:  # symbol_defs list is not empty
+            for sdef in self.symbol_defs:
+                if str(sdef.name) == symbol_name:
+                    return True
+        # Then check parent scope if available
+        if self.parent_table:
+            return self.parent_table.contains(symbol_name)
+        return False
+
+    def get_symbol_definition(self, symbol_name):
+        # First check local scope
+        if self.symbol_defs:  # symbol_defs list is not empty
+            for sdef in self.symbol_defs:
+                if str(sdef.name) == symbol_name:
+                    return sdef
+        # Then check parent scope if available
+        if self.parent_table:
+            return self.parent_table.get_symbol_definition(symbol_name)
         return None
 
     def __str__(self):

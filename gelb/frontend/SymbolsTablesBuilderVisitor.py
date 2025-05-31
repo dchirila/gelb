@@ -24,6 +24,8 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
             self.implicit_symbols = [symbol_to_ignore_for_testing]
         else:
             self.implicit_symbols = []
+        # Store global constants symbol table for hierarchical lookup
+        self.global_constants_symbol_table = None
 
     def check_for_undef_or_ref_before_def_symbols(self, node, ast_root=None):
         """
@@ -113,6 +115,8 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                 # trigger symbol_defs-table creation @global constants block
                 node.global_constants = self.visit(node.global_constants,
                                                    ast_root_node)
+                # Store global constants symbol table for use in other blocks
+                self.global_constants_symbol_table = node.global_constants.symbol_defs
             if node.lattices is not None:
                 # trigger symbol_defs-table creation @lattices block
                 node.lattices = self.visit(node.lattices, ast_root_node)
@@ -206,7 +210,8 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
             ast_root_node: Program_N
     ):
         if node.symbol_defs is None:
-            node.symbol_defs = SymbolsTable()
+            # Create symbol table with global constants as parent
+            node.symbol_defs = SymbolsTable(parent_table=self.global_constants_symbol_table)
 
             for lattice_insta_stmt in node.stmts:
                 node.symbol_defs.append(
@@ -225,7 +230,8 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
             ast_root_node: Program_N
     ):
         if node.symbol_defs is None:
-            node.symbol_defs = SymbolsTable()
+            # Create symbol table with global constants as parent
+            node.symbol_defs = SymbolsTable(parent_table=self.global_constants_symbol_table)
 
             for stmt in node.stmts:
                 if isinstance(stmt, ConstantDefinitionStmt_N):
@@ -254,7 +260,8 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
             ast_root_node: Program_N
     ):
         if node.symbol_defs is None:
-            node.symbol_defs = SymbolsTable()
+            # Create symbol table with global constants as parent
+            node.symbol_defs = SymbolsTable(parent_table=self.global_constants_symbol_table)
 
             for stmt in node.stmts:
                 if isinstance(stmt, ConstantDefinitionStmt_N):
@@ -283,7 +290,8 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
             ast_root_node: Program_N
     ):
         if node.symbol_defs is None:
-            node.symbol_defs = SymbolsTable()
+            # Create symbol table with global constants as parent
+            node.symbol_defs = SymbolsTable(parent_table=self.global_constants_symbol_table)
 
             for stmt in node.stmts:
                 if isinstance(stmt, ConstantDefinitionStmt_N):
@@ -320,7 +328,8 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
             ast_root_node: Program_N
     ):
         if node.symbol_defs is None:
-            node.symbol_defs = SymbolsTable()
+            # Create symbol table with global constants as parent
+            node.symbol_defs = SymbolsTable(parent_table=self.global_constants_symbol_table)
 
             for node_class_insta_stmt in node.stmts:
                 node.symbol_defs.append(

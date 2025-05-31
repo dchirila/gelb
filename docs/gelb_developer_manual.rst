@@ -402,6 +402,214 @@ Testing
 
 Comprehensive tests cover various range scenarios in ``gelb/tests/more_frontend_validation/test_range_resolver_visitor.py``. All GeLB examples now compile successfully with proper range resolution.
 
+Symbol Resolution and Hierarchical Lookup
+==========================================
+
+GeLB implements a hierarchical symbol resolution system that allows blocks to access symbols from global_constants while maintaining proper scoping rules. Understanding this system is crucial for compiler development and debugging.
+
+Overview
+--------
+
+Symbol resolution in GeLB follows a hierarchical model where:
+
+* ``global_constants`` serves as the top-level symbol table
+* All other blocks (``lattices``, ``geometry``, ``node_classes``, etc.) have hierarchical access to global constants
+* Local symbols always take precedence over global symbols (shadowing)
+* Symbol lookup follows the chain: local scope → parent scope → error if not found
+
+Architecture
+------------
+
+**SymbolsTable Class** (``gelb/frontend/SymbolsTable.py``)
+  The core data structure implementing hierarchical lookup:
+
+  * ``__init__(parent_table=None)`` - Creates table with optional parent reference
+  * ``contains(symbol_name)`` - Hierarchical lookup (local first, then parent)
+  * ``contains_local(symbol_name)`` - Local-only lookup (prevents infinite recursion)
+  * ``get_symbol_definition(symbol_name)`` - Returns SymbolDefinition with hierarchical lookup
+  * ``get_symbol_definition_local(symbol_name)`` - Returns SymbolDefinition from local scope only
+
+**SymbolsTablesBuilderVisitor** (``gelb/frontend/SymbolsTablesBuilderVisitor.py``)
+  Constructs the hierarchical symbol table structure:
+
+  * Stores ``global_constants`` symbol table as ``self.global_constants_symbol_table``
+  * Passes global_constants as parent table to all other blocks
+  * Maintains proper scoping by using local-only methods for symbol addition
+
+Symbol Lookup Rules
+-------------------
+
+**Lookup Order:**
+  1. Check local symbol table first
+  2. If not found and parent table exists, check parent recursively
+  3. If not found anywhere, raise ``GeLBExSymbolUnknown``
+
+**Conflict Resolution:**
+  * Local symbols shadow global symbols (no error)
+  * Duplicate symbols in the same scope raise ``GeLBExSymbolExists``
+  * Cross-block references are resolved through parent lookup
+
+Example Scenarios
+-----------------
+
+**Basic Global Constants Access:**
+
+.. code-block:: gelb
+
+    global_constants {
+        const int N = 64;
+        const int Q = 9;
+    }
+
+    lattices {
+        lattice f(1, Q, real);  // Q resolved from global_constants
+    }
+
+    geometry {
+        set_grid_size(N);       // N resolved from global_constants
+        nodes[:] = BULK;
+    }
+
+**Local Symbol Shadowing:**
+
+.. code-block:: gelb
+
+    global_constants {
+        const int SIZE = 100;   // Global SIZE
+    }
+
+    lattices {
+        // No local SIZE, uses global
+        lattice f(1, 9, real);
+    }
+
+    // In another block (hypothetically):
+    some_block {
+        const int SIZE = 50;    // Local SIZE shadows global
+        // References to SIZE here use local value (50)
+    }
+
+**Error Cases:**
+
+.. code-block:: gelb
+
+    global_constants {
+        const int KNOWN = 42;
+    }
+
+    lattices {
+        lattice f(1, UNKNOWN, real);  // Error: UNKNOWN not defined anywhere
+    }
+
+Implementation Details
+----------------------
+
+**Symbol Storage:**
+  * SymbolDefinition objects store: ``name`` (string), ``tag`` (string), ``value`` (AST node)
+  * Names are stored as strings, not Identifier_N objects
+  * Values contain the complete AST subtree for the symbol definition
+
+**Parent Table Setup:**
+  The hierarchical structure is established in ``SymbolsTablesBuilderVisitor.visitProgram_N()``:
+
+  .. code-block:: python
+
+      # Store global constants for use as parent table
+      self.global_constants_symbol_table = node.global_constants.symbol_defs
+
+      # Set up parent table for each block type
+      if node.lattices:
+          node.lattices.symbol_defs = SymbolsTable(self.global_constants_symbol_table)
+
+      if node.geometry:
+          node.geometry.symbol_defs = SymbolsTable(self.global_constants_symbol_table)
+
+**Lookup Implementation:**
+  The ``contains()`` method implements the hierarchical lookup:
+
+  .. code-block:: python
+
+      def contains(self, symbol_name):
+          # First check local scope
+          if self.symbol_defs:
+              for sdef in self.symbol_defs:
+                  if str(sdef.name) == symbol_name:
+                      return True
+          # Then check parent scope if available
+          if self.parent_table:
+              return self.parent_table.contains(symbol_name)
+          return False
+
+Compilation Pipeline Integration
+-------------------------------
+
+Symbol resolution occurs early in the compilation pipeline:
+
+.. code-block:: python
+
+    ast = get_ast("gelb_program", input_string)
+    validate_ast_root_is_program(ast)      # Ensure proper AST structure
+    ast = build_symbols_tables(ast)        # ← Hierarchical setup happens here
+    ast = resolve_all_constants(ast)       # Uses symbol resolution
+    ast = resolve_ranges(ast)
+
+The hierarchical symbol table structure is essential for later stages that need to resolve symbol references in expressions.
+
+Testing
+-------
+
+Comprehensive tests cover the symbol resolution system in:
+
+**Unit Tests** (``gelb/tests/symbols_table/test_hierarchical_symbol_resolution.py``):
+  * ``test_symbols_table_parent_lookup()`` - Core hierarchical functionality
+  * ``test_symbols_table_local_precedence()`` - Shadowing behavior
+  * ``test_symbols_table_duplicate_prevention()`` - Error handling
+
+**Integration Tests:**
+  * ``test_lattices_with_global_constants_integration()`` - Cross-block access
+  * ``test_real_world_integration_ex31_style()`` - Complete program scenarios
+
+**Real-World Examples:**
+  * ``examples/basic/1d/ex30_constants_in_blocks.gelb`` - Complex constant usage
+  * ``examples/basic/1d/ex31_simple_constants_test.gelb`` - Simple test case
+
+Debugging Symbol Resolution
+---------------------------
+
+**Common Issues:**
+  1. **Symbol not found** - Check if symbol is defined in global_constants or local scope
+  2. **Wrong symbol value** - Verify if local symbol is shadowing global symbol
+  3. **Circular references** - Ensure constants don't reference themselves
+
+**Debugging Tools:**
+  * Print symbol table contents with ``repr(symbol_table)``
+  * Check parent table chain: ``symbol_table.parent_table``
+  * Use AST visualization to see symbol references
+  * Run with ``--ast-stage symbols`` to see symbol table construction
+
+**Debug Output Example:**
+
+.. code-block:: python
+
+    print("Local symbols:", ast.lattices.symbol_defs)
+    print("Global symbols:", ast.global_constants.symbol_defs)
+    print("Parent link:", ast.lattices.symbol_defs.parent_table is ast.global_constants.symbol_defs)
+
+Best Practices
+--------------
+
+**For Compiler Development:**
+  * Always use ``contains_local()`` when adding symbols to prevent conflicts
+  * Use ``get_symbol_definition()`` for resolution (includes parent lookup)
+  * Maintain parent table references correctly during AST transformations
+  * Test both positive and negative cases (found/not found symbols)
+
+**For Language Design:**
+  * Keep global_constants as the single source of truth for global symbols
+  * Avoid complex nested scoping (current implementation is two-level)
+  * Use descriptive symbol names to minimize shadowing confusion
+  * Document which blocks can access which symbol scopes
+
 AST Visualization
 =================
 
