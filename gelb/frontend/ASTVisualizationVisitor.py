@@ -211,7 +211,7 @@ class ASTVisualizationVisitor(ASTBaseVisitor):
             "        label=\"Color Legend\";",
             "        style=filled;",
             "        fillcolor=white;",
-            "        node [shape=box, width=2.5, height=0.4];",
+            "        node [shape=box, width=2.0, height=0.3, fontsize=9];",
             "        ",
             "        legend1 [label=\"Program Structure\" fillcolor=lightblue style=filled];",
             "        legend2 [label=\"Literals\" fillcolor=lightgreen style=filled];",
@@ -222,10 +222,9 @@ class ASTVisualizationVisitor(ASTBaseVisitor):
             "        legend7 [label=\"Data Types\" fillcolor=lightcyan style=filled];",
             "        legend8 [label=\"Other\" fillcolor=lightgray style=filled];",
             "        ",
-            "        // Invisible edges to control legend layout",
+            "        // Invisible edges to control legend layout (single column)",
             "        edge [style=invis];",
-            "        legend1 -> legend2 -> legend3 -> legend4;",
-            "        legend5 -> legend6 -> legend7 -> legend8;",
+            "        legend1 -> legend2 -> legend3 -> legend4 -> legend5 -> legend6 -> legend7 -> legend8;",
             "    }",
         ])
         
