@@ -82,6 +82,21 @@ def get_ast(start_rule, input_string):
         raise GeLBExInvalidGrammarRule(start_rule)
 
 
+def validate_ast_root_is_program(ast):
+    """
+    Validate that the AST root node is a Program_N instance.
+    This ensures proper symbol resolution from global_constants block.
+    """
+    from gelb.gelb_ast.ASTNodes import Program_N
+    
+    if not isinstance(ast, Program_N):
+        raise GeLBException(
+            f"AST root must be a Program_N node, but got {type(ast).__name__}",
+            "This is required for proper symbol resolution across scopes. "
+            "Only use 'gelb_program' as the start rule when calling get_ast()."
+        )
+
+
 def build_symbols_tables(ast, symbol_to_ignore_for_testing=None):
     ast_visitor = SymbolsTablesBuilderVisitor(symbol_to_ignore_for_testing)
     return ast_visitor.visit(ast, ast)

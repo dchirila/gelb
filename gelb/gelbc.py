@@ -9,6 +9,7 @@ import gelb.utils.config
 from gelb.utils.ast_visualization import generate_ast_visualization
 from gelb.frontend.stage1_frontend import (
     get_ast,
+    validate_ast_root_is_program,
     build_symbols_tables,
     validate_node_classes,
     initial_validation_geometry,
@@ -100,6 +101,9 @@ def cli(t, input_file, backend, visualize_ast, ast_output, ast_format, keep_dot,
     # ... get the initial AST
     ast = get_ast("gelb_program", src_raw)
     capture_ast_if_requested(ast, 'parsing')
+    
+    # ... validate AST root is Program_N for proper symbol resolution
+    validate_ast_root_is_program(ast)
 
     # ... [validation] prevent clashes of symbol refs with implicits
     # NOTE: it is OK to reference automatic {x, y, z} variables
