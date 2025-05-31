@@ -147,7 +147,7 @@ def cli(t, input_file, backend, visualize_ast, ast_output, ast_format, keep_dot,
     # ... TODO More checks & AST transformations
 
     # Stage 3 :: BackEnd
-    # ... TODO code-generation
+    # ... TODO code-generation (will use 'backend' parameter)
     print(ast)
 
 
