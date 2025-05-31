@@ -69,7 +69,13 @@ from gelb.frontend.stage1_frontend import (
     is_flag=True,
     help="Keep the intermediate DOT file after generating visualization"
 )
-def cli(t, input_file, backend, visualize_ast, ast_output, ast_format, keep_dot):
+@click.option(
+    "--ast-stage",
+    type=click.Choice(['parsing', 'symbols', 'constants', 'ranges', 'all']),
+    default='ranges',
+    help="Which compilation stage to visualize (default: ranges)"
+)
+def cli(t, input_file, backend, visualize_ast, ast_output, ast_format, keep_dot, ast_stage):
     """
     gelbc -- reference compiler (actually: "transpiler") for the GeLB DSL.
 
@@ -88,6 +94,10 @@ def cli(t, input_file, backend, visualize_ast, ast_output, ast_format, keep_dot)
 
     # ... get the initial AST
     ast = get_ast("gelb_program", src_raw)
+    
+    # Capture AST after parsing stage
+    if visualize_ast and ast_stage in ['parsing', 'all']:
+        generate_ast_visualization(ast, input_file, ast_output, ast_format, keep_dot, 'parsing')
 
     # ... [validation] prevent clashes of symbol refs with implicits
     # NOTE: it is OK to reference automatic {x, y, z} variables
@@ -97,6 +107,10 @@ def cli(t, input_file, backend, visualize_ast, ast_output, ast_format, keep_dot)
 
     # ... build the symbols table
     ast = build_symbols_tables(ast)
+    
+    # Capture AST after symbols stage
+    if visualize_ast and ast_stage in ['symbols', 'all']:
+        generate_ast_visualization(ast, input_file, ast_output, ast_format, keep_dot, 'symbols')
 
     # ... [validation] prevent clashes of user-defined symbols with the
     # - implicit constants {Nx , Ny , Nz}
@@ -112,9 +126,17 @@ def cli(t, input_file, backend, visualize_ast, ast_output, ast_format, keep_dot)
 
     # ... resolve ALL constants (explicit AND implicit, in ALL scopes)
     ast = resolve_all_constants(ast)
+    
+    # Capture AST after constants stage
+    if visualize_ast and ast_stage in ['constants', 'all']:
+        generate_ast_visualization(ast, input_file, ast_output, ast_format, keep_dot, 'constants')
 
     # ... resolve range bounds (replace None with concrete values)
     ast = resolve_ranges(ast)
+    
+    # Capture AST after ranges stage (default stage)
+    if visualize_ast and ast_stage in ['ranges', 'all']:
+        generate_ast_visualization(ast, input_file, ast_output, ast_format, keep_dot, 'ranges')
 
     # ... validate node-classes
     validate_node_classes(ast)
@@ -134,13 +156,9 @@ def cli(t, input_file, backend, visualize_ast, ast_output, ast_format, keep_dot)
     # Stage 3 :: BackEnd
     # ... TODO code-generation
     print(ast)
-    
-    # AST Visualization (if requested)
-    if visualize_ast:
-        generate_ast_visualization(ast, input_file, ast_output, ast_format, keep_dot)
 
 
-def generate_ast_visualization(ast, input_file, ast_output, ast_format, keep_dot=False):
+def generate_ast_visualization(ast, input_file, ast_output, ast_format, keep_dot=False, stage_name=None):
     """
     Generate AST visualization using Graphviz.
     
@@ -150,6 +168,7 @@ def generate_ast_visualization(ast, input_file, ast_output, ast_format, keep_dot
         ast_output: User-specified output file (or None for auto-naming)
         ast_format: Output format ('png', 'svg', 'pdf')
         keep_dot: Whether to keep the intermediate DOT file
+        stage_name: Name of the compilation stage (for output naming)
     """
     try:
         # Import visualization functionality (will be implemented in Step 2)
@@ -158,14 +177,18 @@ def generate_ast_visualization(ast, input_file, ast_output, ast_format, keep_dot
         # Determine output file name
         if ast_output is None:
             input_path = Path(input_file)
-            ast_output = f"{input_path.stem}_ast.{ast_format}"
+            if stage_name:
+                ast_output = f"{input_path.stem}_ast_stage_{stage_name}.{ast_format}"
+            else:
+                ast_output = f"{input_path.stem}_ast.{ast_format}"
         
         # Ensure output has correct extension
         output_path = Path(ast_output)
         if output_path.suffix != f".{ast_format}":
             output_path = output_path.with_suffix(f".{ast_format}")
         
-        print(f"Generating AST visualization: {output_path}")
+        stage_info = f" (stage: {stage_name})" if stage_name else ""
+        print(f"Generating AST visualization{stage_info}: {output_path}")
         
         # Create visualization visitor and generate DOT format
         visitor = ASTVisualizationVisitor()
