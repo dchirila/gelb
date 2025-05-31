@@ -401,3 +401,149 @@ Testing
 -------
 
 Comprehensive tests cover various range scenarios in ``gelb/tests/more_frontend_validation/test_range_resolver_visitor.py``. All GeLB examples now compile successfully with proper range resolution.
+
+AST Visualization
+=================
+
+GeLB includes a powerful AST visualization feature that generates visual representations of the Abstract Syntax Tree at various compilation stages. This is an essential tool for debugging, understanding compiler transformations, and documenting AST structure.
+
+CLI Integration
+---------------
+
+The AST visualization is integrated into the ``gelbc`` compiler with the following options:
+
+* ``--visualize-ast`` - Enable AST visualization
+* ``--ast-output FILE`` - Specify output filename (default: ``<input_basename>_ast.<format>``)
+* ``--ast-format {png,svg,pdf}`` - Output format (default: png)
+* ``--ast-stage {parsing,symbols,constants,ranges,all}`` - Compilation stage to visualize (default: ranges)
+* ``--keep-dot`` - Keep intermediate DOT file after generating visualization
+
+Usage Examples
+--------------
+
+Generate AST visualization at the default stage (after range resolution)::
+
+    gelbc --visualize-ast example.gelb
+
+Visualize AST at a specific compilation stage::
+
+    gelbc --visualize-ast --ast-stage parsing example.gelb
+
+Generate visualizations for all compilation stages::
+
+    gelbc --visualize-ast --ast-stage all example.gelb
+
+Specify custom output and keep DOT file::
+
+    gelbc --visualize-ast --ast-output my_ast.svg --keep-dot example.gelb
+
+Compilation Stages
+------------------
+
+The AST can be visualized at four different compilation stages:
+
+1. **parsing** - Raw AST immediately after parsing, with ``None`` values in range bounds
+2. **symbols** - After symbol table construction
+3. **constants** - After constant resolution
+4. **ranges** - After range resolution (default) - ``None`` bounds replaced with concrete values
+
+When using ``--ast-stage all``, separate files are generated for each stage with names like:
+
+* ``example_ast_stage_parsing.png``
+* ``example_ast_stage_symbols.png``
+* ``example_ast_stage_constants.png``
+* ``example_ast_stage_ranges.png``
+
+Implementation Architecture
+---------------------------
+
+The visualization system consists of:
+
+**ASTVisualizationVisitor** (``gelb/frontend/ASTVisualizationVisitor.py``)
+  Inherits from ``ASTBaseVisitor`` and traverses the AST to generate Graphviz DOT format. Key features:
+
+  * Generates unique node IDs for graph construction
+  * Tracks tree depth for statistics
+  * Creates compact, readable node labels
+  * Implements color coding for different node types
+
+**Visualization Pipeline** (``gelb/utils/ast_visualization.py``)
+  The ``generate_ast_visualization()`` function orchestrates:
+
+  1. DOT format generation via the visitor
+  2. Writing DOT content to temporary file
+  3. Invoking Graphviz ``dot`` command for rendering
+  4. Optional cleanup of intermediate files
+  5. Display of AST statistics (node count and max depth)
+
+Visual Design
+-------------
+
+**Node Representation**
+  Each AST node displays:
+
+  * Node type (with ``_N`` suffix removed for clarity)
+  * Key attributes:
+    
+    - Literal values for ``IntLiteral``, ``StringLiteral``, etc.
+    - Identifier names for ``Identifier`` nodes
+    - Operators for expression nodes (``+``, ``-``, ``*``, ``/``)
+    - Data types for ``ScalarDataType`` nodes (e.g., ``int``, ``float``)
+    - Range bounds for ``Range`` nodes (e.g., ``0:Nx-1``)
+
+**Color Coding**
+  A compact legend shows the color scheme:
+
+  * **Light Blue** - Program structure (Program, blocks, Geometry)
+  * **Light Green** - Literals (String, Int, Real, Bool)
+  * **Light Yellow** - Identifiers and references
+  * **Orange** - Operators and expressions
+  * **Plum** - Statements and control flow
+  * **Light Pink** - Ranges and selections
+  * **Light Cyan** - Data types
+  * **Light Gray** - Other nodes
+
+**Graph Layout**
+  * Top-to-bottom tree layout (``rankdir=TB``)
+  * Edge labels show relationship names (e.g., ``lhs``, ``rhs``, ``[0]`` for list elements)
+  * Compact node sizing with readable fonts
+
+Statistics
+----------
+
+Each visualization includes statistics displayed as::
+
+    📊 AST Statistics: 71 nodes, max depth: 8
+
+This helps assess AST complexity and track how transformations affect tree structure.
+
+Dependencies
+------------
+
+**Required:**
+  * Graphviz must be installed and available in PATH
+  * Python subprocess module (standard library)
+
+**Error Handling:**
+  * Compilation continues even if visualization fails
+  * Clear error messages for missing Graphviz
+  * Fallback to DOT file generation if rendering fails
+
+Benefits
+--------
+
+**Development Benefits:**
+  * Debug AST structure visually
+  * Validate AST transformations between stages
+  * Understand complex expression trees
+  * Generate diagrams for documentation
+
+**Educational Benefits:**
+  * See how source code becomes AST
+  * Track compiler transformation effects
+  * Debug compilation issues visually
+
+**Research Benefits:**
+  * Analyze AST complexity metrics
+  * Document language constructs visually
+  * Compare different program structures
