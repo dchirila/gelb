@@ -15,6 +15,10 @@ except ModuleNotFoundError:
     from gelb.antlr_part.generated_code.GeLBParser import GeLBParser
     from gelb.antlr_part.generated_code.GeLBVisitor import GeLBVisitor
 
+# Initialize reserved keywords for error handling
+from gelb.utils.misc import initialize_reserved_keywords
+initialize_reserved_keywords()
+
 from gelb.frontend.ASTBuilderVisitor import ASTBuilderVisitor
 from gelb.frontend.ASTInitialValidationVisitor import ASTInitialValidationVisitor
 from gelb.frontend.SymbolsTablesBuilderVisitor import SymbolsTablesBuilderVisitor
@@ -29,7 +33,6 @@ from gelb.frontend.RangeResolverVisitor import RangeResolverVisitor
 from gelb.frontend.ParsingError import ParsingError
 from gelb.utils.exceptions import *
 from gelb.utils.misc import ensure_file_is_not_empty_or_whitespace
-import gelb.utils.config
 
 
 def get_cst_as_string(start_rule, input_string):

@@ -12,6 +12,39 @@ from gelb.utils import exceptions
 from gelb.utils import config
 
 
+def initialize_reserved_keywords():
+    """
+    Initialize GELB_RESERVED_KEYWORDS from the lexer's literal names.
+    
+    This extracts keywords from the ANTLR-generated lexer and filters them
+    to include only valid identifier-like keywords.
+    
+    Safe to call multiple times - only initializes if not already done.
+    """
+    if config.GELB_RESERVED_KEYWORDS is not None:
+        return  # Already initialized
+        
+    try:
+        from gelb.antlr_part.generated_code.GeLBLexer import GeLBLexer
+        literal_names = GeLBLexer.literalNames
+
+        reg = re.compile(r'^[a-zA-Z0-9_]+$')
+        config.GELB_RESERVED_KEYWORDS = list(
+            filter(
+                lambda kwd: bool(reg.match(kwd)),
+                list(
+                    filter(
+                        lambda kwd: 'INVALID' not in kwd,
+                        [kwd.replace("'", "") for kwd in literal_names]
+                    )
+                )
+            )
+        )
+    except ImportError:
+        # ANTLR files not available - will be initialized later
+        pass
+
+
 def ensure_input_file_has_gelb_extension(input_file):
     if not fnmatch(input_file, "*.gelb"):
         raise exceptions.GeLBExIncorrectInputFileExtension(input_file)
@@ -77,25 +110,8 @@ def invoke_antlr4_tool():
     if antlr4_tool_stat.returncode != 0:
         raise exceptions.GeLBExAntlr4JavaToolFailed(antlr4_tool_stat)
 
-    # obtain the list of reserved keywords (directly from the lexer); this
-    # has the advantage of always being up-to-date.
-    if config.GELB_RESERVED_KEYWORDS is None:
-        # for auto-deducing reserved keywords
-        from gelb.antlr_part.generated_code.GeLBLexer import GeLBLexer
-        literal_names = GeLBLexer.literalNames
-
-        reg = re.compile(r'^[a-zA-Z0-9_]+$')
-        config.GELB_RESERVED_KEYWORDS = list(
-            filter(
-                lambda kwd: bool(reg.match(kwd)),
-                list(
-                    filter(
-                        lambda kwd: 'INVALID' not in kwd,
-                        [kwd.replace("'", "") for kwd in literal_names]
-                    )
-                )
-            )
-        )
+    # Initialize reserved keywords from the newly generated lexer
+    initialize_reserved_keywords()
 
 
 def load_file(input_file):
