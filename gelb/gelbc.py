@@ -2,6 +2,8 @@
 
 import click
 import sys
+import os
+from pathlib import Path
 
 # If we reached this point, we should be able to import GeLB modules
 from gelb.utils.misc import load_file
@@ -46,7 +48,23 @@ from gelb.frontend.stage1_frontend import (
     default='cpu_fortran_serial',
     help="Which backend to use for code-generation"
 )
-def cli(t, input_file, backend):
+@click.option(
+    "--visualize-ast",
+    is_flag=True,
+    help="Generate AST visualization as an image file"
+)
+@click.option(
+    "--ast-output",
+    type=click.STRING,
+    help="Output file for AST visualization (default: <input_basename>_ast.png)"
+)
+@click.option(
+    "--ast-format",
+    type=click.Choice(['png', 'svg', 'pdf']),
+    default='png',
+    help="Output format for AST visualization"
+)
+def cli(t, input_file, backend, visualize_ast, ast_output, ast_format):
     """
     gelbc -- reference compiler (actually: "transpiler") for the GeLB DSL.
 
@@ -111,6 +129,73 @@ def cli(t, input_file, backend):
     # Stage 3 :: BackEnd
     # ... TODO code-generation
     print(ast)
+    
+    # AST Visualization (if requested)
+    if visualize_ast:
+        generate_ast_visualization(ast, input_file, ast_output, ast_format)
+
+
+def generate_ast_visualization(ast, input_file, ast_output, ast_format):
+    """
+    Generate AST visualization using Graphviz.
+    
+    Args:
+        ast: The AST root node to visualize
+        input_file: Original input file path (for default output naming)
+        ast_output: User-specified output file (or None for auto-naming)
+        ast_format: Output format ('png', 'svg', 'pdf')
+    """
+    try:
+        # Import visualization functionality (will be implemented in Step 2)
+        from gelb.frontend.ASTVisualizationVisitor import ASTVisualizationVisitor
+        
+        # Determine output file name
+        if ast_output is None:
+            input_path = Path(input_file)
+            ast_output = f"{input_path.stem}_ast.{ast_format}"
+        
+        # Ensure output has correct extension
+        output_path = Path(ast_output)
+        if output_path.suffix != f".{ast_format}":
+            output_path = output_path.with_suffix(f".{ast_format}")
+        
+        print(f"Generating AST visualization: {output_path}")
+        
+        # Create visualization visitor and generate DOT format
+        visitor = ASTVisualizationVisitor()
+        dot_content = visitor.generate_dot(ast)
+        
+        # Write DOT file (temporary)
+        dot_file = output_path.with_suffix('.dot')
+        with open(dot_file, 'w') as f:
+            f.write(dot_content)
+        
+        # Use Graphviz to render the image
+        import subprocess
+        cmd = [
+            'dot',
+            f'-T{ast_format}',
+            str(dot_file),
+            '-o', str(output_path)
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            print(f"✅ AST visualization saved to: {output_path}")
+            # Clean up temporary DOT file
+            dot_file.unlink()
+        else:
+            print(f"❌ Graphviz error: {result.stderr}")
+            print(f"DOT file saved at: {dot_file}")
+            
+    except ImportError:
+        print("❌ AST visualization not yet implemented (ASTVisualizationVisitor missing)")
+    except FileNotFoundError:
+        print("❌ Graphviz 'dot' command not found. Please install Graphviz and ensure it's in your PATH.")
+    except Exception as e:
+        print(f"❌ Error generating AST visualization: {e}")
+
 
 if __name__ == "__main__":
     cli()
