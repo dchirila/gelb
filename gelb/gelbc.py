@@ -84,6 +84,12 @@ def cli(t, input_file, backend, visualize_ast, ast_output, ast_format, keep_dot,
 
     if not t:  # disable the traceback by default
         sys.tracebacklimit = 0
+    
+    # Helper function to capture AST at various stages
+    def capture_ast_if_requested(ast, stage_name):
+        """Capture AST visualization if requested for this stage."""
+        if visualize_ast and ast_stage in [stage_name, 'all']:
+            generate_ast_visualization(ast, input_file, ast_output, ast_format, keep_dot, stage_name)
 
     # Stage 1 :: FrontEnd
 
@@ -93,10 +99,7 @@ def cli(t, input_file, backend, visualize_ast, ast_output, ast_format, keep_dot,
 
     # ... get the initial AST
     ast = get_ast("gelb_program", src_raw)
-    
-    # Capture AST after parsing stage
-    if visualize_ast and ast_stage in ['parsing', 'all']:
-        generate_ast_visualization(ast, input_file, ast_output, ast_format, keep_dot, 'parsing')
+    capture_ast_if_requested(ast, 'parsing')
 
     # ... [validation] prevent clashes of symbol refs with implicits
     # NOTE: it is OK to reference automatic {x, y, z} variables
@@ -106,10 +109,7 @@ def cli(t, input_file, backend, visualize_ast, ast_output, ast_format, keep_dot,
 
     # ... build the symbols table
     ast = build_symbols_tables(ast)
-    
-    # Capture AST after symbols stage
-    if visualize_ast and ast_stage in ['symbols', 'all']:
-        generate_ast_visualization(ast, input_file, ast_output, ast_format, keep_dot, 'symbols')
+    capture_ast_if_requested(ast, 'symbols')
 
     # ... [validation] prevent clashes of user-defined symbols with the
     # - implicit constants {Nx , Ny , Nz}
@@ -125,17 +125,11 @@ def cli(t, input_file, backend, visualize_ast, ast_output, ast_format, keep_dot,
 
     # ... resolve ALL constants (explicit AND implicit, in ALL scopes)
     ast = resolve_all_constants(ast)
-    
-    # Capture AST after constants stage
-    if visualize_ast and ast_stage in ['constants', 'all']:
-        generate_ast_visualization(ast, input_file, ast_output, ast_format, keep_dot, 'constants')
+    capture_ast_if_requested(ast, 'constants')
 
     # ... resolve range bounds (replace None with concrete values)
     ast = resolve_ranges(ast)
-    
-    # Capture AST after ranges stage (default stage)
-    if visualize_ast and ast_stage in ['ranges', 'all']:
-        generate_ast_visualization(ast, input_file, ast_output, ast_format, keep_dot, 'ranges')
+    capture_ast_if_requested(ast, 'ranges')
 
     # ... validate node-classes
     validate_node_classes(ast)
