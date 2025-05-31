@@ -203,6 +203,32 @@ class ASTVisualizationVisitor(ASTBaseVisitor):
             else:
                 lines.append(f'    {parent_id} -> {child_id};')
         
+        # Add legend
+        lines.extend([
+            "",
+            "    // Legend",
+            "    subgraph cluster_legend {",
+            "        label=\"Color Legend\";",
+            "        style=filled;",
+            "        fillcolor=white;",
+            "        node [shape=box, width=2.5, height=0.4];",
+            "        ",
+            "        legend1 [label=\"Program Structure\" fillcolor=lightblue style=filled];",
+            "        legend2 [label=\"Literals\" fillcolor=lightgreen style=filled];",
+            "        legend3 [label=\"Identifiers/References\" fillcolor=lightyellow style=filled];",
+            "        legend4 [label=\"Operators\" fillcolor=orange style=filled];",
+            "        legend5 [label=\"Statements\" fillcolor=plum style=filled];",
+            "        legend6 [label=\"Ranges/Selections\" fillcolor=lightpink style=filled];",
+            "        legend7 [label=\"Data Types\" fillcolor=lightcyan style=filled];",
+            "        legend8 [label=\"Other\" fillcolor=lightgray style=filled];",
+            "        ",
+            "        // Invisible edges to control legend layout",
+            "        edge [style=invis];",
+            "        legend1 -> legend2 -> legend3 -> legend4;",
+            "        legend5 -> legend6 -> legend7 -> legend8;",
+            "    }",
+        ])
+        
         lines.append("}")
         return "\n".join(lines)
     
