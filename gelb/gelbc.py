@@ -64,7 +64,12 @@ from gelb.frontend.stage1_frontend import (
     default='png',
     help="Output format for AST visualization"
 )
-def cli(t, input_file, backend, visualize_ast, ast_output, ast_format):
+@click.option(
+    "--keep-dot",
+    is_flag=True,
+    help="Keep the intermediate DOT file after generating visualization"
+)
+def cli(t, input_file, backend, visualize_ast, ast_output, ast_format, keep_dot):
     """
     gelbc -- reference compiler (actually: "transpiler") for the GeLB DSL.
 
@@ -132,10 +137,10 @@ def cli(t, input_file, backend, visualize_ast, ast_output, ast_format):
     
     # AST Visualization (if requested)
     if visualize_ast:
-        generate_ast_visualization(ast, input_file, ast_output, ast_format)
+        generate_ast_visualization(ast, input_file, ast_output, ast_format, keep_dot)
 
 
-def generate_ast_visualization(ast, input_file, ast_output, ast_format):
+def generate_ast_visualization(ast, input_file, ast_output, ast_format, keep_dot=False):
     """
     Generate AST visualization using Graphviz.
     
@@ -144,6 +149,7 @@ def generate_ast_visualization(ast, input_file, ast_output, ast_format):
         input_file: Original input file path (for default output naming)
         ast_output: User-specified output file (or None for auto-naming)
         ast_format: Output format ('png', 'svg', 'pdf')
+        keep_dot: Whether to keep the intermediate DOT file
     """
     try:
         # Import visualization functionality (will be implemented in Step 2)
@@ -183,8 +189,11 @@ def generate_ast_visualization(ast, input_file, ast_output, ast_format):
         
         if result.returncode == 0:
             print(f"✅ AST visualization saved to: {output_path}")
-            # Clean up temporary DOT file
-            dot_file.unlink()
+            # Clean up temporary DOT file unless asked to keep it
+            if keep_dot:
+                print(f"📄 DOT file saved at: {dot_file}")
+            else:
+                dot_file.unlink()
         else:
             print(f"❌ Graphviz error: {result.stderr}")
             print(f"DOT file saved at: {dot_file}")

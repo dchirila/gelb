@@ -48,6 +48,33 @@ class ASTVisualizationVisitor(ASTBaseVisitor):
             self.node_counter += 1
         return self.node_to_id[id(node)]
     
+    def _get_simple_node_repr(self, node):
+        """Get a simple string representation of a node for compact display."""
+        if node is None:
+            return "None"
+        
+        node_type = type(node).__name__
+        
+        # For literals, just return the value
+        if hasattr(node, 'value') and node.value is not None:
+            return str(node.value)
+        
+        # For identifiers, return the name
+        elif hasattr(node, 'name') and node.name is not None:
+            return str(node.name)
+        
+        # For binary operators, show in infix notation
+        elif node_type in ['Add_N', 'Sub_N', 'Mul_N', 'Div_N']:
+            if hasattr(node, 'left') and hasattr(node, 'right'):
+                left_repr = self._get_simple_node_repr(node.left)
+                right_repr = self._get_simple_node_repr(node.right)
+                op_map = {'Add_N': '+', 'Sub_N': '-', 'Mul_N': '*', 'Div_N': '/'}
+                op = op_map.get(node_type, '?')
+                return f"{left_repr}{op}{right_repr}"
+        
+        # For other nodes, just return the type
+        return node_type.replace('_N', '')
+    
     def _get_node_color(self, node):
         """Determine the color for a node based on its type."""
         node_type = type(node).__name__
@@ -112,8 +139,9 @@ class ASTVisualizationVisitor(ASTBaseVisitor):
         
         elif hasattr(node, 'low') and hasattr(node, 'high'):
             # Range nodes - show bounds info
-            low_str = "None" if node.low is None else "..."
-            high_str = "None" if node.high is None else "..."
+            # Recursively get simple string representation of bounds
+            low_str = self._get_simple_node_repr(node.low) if node.low else "None"
+            high_str = self._get_simple_node_repr(node.high) if node.high else "None"
             return f"{display_type}\\n{low_str}:{high_str}"
         
         elif hasattr(node, 'operator'):
