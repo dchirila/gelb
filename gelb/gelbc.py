@@ -121,7 +121,7 @@ def cli(t, input_file, backend, visualize_ast, ast_output, ast_format, keep_dot,
     prevent_clashes_of_symbol_defs_with_implicits(ast)
 
     # ... add symbols for implicit constants & variable (where they are needed)
-    # ast = add_implicit_symbols(ast)
+    ast = add_implicit_symbols(ast)
 
     # ... all array-literals should be rectangular (because we DO NOT support
     # ragged arrays in GeLB)

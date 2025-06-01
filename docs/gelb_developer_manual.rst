@@ -610,6 +610,302 @@ Best Practices
   * Use descriptive symbol names to minimize shadowing confusion
   * Document which blocks can access which symbol scopes
 
+Implicit Symbols and Lattice Coordinates
+========================================
+
+GeLB automatically provides implicit symbols that represent grid dimensions and lattice site coordinates. These symbols are essential for lattice-based simulations and work similarly to CUDA thread indices, allowing each lattice site to know its position in the simulation grid.
+
+Overview
+--------
+
+GeLB provides two categories of implicit symbols:
+
+**Dimension Constants (Nx, Ny, Nz):**
+  * Compile-time constants representing grid dimensions
+  * Derived from the ``set_grid_size()`` call in the geometry block
+  * Available in ``global_constants`` and all other blocks via hierarchical lookup
+
+**Lattice Coordinates (x, y, z):**
+  * Runtime variables representing current lattice site coordinates
+  * Similar to CUDA ``threadIdx`` - each lattice site knows its position
+  * Available in ``initializer``, ``dynamic``, and ``gauge`` blocks
+  * Range from 0 to Nx-1, Ny-1, Nz-1 respectively (uint64 at runtime)
+
+Dimension Detection
+-------------------
+
+The compiler automatically detects grid dimensionality from the geometry block:
+
+**1D Programs:**
+  .. code-block:: gelb
+
+      geometry {
+          set_grid_size(32);          // Creates: Nx = 32
+          nodes[:] = BULK;            // Available coordinates: x
+      }
+
+**2D Programs:**
+  .. code-block:: gelb
+
+      geometry {
+          set_grid_size({64, 32});    // Creates: Nx = 64, Ny = 32
+          nodes[:,:] = BULK;          // Available coordinates: x, y
+      }
+
+**3D Programs:**
+  .. code-block:: gelb
+
+      geometry {
+          set_grid_size({64, 32, 16}); // Creates: Nx = 64, Ny = 32, Nz = 16
+          nodes[:,:,:] = BULK;         // Available coordinates: x, y, z
+      }
+
+Lattice Coordinate Usage
+------------------------
+
+The x, y, z coordinates work like CUDA thread indices, representing the current lattice site being processed:
+
+**Initializer Example:**
+  .. code-block:: gelb
+
+      initializer SetInitialValues {
+          // x, y represent the current lattice site coordinates
+          f.out[x,y | :] = initial_density(x, y);
+          
+          // Each lattice site (x,y) executes this independently
+          // x ranges from 0 to Nx-1, y ranges from 0 to Ny-1
+      }
+
+**Dynamic Example:**
+  .. code-block:: gelb
+
+      dynamic CollisionStep {
+          // Current lattice site coordinates are x, y
+          // Access neighboring sites using offsets
+          real density = f.in[x,y | :].sum();
+          
+          // Each site processes its local data
+          f.out[x,y | :] = collision_operator(f.in[x,y | :]);
+      }
+
+**Gauge Example:**
+  .. code-block:: gelb
+
+      gauge ComputeVelocity(out = {real u; real v;}) {
+          // Extract velocity at current lattice site (x,y)
+          {u, v} = compute_velocity(f.in[x,y | :]);
+      }
+
+Dimension Constants Usage
+-------------------------
+
+Nx, Ny, Nz constants are available throughout the program for boundary checks and computations:
+
+**In Global Constants:**
+  .. code-block:: gelb
+
+      global_constants {
+          const int HALF_NX = Nx / 2;     // Use Nx in expressions
+          const real DX = 1.0 / Nx;       // Grid spacing calculation
+      }
+
+**In Expressions:**
+  .. code-block:: gelb
+
+      dynamic BoundaryConditions {
+          // Use dimension constants for boundary detection
+          if (x == 0 || x == Nx-1) {
+              // Handle boundary conditions
+              f.out[x,y | :] = boundary_value;
+          }
+      }
+
+Implementation Architecture
+---------------------------
+
+**ImplicitSymbolsAdderVisitor** (``gelb/frontend/ImplicitSymbolsAdderVisitor.py``)
+  The visitor that adds implicit symbols to the AST:
+
+  * ``_extract_grid_dimensions()`` - Analyzes geometry block to determine dimensionality
+  * ``_add_dimension_constants()`` - Adds Nx, Ny, Nz to global_constants
+  * ``_add_lattice_coordinates()`` - Adds x, y, z to simulation blocks
+
+**Grid Dimension Extraction:**
+  .. code-block:: python
+
+      if isinstance(grid_size, IntLiteral_N):
+          # 1D case: set_grid_size(32)
+          self.grid_dimensions = [grid_size]
+          self.dimensionality = 1
+      elif isinstance(grid_size, Array1DLiteral_N):
+          # Multi-dimensional: set_grid_size({64, 32})
+          self.grid_dimensions = grid_size.value.elements
+          self.dimensionality = len(grid_size.value.elements)
+
+**Symbol Addition:**
+  .. code-block:: python
+
+      # Add dimension constants to global_constants
+      for i in range(self.dimensionality):
+          dim_name = ['Nx', 'Ny', 'Nz'][i]
+          symbol_def = SymbolDefinition(
+              name=dim_name,
+              tag="implicit dimension constant",
+              value=self.grid_dimensions[i]
+          )
+
+**Compilation Pipeline Integration:**
+  The implicit symbols are added after symbol table construction:
+
+  .. code-block:: python
+
+      ast = build_symbols_tables(ast)
+      ast = add_implicit_symbols(ast)        # ← Implicit symbols added here
+      ast = resolve_all_constants(ast)
+
+Symbol Scoping Rules
+--------------------
+
+**Dimension Constants (Nx, Ny, Nz):**
+  * Added to ``global_constants`` symbol table
+  * Accessible in all blocks via hierarchical lookup
+  * Take precedence: user-defined → implicit → error
+
+**Lattice Coordinates (x, y, z):**
+  * Added only to simulation blocks: ``initializer``, ``dynamic``, ``gauge``
+  * Not added to structural blocks: ``lattices``, ``node_classes``, ``geometry``
+  * Local to each block (no cross-block coordinate sharing)
+
+**Duplicate Prevention:**
+  * Implicit symbols are only added if not already defined by user
+  * User-defined symbols always take precedence over implicit ones
+  * No errors for shadowing implicit symbols
+
+Advanced Usage Patterns
+------------------------
+
+**Neighbor Access Patterns:**
+  .. code-block:: gelb
+
+      dynamic StreamingStep {
+          // Access neighbors using coordinate arithmetic
+          // (Note: actual neighbor access syntax may vary)
+          
+          // Current site
+          real center = f.in[x,y | 0];
+          
+          // Boundary-safe neighbor access would use modulo or conditionals
+          if (x > 0) {
+              real left = f.in[x-1,y | 0];
+          }
+      }
+
+**Position-Dependent Initialization:**
+  .. code-block:: gelb
+
+      initializer PositionalInit {
+          // Initialize based on lattice position
+          real distance_from_center = sqrt((x - Nx/2)^2 + (y - Ny/2)^2);
+          
+          if (distance_from_center < Nx/4) {
+              f.out[x,y | :] = equilibrium_distribution(1.0);  // High density
+          } else {
+              f.out[x,y | :] = equilibrium_distribution(0.1);  // Low density
+          }
+      }
+
+**Multi-Scale Computations:**
+  .. code-block:: gelb
+
+      gauge GlobalAverages(out = {real avg_density;}) {
+          // Each site contributes to global average
+          // (Note: actual reduction syntax may vary)
+          real local_density = f.in[x,y | :].sum();
+          avg_density = local_density / (Nx * Ny);  // Normalize by grid size
+      }
+
+Testing and Validation
+-----------------------
+
+**Test Coverage** (``gelb/tests/test_implicit_symbols.py``):
+  * ``test_1d_implicit_symbols()`` - Verifies Nx and x for 1D grids
+  * ``test_2d_implicit_symbols()`` - Verifies Nx, Ny and x, y for 2D grids
+  * ``test_3d_implicit_symbols()`` - Verifies Nx, Ny, Nz and x, y, z for 3D grids
+  * ``test_implicit_symbols_no_duplicates()`` - Ensures user symbols take precedence
+  * ``test_blocks_without_lattice_coordinates()`` - Verifies coordinates only in simulation blocks
+
+**Real-World Examples:**
+  * ``examples/basic/1d/ex0_int_vec_setto_one.gelb`` - 1D usage of x and Nx
+  * ``examples/basic/1d/ex31_simple_constants_test.gelb`` - Constants with implicit symbols
+  * All lattice-based examples use implicit coordinates
+
+Debugging Implicit Symbols
+---------------------------
+
+**Common Issues:**
+  1. **Missing coordinates** - Check if you're in the right block type (initializer/dynamic/gauge)
+  2. **Wrong dimensionality** - Verify geometry block's ``set_grid_size()`` call
+  3. **Shadowed symbols** - User-defined x, y, z, Nx, Ny, Nz take precedence
+
+**Debug Commands:**
+  * View symbol tables: ``gelbc --ast-stage symbols program.gelb``
+  * Check grid dimensions in AST visualization
+  * Print symbol table contents during development
+
+**Debug Output Example:**
+  .. code-block:: python
+
+      # Check if implicit symbols were added
+      print("Global constants:", ast.global_constants.symbol_defs)
+      print("Initializer symbols:", ast.initializers[0].symbol_defs)
+      
+      # Verify dimensionality detection
+      visitor = ImplicitSymbolsAdderVisitor()
+      visitor._extract_grid_dimensions(ast.geometry)
+      print("Detected dimensionality:", visitor.dimensionality)
+
+Best Practices
+--------------
+
+**For Simulation Development:**
+  * Use x, y, z as the primary coordinate variables in simulation blocks
+  * Use Nx, Ny, Nz for boundary conditions and grid-size-dependent calculations
+  * Avoid shadowing implicit symbols unless you have a specific need
+  * Remember that coordinates represent the *current* lattice site being processed
+
+**For Compiler Development:**
+  * Always test implicit symbol addition with different grid dimensions
+  * Ensure implicit symbols don't interfere with user-defined symbols
+  * Verify that symbols are added to the correct block types only
+  * Test with both literal and expression-based grid sizes
+
+**Performance Considerations:**
+  * Implicit coordinates will be uint64 variables at runtime
+  * Grid dimensions are compile-time constants that can be optimized
+  * Consider cache efficiency when accessing neighboring lattice sites
+
+CUDA-Style Programming Model
+----------------------------
+
+The implicit coordinate system enables a CUDA-like programming model where:
+
+**Each Lattice Site is a Thread:**
+  * x, y, z represent the current thread's (lattice site's) coordinates
+  * Each site executes the same code but operates on different data
+  * Sites can be processed in parallel (hardware-dependent)
+
+**Grid-Stride Loops:**
+  * Grid dimensions (Nx, Ny, Nz) define the problem size
+  * Runtime system handles iteration over all lattice sites
+  * User code focuses on per-site computation
+
+**Data Locality:**
+  * Each site primarily accesses its own data: ``f[x,y | :]``
+  * Neighbor access follows structured patterns
+  * Memory access patterns are predictable for optimization
+
+This programming model makes GeLB suitable for both CPU and GPU execution while maintaining a clean, mathematical notation for lattice-based algorithms.
+
 AST Visualization
 =================
 
