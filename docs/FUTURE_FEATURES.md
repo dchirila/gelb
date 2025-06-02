@@ -6,6 +6,21 @@ However, they are still very pertinent, and worthy of future consideration.
 
 ## Language Features
 
+### Coordinate access in geometry blocks
+
+- Allow using lattice coordinates (x, y, z) in geometry block expressions
+- This would enable coordinate-based node painting patterns, e.g.:
+  ```gelb
+  nodes[:, y < 5] = WALL;           // Bottom wall
+  nodes[x > Nx - 10, :] = OUTLET;   // Right outlet region
+  nodes[x == 0, y == 0] = CORNER;   // Special corner treatment
+  ```
+- Current limitation: x, y, z are only available in initializer, dynamic, and gauge blocks
+- Implementation considerations:
+  - Would need to add implicit coordinate symbols to geometry block's symbol table
+  - Must ensure coordinates are properly bounded by grid dimensions
+  - Could enable more complex geometry specifications without external tools
+
 ### Array selection assignment statements
 
 - Implement `array_selection_assignment_stmt` in the grammar (currently commented out in `block_stmt` rule)
