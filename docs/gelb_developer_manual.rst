@@ -62,7 +62,26 @@ Development Environment
 
   .. code-block:: bash
 
+      # Run all tests
       pytest
+
+      # Run specific test file
+      uv run pytest gelb/tests/type_inference/test_type_inference_paint_nodes.py
+
+      # Run specific test class
+      uv run pytest gelb/tests/type_inference/test_type_inference_paint_nodes.py::TestPaintNodesTypeInference
+
+      # Run specific test method
+      uv run pytest gelb/tests/type_inference/test_type_inference_paint_nodes.py::TestPaintNodesTypeInference::test_paint_nodes_with_constant_ranges
+
+      # Alternative: Use -k to match test name pattern
+      uv run pytest gelb/tests/type_inference/test_type_inference_paint_nodes.py -k "test_paint_nodes_with_constant_ranges"
+
+      # Common pytest flags:
+      # -x  : stop on first failure
+      # -v  : verbose output
+      # -s  : show print statements
+      # -xvs: combine all three flags (recommended for debugging)
 
 * Clean up generated files:
 
