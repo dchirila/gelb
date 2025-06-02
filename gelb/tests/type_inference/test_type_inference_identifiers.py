@@ -10,10 +10,14 @@ from gelb.frontend.stage1_frontend import (
     infer_types
 )
 from gelb.gelb_ast.ASTNodes import *
+from gelb.utils import config
 
 
 def get_typed_ast(gelb_code):
     """Helper to get AST with types inferred."""
+    # Set the source code in config to avoid error reporting issues
+    config.GELB_SRC_RAW = gelb_code
+    
     ast = get_ast("gelb_program", gelb_code)
     ast = build_symbols_tables(ast)
     ast = add_implicit_symbols(ast)
