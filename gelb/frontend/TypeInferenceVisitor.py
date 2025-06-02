@@ -28,6 +28,9 @@ class TypeInferenceVisitor(ASTBaseVisitor):
     
     def visitProgram_N(self, node: Program_N, ast_root_node: Program_N):
         """Visit all blocks in the program to infer types."""
+        # Store the global constants block for access from all blocks
+        self.global_constants_block = node.global_constants
+        
         # Process global constants first
         if node.global_constants is not None:
             self.current_block = node.global_constants
@@ -254,7 +257,7 @@ class TypeInferenceVisitor(ASTBaseVisitor):
                 )
         
         # Get type from symbol definition based on tag
-        if symbol_def.tag == "constant":
+        if symbol_def.tag == "constant" or symbol_def.tag == "constant definition":
             # For constants, value is ConstantDefinitionStmt_N
             node.inferred_type = symbol_def.value.data_type
         elif symbol_def.tag == "variable" or symbol_def.tag == "variable declaration":
@@ -432,8 +435,11 @@ class TypeInferenceVisitor(ASTBaseVisitor):
         return node
     
     def visitPaintNodesStmt_N(self, node: PaintNodesStmt_N, ast_root_node: Program_N):
-        """Paint statements don't have expressions that need type inference."""
-        # The RHS is a node class name, not an expression
+        """Process expressions in paint statement ranges."""
+        # The LHS contains spatial ranges that may have expressions
+        if node.lhs is not None:
+            self.visit(node.lhs, ast_root_node)
+        # The RHS is a node class name, not an expression that needs type inference
         return node
     
     def visitLatticesBlock_N(self, node: LatticesBlock_N, ast_root_node: Program_N):
