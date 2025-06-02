@@ -19,7 +19,8 @@ from gelb.frontend.stage1_frontend import (
     resolve_ranges,
     prevent_clashes_of_symbol_refs_with_implicits,
     prevent_clashes_of_symbol_defs_with_implicits,
-    add_implicit_symbols
+    add_implicit_symbols,
+    infer_types
 )
 
 
@@ -71,9 +72,9 @@ from gelb.frontend.stage1_frontend import (
 )
 @click.option(
     "--ast-stage",
-    type=click.Choice(['parsing', 'symbols', 'constants', 'ranges', 'all']),
-    default='ranges',
-    help="Which compilation stage to visualize (default: ranges)"
+    type=click.Choice(['parsing', 'symbols', 'constants', 'ranges', 'types', 'all']),
+    default='types',
+    help="Which compilation stage to visualize (default: types)"
 )
 def cli(t, input_file, backend, visualize_ast, ast_output, ast_format, keep_dot, ast_stage):
     """
@@ -134,6 +135,10 @@ def cli(t, input_file, backend, visualize_ast, ast_output, ast_format, keep_dot,
     # ... resolve range bounds (replace None with concrete values)
     ast = resolve_ranges(ast)
     capture_ast_if_requested(ast, 'ranges')
+
+    # ... infer types for all expressions
+    ast = infer_types(ast)
+    capture_ast_if_requested(ast, 'types')
 
     # ... validate node-classes
     validate_node_classes(ast)

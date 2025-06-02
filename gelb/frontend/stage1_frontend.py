@@ -30,6 +30,7 @@ from gelb.frontend.GeometryInitialValidationVisitor import GeometryInitialValida
 from gelb.frontend.ConstantsResolverVisitor import ConstantsResolverVisitor
 from gelb.frontend.RectangularArraysEnforcerVisitor import RectangularArraysEnforcerVisitor
 from gelb.frontend.RangeResolverVisitor import RangeResolverVisitor
+from gelb.frontend.TypeInferenceVisitor import TypeInferenceVisitor
 from gelb.frontend.ParsingError import ParsingError
 from gelb.utils.exceptions import *
 from gelb.utils.misc import ensure_file_is_not_empty_or_whitespace
@@ -148,6 +149,23 @@ def resolve_ranges(ast):
 def enforce_rectangular_array_literals(ast):
     ast_visitor = RectangularArraysEnforcerVisitor()
     ast_visitor.visit(ast, ast)  # nothing to return here
+
+
+def infer_types(ast):
+    """
+    Infer types for all expressions in the AST.
+    
+    Adds an 'inferred_type' attribute to each expression node
+    containing its data type (ScalarDataType_N or ArrayDataType_N).
+    
+    Must run after:
+    - Symbol tables are built
+    - Constants are resolved
+    - Ranges are resolved
+    """
+    ast_visitor = TypeInferenceVisitor()
+    ast_visitor.visit(ast, ast)
+    return ast
 
 
 def validate_ast(ast):
