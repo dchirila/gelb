@@ -763,6 +763,112 @@ def get_expression_parse_test_data():
     ]
 
 
+def get_data_type_test_data():
+    """Return test data for data type testing (both scalar and array types)."""
+    return [
+        # Scalar data types for "data_type" rule
+        ("scalar", "data_type", "bool", "(ScalarDataType bool)"),
+        ("scalar", "data_type", "int64", "(ScalarDataType int64)"),
+        ("scalar", "data_type", "int32", "(ScalarDataType int32)"),
+        ("scalar", "data_type", "int16", "(ScalarDataType int16)"),
+        ("scalar", "data_type", "int8", "(ScalarDataType int8)"),
+        ("scalar", "data_type", "int", "(ScalarDataType int)"),
+        ("scalar", "data_type", "real64", "(ScalarDataType real64)"),
+        ("scalar", "data_type", "real32", "(ScalarDataType real32)"),
+        ("scalar", "data_type", "real16", "(ScalarDataType real16)"),
+        ("scalar", "data_type", "real", "(ScalarDataType real)"),
+        
+        # Scalar data types for "scalar_data_type" rule (same expected output)
+        ("scalar", "scalar_data_type", "bool", "(ScalarDataType bool)"),
+        ("scalar", "scalar_data_type", "int64", "(ScalarDataType int64)"),
+        ("scalar", "scalar_data_type", "int32", "(ScalarDataType int32)"),
+        ("scalar", "scalar_data_type", "int16", "(ScalarDataType int16)"),
+        ("scalar", "scalar_data_type", "int8", "(ScalarDataType int8)"),
+        ("scalar", "scalar_data_type", "int", "(ScalarDataType int)"),
+        ("scalar", "scalar_data_type", "real64", "(ScalarDataType real64)"),
+        ("scalar", "scalar_data_type", "real32", "(ScalarDataType real32)"),
+        ("scalar", "scalar_data_type", "real16", "(ScalarDataType real16)"),
+        ("scalar", "scalar_data_type", "real", "(ScalarDataType real)"),
+        
+        # Array data types for "data_type" rule
+        ("array", "data_type", "array[int64, 3]", "(ArrayDataType (ScalarDataType int64) (IntLiteral 3))"),
+        ("array", "data_type", "array[real64, {2, 3}]", "(ArrayDataType (ScalarDataType real64) (ArrayLiteral1D (IntLiteral 2) (IntLiteral 3)))"),
+        
+        # Array data types for "array_data_type" rule (same expected output)
+        ("array", "array_data_type", "array[int64, 3]", "(ArrayDataType (ScalarDataType int64) (IntLiteral 3))"),
+        ("array", "array_data_type", "array[real64, {2, 3}]", "(ArrayDataType (ScalarDataType real64) (ArrayLiteral1D (IntLiteral 2) (IntLiteral 3)))"),
+    ]
+
+
+def get_data_type_parse_test_data():
+    """Return test data for data type parsing tests (CST)."""
+    return [
+        # Array data types parsing
+        ("array", "array_data_type", "array[int64, 3]", "(array_data_type array [ (scalar_data_type (scalar_int_data_type int64)) , (array_shape (expr 3)) ])"),
+        ("array", "array_data_type", "array[real64, {2, 3}]", "(array_data_type array [ (scalar_data_type (scalar_real_data_type real64)) , (array_shape (array_literal_1d { (expr 2) , (expr 3) })) ])"),
+        
+        # Scalar data types already handled by get_scalar_data_types() in parameterized parse test
+    ]
+
+
+def get_rectangular_selection_test_data():
+    """Return test data for rectangular selection AST building tests."""
+    return [
+        # Array elements rectangular selection
+        ("array", "rect_sel_of_array_elems", "my_array[x]", 
+         "(RectSelOfArrayElems (Identifier my_array) (Range (Identifier x) (Identifier x)))"),
+        ("array", "rect_sel_of_array_elems", "my_array[:x]", 
+         "(RectSelOfArrayElems (Identifier my_array) (Range (RangePlaceholder Min) (Identifier x)))"),
+        ("array", "rect_sel_of_array_elems", "my_array[x:]", 
+         "(RectSelOfArrayElems (Identifier my_array) (Range (Identifier x) (RangePlaceholder Max)))"),
+        ("array", "rect_sel_of_array_elems", "my_array[x-1:y+2]", 
+         "(RectSelOfArrayElems (Identifier my_array) (Range (Sub (Identifier x) (IntLiteral 1)) (Add (Identifier y) (IntLiteral 2))))"),
+        ("array", "rect_sel_of_array_elems", "my_array[:]", 
+         "(RectSelOfArrayElems (Identifier my_array) (Range (RangePlaceholder Min) (RangePlaceholder Max)))"),
+        ("array", "rect_sel_of_array_elems", "my_array[x, y]", 
+         "(RectSelOfArrayElems (Identifier my_array) (Range (Identifier x) (Identifier x)) (Range (Identifier y) (Identifier y)))"),
+         
+        # Lattice in DFs rectangular selection
+        ("lattice_in", "rect_sel_of_lattice_in_dfs", "f.in[x | 0]", 
+         "(RectSelOfLatticeInDFs (Identifier f) (Range (Identifier x) (Identifier x)) (Range (IntLiteral 0) (IntLiteral 0)))"),
+        ("lattice_in", "rect_sel_of_lattice_in_dfs", "g.in[x+1, y-1 | :]", 
+         "(RectSelOfLatticeInDFs (Identifier g) (Range (Add (Identifier x) (IntLiteral 1)) (Add (Identifier x) (IntLiteral 1))) (Range (Sub (Identifier y) (IntLiteral 1)) (Sub (Identifier y) (IntLiteral 1))) (Range (RangePlaceholder Min) (RangePlaceholder Max)))"),
+        ("lattice_in", "rect_sel_of_lattice_in_dfs", "ugly_lattice_name.in[-1+x, 3-y, z-x | 3:Q]", 
+         "(RectSelOfLatticeInDFs (Identifier ugly_lattice_name) (Range (Add (UnaryMinusExpr (IntLiteral 1)) (Identifier x)) (Add (UnaryMinusExpr (IntLiteral 1)) (Identifier x))) (Range (Sub (IntLiteral 3) (Identifier y)) (Sub (IntLiteral 3) (Identifier y))) (Range (Sub (Identifier z) (Identifier x)) (Sub (Identifier z) (Identifier x))) (Range (IntLiteral 3) (Identifier Q)))"),
+         
+        # Lattice out DFs rectangular selection  
+        ("lattice_out", "rect_sel_of_lattice_out_dfs", "f.out[x | 0]", 
+         "(RectSelOfLatticeOutDFs (Identifier f) (Range (Identifier x) (Identifier x)) (Range (IntLiteral 0) (IntLiteral 0)))"),
+        ("lattice_out", "rect_sel_of_lattice_out_dfs", "g.out[x+1, y-1 | :]", 
+         "(RectSelOfLatticeOutDFs (Identifier g) (Range (Add (Identifier x) (IntLiteral 1)) (Add (Identifier x) (IntLiteral 1))) (Range (Sub (Identifier y) (IntLiteral 1)) (Sub (Identifier y) (IntLiteral 1))) (Range (RangePlaceholder Min) (RangePlaceholder Max)))"),
+        ("lattice_out", "rect_sel_of_lattice_out_dfs", "ugly_lattice_name.out[-1+x, 3-y, z-x | 3:Q]", 
+         "(RectSelOfLatticeOutDFs (Identifier ugly_lattice_name) (Range (Add (UnaryMinusExpr (IntLiteral 1)) (Identifier x)) (Add (UnaryMinusExpr (IntLiteral 1)) (Identifier x))) (Range (Sub (IntLiteral 3) (Identifier y)) (Sub (IntLiteral 3) (Identifier y))) (Range (Sub (Identifier z) (Identifier x)) (Sub (Identifier z) (Identifier x))) (Range (IntLiteral 3) (Identifier Q)))"),
+    ]
+
+
+def get_range_test_data():
+    """Return test data for range AST building tests."""
+    return [
+        # Coordinate ranges
+        ("coords", "coords_range", "1", "(Range (IntLiteral 1) (IntLiteral 1))"),
+        ("coords", "coords_range", "23:", "(Range (IntLiteral 23) (RangePlaceholder Max))"),
+        ("coords", "coords_range", ":45", "(Range (RangePlaceholder Min) (IntLiteral 45))"),
+        ("coords", "coords_range", "x", "(Range (Identifier x) (Identifier x))"),
+        ("coords", "coords_range", "x- 1", "(Range (Sub (Identifier x) (IntLiteral 1)) (Sub (Identifier x) (IntLiteral 1)))"),
+        ("coords", "coords_range", "x- 1:", "(Range (Sub (Identifier x) (IntLiteral 1)) (RangePlaceholder Max))"),
+        ("coords", "coords_range", "x:- 1", "(Range (Identifier x) (UnaryMinusExpr (IntLiteral 1)))"),
+        ("coords", "coords_range", "x:x+1", "(Range (Identifier x) (Add (Identifier x) (IntLiteral 1)))"),
+        ("coords", "coords_range", ":", "(Range (RangePlaceholder Min) (RangePlaceholder Max))"),
+        
+        # Lattice DF ranges  
+        ("lattice_dfs", "lattice_dfs_range", "| :", "(Range (RangePlaceholder Min) (RangePlaceholder Max))"),
+        ("lattice_dfs", "lattice_dfs_range", "|: Q", "(Range (RangePlaceholder Min) (Identifier Q))"),
+        ("lattice_dfs", "lattice_dfs_range", "|2 :", "(Range (IntLiteral 2) (RangePlaceholder Max))"),
+        ("lattice_dfs", "lattice_dfs_range", "|3 ", "(Range (IntLiteral 3) (IntLiteral 3))"),
+        ("lattice_dfs", "lattice_dfs_range", "|/* why not a comment here? :) */4 :Q", "(Range (IntLiteral 4) (Identifier Q))"),
+    ]
+
+
 # ============================================================================
 # Test Exception Helpers
 # ============================================================================
