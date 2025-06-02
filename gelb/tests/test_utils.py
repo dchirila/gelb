@@ -375,6 +375,279 @@ def get_dimension_symbols():
     return ["Nx", "Ny", "Nz"]
 
 
+def get_array_literal_parse_test_data():
+    """Return test data for array literal parsing tests (CST)."""
+    return [
+        # 1D array literals
+        ("1d", "simple", "{1, 2, 3}", 
+         "(array_literal_1d { (expr 1) , (expr 2) , (expr 3) })"),
+        ("1d", "with_comments", "/* comment 1*/{\n123// comment 2\n, 456//\n}",
+         "(array_literal_1d { (expr 123) , (expr 456) })"),
+        
+        # 2D array literals  
+        ("2d", "simple", "{{1, 2}, {3, 4} }",
+         "(array_literal_2d { (array_literal_1d { (expr 1) , (expr 2) }) , (array_literal_1d { (expr 3) , (expr 4) }) })"),
+        ("2d", "with_whitespace", "{\n{1, 2},\n{3, 4}\n}",
+         "(array_literal_2d { (array_literal_1d { (expr 1) , (expr 2) }) , (array_literal_1d { (expr 3) , (expr 4) }) })"),
+        
+        # 3D array literals
+        ("3d", "simple", "{{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}}",
+         "(array_literal_3d { (array_literal_2d { (array_literal_1d { (expr 1) , (expr 2) }) , (array_literal_1d { (expr 3) , (expr 4) }) }) , (array_literal_2d { (array_literal_1d { (expr 5) , (expr 6) }) , (array_literal_1d { (expr 7) , (expr 8) }) }) })"),
+        
+        # 4D array literals  
+        ("4d", "simple", "{{{{1,2},{3,4}},{{5,6},{7,8}}},{{{9,10},{11,12}},{{13,14},{15,16}}}}",
+         "(array_literal_4d { (array_literal_3d { (array_literal_2d { (array_literal_1d { (expr 1) , (expr 2) }) , (array_literal_1d { (expr 3) , (expr 4) }) }) , (array_literal_2d { (array_literal_1d { (expr 5) , (expr 6) }) , (array_literal_1d { (expr 7) , (expr 8) }) }) }) , (array_literal_3d { (array_literal_2d { (array_literal_1d { (expr 9) , (expr 10) }) , (array_literal_1d { (expr 11) , (expr 12) }) }) , (array_literal_2d { (array_literal_1d { (expr 13) , (expr 14) }) , (array_literal_1d { (expr 15) , (expr 16) }) }) }) })"),
+    ]
+
+
+def get_array_literal_ast_test_data():
+    """Return test data for array literal AST building tests."""
+    return [
+        # 1D array literals
+        ("1d", "simple", "{1, 2, 3}", 
+         "(ArrayLiteral1D (IntLiteral 1) (IntLiteral 2) (IntLiteral 3))"),
+        ("1d", "with_comments", "/* comment 1*/{\n123// comment 2\n, 456//\n}",
+         "(ArrayLiteral1D (IntLiteral 123) (IntLiteral 456))"),
+        
+        # 2D array literals  
+        ("2d", "simple", "{{1, 2}, {3, 4} }",
+         "(ArrayLiteral2D (ArrayLiteral1D (IntLiteral 1) (IntLiteral 2)) (ArrayLiteral1D (IntLiteral 3) (IntLiteral 4)))"),
+        
+        # 3D array literals
+        ("3d", "simple", "{{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}}",
+         "(ArrayLiteral3D (ArrayLiteral2D (ArrayLiteral1D (IntLiteral 1) (IntLiteral 2)) (ArrayLiteral1D (IntLiteral 3) (IntLiteral 4))) (ArrayLiteral2D (ArrayLiteral1D (IntLiteral 5) (IntLiteral 6)) (ArrayLiteral1D (IntLiteral 7) (IntLiteral 8))))"),
+        
+        # 4D array literals  
+        ("4d", "simple", "{{{{1,2},{3,4}},{{5,6},{7,8}}},{{{9,10},{11,12}},{{13,14},{15,16}}}}",
+         "(ArrayLiteral4D (ArrayLiteral3D (ArrayLiteral2D (ArrayLiteral1D (IntLiteral 1) (IntLiteral 2)) (ArrayLiteral1D (IntLiteral 3) (IntLiteral 4))) (ArrayLiteral2D (ArrayLiteral1D (IntLiteral 5) (IntLiteral 6)) (ArrayLiteral1D (IntLiteral 7) (IntLiteral 8)))) (ArrayLiteral3D (ArrayLiteral2D (ArrayLiteral1D (IntLiteral 9) (IntLiteral 10)) (ArrayLiteral1D (IntLiteral 11) (IntLiteral 12))) (ArrayLiteral2D (ArrayLiteral1D (IntLiteral 13) (IntLiteral 14)) (ArrayLiteral1D (IntLiteral 15) (IntLiteral 16)))))"),
+    ]
+
+
+def get_binary_operator_test_data():
+    """Return test data for binary operator parsing tests."""
+    return [
+        # Arithmetic operators
+        ("add", "x + y", "(Add (Identifier x) (Identifier y))"),
+        ("sub", "x - y", "(Sub (Identifier x) (Identifier y))"),
+        ("mul", "x * y", "(Mul (Identifier x) (Identifier y))"),
+        ("div", "x / y", "(Div (Identifier x) (Identifier y))"),
+        ("pow", "x ^ y", "(Pow (Identifier x) (Identifier y))"),
+        
+        # Comparison operators
+        ("lt", "x < y", "(Less (Identifier x) (Identifier y))"),
+        ("gt", "x > y", "(Greater (Identifier x) (Identifier y))"),
+        ("le", "x <= y", "(LessEqual (Identifier x) (Identifier y))"),
+        ("ge", "x >= y", "(GreaterEqual (Identifier x) (Identifier y))"),
+        ("eq", "x == y", "(Equal (Identifier x) (Identifier y))"),
+        ("ne", "x != y", "(NotEqual (Identifier x) (Identifier y))"),
+        
+        # Logical operators
+        ("and", "x && y", "(And (Identifier x) (Identifier y))"),
+        ("or", "x || y", "(Or (Identifier x) (Identifier y))"),
+    ]
+
+
+def get_symbol_table_error_test_data():
+    """Return test data for symbol table error tests across different block types."""
+    return [
+        # Global constants block tests
+        ("global_constants_block", "symbol_exists", GeLBExSymbolExists, """
+        global_constants {
+          const array[int32, {23, 32}] NX = 32;
+          const array[real64, {23, 32}] NX = 3.14;
+        }
+        """, None),
+        
+        ("global_constants_block", "symbol_unknown", GeLBExSymbolUnknown, """
+        global_constants {
+          const int NY = -2 * NX + NZ;
+        }
+        """, None),
+        
+        ("global_constants_block", "symbol_recursion", GeLBExSymbolConstantRecursion, """
+        global_constants {
+          const int NX = 123;
+          const int NY = -2 * NY + NX;
+        }
+        """, None),
+        
+        ("global_constants_block", "symbol_ref_before_def", GeLBExSymbolRefBeforeDef, """
+        global_constants {
+          const int TWENTYFOUR = 2 * TWELVE + TWELVE;
+          const int TWELVE = 12;
+        }
+        """, None),
+        
+        # Lattices block tests  
+        ("lattices_block", "symbol_exists", GeLBExSymbolExists, """
+        lattices {
+          lattice f(3, 19, real64);
+          lattice g(3, 5, real64);
+          lattice f(3, 19, real64);
+        }
+        """, None),
+        
+        ("lattices_block", "symbol_unknown_d", GeLBExSymbolUnknown, """
+        lattices {
+          lattice f(1 + TWO, 19, real64);
+        }
+        """, None),
+        
+        ("lattices_block", "symbol_unknown_q", GeLBExSymbolUnknown, """
+        lattices {
+          lattice f(3, TWO + 17, real64);
+        }
+        """, None),
+        
+        # Node classes block tests
+        ("node_classes_block", "symbol_exists", GeLBExSymbolExists, """
+        node_classes {
+          node_class BULK(SetDFsToZero, SetDFsToOne, CurrentState);
+          node_class BULK(SetDFsToZero, SetDFsToOne, CurrentState);
+        }
+        """, None),
+        
+        # Dynamic block tests
+        ("dynamic_block", "symbol_exists", GeLBExSymbolExists, """
+        dynamic SetDFsToConstant {
+          const real64 PI = 3.141592653589793;
+          const real32 PI = 3.14159265;
+          const real16 PI = 3.141;
+          f.out[x, y, z | :] = PI;
+        }
+        """, "f"),
+        
+        ("dynamic_block", "symbol_unknown_const", GeLBExSymbolUnknown, """
+        dynamic SetDFsToConstant {
+          const int TWOPI = PI;
+          f.out[x, y, z | :] = TWOPI;
+        }
+        """, "f"),
+        
+        ("dynamic_block", "symbol_unknown_ref", GeLBExSymbolUnknown, """
+        dynamic SetDFsToConstant {
+          f.out[x, y, z | :] = TWOPI;
+        }
+        """, "f"),
+        
+        ("dynamic_block", "symbol_recursion", GeLBExSymbolConstantRecursion, """
+        dynamic SetDFsToConstant {
+          const int NX = 123;
+          const int NY = -2 * NY + NX;
+          f.out[x, y, z | :] = NY;
+        }
+        """, "f"),
+        
+        # Initializer block tests
+        ("initializer_block", "symbol_exists", GeLBExSymbolExists, """
+        initializer SetDFsToConstant {
+          const real64 PI = 3.141592653589793;
+          const real32 PI = 3.14159265;
+          const real16 PI = 3.141;
+          f.out[x, y, z | :] = PI;
+        }
+        """, "f"),
+        
+        ("initializer_block", "symbol_unknown_const", GeLBExSymbolUnknown, """
+        initializer SetDFsToConstant {
+          const int TWOPI = PI;
+          f.out[x, y, z | :] = TWOPI;
+        }
+        """, "f"),
+        
+        ("initializer_block", "symbol_unknown_ref", GeLBExSymbolUnknown, """
+        initializer SetDFsToConstant {
+          f.out[x, y, z | :] = TWOPI;
+        }
+        """, "f"),
+        
+        ("initializer_block", "symbol_unknown_var", GeLBExSymbolUnknown, """
+        initializer SetDFsToConstant {
+          int tutu;
+          tutu = PI;
+          f.out[x, y, z | :] = tutu;
+        }
+        """, "f"),
+        
+        ("initializer_block", "symbol_recursion", GeLBExSymbolConstantRecursion, """
+        initializer SetDFsToConstant {
+          const int NX = 123;
+          const int NY = -2 * NY + NX;
+          g.out[x, y, z | :] = NY;
+        }
+        """, "g"),
+        
+        # Gauge block tests
+        ("gauge_block", "symbol_exists", GeLBExSymbolExists, """
+        gauge PiTimesCurrentState(out = {int state;}) {
+          const real64 PI = 3.141592653589793;
+          const real32 PI = 3.14159265;
+          const real16 PI = 3.141;
+          state = PI*f.in[x | 0];
+        }
+        """, "f"),
+        
+        ("gauge_block", "symbol_unknown", GeLBExSymbolUnknown, """
+        gauge PiTimesCurrentState(out = {int state;}) {
+          state = PI *f.in[x | 0];
+        }
+        """, "f"),
+    ]
+
+
+def get_symbol_table_valid_test_data():
+    """Return test data for valid symbol table constructions across different block types."""
+    return [
+        # Global constants block valid test
+        ("global_constants_block", """
+        global_constants {
+            const int CX = 0;
+            const real64 Z = 123;
+        }
+        """, None, "(CX \"constant definition\" (ConstantDefinitionStmt (Identifier CX) (ScalarDataType int) (IntLiteral 0))) (Z \"constant definition\" (ConstantDefinitionStmt (Identifier Z) (ScalarDataType real64) (IntLiteral 123)))"),
+        
+        # Lattices block valid test  
+        ("lattices_block", """
+        lattices {
+          lattice f(2, 9, real64);
+          lattice g(2, 5, real64);
+        }
+        """, None, "(f \"lattice instance\" (LatticeInstaStmt (Identifier f) (IntLiteral 2) (IntLiteral 9) (ScalarDataType real64))) (g \"lattice instance\" (LatticeInstaStmt (Identifier g) (IntLiteral 2) (IntLiteral 5) (ScalarDataType real64)))"),
+        
+        # Node classes block valid test
+        ("node_classes_block", """
+        node_classes {
+          node_class TOP(SetDFsToZero, SetDFsToOne, CurrentState);
+          node_class BULK(SetDFsToZero, SetDFsToOne, CurrentState);
+        }
+        """, None, "(TOP \"node class\" (NodeClassInstaStmt (Identifier TOP) (Identifier SetDFsToZero) (Identifier SetDFsToOne) (Identifier CurrentState))) (BULK \"node class\" (NodeClassInstaStmt (Identifier BULK) (Identifier SetDFsToZero) (Identifier SetDFsToOne) (Identifier CurrentState)))"),
+        
+        # Dynamic block valid test
+        ("dynamic_block", """
+        dynamic SetDFsToConstant {
+          const real64 PI = 3.141592653589793;
+          f.out[x, y, z | :] = PI;
+        }
+        """, "f", "(PI \"constant definition\" (ConstantDefinitionStmt (Identifier PI) (ScalarDataType real64) (RealLiteral 3.141592653589793)))"),
+        
+        # Initializer block valid test  
+        ("initializer_block", """
+        initializer SetDFsToConstant {
+          const real64 PI = 3.141592653589793;
+          f.out[x, y, z | :] = PI;
+        }
+        """, "f", "(PI \"constant definition\" (ConstantDefinitionStmt (Identifier PI) (ScalarDataType real64) (RealLiteral 3.141592653589793)))"),
+        
+        # Gauge block valid test
+        ("gauge_block", """
+        gauge PiTimesCurrentState(out = {int state;}) {
+          const real64 PI = 3.141592653589793;
+          state = f.in[x | 0];
+        }
+        """, "f", "(PI \"constant definition\" (ConstantDefinitionStmt (Identifier PI) (ScalarDataType real64) (RealLiteral 3.141592653589793))) (state \"output variable declaration\" (VariableDeclarationStmt (Identifier state) (ScalarDataType int)))"),
+    ]
+
+
 # ============================================================================
 # Test Exception Helpers
 # ============================================================================
@@ -441,6 +714,21 @@ def assert_symbol_recursion_error(gelb_code, expected_symbol_name=None):
     
     if expected_symbol_name:
         assert expected_symbol_name in str(exc_info.value)
+
+
+def assert_symbol_table_error(test_string, rule, exception_class, symbol_to_ignore="f"):
+    """
+    Helper to assert that a specific symbol table exception is raised.
+    
+    Args:
+        test_string (str): Code that should raise the exception
+        rule (str): ANTLR rule to parse with
+        exception_class: Exception class to expect
+        symbol_to_ignore (str): Symbol to ignore during testing (usually "f" for lattice)
+    """
+    ast = get_ast(rule, test_string)
+    with pytest.raises(exception_class):
+        build_symbols_tables(ast, symbol_to_ignore)
 
 
 def assert_symbol_not_allowed_error(test_string, rule, expected_symbol_name=None):
