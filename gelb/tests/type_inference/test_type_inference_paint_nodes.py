@@ -1,68 +1,8 @@
 #!/usr/bin/env python3
 
 import pytest
-from gelb.frontend.stage1_frontend import (
-    get_ast,
-    build_symbols_tables,
-    resolve_all_constants,
-    resolve_ranges,
-    add_implicit_symbols,
-    infer_types
-)
 from gelb.gelb_ast.ASTNodes import *
-from gelb.utils import config
-
-
-def get_typed_ast(gelb_code):
-    """Helper to get AST with types inferred."""
-    # Set the source code in config to avoid error reporting issues
-    config.GELB_SRC_RAW = gelb_code
-    
-    ast = get_ast("gelb_program", gelb_code)
-    ast = build_symbols_tables(ast)
-    ast = add_implicit_symbols(ast)
-    ast = resolve_all_constants(ast)
-    ast = resolve_ranges(ast)
-    ast = infer_types(ast)
-    return ast
-
-
-def minimal_gelb_program_2d(geometry_content="", global_constants_content=""):
-    """Create a minimal valid 2D GeLB program with the given geometry content."""
-    default_constants = "const int N = 32;"
-    if global_constants_content:
-        # If custom constants provided, use them (they should include N)
-        constants_block = global_constants_content
-    else:
-        constants_block = default_constants
-        
-    return f"""
-    simulation_description("Test 2D");
-    global_constants {{
-        {constants_block}
-    }}
-    lattices {{
-        lattice f(2, 9, int);
-    }}
-    initializer Init {{
-        f.out[x, y | 0] = 0;
-    }}
-    dynamic Dyn {{
-        f.out[x, y | 0] = f.in[x, y | 0];
-    }}
-    gauge Out(out = {{int val;}}) {{
-        val = f.in[x, y | 0];
-    }}
-    node_classes {{
-        node_class BULK(Init, Dyn, Out);
-        node_class WALL(Init, Dyn, Out);
-    }}
-    geometry {{
-        set_grid_size({{N, N}});
-        set_grid_periodicity({{false, false}});
-        {geometry_content if geometry_content else "nodes[:, :] = BULK;"}
-    }}
-    """
+from gelb.tests.test_utils import get_typed_ast, minimal_gelb_program_2d
 
 
 class TestPaintNodesTypeInference:
