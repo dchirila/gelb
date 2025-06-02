@@ -91,10 +91,6 @@ class TestPaintNodesTypeInference:
         assert isinstance(first_range.high.inferred_type, ScalarDataType_N)
         assert first_range.high.inferred_type.scalar_dtype == "int"
     
-    def test_paint_nodes_with_implicit_Nx(self):
-        # Skip this test - Nx resolution requires proper symbol table hierarchy
-        pytest.skip("Nx symbol resolution requires fixing symbol table parent hierarchy")
-        
     def test_paint_nodes_with_arithmetic_expression(self):
         gelb_code = minimal_gelb_program_2d("nodes[2 * 5 : N - 10, :] = WALL;")
         ast = get_typed_ast(gelb_code)

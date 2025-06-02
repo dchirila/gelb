@@ -272,7 +272,10 @@ geometry {
         assert ast.geometry.symbol_defs.contains("BULK")  # from node classes
         
         # Verify the parent table structure
-        assert ast.geometry.symbol_defs.parent_table is ast.global_constants.symbol_defs
+        # Geometry should have program's global table as parent (to access node classes)
+        # and program's global table should have global_constants as parent
+        assert ast.geometry.symbol_defs.parent_table is ast.symbol_defs
+        assert ast.symbol_defs.parent_table is ast.global_constants.symbol_defs
     
     # Verify the parent table structure for other blocks
     assert ast.lattices.symbol_defs.parent_table is ast.global_constants.symbol_defs

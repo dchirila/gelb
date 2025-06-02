@@ -3,7 +3,6 @@
 from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
 from gelb.gelb_ast.ASTNodes import *
 from gelb.gelb_ast.SymbolDefinition import SymbolDefinition
-from gelb.frontend.SymbolsTable import SymbolsTable
 
 
 class ImplicitSymbolsAdderVisitor(ASTBaseVisitor):
@@ -40,6 +39,12 @@ class ImplicitSymbolsAdderVisitor(ASTBaseVisitor):
         # Add implicit constants (Nx, Ny, Nz) to global_constants block
         if node.global_constants:
             self._add_dimension_constants(node.global_constants)
+        else:
+            # If there's no global_constants block, we still need Nx, Ny, Nz to be accessible
+            # Find the shared parent symbol table from any block that has one
+            parent_table = self._find_shared_parent_table(node)
+            if parent_table is not None and self.dimensionality > 0:
+                self._add_dimension_constants_to_table(parent_table)
         
         # Add implicit lattice coordinate variables (x, y, z) to blocks that need them
         blocks_needing_coordinates = []
@@ -99,9 +104,9 @@ class ImplicitSymbolsAdderVisitor(ASTBaseVisitor):
         """
         dimension_names = ['Nx', 'Ny', 'Nz']
         
-        # Ensure the block has a symbol table
+        # The symbol table should already exist from SymbolsTablesBuilderVisitor
         if not hasattr(global_constants_block, 'symbol_defs') or global_constants_block.symbol_defs is None:
-            global_constants_block.symbol_defs = SymbolsTable()
+            raise ValueError("global_constants_block should have a symbol table by this point in the pipeline")
         
         # Add dimension constants based on actual dimensionality
         for i in range(self.dimensionality):
@@ -129,9 +134,9 @@ class ImplicitSymbolsAdderVisitor(ASTBaseVisitor):
         """
         coordinate_names = ['x', 'y', 'z']
         
-        # Ensure the block has a symbol table
+        # The symbol table should already exist from SymbolsTablesBuilderVisitor
         if not hasattr(block, 'symbol_defs') or block.symbol_defs is None:
-            block.symbol_defs = SymbolsTable()
+            raise ValueError(f"{block.__class__.__name__} should have a symbol table by this point in the pipeline")
         
         # Add lattice coordinate variables based on dimensionality
         for i in range(self.dimensionality):
@@ -151,3 +156,50 @@ class ImplicitSymbolsAdderVisitor(ASTBaseVisitor):
             # Add to symbol table (only if not already present)
             if not block.symbol_defs.contains_local(coord_name):
                 block.symbol_defs.append(symbol_def)
+    
+    def _find_shared_parent_table(self, node):
+        """
+        Find the shared parent symbol table when there's no global_constants block.
+        All blocks should share the same parent table created by SymbolsTablesBuilderVisitor.
+        """
+        # Check various blocks to find the parent table
+        blocks_to_check = []
+        if node.lattices:
+            blocks_to_check.append(node.lattices)
+        if node.initializers:
+            blocks_to_check.extend(node.initializers)
+        if node.dynamics:
+            blocks_to_check.extend(node.dynamics)
+        if node.gauges:
+            blocks_to_check.extend(node.gauges)
+        if node.geometry:
+            blocks_to_check.append(node.geometry)
+        
+        for block in blocks_to_check:
+            if hasattr(block, 'symbol_defs') and block.symbol_defs and hasattr(block.symbol_defs, 'parent_table'):
+                return block.symbol_defs.parent_table
+        
+        return None
+    
+    def _add_dimension_constants_to_table(self, symbol_table):
+        """
+        Add Nx, Ny, Nz constants directly to a symbol table.
+        Used when there's no global_constants block.
+        """
+        dimension_names = ['Nx', 'Ny', 'Nz']
+        
+        # Add dimension constants based on actual dimensionality
+        for i in range(self.dimensionality):
+            dim_name = dimension_names[i]
+            dim_value = self.grid_dimensions[i]
+            
+            # Create a symbol definition for the dimension constant
+            symbol_def = SymbolDefinition(
+                name=dim_name,
+                tag="implicit dimension constant",
+                value=dim_value
+            )
+            
+            # Add to symbol table (only if not already present)
+            if not symbol_table.contains_local(dim_name):
+                symbol_table.append(symbol_def)

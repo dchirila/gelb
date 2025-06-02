@@ -74,9 +74,26 @@ class TestIdentifierTypeInference:
         assert mul_expr.inferred_type.scalar_dtype == "int"
     
     def test_implicit_constant_Nx(self):
-        # Skip this test - Nx resolution requires proper symbol table hierarchy
-        # which is a separate issue from type inference
-        pytest.skip("Nx symbol resolution requires fixing symbol table parent hierarchy")
+        # Test that Nx can be accessed from blocks via parent symbol table
+        gelb_code = minimal_gelb_program(
+            global_constants_content="const int SIZE = 100;",
+            initializer_content="f.out[x | 0] = Nx - x;"
+        )
+        ast = get_typed_ast(gelb_code)
+        
+        # Find the subtraction expression in the assignment
+        init_block = ast.initializers.elements[0]
+        assign_stmt = init_block.stmts.elements[0]
+        
+        # The RHS should be a Sub_N expression with Nx - x
+        sub_expr = assign_stmt.rhs
+        assert isinstance(sub_expr, Sub_N)
+        
+        # Check that Nx has been resolved and has int type
+        nx_identifier = sub_expr.left
+        assert hasattr(nx_identifier, 'inferred_type')
+        assert isinstance(nx_identifier.inferred_type, ScalarDataType_N)
+        assert nx_identifier.inferred_type.scalar_dtype == "int"
     
     def test_implicit_variable_x_in_initializer(self):
         gelb_code = minimal_gelb_program(initializer_content="f.out[x | 0] = x;")

@@ -119,14 +119,20 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
 
         # guard against attempts to build the symbol_defs-table more than once
         if node.symbol_defs is None:
-            node.symbol_defs = SymbolsTable()  # new SymbolsTable
-
             if node.global_constants is not None:
                 # trigger symbol_defs-table creation @global constants block
                 node.global_constants = self.visit(node.global_constants,
                                                    ast_root_node)
                 # Store global constants symbol table for use in other blocks
                 self.global_constants_symbol_table = node.global_constants.symbol_defs
+            else:
+                # Create an empty global constants symbol table even if the block doesn't exist
+                # This ensures all other blocks have a consistent parent for hierarchical lookup
+                self.global_constants_symbol_table = SymbolsTable()
+            
+            # Create program's global symbol table with global constants as parent
+            # This allows the program table to contain node classes while still accessing constants
+            node.symbol_defs = SymbolsTable(parent_table=self.global_constants_symbol_table)
             if node.lattices is not None:
                 # trigger symbol_defs-table creation @lattices block
                 node.lattices = self.visit(node.lattices, ast_root_node)
@@ -371,11 +377,12 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
             ast_root_node: Program_N
     ):
         if node.symbol_defs is None:
-            # Create symbol table with global constants as parent
-            # This allows geometry expressions to access global constants like N
-            node.symbol_defs = SymbolsTable(parent_table=self.global_constants_symbol_table)
+            # Create symbol table with program's global table as parent
+            # This allows geometry to access both global constants (via program->global_constants)
+            # and node classes (directly from program's global table)
+            node.symbol_defs = SymbolsTable(parent_table=ast_root_node.symbol_defs)
             
             # Geometry block doesn't define any symbols itself,
-            # it just needs access to global constants for expressions
+            # it just needs access to global constants and node classes for expressions
             self.check_for_undef_or_ref_before_def_symbols(node, ast_root_node)
         return node
