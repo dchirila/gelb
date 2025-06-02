@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import pytest
-from gelb.tests.test_utils import assert_symbol_not_allowed_error, get_coordinate_symbols, get_dimension_symbols
+from gelb.tests.unit.symbols.symbol_test_utils import assert_symbol_not_allowed_error, get_coordinate_symbols, get_dimension_symbols
 
 
 class TestImplicitSymbolsInBlocks:

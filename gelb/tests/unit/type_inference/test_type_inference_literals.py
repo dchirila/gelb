@@ -2,7 +2,7 @@
 
 import pytest
 from gelb.gelb_ast.ASTNodes import *
-from gelb.tests.test_utils import get_typed_ast, minimal_gelb_program_1d as minimal_gelb_program
+from gelb.tests.unit.type_inference.type_inference_test_utils import get_typed_ast, minimal_gelb_program_1d as minimal_gelb_program
 
 
 class TestLiteralTypeInference:

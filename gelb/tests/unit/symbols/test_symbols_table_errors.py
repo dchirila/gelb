@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 
 import pytest
-from gelb.tests.test_utils import get_symbol_table_error_test_data, get_symbol_table_valid_test_data
-from gelb.frontend.stage1_frontend import get_ast, build_symbols_tables
+from gelb.tests.unit.symbols.symbol_test_utils import get_symbol_table_error_test_data, get_symbol_table_valid_test_data
+from gelb.tests.test_utils import get_ast
+from gelb.frontend.stage1_frontend import build_symbols_tables
 
 
 class TestSymbolTableErrors:

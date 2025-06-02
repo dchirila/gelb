@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import pytest
-from gelb.tests.test_utils import assert_ast_equals, get_expression_ast_test_data
+from gelb.tests.unit.ast_building.ast_test_utils import assert_ast_equals, get_expression_ast_test_data
 
 
 class TestExpressionAST:
