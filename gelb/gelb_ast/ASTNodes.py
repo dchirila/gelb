@@ -864,3 +864,18 @@ class LatticeOutSelectionAssignmentStmt_N(AssignmentStmt_N):
         return (
             f"(LatticeOutSelectionAssignmentStmt {self.lhs} {self.rhs})"
         )
+
+
+class ArraySelectionAssignmentStmt_N(AssignmentStmt_N):
+    """
+    Represents an assignment to an array element or slice selection.
+    
+    Examples:
+        my_array[0] = 42;
+        my_array[i:j] = some_expr;
+        matrix[x, y] = value;
+    """
+    def __str__(self):
+        return (
+            f"(ArraySelectionAssignmentStmt {self.lhs} {self.rhs})"
+        )

@@ -925,6 +925,263 @@ The implicit coordinate system enables a CUDA-like programming model where:
 
 This programming model makes GeLB suitable for both CPU and GPU execution while maintaining a clean, mathematical notation for lattice-based algorithms.
 
+Array Selection Assignment Statements
+=====================================
+
+GeLB supports direct assignment to array elements and slices through array selection assignment statements. This feature allows modification of array values after declaration, complementing the existing variable and lattice assignment statements.
+
+Overview
+--------
+
+Array selection assignment statements enable direct modification of array elements using familiar indexing syntax:
+
+.. code-block:: gelb
+
+    // Single element assignment
+    my_array[0] = 42;
+    
+    // Multi-dimensional array assignment
+    matrix[x, y] = value;
+    
+    // Slice assignment
+    coefficients[1:3] = some_expr;
+    
+    // Complex expressions in indices and values
+    temp[i + j] = a * b + c;
+    
+    // Array literal assignment
+    data[0] = {10, 20, 30};
+
+Syntax Patterns
+---------------
+
+Array selection assignments follow the general pattern:
+
+.. code-block:: gelb
+
+    array_name[selection] = expression;
+
+**Selection Patterns:**
+
+* **Single Element**: ``arr[0]``, ``arr[i]``, ``arr[x+1]``
+* **Multi-Dimensional**: ``matrix[x, y]``, ``tensor[i, j, k]``
+* **Slice Ranges**: ``arr[1:5]``, ``arr[start:end]``
+* **Partial Ranges**: ``arr[5:]`` (from index 5 to end), ``arr[:10]`` (from start to index 10)
+* **All Elements**: ``arr[:]`` (entire array)
+
+**Expression Types:**
+
+* **Literals**: ``42``, ``3.14``, ``true``
+* **Variables**: ``value``, ``x + y``
+* **Array Literals**: ``{1, 2, 3}``
+* **Complex Expressions**: ``a * b + c``, ``func(x, y)``
+
+Usage in Program Blocks
+------------------------
+
+Array selection assignments are valid in any block that allows statements:
+
+**Initializer Blocks:**
+
+.. code-block:: gelb
+
+    initializer Setup {
+        array[real, 5] coefficients;
+        coefficients[0] = 1.0;
+        coefficients[1] = 2.5;
+        coefficients[2:4] = 3.14;
+        
+        f.out[x | 0] = coefficients[x % 5];
+    }
+
+**Dynamic Blocks:**
+
+.. code-block:: gelb
+
+    dynamic Update {
+        array[int, 3] neighbors;
+        neighbors[0] = f.in[x-1 | 0];
+        neighbors[1] = f.in[x   | 0]; 
+        neighbors[2] = f.in[x+1 | 0];
+        
+        f.out[x | 0] = neighbors.sum() / 3;
+    }
+
+**Gauge Blocks:**
+
+.. code-block:: gelb
+
+    gauge Analyze(out = {array[real, 3] moments;}) {
+        array[real, 9] dfs = f.in[x, y | :];
+        moments[0] = dfs.sum();              // Density
+        moments[1] = dot(dfs, velocity_x);   // X-momentum
+        moments[2] = dot(dfs, velocity_y);   // Y-momentum
+    }
+
+Range Integration
+-----------------
+
+Array selection assignments fully integrate with GeLB's range resolution system:
+
+**Before Range Resolution:**
+
+.. code-block:: gelb
+
+    data[:] = initial_value;  // : becomes 0:(N-1)
+
+**After Range Resolution:**
+
+.. code-block:: gelb
+
+    data[0:N-1] = initial_value;  // Explicit bounds
+
+This integration ensures that array assignments work seamlessly with the existing range syntax used in lattice selections and geometry specifications.
+
+Implementation Architecture
+----------------------------
+
+**Grammar Rule** (``gelb/antlr_part/grammars/GeLB.g4``):
+
+.. code-block:: antlr
+
+    array_selection_assignment_stmt :
+        lhs=rect_sel_of_array_elems
+        OP_ASSIGN
+        rhs=expr
+        SEMICOLON ;
+
+This follows the same pattern as other assignment statements (``variable_assignment_stmt``, ``lattice_out_selection_assignment_stmt``).
+
+**AST Node** (``gelb/gelb_ast/ASTNodes.py``):
+
+.. code-block:: python
+
+    class ArraySelectionAssignmentStmt_N(AssignmentStmt_N):
+        """
+        Represents an assignment to an array element or slice selection.
+        
+        Examples:
+            my_array[0] = 42;
+            matrix[x, y] = value;
+            arr[1:3] = some_expr;
+        """
+
+**Visitor Integration:**
+
+Array selection assignments are handled by all frontend visitors:
+
+* **ASTBuilderVisitor**: Converts parse tree to AST
+* **TypeInferenceVisitor**: Infers types of LHS selection and RHS expression
+* **RangeResolverVisitor**: Resolves ``None`` bounds in array indices
+* **ASTVisualizationVisitor**: Automatic support via generic traversal
+
+Type System Integration
+-----------------------
+
+Array selection assignments integrate with GeLB's type inference system:
+
+**Type Checking:**
+
+* LHS array selection must resolve to a valid array type
+* RHS expression type must be compatible with array element type
+* Multi-dimensional selections preserve array structure
+* Slice assignments handle partial array updates
+
+**Example Type Resolution:**
+
+.. code-block:: gelb
+
+    const array[real, 5] data = {1.0, 2.0, 3.0, 4.0, 5.0};
+    
+    data[0] = 3.14;        // real := real ✓
+    data[1:3] = {2.5, 3.5}; // array[real, 2] := array[real, 2] ✓
+
+Visualization Support
+---------------------
+
+Array selection assignments appear in AST visualizations with:
+
+* **Purple color** (``plum``) - Statements and control flow
+* **Pink color** for array selections (``lightpink``) - Ranges and selections  
+* **Orange color** for expressions (``orange``) - Operators and expressions
+
+Use ``gelbc --visualize-ast`` to generate visual representations showing the complete assignment structure.
+
+Testing and Validation
+-----------------------
+
+**Test Coverage:**
+
+* **AST Building Tests** (``gelb/tests/unit/ast_building/test_build_ast_array_selection_assignment_stmt.py``):
+  
+  - Single element assignments
+  - Multi-dimensional arrays
+  - Slice assignments with ranges
+  - Complex expressions in indices and values
+  - Array literal assignments
+
+* **Parsing Tests** (``gelb/tests/unit/parsing/test_parse_array_selection_assignment_stmt.py``):
+  
+  - Concrete syntax tree validation
+  - Different range patterns
+  - Expression parsing in array contexts
+
+**Example Test Cases:**
+
+.. code-block:: python
+
+    # Simple element assignment
+    "my_array[0] = 42;"
+    
+    # Multi-dimensional assignment  
+    "matrix[x, y] = value;"
+    
+    # Slice assignment
+    "arr[1:3] = expr;"
+    
+    # Complex expressions
+    "temp[i + j] = a * b + c;"
+
+Best Practices
+--------------
+
+**For Language Users:**
+
+* Use descriptive array names that indicate their purpose
+* Prefer slice assignments for initializing multiple elements
+* Consider using array literals for small, static initializations
+* Be mindful of array bounds when using variable indices
+
+**For Compiler Developers:**
+
+* Array assignments follow the same visitor patterns as other assignment types
+* Range resolution applies to array indices just like lattice selections
+* Type inference handles both LHS array types and RHS expression types
+* AST visualization works automatically via generic traversal
+
+**Performance Considerations:**
+
+* Array element assignments will be compiled to efficient memory operations
+* Slice assignments may be optimized to bulk operations where possible
+* Consider memory layout and cache efficiency for multi-dimensional arrays
+
+Limitations and Future Work
+---------------------------
+
+**Current Limitations:**
+
+* Array assignments currently work with declared arrays within blocks
+* Cross-block array sharing requires careful scoping consideration
+* Advanced array operations (reductions, broadcasts) are not yet implemented
+
+**Future Enhancements:**
+
+* Support for advanced array operations and intrinsic functions
+* Optimization of slice assignments to vectorized operations
+* Integration with parallel execution models for array operations
+
+This feature significantly enhances GeLB's array manipulation capabilities while maintaining consistency with the existing language design and compilation pipeline.
+
 AST Visualization
 =================
 

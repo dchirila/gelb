@@ -67,7 +67,7 @@ block_stmt : constant_definition_stmt
            // BEGIN :: assignment stmts //
            | lattice_out_selection_assignment_stmt
            | variable_assignment_stmt
-//           | array_selection_assignment_stmt
+           | array_selection_assignment_stmt
            // END :: assignment stmts //
            ;
 
@@ -225,6 +225,12 @@ CURLY_CLOSE ;
 variable_assignment_stmt : lhs=identifier OP_ASSIGN
     rhs=expr
 SEMICOLON ;
+
+array_selection_assignment_stmt :
+    lhs=rect_sel_of_array_elems
+    OP_ASSIGN
+    rhs=expr
+    SEMICOLON ;
 
 identifier : ID ;
 

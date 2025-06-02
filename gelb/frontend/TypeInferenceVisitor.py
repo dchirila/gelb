@@ -72,6 +72,12 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         self.visit(node.rhs, ast_root_node)
         return node
     
+    def visitArraySelectionAssignmentStmt_N(self, node: ArraySelectionAssignmentStmt_N, ast_root_node: Program_N):
+        """Infer types of both LHS and RHS expressions."""
+        self.visit(node.lhs, ast_root_node)
+        self.visit(node.rhs, ast_root_node)
+        return node
+    
     # Literal type inference
     
     def visitIntLiteral_N(self, node: IntLiteral_N, ast_root_node: Program_N):

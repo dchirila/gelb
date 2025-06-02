@@ -431,6 +431,18 @@ class ASTBuilderVisitor(GeLBVisitor):
             lhs, rhs
         )
 
+    # Visit a parse tree produced by GeLBParser#array_selection_assignment_stmt.
+    def visitArray_selection_assignment_stmt(
+            self,
+            ctx: GeLBParser.Array_selection_assignment_stmtContext
+    ):
+        lhs = self.visit(ctx.lhs)
+        rhs = self.visit(ctx.rhs)
+        return ArraySelectionAssignmentStmt_N(
+            code_range_from_ctx(ctx),
+            lhs, rhs
+        )
+
     # Visit a parse tree produced by GeLBParser#rect_sel_of_lattice_in_dfs.
     def visitRect_sel_of_lattice_in_dfs(
             self,

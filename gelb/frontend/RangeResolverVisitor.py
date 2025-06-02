@@ -169,6 +169,12 @@ class RangeResolverVisitor(ASTBaseVisitor, BinaryOperationMixin, ProgramTraversa
         # Variable assignments might have ranges in the RHS expression
         self.visit(node.rhs, ast_root_node)
         return node
+    
+    def visitArraySelectionAssignmentStmt_N(self, node, ast_root_node):
+        # Array selection assignments might have ranges in both LHS and RHS
+        self.visit(node.lhs, ast_root_node)
+        self.visit(node.rhs, ast_root_node)
+        return node
         
     def visitConstantDefinitionStmt_N(self, node, ast_root_node):
         # Constants have a variable assignment statement

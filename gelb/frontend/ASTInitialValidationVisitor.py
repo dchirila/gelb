@@ -353,3 +353,10 @@ class ASTInitialValidationVisitor(ASTBaseVisitor):
             ast_root_node: Program_N
     ):
         raise NotImplementedError()
+    
+    def visitArraySelectionAssignmentStmt_N(
+            self,
+            node: ArraySelectionAssignmentStmt_N,
+            ast_root_node: Program_N
+    ):
+        raise NotImplementedError()
