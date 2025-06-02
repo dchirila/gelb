@@ -310,6 +310,72 @@ def minimal_gelb_program(global_constants_content="", initializer_content="", wi
 
 
 # ============================================================================
+# CST and AST Testing Helpers  
+# ============================================================================
+
+def assert_cst_equals(test_string, expected, rule):
+    """
+    Helper to test CST (Concrete Syntax Tree) parsing.
+    
+    Args:
+        test_string (str): Input string to parse
+        expected (str): Expected CST string representation
+        rule (str): ANTLR rule name to start parsing from
+    """
+    from gelb.frontend.stage1_frontend import get_cst_as_string
+    result = get_cst_as_string(rule, test_string)
+    assert result == expected
+
+
+def assert_ast_equals(test_string, expected, rule):
+    """
+    Helper to test AST (Abstract Syntax Tree) building.
+    
+    Args:
+        test_string (str): Input string to parse
+        expected (str): Expected AST string representation  
+        rule (str): ANTLR rule name to start parsing from
+    """
+    ast = get_ast(rule, test_string)
+    assert str(ast) == expected
+
+
+# ============================================================================
+# Parameterized Test Data Generators
+# ============================================================================
+
+def get_scalar_data_types():
+    """Return test data for scalar data types supported by GeLB grammar."""
+    return [
+        ("bool", "(scalar_data_type (scalar_bool_data_type bool))"),
+        ("int64", "(scalar_data_type (scalar_int_data_type int64))"),
+        ("int32", "(scalar_data_type (scalar_int_data_type int32))"),
+        ("int16", "(scalar_data_type (scalar_int_data_type int16))"),
+        ("int8", "(scalar_data_type (scalar_int_data_type int8))"),
+        ("int", "(scalar_data_type (scalar_int_data_type int))"),
+        ("real64", "(scalar_data_type (scalar_real_data_type real64))"),
+        ("real32", "(scalar_data_type (scalar_real_data_type real32))"),
+        ("real16", "(scalar_data_type (scalar_real_data_type real16))"),
+        ("real", "(scalar_data_type (scalar_real_data_type real))"),
+    ]
+
+
+def get_implicit_symbols():
+    """Return list of implicit symbols for testing."""
+    return ["x", "y", "z", "Nx", "Ny", "Nz"]
+
+
+def get_coordinate_symbols():
+    """Return list of coordinate symbols (x, y, z)."""
+    return ["x", "y", "z"]
+
+
+def get_dimension_symbols():
+    """Return list of dimension symbols (Nx, Ny, Nz)."""
+    return ["Nx", "Ny", "Nz"]
+
+
+# ============================================================================
 # Test Exception Helpers
 # ============================================================================
 
@@ -375,6 +441,54 @@ def assert_symbol_recursion_error(gelb_code, expected_symbol_name=None):
     
     if expected_symbol_name:
         assert expected_symbol_name in str(exc_info.value)
+
+
+def assert_symbol_not_allowed_error(test_string, rule, expected_symbol_name=None):
+    """
+    Helper to assert that a GeLBExSymbolNotAllowedHere exception is raised.
+    
+    Args:
+        test_string (str): Code that should raise the exception
+        rule (str): ANTLR rule to parse with
+        expected_symbol_name (str, optional): Expected disallowed symbol name
+    """
+    from gelb.frontend.stage1_frontend import prevent_clashes_of_symbol_refs_with_implicits
+    from gelb.utils.exceptions import GeLBExSymbolNotAllowedHere
+    
+    ast = get_ast(rule, test_string)
+    with pytest.raises(GeLBExSymbolNotAllowedHere):
+        prevent_clashes_of_symbol_refs_with_implicits(ast)
+
+
+def create_implicit_symbol_block_test(block_type, symbol_name, template_dict):
+    """
+    Create test string for implicit symbol testing in specific blocks.
+    
+    Args:
+        block_type (str): Type of block ("global_constants", "lattices", etc.)
+        symbol_name (str): Symbol to test ("x", "y", "z", "Nx", "Ny", "Nz")
+        template_dict (dict): Templates for each block type
+        
+    Returns:
+        str: Test string for the specific block and symbol combination
+    """
+    template = template_dict.get(block_type, "")
+    return template.format(symbol=symbol_name)
+
+
+# Predefined templates for implicit symbol testing
+IMPLICIT_SYMBOL_TEMPLATES = {
+    "global_constants": """
+    global_constants { //
+      const int TUTU = {symbol};
+    }
+    """,
+    "lattices": """
+    lattices {
+      lattice myLattice({symbol}, 5, int);
+    }
+    """
+}
 
 
 # ============================================================================
