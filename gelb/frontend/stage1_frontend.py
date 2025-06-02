@@ -31,6 +31,7 @@ from gelb.frontend.ConstantsResolverVisitor import ConstantsResolverVisitor
 from gelb.frontend.RectangularArraysEnforcerVisitor import RectangularArraysEnforcerVisitor
 from gelb.frontend.RangeResolverVisitor import RangeResolverVisitor
 from gelb.frontend.TypeInferenceVisitor import TypeInferenceVisitor
+from gelb.frontend.ConstantAssignmentValidationVisitor import ConstantAssignmentValidationVisitor
 from gelb.frontend.ParsingError import ParsingError
 from gelb.utils.exceptions import *
 from gelb.utils.misc import ensure_file_is_not_empty_or_whitespace
@@ -164,6 +165,23 @@ def infer_types(ast):
     - Ranges are resolved
     """
     ast_visitor = TypeInferenceVisitor()
+    ast_visitor.visit(ast, ast)
+    return ast
+
+
+def validate_constant_assignments(ast):
+    """
+    Validate that constants are not assigned to in variable assignment statements.
+    
+    Enforces the rule that constants (symbols with tag "constant definition"
+    or "implicit dimension constant") cannot appear on the left-hand side 
+    of variable assignment statements.
+    
+    Must run after:
+    - Symbol tables are built
+    - Implicit symbols are added
+    """
+    ast_visitor = ConstantAssignmentValidationVisitor()
     ast_visitor.visit(ast, ast)
     return ast
 

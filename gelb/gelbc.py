@@ -20,7 +20,8 @@ from gelb.frontend.stage1_frontend import (
     prevent_clashes_of_symbol_refs_with_implicits,
     prevent_clashes_of_symbol_defs_with_implicits,
     add_implicit_symbols,
-    infer_types
+    infer_types,
+    validate_constant_assignments
 )
 
 
@@ -139,6 +140,9 @@ def cli(t, input_file, backend, visualize_ast, ast_output, ast_format, keep_dot,
     # ... infer types for all expressions
     ast = infer_types(ast)
     capture_ast_if_requested(ast, 'types')
+
+    # ... validate that constants are not assigned to
+    ast = validate_constant_assignments(ast)
 
     # ... validate node-classes
     validate_node_classes(ast)

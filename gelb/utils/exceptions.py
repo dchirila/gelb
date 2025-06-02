@@ -704,3 +704,38 @@ class GeLBExSymbolNotAllowedHere(GeLBException):
             )
             # super().__str__()
             os._exit(1)  # really abort
+
+
+class GeLBExConstantAssignment(GeLBException):
+    """
+    GeLB exception, for signaling that a constant is being assigned to (which is not allowed).
+    """
+    def __init__(self, identifier_node, symbol_def):
+        self.identifier_node = identifier_node
+        self.symbol_def = symbol_def
+        name = identifier_node.name
+        error = (
+            f"You are trying to assign a value to"
+            f" {click.style(name, underline=True) + Fore.RED}."
+            f" However, {click.style(name, underline=True) + Fore.RED}"
+            f" is a constant and cannot be modified."
+        )
+        hint = (
+            f"Constants are immutable once defined. If you need to modify"
+            f" {click.style(name, underline=True) + Fore.GREEN},"
+            f" declare it as a variable instead, or use a different name."
+        )
+        super().__init__(error, hint)
+        if not running_within_pytest():
+            print(self)
+
+    def __str__(self):
+        """Override base-class's __str__, because we want to print the code"""
+        if not running_within_pytest():
+            show_error_in_src(
+                self.identifier_node.code_range.start_line,
+                self.identifier_node.code_range.start_col,
+                self.error, self.hint
+            )
+            # super().__str__()
+            os._exit(1)  # really abort
