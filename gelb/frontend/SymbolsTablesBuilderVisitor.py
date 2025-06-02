@@ -41,12 +41,14 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                     if (
                             isinstance(node, InitializerBlock_N) or
                             isinstance(node, DynamicBlock_N) or
-                            isinstance(node, GaugeBlock_N)
+                            isinstance(node, GaugeBlock_N) or
+                            isinstance(node, GeometryBlock_N)
                     ):
                         lattice_names = []
                         if (
                                 (ast_root is not None) and
-                                isinstance(ast_root, Program_N)
+                                isinstance(ast_root, Program_N) and
+                                ast_root.lattices is not None
                         ):
                             lattice_sdefs = ast_root.lattices.symbol_defs
                             lattice_names = [
@@ -55,10 +57,18 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                         self.implicit_symbols += [
                             # TODO un-define y, z, NY, Nz, depending on
                             #  dimensionality (inferred from ast_root)
-                            "x", "y", "z", "Nx", "Ny", "Nz",
-                            # name of the {initializer/dynamic/gauge}
-                            str(node.name.name)
-                        ] + lattice_names
+                            "x", "y", "z", "Nx", "Ny", "Nz"
+                        ]
+                        # Add block name only if it has a name attribute
+                        if hasattr(node, 'name') and node.name is not None:
+                            self.implicit_symbols.append(str(node.name.name))
+                        self.implicit_symbols += lattice_names
+                        
+                        # For geometry block, also need to check global symbol table for node classes
+                        if isinstance(node, GeometryBlock_N) and ast_root is not None:
+                            # Check if symbol is in the global symbol table (e.g., node classes)
+                            if ast_root.symbol_defs and ast_root.symbol_defs.contains(sref.name):
+                                continue  # Symbol found in global scope, skip the error
 
                     if sref.name not in self.implicit_symbols:
                         raise GeLBExSymbolUnknown(sref)
@@ -181,6 +191,20 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
             if node.node_classes is not None:
                 # trigger symbol_defs-table creation @node-classes block
                 node.node_classes = self.visit(node.node_classes, ast_root_node)
+                
+                # Add node class names to global symbol table so geometry can reference them
+                for node_class_stmt in node.node_classes.stmts:
+                    node.symbol_defs.append(
+                        SymbolDefinition(
+                            name=node_class_stmt.name.name,
+                            tag="node class",
+                            value=node_class_stmt
+                        )
+                    )
+                
+            if node.geometry is not None:
+                # trigger symbol_defs-table creation @geometry block
+                node.geometry = self.visit(node.geometry, ast_root_node)
 
         return node
 
@@ -339,4 +363,19 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
                         value=node_class_insta_stmt
                     )
                 )
+        return node
+
+    def visitGeometryBlock_N(
+            self,
+            node: GeometryBlock_N,
+            ast_root_node: Program_N
+    ):
+        if node.symbol_defs is None:
+            # Create symbol table with global constants as parent
+            # This allows geometry expressions to access global constants like N
+            node.symbol_defs = SymbolsTable(parent_table=self.global_constants_symbol_table)
+            
+            # Geometry block doesn't define any symbols itself,
+            # it just needs access to global constants for expressions
+            self.check_for_undef_or_ref_before_def_symbols(node, ast_root_node)
         return node
