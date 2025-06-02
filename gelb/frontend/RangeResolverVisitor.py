@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
+from gelb.frontend.visitor_mixins import BinaryOperationMixin, ProgramTraversalMixin
 from gelb.gelb_ast.ASTNodes import (
     Range_N, IntLiteral_N, Sub_N, Identifier_N, Div_N, Add_N, Mul_N,
     RectSelOfLatticeOutDFs_N, RectSelOfLatticeInDFs_N,
@@ -8,7 +9,7 @@ from gelb.gelb_ast.ASTNodes import (
 )
 
 
-class RangeResolverVisitor(ASTBaseVisitor):
+class RangeResolverVisitor(ASTBaseVisitor, BinaryOperationMixin, ProgramTraversalMixin):
     """
     Replaces None bounds in Range_N nodes with concrete values:
     - None lower bound → 0
@@ -24,22 +25,8 @@ class RangeResolverVisitor(ASTBaseVisitor):
         self.in_dfs_range = False  # Track if we're in a DFs range
         
     def visitProgram_N(self, node, ast_root_node):
-        # Visit all blocks that might contain ranges
-        if node.initializers:
-            for initializer in node.initializers:
-                self.visit(initializer, ast_root_node)
-                
-        if node.dynamics:
-            for dynamic in node.dynamics:
-                self.visit(dynamic, ast_root_node)
-                
-        if node.gauges:
-            for gauge in node.gauges:
-                self.visit(gauge, ast_root_node)
-                
-        if node.geometry:
-            self.visit(node.geometry, ast_root_node)
-            
+        # Use mixin for standard traversal
+        self.traverse_program_blocks(node, ast_root_node)
         return node
         
     def visitGeometryBlock_N(self, node, ast_root_node):
@@ -170,26 +157,9 @@ class RangeResolverVisitor(ASTBaseVisitor):
         # Identifier nodes don't need modification
         return node
         
-    def visitSub_N(self, node, ast_root_node):
-        # Visit operands
-        self.visit(node.left, ast_root_node)
-        self.visit(node.right, ast_root_node)
-        return node
-        
-    def visitAdd_N(self, node, ast_root_node):
-        # Visit operands
-        self.visit(node.left, ast_root_node)
-        self.visit(node.right, ast_root_node)
-        return node
-        
-    def visitDiv_N(self, node, ast_root_node):
-        # Visit operands
-        self.visit(node.left, ast_root_node)
-        self.visit(node.right, ast_root_node)
-        return node
-        
-    def visitMul_N(self, node, ast_root_node):
-        # Visit operands
+    # Binary operations handled by mixin
+    def _handle_binary_operation(self, node, ast_root_node, operation_type):
+        """Handle binary operations by visiting operands."""
         self.visit(node.left, ast_root_node)
         self.visit(node.right, ast_root_node)
         return node

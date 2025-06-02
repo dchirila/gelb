@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
+from gelb.frontend.visitor_mixins import SymbolTableUtilityMixin
 from gelb.gelb_ast.ASTNodes import *
 from gelb.frontend.SymbolsTable import SymbolsTable
 from gelb.gelb_ast.SymbolDefinition import SymbolDefinition
@@ -12,7 +13,7 @@ from gelb.utils.exceptions import (
 )
 
 
-class SymbolsTablesBuilderVisitor(ASTBaseVisitor):
+class SymbolsTablesBuilderVisitor(ASTBaseVisitor, SymbolTableUtilityMixin):
     """
     Concrete visitor for adding the symbol_defs tables to the AST nodes which
     need them.

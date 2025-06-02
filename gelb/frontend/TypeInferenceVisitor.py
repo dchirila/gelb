@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
 from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
+from gelb.frontend.visitor_mixins import BinaryOperationMixin, ArrayLiteralProcessingMixin, ProgramTraversalMixin
 from gelb.gelb_ast.ASTNodes import *
 from gelb.utils.exceptions import *
 from gelb.utils.CodeRange import CodeRange
 
 
-class TypeInferenceVisitor(ASTBaseVisitor):
+class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralProcessingMixin, ProgramTraversalMixin):
     """
     Concrete visitor for inferring types of all expression elements in the AST.
     
@@ -28,43 +29,17 @@ class TypeInferenceVisitor(ASTBaseVisitor):
     
     def visitProgram_N(self, node: Program_N, ast_root_node: Program_N):
         """Visit all blocks in the program to infer types."""
-        # Store the global constants block for access from all blocks
-        self.global_constants_block = node.global_constants
-        
-        # Process global constants first
-        if node.global_constants is not None:
-            self.current_block = node.global_constants
-            self.visit(node.global_constants, ast_root_node)
-        
-        # Process lattices block
-        if node.lattices is not None:
-            self.current_block = node.lattices
-            self.visit(node.lattices, ast_root_node)
-        
-        # Process initializer blocks
-        if node.initializers is not None:
-            for initializer in node.initializers:
-                self.current_block = initializer
-                self.visit(initializer, ast_root_node)
-        
-        # Process dynamic blocks
-        if node.dynamics is not None:
-            for dynamic in node.dynamics:
-                self.current_block = dynamic
-                self.visit(dynamic, ast_root_node)
-        
-        # Process gauge blocks
-        if node.gauges is not None:
-            for gauge in node.gauges:
-                self.current_block = gauge
-                self.visit(gauge, ast_root_node)
-        
-        # Process geometry block
-        if node.geometry is not None:
-            self.current_block = node.geometry
-            self.visit(node.geometry, ast_root_node)
-        
+        # Use the mixin for standard traversal
+        self.traverse_program_blocks(node, ast_root_node)
         return node
+    
+    def _store_global_constants(self, node):
+        """Hook for storing global constants block."""
+        self.global_constants_block = node.global_constants
+    
+    def _before_block_visit(self, block_node, block_type):
+        """Set current block context before visiting."""
+        self.current_block = block_node
     
     def visitGlobalConstantsBlock_N(self, node: GlobalConstantsBlock_N, ast_root_node: Program_N):
         """Process constant definitions to infer types of their values."""
@@ -123,114 +98,19 @@ class TypeInferenceVisitor(ASTBaseVisitor):
     
     def visitArray1DLiteral_N(self, node: Array1DLiteral_N, ast_root_node: Program_N):
         """Infer type of 1D array literal from its elements."""
-        if not node.value.elements:
-            raise GeLBException(
-                "Cannot infer type of empty array literal",
-                "Array literals must contain at least one element"
-            )
-        
-        # Infer types of all elements
-        element_types = []
-        for elem in node.value.elements:
-            self.visit(elem, ast_root_node)
-            element_types.append(elem.inferred_type)
-        
-        # Determine common type (for now, assume all elements must have same type)
-        # TODO: Implement type promotion rules
-        first_type = element_types[0]
-        base_type = self._get_base_scalar_type(first_type)
-        
-        # Create array type with shape
-        shape = IntLiteral_N(node.code_range, len(node.value.elements))
-        node.inferred_type = ArrayDataType_N(node.code_range, base_type, shape)
-        return node
+        return self._process_array_literal(node, ast_root_node, 1)
     
     def visitArray2DLiteral_N(self, node: Array2DLiteral_N, ast_root_node: Program_N):
         """Infer type of 2D array literal from its structure."""
-        if not node.value.elements:
-            raise GeLBException(
-                "Cannot infer type of empty array literal",
-                "Array literals must contain at least one element"
-            )
-        
-        # Process all rows
-        for row in node.value.elements:
-            self.visit(row, ast_root_node)
-        
-        # Get base type from first row
-        first_row_type = node.value.elements[0].inferred_type
-        base_type = self._get_base_scalar_type(first_row_type)
-        
-        # Create 2D shape
-        num_rows = len(node.value.elements)
-        num_cols = len(node.value.elements[0].value.elements)
-        shape_values = List_N(node.code_range)
-        shape_values.append(IntLiteral_N(node.code_range, num_rows))
-        shape_values.append(IntLiteral_N(node.code_range, num_cols))
-        shape = Array1DLiteral_N(node.code_range, shape_values)
-        
-        node.inferred_type = ArrayDataType_N(node.code_range, base_type, shape)
-        return node
+        return self._process_array_literal(node, ast_root_node, 2)
     
     def visitArray3DLiteral_N(self, node: Array3DLiteral_N, ast_root_node: Program_N):
         """Infer type of 3D array literal from its structure."""
-        if not node.value.elements:
-            raise GeLBException(
-                "Cannot infer type of empty array literal",
-                "Array literals must contain at least one element"
-            )
-        
-        # Process all 2D slices
-        for slice_2d in node.value.elements:
-            self.visit(slice_2d, ast_root_node)
-        
-        # Get base type from first slice
-        first_slice_type = node.value.elements[0].inferred_type
-        base_type = self._get_base_scalar_type(first_slice_type)
-        
-        # Create 3D shape
-        num_slices = len(node.value.elements)
-        num_rows = len(node.value.elements[0].value.elements)
-        num_cols = len(node.value.elements[0].value.elements[0].value.elements)
-        shape_values = List_N(node.code_range)
-        shape_values.append(IntLiteral_N(node.code_range, num_slices))
-        shape_values.append(IntLiteral_N(node.code_range, num_rows))
-        shape_values.append(IntLiteral_N(node.code_range, num_cols))
-        shape = Array1DLiteral_N(node.code_range, shape_values)
-        
-        node.inferred_type = ArrayDataType_N(node.code_range, base_type, shape)
-        return node
+        return self._process_array_literal(node, ast_root_node, 3)
     
     def visitArray4DLiteral_N(self, node: Array4DLiteral_N, ast_root_node: Program_N):
         """Infer type of 4D array literal from its structure."""
-        if not node.value.elements:
-            raise GeLBException(
-                "Cannot infer type of empty array literal",
-                "Array literals must contain at least one element"
-            )
-        
-        # Process all 3D slices
-        for slice_3d in node.value.elements:
-            self.visit(slice_3d, ast_root_node)
-        
-        # Get base type from first slice
-        first_slice_type = node.value.elements[0].inferred_type
-        base_type = self._get_base_scalar_type(first_slice_type)
-        
-        # Create 4D shape
-        dim0 = len(node.value.elements)
-        dim1 = len(node.value.elements[0].value.elements)
-        dim2 = len(node.value.elements[0].value.elements[0].value.elements)
-        dim3 = len(node.value.elements[0].value.elements[0].value.elements[0].value.elements)
-        shape_values = List_N(node.code_range)
-        shape_values.append(IntLiteral_N(node.code_range, dim0))
-        shape_values.append(IntLiteral_N(node.code_range, dim1))
-        shape_values.append(IntLiteral_N(node.code_range, dim2))
-        shape_values.append(IntLiteral_N(node.code_range, dim3))
-        shape = Array1DLiteral_N(node.code_range, shape_values)
-        
-        node.inferred_type = ArrayDataType_N(node.code_range, base_type, shape)
-        return node
+        return self._process_array_literal(node, ast_root_node, 4)
     
     # Identifier type inference
     
@@ -292,59 +172,42 @@ class TypeInferenceVisitor(ASTBaseVisitor):
                 )
         return node
     
-    # Binary operation type inference
+    # Binary operation type inference - handled by mixin
     
-    def visitAdd_N(self, node: Add_N, ast_root_node: Program_N):
-        """Infer type of addition operation."""
-        return self._infer_binary_op_type(node, ast_root_node, "arithmetic")
+    # Implementation of mixin abstract methods
     
-    def visitSub_N(self, node: Sub_N, ast_root_node: Program_N):
-        """Infer type of subtraction operation."""
-        return self._infer_binary_op_type(node, ast_root_node, "arithmetic")
+    def _handle_binary_operation(self, node, ast_root_node, operation_type):
+        """Handle binary operations for the mixin."""
+        return self._infer_binary_op_type(node, ast_root_node, operation_type)
     
-    def visitMul_N(self, node: Mul_N, ast_root_node: Program_N):
-        """Infer type of multiplication operation."""
-        return self._infer_binary_op_type(node, ast_root_node, "arithmetic")
-    
-    def visitDiv_N(self, node: Div_N, ast_root_node: Program_N):
-        """Infer type of division operation."""
-        return self._infer_binary_op_type(node, ast_root_node, "arithmetic")
-    
-    def visitPow_N(self, node: Pow_N, ast_root_node: Program_N):
-        """Infer type of power operation."""
-        return self._infer_binary_op_type(node, ast_root_node, "arithmetic")
-    
-    def visitLess_N(self, node: Less_N, ast_root_node: Program_N):
-        """Comparison operations always return bool."""
-        return self._infer_binary_op_type(node, ast_root_node, "comparison")
-    
-    def visitGreater_N(self, node: Greater_N, ast_root_node: Program_N):
-        """Comparison operations always return bool."""
-        return self._infer_binary_op_type(node, ast_root_node, "comparison")
-    
-    def visitLessEqual_N(self, node: LessEqual_N, ast_root_node: Program_N):
-        """Comparison operations always return bool."""
-        return self._infer_binary_op_type(node, ast_root_node, "comparison")
-    
-    def visitGreaterEqual_N(self, node: GreaterEqual_N, ast_root_node: Program_N):
-        """Comparison operations always return bool."""
-        return self._infer_binary_op_type(node, ast_root_node, "comparison")
-    
-    def visitEqual_N(self, node: Equal_N, ast_root_node: Program_N):
-        """Comparison operations always return bool."""
-        return self._infer_binary_op_type(node, ast_root_node, "comparison")
-    
-    def visitNotEqual_N(self, node: NotEqual_N, ast_root_node: Program_N):
-        """Comparison operations always return bool."""
-        return self._infer_binary_op_type(node, ast_root_node, "comparison")
-    
-    def visitAnd_N(self, node: And_N, ast_root_node: Program_N):
-        """Logical operations require bool operands and return bool."""
-        return self._infer_binary_op_type(node, ast_root_node, "logical")
-    
-    def visitOr_N(self, node: Or_N, ast_root_node: Program_N):
-        """Logical operations require bool operands and return bool."""
-        return self._infer_binary_op_type(node, ast_root_node, "logical")
+    def _handle_array_literal_dimensions(self, node, ast_root_node, dimensions):
+        """Handle dimension-specific array literal processing."""
+        # Get base type from first element (after recursive processing)
+        first_element = node.value.elements[0]
+        # Navigate to the deepest element based on dimensions
+        current = first_element
+        for _ in range(dimensions - 1):
+            current = current.value.elements[0]
+        
+        # Now current should have an inferred_type
+        base_type = self._get_base_scalar_type(current.inferred_type)
+        
+        # Create shape based on dimensions
+        shape_values = List_N(node.code_range)
+        current_level = node.value.elements
+        
+        for dim in range(dimensions):
+            shape_values.append(IntLiteral_N(node.code_range, len(current_level)))
+            if dim < dimensions - 1:
+                current_level = current_level[0].value.elements
+        
+        if dimensions == 1:
+            shape = IntLiteral_N(node.code_range, len(node.value.elements))
+        else:
+            shape = Array1DLiteral_N(node.code_range, shape_values)
+        
+        node.inferred_type = ArrayDataType_N(node.code_range, base_type, shape)
+        return node
     
     # Unary operation type inference
     
