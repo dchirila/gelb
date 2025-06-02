@@ -89,3 +89,28 @@ def get_array_literal_parse_test_data():
         ("4d", "simple", "{{{{1,2},{3,4}},{{5,6},{7,8}}},{{{9,10},{11,12}},{{13,14},{15,16}}}}",
          "(array_literal_4d { (array_literal_3d { (array_literal_2d { (array_literal_1d { (expr 1) , (expr 2) }) , (array_literal_1d { (expr 3) , (expr 4) }) }) , (array_literal_2d { (array_literal_1d { (expr 5) , (expr 6) }) , (array_literal_1d { (expr 7) , (expr 8) }) }) }) , (array_literal_3d { (array_literal_2d { (array_literal_1d { (expr 9) , (expr 10) }) , (array_literal_1d { (expr 11) , (expr 12) }) }) , (array_literal_2d { (array_literal_1d { (expr 13) , (expr 14) }) , (array_literal_1d { (expr 15) , (expr 16) }) }) }) })"),
     ]
+
+
+def get_array_selection_assignment_parse_test_data():
+    """Return test data for array selection assignment statement parsing tests (CST)."""
+    return [
+        # Single element assignments
+        ("element", "simple_int", "arr[0] = 42;",
+         "(array_selection_assignment_stmt (rect_sel_of_array_elems (identifier arr) [ (coords_range (expr 0)) ]) = (expr 42) ;)"),
+        ("element", "variable_index", "arr[i] = value;",
+         "(array_selection_assignment_stmt (rect_sel_of_array_elems (identifier arr) [ (coords_range (expr (identifier i))) ]) = (expr (identifier value)) ;)"),
+        
+        # Multi-dimensional assignments
+        ("multi_dim", "2d_simple", "matrix[x, y] = value;",
+         "(array_selection_assignment_stmt (rect_sel_of_array_elems (identifier matrix) [ (coords_range (expr (identifier x))) , (coords_range (expr (identifier y))) ]) = (expr (identifier value)) ;)"),
+        
+        # Slice assignments
+        ("slice", "simple_range", "arr[1:3] = expr;",
+         "(array_selection_assignment_stmt (rect_sel_of_array_elems (identifier arr) [ (coords_range (expr 1) : (expr 3)) ]) = (expr (identifier expr)) ;)"),
+        
+        # Complex expressions
+        ("complex", "arithmetic_rhs", "arr[0] = a + b;",
+         "(array_selection_assignment_stmt (rect_sel_of_array_elems (identifier arr) [ (coords_range (expr 0)) ]) = (expr (expr (identifier a)) + (expr (identifier b))) ;)"),
+        ("complex", "array_literal_rhs", "arr[0] = {1, 2};",
+         "(array_selection_assignment_stmt (rect_sel_of_array_elems (identifier arr) [ (coords_range (expr 0)) ]) = (expr (array_literal_1d { (expr 1) , (expr 2) })) ;)"),
+    ]

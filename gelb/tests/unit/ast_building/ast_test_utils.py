@@ -102,3 +102,36 @@ def get_expression_ast_test_data():
         ("array", "multi_dim_array", "matrix[i, j]", "(RectSelOfArrayElems (Identifier matrix) (Range (Identifier i) (Identifier i)) (Range (Identifier j) (Identifier j)))"),
         ("array", "array_with_arithmetic", "arr[i + 1]", "(RectSelOfArrayElems (Identifier arr) (Range (Add (Identifier i) (IntLiteral 1)) (Add (Identifier i) (IntLiteral 1))))"),
     ]
+
+
+def get_array_selection_assignment_ast_test_data():
+    """Return test data for array selection assignment statement AST building tests."""
+    return [
+        # Single element assignments
+        ("element", "simple_int", "my_array[0] = 42;",
+         "(ArraySelectionAssignmentStmt (RectSelOfArrayElems (Identifier my_array) (Range (IntLiteral 0) (IntLiteral 0))) (IntLiteral 42))"),
+        ("element", "variable_index", "arr[i] = value;",
+         "(ArraySelectionAssignmentStmt (RectSelOfArrayElems (Identifier arr) (Range (Identifier i) (Identifier i))) (Identifier value))"),
+        ("element", "complex_index", "arr[i + j] = value;",
+         "(ArraySelectionAssignmentStmt (RectSelOfArrayElems (Identifier arr) (Range (Add (Identifier i) (Identifier j)) (Add (Identifier i) (Identifier j)))) (Identifier value))"),
+        
+        # Multi-dimensional assignments
+        ("multi_dim", "2d_simple", "matrix[x, y] = value;",
+         "(ArraySelectionAssignmentStmt (RectSelOfArrayElems (Identifier matrix) (Range (Identifier x) (Identifier x)) (Range (Identifier y) (Identifier y))) (Identifier value))"),
+        
+        # Slice assignments
+        ("slice", "simple_range", "my_array[1:3] = some_expr;",
+         "(ArraySelectionAssignmentStmt (RectSelOfArrayElems (Identifier my_array) (Range (IntLiteral 1) (IntLiteral 3))) (Identifier some_expr))"),
+        ("slice", "expression_bounds", "arr[i-1:j+2] = expr;",
+         "(ArraySelectionAssignmentStmt (RectSelOfArrayElems (Identifier arr) (Range (Sub (Identifier i) (IntLiteral 1)) (Add (Identifier j) (IntLiteral 2)))) (Identifier expr))"),
+        
+        # Complex RHS expressions
+        ("complex_rhs", "arithmetic", "arr[0] = a + b * 2;",
+         "(ArraySelectionAssignmentStmt (RectSelOfArrayElems (Identifier arr) (Range (IntLiteral 0) (IntLiteral 0))) (Add (Identifier a) (Mul (Identifier b) (IntLiteral 2))))"),
+        ("complex_rhs", "array_literal", "arr[0] = {1, 2, 3};",
+         "(ArraySelectionAssignmentStmt (RectSelOfArrayElems (Identifier arr) (Range (IntLiteral 0) (IntLiteral 0))) (ArrayLiteral1D (IntLiteral 1) (IntLiteral 2) (IntLiteral 3)))"),
+        
+        # Edge cases
+        ("edge_case", "with_whitespace", "arr \n/*comment*/\n [ 0 ] = // comment\n value ;",
+         "(ArraySelectionAssignmentStmt (RectSelOfArrayElems (Identifier arr) (Range (IntLiteral 0) (IntLiteral 0))) (Identifier value))"),
+    ]
