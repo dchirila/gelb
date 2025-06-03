@@ -10,6 +10,31 @@ from pathlib import Path
 import subprocess
 
 
+def _get_numbered_stage_name(stage_name):
+    """
+    Convert stage name to numbered stage name for better ordering.
+    
+    Args:
+        stage_name (str): Original stage name
+        
+    Returns:
+        str: Numbered stage name for file ordering
+    """
+    stage_mapping = {
+        'parsing': '1_1_parsing',
+        'symbols': '1_2_symbols',
+        'constants': '1_3_constants',
+        'ranges': '1_4_ranges',
+        'types': '1_5_types',
+        'midware': '2_1_midware',
+        # Future backend stages can be added as:
+        # 'backend': '3_1_backend',
+        # 'optimization': '3_2_optimization',
+    }
+    
+    return stage_mapping.get(stage_name, stage_name)
+
+
 def generate_ast_visualization(ast, input_file, ast_output, ast_format, keep_dot=False, stage_name=None):
     """
     Generate AST visualization using Graphviz.
@@ -30,7 +55,8 @@ def generate_ast_visualization(ast, input_file, ast_output, ast_format, keep_dot
         if ast_output is None:
             input_path = Path(input_file)
             if stage_name:
-                ast_output = f"{input_path.stem}_ast_stage_{stage_name}.{ast_format}"
+                numbered_stage = _get_numbered_stage_name(stage_name)
+                ast_output = f"{input_path.stem}_{numbered_stage}.{ast_format}"
             else:
                 ast_output = f"{input_path.stem}_ast.{ast_format}"
         
