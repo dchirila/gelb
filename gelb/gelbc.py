@@ -23,6 +23,7 @@ from gelb.frontend.stage1_frontend import (
     infer_types,
     validate_constant_assignments
 )
+from gelb.midware.stage2_midware import process_ast as midware_process_ast
 
 
 @click.command()
@@ -73,7 +74,7 @@ from gelb.frontend.stage1_frontend import (
 )
 @click.option(
     "--ast-stage",
-    type=click.Choice(['parsing', 'symbols', 'constants', 'ranges', 'types', 'all']),
+    type=click.Choice(['parsing', 'symbols', 'constants', 'ranges', 'types', 'midware', 'all']),
     default='types',
     help="Which compilation stage to visualize (default: types)"
 )
@@ -157,7 +158,9 @@ def cli(t, input_file, backend, visualize_ast, ast_output, ast_format, keep_dot,
     # ... TODO semantic analysis, checks, etc.
 
     # Stage 2 :: MidWare
-    # ... TODO More checks & AST transformations
+    # ... Apply AST transformations and optimizations
+    ast = midware_process_ast(ast)
+    capture_ast_if_requested(ast, 'midware')
 
     # Stage 3 :: BackEnd
     # ... TODO code-generation (will use 'backend' parameter)
