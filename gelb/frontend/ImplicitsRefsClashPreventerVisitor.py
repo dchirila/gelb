@@ -181,7 +181,7 @@ class ImplicitsRefsClashPreventerVisitor(ASTBaseVisitor):
             node: GeometryBlock_N,
             ast_root_node: Program_N
     ):
-        self.check_node_symbol_refs(node.grid_size)
-        self.check_node_symbol_refs(node.grid_periodicity)
+        # Geometry block no longer has grid_size and grid_periodicity
+        # These are now part of lattice instantiation statements
         for stmt in node.stmts:
             self.check_node_symbol_refs(stmt)

@@ -27,6 +27,12 @@ class ConstantsResolverVisitor(ASTBaseVisitor):
             node.global_constants = self.visit(
                 node.global_constants, ast_root_node
             )
+        
+        # resolve constants @LatticesBlock_N
+        if node.lattices is not None:
+            node.lattices = self.visit(
+                node.lattices, ast_root_node
+            )
         return node
 
     def visitGlobalConstantsBlock_N(
@@ -57,3 +63,65 @@ class ConstantsResolverVisitor(ASTBaseVisitor):
                     sdef
                 )
         return node
+
+    def visitLatticesBlock_N(
+            self,
+            node: LatticesBlock_N,
+            ast_root_node: Program_N
+    ):
+        """Resolve constants in lattice instantiation statements."""
+        for stmt in node.stmts:  # iterate over lattice statements
+            self.visit(stmt, ast_root_node)
+        return node
+
+    def visitLatticeInstaStmt_N(
+            self,
+            node: LatticeInstaStmt_N,
+            ast_root_node: Program_N
+    ):
+        """Resolve constants in lattice instantiation parameters."""
+        # Get the lattices block's symbol table which has hierarchical access to global constants
+        parent_lattices_block = self._find_parent_lattices_block(ast_root_node)
+        if parent_lattices_block is None or parent_lattices_block.symbol_defs is None:
+            return node
+        
+        # Resolve constants in all parameter expressions
+        expressions_to_resolve = [
+            (node.d, "d parameter"),
+            (node.q, "q parameter")
+        ]
+        
+        # Add new parameters if they exist
+        if hasattr(node, 'grid_size') and node.grid_size is not None:
+            expressions_to_resolve.append((node.grid_size, "grid_size parameter"))
+        if hasattr(node, 'periodicity') and node.periodicity is not None:
+            expressions_to_resolve.append((node.periodicity, "periodicity parameter"))
+        
+        # Resolve constants in each expression
+        for expr, description in expressions_to_resolve:
+            if expr is not None:
+                self._resolve_constants_in_expression(expr, parent_lattices_block.symbol_defs)
+        
+        return node
+
+    def _resolve_constants_in_expression(self, expr, symbol_table):
+        """Helper method to resolve constants in a single expression using hierarchical lookup."""
+        # Get all symbol references in the expression
+        referenced_symbols = expr.get_referenced_symbols()
+        
+        # Get unique symbol names
+        referenced_symbols_names = set()
+        for sref in referenced_symbols:
+            referenced_symbols_names.add(sref.name)
+        
+        # Replace each referenced symbol with its definition
+        for srefname in referenced_symbols_names:
+            if symbol_table.contains(srefname):  # Uses hierarchical lookup
+                sdef = symbol_table.get_symbol_definition(srefname).value.value
+                expr.replace_symbol_references(srefname, sdef)
+
+    def _find_parent_lattices_block(self, ast_root_node):
+        """Find the lattices block in the program."""
+        if hasattr(ast_root_node, 'lattices') and ast_root_node.lattices is not None:
+            return ast_root_node.lattices
+        return None

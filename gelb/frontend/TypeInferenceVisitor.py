@@ -300,13 +300,8 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
     
     def visitGeometryBlock_N(self, node: GeometryBlock_N, ast_root_node: Program_N):
         """Process statements in geometry block."""
-        # Process grid size expression
-        if node.grid_size is not None:
-            self.visit(node.grid_size, ast_root_node)
-        
-        # Process grid periodicity expression
-        if node.grid_periodicity is not None:
-            self.visit(node.grid_periodicity, ast_root_node)
+        # Geometry block no longer has grid_size and grid_periodicity
+        # These are now part of lattice instantiation statements
         
         # Process paint statements
         for stmt in node.stmts:
@@ -334,6 +329,12 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
             self.visit(node.d, ast_root_node)
         if node.q is not None:
             self.visit(node.q, ast_root_node)
+        
+        # Infer types of new grid_size and periodicity parameters
+        if hasattr(node, 'grid_size') and node.grid_size is not None:
+            self.visit(node.grid_size, ast_root_node)
+        if hasattr(node, 'periodicity') and node.periodicity is not None:
+            self.visit(node.periodicity, ast_root_node)
         return node
     
     def visitNodeClassesBlock_N(self, node: NodeClassesBlock_N, ast_root_node: Program_N):

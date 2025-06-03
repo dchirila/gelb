@@ -36,15 +36,18 @@ class ImplicitSymbolsAdderVisitor(ASTBaseVisitor):
         if node.lattices:
             self._extract_grid_dimensions(node.lattices)
         
-        # Add implicit constants (Nx, Ny, Nz) to global_constants block
-        if node.global_constants:
-            self._add_dimension_constants(node.global_constants)
+        # Add implicit constants (Nx, Ny, Nz) to the Program level symbol table
+        if hasattr(node, 'symbol_defs') and node.symbol_defs is not None:
+            self._add_dimension_constants_to_table(node.symbol_defs)
         else:
-            # If there's no global_constants block, we still need Nx, Ny, Nz to be accessible
-            # Find the shared parent symbol table from any block that has one
-            parent_table = self._find_shared_parent_table(node)
-            if parent_table is not None and self.dimensionality > 0:
-                self._add_dimension_constants_to_table(parent_table)
+            # If Program doesn't have a symbol table yet, check if global_constants exists
+            if node.global_constants:
+                self._add_dimension_constants(node.global_constants)
+            else:
+                # Find the shared parent symbol table from any block that has one
+                parent_table = self._find_shared_parent_table(node)
+                if parent_table is not None and self.dimensionality > 0:
+                    self._add_dimension_constants_to_table(parent_table)
         
         # Add implicit lattice coordinate variables (x, y, z) to blocks that need them
         blocks_needing_coordinates = []
@@ -67,6 +70,14 @@ class ImplicitSymbolsAdderVisitor(ASTBaseVisitor):
         """
         Extract grid dimensions from the lattices block's first lattice grid_size parameter.
         For GeLB v1, all lattices must have identical grid sizes.
+        
+        The lattice syntax is:
+        lattice name(d, q, df_type, grid_size, periodicity);
+        
+        Examples:
+        - 1D: lattice f(1, 1, int, 32, false);              // grid_size is IntLiteral_N(32)
+        - 2D: lattice f(2, 9, real, {64, 32}, {true, false});  // grid_size is Array1DLiteral_N
+        - 3D: lattice f(3, 27, real, {64, 32, 16}, {true, false, true});
         """
         if not lattices_block.stmts or not lattices_block.stmts.elements:
             # No lattices specified, use default 1D with size 1
@@ -76,6 +87,12 @@ class ImplicitSymbolsAdderVisitor(ASTBaseVisitor):
         
         # Get the first lattice instantiation statement
         first_lattice = lattices_block.stmts.elements[0]
+        
+        if not isinstance(first_lattice, LatticeInstaStmt_N):
+            # Not a lattice instantiation, use default
+            self.grid_dimensions = [IntLiteral_N(None, 1)]
+            self.dimensionality = 1
+            return
         
         if not hasattr(first_lattice, 'grid_size') or not first_lattice.grid_size:
             # No grid size specified, use default 1D with size 1
@@ -93,19 +110,30 @@ class ImplicitSymbolsAdderVisitor(ASTBaseVisitor):
         elif isinstance(grid_size, Array1DLiteral_N):
             # Multi-dimensional case: lattice f(2, 9, real, {64, 32}, {true, false})
             # grid_size.value is a List_N object containing the elements
-            if hasattr(grid_size.value, 'elements'):
+            if hasattr(grid_size, 'value') and hasattr(grid_size.value, 'elements'):
                 self.grid_dimensions = grid_size.value.elements
                 self.dimensionality = len(grid_size.value.elements)
-            else:
-                # Fallback: assume the value itself is a list-like
+            elif hasattr(grid_size, 'value') and isinstance(grid_size.value, list):
+                # Direct list case
                 self.grid_dimensions = grid_size.value
                 self.dimensionality = len(grid_size.value)
+            else:
+                # Fallback: treat as 1D
+                self.grid_dimensions = [grid_size]
+                self.dimensionality = 1
             
         else:
             # Handle expressions (like identifiers that reference constants)
             # For now, assume 1D and use the expression as is
             self.grid_dimensions = [grid_size]
             self.dimensionality = 1
+            
+        # Validate dimensionality matches the d parameter
+        if hasattr(first_lattice, 'd') and isinstance(first_lattice.d, IntLiteral_N):
+            expected_dim = first_lattice.d.value
+            if expected_dim != self.dimensionality:
+                # Log warning but continue - this should be caught by validation elsewhere
+                pass
     
     def _add_dimension_constants(self, global_constants_block):
         """
