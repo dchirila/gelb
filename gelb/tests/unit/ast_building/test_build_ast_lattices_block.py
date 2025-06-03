@@ -4,7 +4,7 @@ import pytest
 from gelb.frontend.stage1_frontend import ASTBuilderVisitor, get_ast
 
 
-def test_one_lattice_instance_no_arg_keywords():
+def test_one_lattice_instance():
     # Arrange
     test_string = """lattices {
         lattice f(2, 9, bool, 32, false);
@@ -25,7 +25,7 @@ def test_one_lattice_instance_no_arg_keywords():
         ")"
     )
 
-def test_two_lattice_instances_no_arg_keywords():
+def test_two_lattice_instances():
     # Arrange
     test_string = """lattices {
         lattice f(3, 19, real64, {64, 64, 64}, {true, true, true});
