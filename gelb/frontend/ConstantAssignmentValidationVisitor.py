@@ -96,6 +96,34 @@ class ConstantAssignmentValidationVisitor(ASTBaseVisitor, SymbolTableUtilityMixi
         self.visit(node.rhs, ast_root_node)
         return node
 
+    def visitArraySelectionAssignmentStmt_N(self, node, ast_root_node):
+        """
+        Validate that the array being assigned to is not a constant.
+        
+        This checks if the array on the left-hand side of the assignment
+        is a constant, and if so, raises an error.
+        """
+        # Check if LHS is a rectangular selection of array elements
+        if hasattr(node.lhs, 'array_name') and hasattr(node.lhs.array_name, 'name'):
+            array_name = str(node.lhs.array_name.name)
+            
+            # Find the symbol definition using hierarchical lookup
+            symbol_def = self._find_symbol_definition(array_name, ast_root_node)
+            
+            if symbol_def:
+                # Check if this symbol is a constant array
+                if (symbol_def.tag == "constant definition"):
+                    raise GeLBExConstantAssignment(node.lhs.array_name, symbol_def)
+        
+        # Continue visiting the RHS
+        self.visit(node.rhs, ast_root_node)
+        return node
+
+    def visitLatticeOutSelectionAssignmentStmt_N(self, node, ast_root_node):
+        """Visit lattice output assignment statement (no validation needed)."""
+        self.visit(node.rhs, ast_root_node)
+        return node
+
     def _find_symbol_definition(self, symbol_name, ast_root_node):
         """
         Find a symbol definition by searching through the symbol table hierarchy.
@@ -141,7 +169,9 @@ class ConstantAssignmentValidationVisitor(ASTBaseVisitor, SymbolTableUtilityMixi
         
         return None
 
-    # Default visitors for other node types (pass-through)
+    # The following visit methods are needed because we might encounter these
+    # statement types while traversing blocks, but we don't need to validate them
+    
     def visitConstantDefinitionStmt_N(self, node, ast_root_node):
         """Visit constant definition statement (no validation needed)."""
         return node
@@ -152,34 +182,6 @@ class ConstantAssignmentValidationVisitor(ASTBaseVisitor, SymbolTableUtilityMixi
 
     def visitLatticeInstaStmt_N(self, node, ast_root_node):
         """Visit lattice instantiation statement (no validation needed)."""
-        return node
-
-    def visitLatticeOutSelectionAssignmentStmt_N(self, node, ast_root_node):
-        """Visit lattice output assignment statement (no validation needed)."""
-        self.visit(node.rhs, ast_root_node)
-        return node
-
-    def visitArraySelectionAssignmentStmt_N(self, node, ast_root_node):
-        """
-        Validate that the array being assigned to is not a constant.
-        
-        This checks if the array on the left-hand side of the assignment
-        is a constant, and if so, raises an error.
-        """
-        # Check if LHS is a rectangular selection of array elements
-        if hasattr(node.lhs, 'array_name') and hasattr(node.lhs.array_name, 'name'):
-            array_name = str(node.lhs.array_name.name)
-            
-            # Find the symbol definition using hierarchical lookup
-            symbol_def = self._find_symbol_definition(array_name, ast_root_node)
-            
-            if symbol_def:
-                # Check if this symbol is a constant array
-                if (symbol_def.tag == "constant definition"):
-                    raise GeLBExConstantAssignment(node.lhs.array_name, symbol_def)
-        
-        # Continue visiting the RHS
-        self.visit(node.rhs, ast_root_node)
         return node
 
     def visitPaintNodesStmt_N(self, node, ast_root_node):
@@ -202,7 +204,7 @@ class ConstantAssignmentValidationVisitor(ASTBaseVisitor, SymbolTableUtilityMixi
         """Visit set grid periodicity statement (no validation needed)."""
         return node
 
-    # For expressions, we generally don't need to validate but should traverse
+    # Expression nodes - needed when traversing RHS of assignments
     def visitIdentifier_N(self, node, ast_root_node):
         """Visit identifier (no validation needed)."""
         return node
@@ -223,31 +225,28 @@ class ConstantAssignmentValidationVisitor(ASTBaseVisitor, SymbolTableUtilityMixi
         """Visit string literal (no validation needed)."""
         return node
 
-    def visitArrayLiteral1D_N(self, node, ast_root_node):
-        """Visit 1D array literal (traverse elements)."""
-        for element in node.elements:
-            self.visit(element, ast_root_node)
+    # Array and lattice selections - needed when traversing RHS
+    def visitRectSelOfArrayElems_N(self, node, ast_root_node):
+        """Visit rectangular selection of array elements."""
         return node
 
-    def visitArrayLiteral2D_N(self, node, ast_root_node):
-        """Visit 2D array literal (traverse elements)."""
-        for element in node.elements:
-            self.visit(element, ast_root_node)
+    def visitRectSelOfLatticeInDFs_N(self, node, ast_root_node):
+        """Visit rectangular selection of lattice input distribution functions."""
         return node
 
-    def visitArrayLiteral3D_N(self, node, ast_root_node):
-        """Visit 3D array literal (traverse elements)."""
-        for element in node.elements:
-            self.visit(element, ast_root_node)
+    def visitRectSelOfLatticeOutDFs_N(self, node, ast_root_node):
+        """Visit rectangular selection of lattice output distribution functions."""
         return node
 
-    def visitArrayLiteral4D_N(self, node, ast_root_node):
-        """Visit 4D array literal (traverse elements)."""
-        for element in node.elements:
-            self.visit(element, ast_root_node)
+    def visitRange_N(self, node, ast_root_node):
+        """Visit range node."""
         return node
 
-    # Binary operations
+    def visitRangePlaceholder_N(self, node, ast_root_node):
+        """Visit range placeholder (no validation needed)."""
+        return node
+
+    # Binary operations - needed for complex expressions in RHS
     def visitAdd_N(self, node, ast_root_node):
         """Visit addition expression."""
         self.visit(node.left, ast_root_node)
@@ -278,109 +277,27 @@ class ConstantAssignmentValidationVisitor(ASTBaseVisitor, SymbolTableUtilityMixi
         self.visit(node.right, ast_root_node)
         return node
 
-    # Comparison operations
-    def visitLess_N(self, node, ast_root_node):
-        """Visit less than expression."""
-        self.visit(node.left, ast_root_node)
-        self.visit(node.right, ast_root_node)
+    # Array literals - might appear in RHS
+    def visitArrayLiteral1D_N(self, node, ast_root_node):
+        """Visit 1D array literal."""
+        for element in node.elements:
+            self.visit(element, ast_root_node)
         return node
 
-    def visitGreater_N(self, node, ast_root_node):
-        """Visit greater than expression."""
-        self.visit(node.left, ast_root_node)
-        self.visit(node.right, ast_root_node)
+    def visitArrayLiteral2D_N(self, node, ast_root_node):
+        """Visit 2D array literal."""
+        for element in node.elements:
+            self.visit(element, ast_root_node)
         return node
 
-    def visitLessEqual_N(self, node, ast_root_node):
-        """Visit less than or equal expression."""
-        self.visit(node.left, ast_root_node)
-        self.visit(node.right, ast_root_node)
+    def visitArrayLiteral3D_N(self, node, ast_root_node):
+        """Visit 3D array literal."""
+        for element in node.elements:
+            self.visit(element, ast_root_node)
         return node
 
-    def visitGreaterEqual_N(self, node, ast_root_node):
-        """Visit greater than or equal expression."""
-        self.visit(node.left, ast_root_node)
-        self.visit(node.right, ast_root_node)
-        return node
-
-    def visitEqual_N(self, node, ast_root_node):
-        """Visit equality expression."""
-        self.visit(node.left, ast_root_node)
-        self.visit(node.right, ast_root_node)
-        return node
-
-    def visitNotEqual_N(self, node, ast_root_node):
-        """Visit not equal expression."""
-        self.visit(node.left, ast_root_node)
-        self.visit(node.right, ast_root_node)
-        return node
-
-    # Logical operations
-    def visitAnd_N(self, node, ast_root_node):
-        """Visit logical AND expression."""
-        self.visit(node.left, ast_root_node)
-        self.visit(node.right, ast_root_node)
-        return node
-
-    def visitOr_N(self, node, ast_root_node):
-        """Visit logical OR expression."""
-        self.visit(node.left, ast_root_node)
-        self.visit(node.right, ast_root_node)
-        return node
-
-    # Unary operations
-    def visitUnaryMinusExpr_N(self, node, ast_root_node):
-        """Visit unary minus expression."""
-        self.visit(node.value, ast_root_node)
-        return node
-
-    def visitNotExpr_N(self, node, ast_root_node):
-        """Visit logical NOT expression."""
-        self.visit(node.value, ast_root_node)
-        return node
-
-    # Array and lattice selections
-    def visitRectSelOfArrayElems_N(self, node, ast_root_node):
-        """Visit rectangular selection of array elements."""
-        self.visit(node.array_name, ast_root_node)
-        for range_node in node.element_ranges:
-            if range_node:
-                self.visit(range_node, ast_root_node)
-        return node
-
-    def visitRectSelOfLatticeInDFs_N(self, node, ast_root_node):
-        """Visit rectangular selection of lattice input distribution functions."""
-        self.visit(node.lattice_name, ast_root_node)
-        for range_node in node.element_ranges:
-            if range_node:
-                self.visit(range_node, ast_root_node)
-        return node
-
-    def visitRectSelOfLatticeOutDFs_N(self, node, ast_root_node):
-        """Visit rectangular selection of lattice output distribution functions."""
-        self.visit(node.lattice_name, ast_root_node)
-        for range_node in node.element_ranges:
-            if range_node:
-                self.visit(range_node, ast_root_node)
-        return node
-
-    def visitRange_N(self, node, ast_root_node):
-        """Visit range node."""
-        if node.low:
-            self.visit(node.low, ast_root_node)
-        if node.high:
-            self.visit(node.high, ast_root_node)
-        return node
-
-    def visitRangePlaceholder_N(self, node, ast_root_node):
-        """Visit range placeholder (no validation needed)."""
-        return node
-
-    # Data types
-    def visitScalarDataType_N(self, node, ast_root_node):
-        """Visit scalar data type (no validation needed)."""
-        return node
-
-    def visitArrayDataType_N(self, node, ast_root_node):
-        """Visit array data type (no validation needed)."""
+    def visitArrayLiteral4D_N(self, node, ast_root_node):
+        """Visit 4D array literal."""
+        for element in node.elements:
+            self.visit(element, ast_root_node)
         return node
