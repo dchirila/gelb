@@ -8,11 +8,9 @@ global_constants {
   const real K = 2 * 3.141592654 / N;
   const real tD = 1 / (2 * NU * K^2); }
 
-lattices { lattice f(2, 9, real); }
+lattices { lattice f(2, 9, real, {N, N}, {true, true}); }
 
 geometry {
-  set_grid_size({N, N});
-  set_grid_periodicity({true, true});
   nodes[:,:] = BULK; }
 
 node_classes { node_class BULK(InitToFEq, BGKCollStream, RhoUV); }

@@ -3,7 +3,9 @@ simulation_description("Pretty much the hello world of GeLB");
 lattices {
   lattice f(1,        // d
             1,        // q
-            int       // df_type
+            int,      // df_type
+            32,       // grid_size
+            false     // periodicity
   );
 }
 
@@ -24,7 +26,5 @@ node_classes { //
 }
 
 geometry { //
-  set_grid_size(32);
-  set_grid_periodicity(false);
   nodes[:] = BULK;
 }

@@ -6,7 +6,7 @@ global_constants {
 }
 
 lattices {
-  lattice f(1, DFS, int);  // DFS should resolve to 3
+  lattice f(1, DFS, int, SIZE, false);  // DFS should resolve to 3, SIZE to 16
 }
 
 initializer Init {
@@ -26,7 +26,6 @@ node_classes {
 }
 
 geometry {
-  set_grid_size(SIZE);  // SIZE should resolve to 16
-  set_grid_periodicity(false);
+  // Grid size and periodicity are now specified in the lattice declaration
   nodes[:] = BULK;
 }
