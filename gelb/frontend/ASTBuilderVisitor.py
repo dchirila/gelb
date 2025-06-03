@@ -216,7 +216,9 @@ class ASTBuilderVisitor(GeLBVisitor):
             self.visit(ctx.name),
             self.visit(ctx.d),
             self.visit(ctx.q),
-            self.visit(ctx.df_type)
+            self.visit(ctx.df_type),
+            self.visit(ctx.grid_size),     # NEW: grid size parameter
+            self.visit(ctx.periodicity)    # NEW: periodicity parameter
         )
 
     # Visit a parse tree produced by GeLBParser#singleElementRange.
@@ -389,20 +391,11 @@ class ASTBuilderVisitor(GeLBVisitor):
                 ctx.start.line,
                 ctx.start.column
             )
-        grid_size = self.visit(
-            ctx.set_grid_size_stmt().expr()
-        )
-        grid_periodicity = self.visit(
-            ctx.set_grid_periodicity_stmt().expr()
-        )
         stmts = List_N(code_range_from_ctx(ctx))
         for stmt in ctx.paint_nodes_stmt():
             stmts.append(self.visit(stmt))
-        self.instances_geometry_block += 1
         return GeometryBlock_N(
             code_range_from_ctx(ctx),
-            grid_size,
-            grid_periodicity,
             stmts
         )
 
