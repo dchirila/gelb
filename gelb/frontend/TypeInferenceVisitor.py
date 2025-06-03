@@ -248,18 +248,28 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
                 "This is likely an internal compiler error"
             )
         
-        symbol_def = self.current_block.symbol_defs.get_symbol_definition(node.array_name)
+        # Extract array name string from Identifier_N
+        array_name_str = str(node.array_name.name) if hasattr(node.array_name, 'name') else str(node.array_name)
+        
+        # Look up symbol definition with hierarchical lookup
+        symbol_def = self.current_block.symbol_defs.get_symbol_definition(array_name_str)
         if symbol_def is None:
-            raise GeLBException(
-                f"Undefined array '{node.array_name}'",
-                f"at {node.code_range}"
-            )
+            # Try the parent symbol table (for global constants)
+            parent_table = self.current_block.symbol_defs.parent_table
+            if parent_table:
+                symbol_def = parent_table.get_symbol_definition(array_name_str)
+            
+            if symbol_def is None:
+                raise GeLBException(
+                    f"Undefined array '{array_name_str}'",
+                    f"at {node.code_range}"
+                )
         
         # Get base type from array
-        array_type = symbol_def.data_type
+        array_type = symbol_def.data_type if hasattr(symbol_def, 'data_type') else symbol_def.value.data_type
         if not isinstance(array_type, ArrayDataType_N):
             raise GeLBException(
-                f"'{node.array_name}' is not an array",
+                f"'{array_name_str}' is not an array",
                 f"at {node.code_range}"
             )
         

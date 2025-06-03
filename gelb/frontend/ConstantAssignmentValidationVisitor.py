@@ -160,7 +160,25 @@ class ConstantAssignmentValidationVisitor(ASTBaseVisitor, SymbolTableUtilityMixi
         return node
 
     def visitArraySelectionAssignmentStmt_N(self, node, ast_root_node):
-        """Visit array selection assignment statement (no validation needed)."""
+        """
+        Validate that the array being assigned to is not a constant.
+        
+        This checks if the array on the left-hand side of the assignment
+        is a constant, and if so, raises an error.
+        """
+        # Check if LHS is a rectangular selection of array elements
+        if hasattr(node.lhs, 'array_name') and hasattr(node.lhs.array_name, 'name'):
+            array_name = str(node.lhs.array_name.name)
+            
+            # Find the symbol definition using hierarchical lookup
+            symbol_def = self._find_symbol_definition(array_name, ast_root_node)
+            
+            if symbol_def:
+                # Check if this symbol is a constant array
+                if (symbol_def.tag == "constant definition"):
+                    raise GeLBExConstantAssignment(node.lhs.array_name, symbol_def)
+        
+        # Continue visiting the RHS
         self.visit(node.rhs, ast_root_node)
         return node
 

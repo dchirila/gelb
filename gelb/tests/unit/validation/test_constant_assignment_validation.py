@@ -222,3 +222,74 @@ class TestConstantAssignmentValidation:
         except Exception:
             # Other errors (like undefined symbol) are expected and OK for this test
             pass
+
+    def test_constant_array_element_assignment(self):
+        """Test that assigning to a constant array element raises an error."""
+        gelb_code = minimal_gelb_program_1d(
+            global_constants_content="const array[int, 3] COEFFS = {1, 2, 3};",
+            initializer_content="""
+                array[int, 3] temp;
+                temp[0] = COEFFS[0];
+                temp[1] = COEFFS[1]; 
+                temp[2] = COEFFS[2];
+                COEFFS[0] = 42;
+                f.out[x | 0] = temp[0];
+            """,
+            dynamic_content="f.out[x | 0] = f.in[x | 0];",
+            gauge_content="val = f.in[x | 0];"
+        )
+        
+        # Get AST with type inference completed
+        ast = get_typed_ast(gelb_code)
+        
+        # Validation should raise an error for assignment to constant array element
+        with pytest.raises(GeLBExConstantAssignment) as excinfo:
+            validate_constant_assignments(ast)
+        
+        # Check that the error mentions the constant array name
+        assert "COEFFS" in str(excinfo.value.error)
+
+    def test_constant_array_element_assignment_in_dynamic_block(self):
+        """Test that constant array element assignments are caught in dynamic blocks too."""
+        gelb_code = minimal_gelb_program_1d(
+            global_constants_content="const array[real, 2] WEIGHTS = {0.5, 0.5};",
+            initializer_content="f.out[x | 0] = 0;",
+            dynamic_content="""
+                WEIGHTS[0] = 0.7;
+                f.out[x | 0] = f.in[x | 0];
+            """,
+            gauge_content="val = f.in[x | 0];"
+        )
+        
+        # Get AST with type inference completed
+        ast = get_typed_ast(gelb_code)
+        
+        # Validation should raise an error even in dynamic block
+        with pytest.raises(GeLBExConstantAssignment) as excinfo:
+            validate_constant_assignments(ast)
+        
+        assert "WEIGHTS" in str(excinfo.value.error)
+
+    def test_variable_array_element_assignment_allowed(self):
+        """Test that assignment to a non-constant array element is allowed."""
+        gelb_code = minimal_gelb_program_1d(
+            initializer_content="""
+                array[int, 3] my_array;
+                my_array[0] = 10;
+                my_array[1] = 20;
+                my_array[2] = 30;
+                f.out[x | 0] = my_array[0];
+            """,
+            dynamic_content="f.out[x | 0] = f.in[x | 0];",
+            gauge_content="val = f.in[x | 0];"
+        )
+        
+        # Get AST with type inference completed
+        ast = get_typed_ast(gelb_code)
+        
+        # Validation should pass - variable arrays can be modified
+        try:
+            result = validate_constant_assignments(ast)
+            assert result is not None
+        except GeLBExConstantAssignment:
+            pytest.fail("Variable array element assignment should be allowed")
