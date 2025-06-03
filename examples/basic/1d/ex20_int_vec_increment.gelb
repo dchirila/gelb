@@ -1,7 +1,7 @@
 simulation_description("None");
 
 lattices { //
-  lattice f(1, 1, int);
+  lattice f(1, 1, int, 32, false);
 }
 
 initializer SetDFsToZero { //
@@ -21,23 +21,5 @@ node_classes { //
 }
 
 geometry { //
-  set_grid_size(
-  32
-  //
-  //{32, 32}
-  //
-  //{{16, 32}, {64, 128}}
-  //{
-  //  {
-  //    {32, 64}, {32, 64},
-  //    {32, 64}, {32, 64}
-  //   },
-  //  {
-  //    {32, 64}, {32, 64},
-  //    {32, 64}, {32, 64}
-  //   }
-  //}
-  );
-  set_grid_periodicity(false);
   nodes[:] = BULK;
 }

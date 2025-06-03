@@ -226,16 +226,18 @@ class LatticeInstaStmt_N(Node_N):
 
     TODO (validation): only allow inside LatticesBlock_N
     """
-    def __init__(self, code_range, name, d, q, df_type):
+    def __init__(self, code_range, name, d, q, df_type, grid_size, periodicity):
         super().__init__(code_range)
         self.name = name
         self.d = d
         self.q = q
         self.df_type = df_type
+        self.grid_size = grid_size      # NEW: grid dimensions
+        self.periodicity = periodicity  # NEW: periodicity
 
     def __str__(self):
         return (
-            f"(LatticeInstaStmt {self.name} {self.d} {self.q} {self.df_type})"
+            f"(LatticeInstaStmt {self.name} {self.d} {self.q} {self.df_type} {self.grid_size} {self.periodicity})"
         )
 
 
@@ -327,16 +329,12 @@ class GeometryBlock_N(Block_N):
     """
     Represents the block (one per program) of node-painting statements.
     """
-    def __init__(self, code_range, grid_size, grid_periodicity, stmts):
+    def __init__(self, code_range, stmts):
         super().__init__(code_range, stmts)
-        self.grid_size = grid_size
-        self.grid_periodicity = grid_periodicity
 
     def __str__(self):
         return (
             f"(GeometryBlock"
-            f" (GridSize {self.grid_size})"
-            f" (GridPeriodicity {self.grid_periodicity})"
             f" {' '.join(f'{e}' for e in self.stmts)}"
             f")"
         )

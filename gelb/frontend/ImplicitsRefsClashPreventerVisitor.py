@@ -79,30 +79,52 @@ class ImplicitsRefsClashPreventerVisitor(ASTBaseVisitor):
                             )
                     # NOTE: other parts of the code ensure that we don't try
                     # to define a variable called "x".
-        elif (
-                (name in ["Nx", "Ny", "Nz"]) and
-                not (isinstance(node, PaintNodesStmt_N))
-        ):
-            error = (
-                f"You are using the implicit constant"
-                f" {click.style(name, underline=True) + Fore.RED}"
-                f" (representing the size of the simulation domain"
-                f" along the {name[-1]}-coordinate) in a place where it does"
-                f" not make sense."
-            )
-            hint = (
-                f"{click.style(name, underline=True) + Fore.GREEN}"
-                f" may be used *only* inside the brackets of the"
-                f" \"nodes[...]\" construct, inside the geometry block"
-            )
-            if name == "Nx":
-                hint += "."
-            elif name == "Ny":
-                hint += " (and only for 2D & 3D simulations)."
-            elif name == "Nz":
-                hint += " (and only for 3D simulations)."
-
-            raise GeLBExSymbolNotAllowedHere(ref, error, hint)
+        elif name in ["Nx", "Ny", "Nz"]:
+            # Nx, Ny, Nz are implicit dimension constants that are added later in the pipeline.
+            # At this point in compilation (before add_implicit_symbols), they don't exist yet,
+            # so references to them should be invalid except in specific contexts.
+            if isinstance(node, GlobalConstantsBlock_N):
+                # Invalid: global constants are processed before implicit symbols are added
+                error = (
+                    f"You are using the implicit constant"
+                    f" {click.style(name, underline=True) + Fore.RED}"
+                    f" (representing the size of the simulation domain"
+                    f" along the {name[-1]}-coordinate) in a global constants block."
+                )
+                hint = (
+                    f"Global constants are processed before implicit constants like"
+                    f" {click.style(name, underline=True) + Fore.GREEN}"
+                    f" are available. Use explicit constants instead."
+                )
+                raise GeLBExSymbolNotAllowedHere(ref, error, hint)
+            elif isinstance(node, LatticesBlock_N):
+                # Invalid: lattice parameters are processed before implicit symbols are added
+                error = (
+                    f"You are using the implicit constant"
+                    f" {click.style(name, underline=True) + Fore.RED}"
+                    f" in lattice parameter expressions."
+                )
+                hint = (
+                    f"Lattice parameters are processed before implicit constants like"
+                    f" {click.style(name, underline=True) + Fore.GREEN}"
+                    f" are available. Use explicit constants for lattice dimensions."
+                )
+                raise GeLBExSymbolNotAllowedHere(ref, error, hint)
+            elif isinstance(node, NodeClassesBlock_N):
+                # Invalid: node classes are processed before implicit symbols are added
+                error = (
+                    f"You are using the implicit constant"
+                    f" {click.style(name, underline=True) + Fore.RED}"
+                    f" in node classes block."
+                )
+                hint = (
+                    f"Node classes are processed before implicit constants like"
+                    f" {click.style(name, underline=True) + Fore.GREEN}"
+                    f" are available."
+                )
+                raise GeLBExSymbolNotAllowedHere(ref, error, hint)
+            # Note: GeometryBlock_N should allow Nx, Ny, Nz since geometry is processed 
+            # after implicit symbols are conceptually available
 
     def visitProgram_N(
             self,
@@ -181,7 +203,7 @@ class ImplicitsRefsClashPreventerVisitor(ASTBaseVisitor):
             node: GeometryBlock_N,
             ast_root_node: Program_N
     ):
-        self.check_node_symbol_refs(node.grid_size)
-        self.check_node_symbol_refs(node.grid_periodicity)
+        # Geometry block no longer has grid_size and grid_periodicity
+        # These are now part of lattice instantiation statements
         for stmt in node.stmts:
             self.check_node_symbol_refs(stmt)

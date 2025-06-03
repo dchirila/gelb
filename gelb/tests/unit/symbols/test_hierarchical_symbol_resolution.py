@@ -135,7 +135,7 @@ global_constants {
 }
 
 lattices {
-  lattice f(D, Q, real64);
+  lattice f(D, Q, real64, {32, 32}, {true, true});
 }
 
 initializer Init {
@@ -155,8 +155,6 @@ node_classes {
 }
 
 geometry {
-  set_grid_size({32, 32});
-  set_grid_periodicity({true, true});
   nodes[:,:] = BULK;
 }"""
     # Act
@@ -185,7 +183,7 @@ global_constants {
 }
 
 lattices {
-  lattice f(2, UNKNOWN_VAR, real64);  // UNKNOWN_VAR not defined anywhere
+  lattice f(2, UNKNOWN_VAR, real64, {32, 32}, {true, true});  // UNKNOWN_VAR not defined anywhere
 }
 
 initializer Init {
@@ -205,8 +203,6 @@ node_classes {
 }
 
 geometry {
-  set_grid_size({32, 32});
-  set_grid_periodicity({true, true});
   nodes[:,:] = BULK;
 }"""
     # Act & Assert - should raise GeLBExSymbolUnknown for truly unknown symbols
@@ -228,7 +224,7 @@ global_constants {
 }
 
 lattices {
-  lattice f(1, DFS, int);  // DFS should resolve to 3
+  lattice f(1, DFS, int, SIZE, false);  // DFS should resolve to 3, SIZE to 16
 }
 
 initializer Init {
@@ -248,8 +244,6 @@ node_classes {
 }
 
 geometry {
-  set_grid_size(SIZE);  // SIZE should resolve to 16
-  set_grid_periodicity(false);
   nodes[:] = BULK;
 }"""
     # Act
@@ -261,8 +255,9 @@ geometry {
     assert ast.global_constants.symbol_defs.contains("SIZE")
     assert ast.global_constants.symbol_defs.contains("DFS")
     
-    # Lattices should be able to access DFS from global constants
+    # Lattices should be able to access DFS and SIZE from global constants
     assert ast.lattices.symbol_defs.contains("DFS")  # via parent lookup
+    assert ast.lattices.symbol_defs.contains("SIZE") # via parent lookup  
     assert ast.lattices.symbol_defs.contains("f")    # local lattice
     
     # Check if geometry has symbol_defs (it might not always have one)
@@ -272,14 +267,14 @@ geometry {
         assert ast.geometry.symbol_defs.contains("BULK")  # from node classes
         
         # Verify the parent table structure
-        # Geometry should have program's global table as parent (to access node classes)
-        # and program's global table should have global_constants as parent
+        # Geometry should have program's symbol table as parent (to access global constants and node classes)
+        # Program.symbol_defs is now the root table containing global constants
         assert ast.geometry.symbol_defs.parent_table is ast.symbol_defs
-        assert ast.symbol_defs.parent_table is ast.global_constants.symbol_defs
+        assert ast.symbol_defs.parent_table is None  # Program.symbol_defs is the root
     
     # Verify the parent table structure for other blocks
-    assert ast.lattices.symbol_defs.parent_table is ast.global_constants.symbol_defs
-    assert ast.node_classes.symbol_defs.parent_table is ast.global_constants.symbol_defs
+    assert ast.lattices.symbol_defs.parent_table is ast.symbol_defs
+    assert ast.node_classes.symbol_defs.parent_table is ast.symbol_defs
 
 
 def test_minimal_global_constants_with_hierarchical_lookup():
@@ -293,7 +288,7 @@ global_constants {
 }
 
 lattices {
-  lattice f(1, Q_VALUE, int);  // Using global constant
+  lattice f(1, Q_VALUE, int, 16, false);  // Using global constant
 }
 
 initializer Init {
@@ -313,8 +308,6 @@ node_classes {
 }
 
 geometry {
-  set_grid_size(16);
-  set_grid_periodicity(false);
   nodes[:] = BULK;
 }"""
     # Act
@@ -327,4 +320,4 @@ geometry {
     assert ast.lattices.symbol_defs.contains("Q_VALUE") # Can access global constant
     
     # Parent table structure should be set up
-    assert ast.lattices.symbol_defs.parent_table is ast.global_constants.symbol_defs
+    assert ast.lattices.symbol_defs.parent_table is ast.symbol_defs

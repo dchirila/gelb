@@ -22,7 +22,7 @@ class TestImplicitSymbolsInBlocks:
         """Invalid: implicit symbols not allowed in lattice dimension specifications."""
         test_string = f"""
         lattices {{
-          lattice myLattice({symbol}, 5, int);
+          lattice myLattice({symbol}, 5, int, 32, false);
         }}
         """
         assert_symbol_not_allowed_error(test_string, "lattices_block")
@@ -43,76 +43,79 @@ class TestImplicitSymbolsInBlocks:
         """Invalid: implicit symbols not allowed in lattice Q-value specifications."""
         test_string = f"""
         lattices {{ //
-          lattice f(2, {symbol}, int);
+          lattice f(2, {symbol}, int, {{32, 32}}, {{false, false}});
         }}
         """
         assert_symbol_not_allowed_error(test_string, "lattices_block")
 
     def test_geometry_block_invalid_x(self):
-        """Invalid: x not allowed in geometry block."""
+        """Invalid: x not allowed in geometry block node painting."""
         test_string = """
         geometry {
-          set_grid_size(x);
-          set_grid_periodicity(false);
-          nodes[:] = BULK;
+          nodes[x] = BULK;
         }
         """
         assert_symbol_not_allowed_error(test_string, "geometry_block")
 
     def test_geometry_block_invalid_y(self):
-        """Invalid: y not allowed in geometry block."""
+        """Invalid: y not allowed in geometry block node painting."""
         test_string = """
         geometry {
-          set_grid_size(y);
-          set_grid_periodicity(false);
-          nodes[:] = BULK;
+          nodes[:, y] = BULK;
         }
         """
         assert_symbol_not_allowed_error(test_string, "geometry_block")
 
     def test_geometry_block_invalid_z(self):
-        """Invalid: z not allowed in geometry block."""
+        """Invalid: z not allowed in geometry block node painting."""
         test_string = """
         geometry {
-          set_grid_size(z);
-          set_grid_periodicity(false);
-          nodes[:] = BULK;
+          nodes[:, :, z] = BULK;
         }
         """
         assert_symbol_not_allowed_error(test_string, "geometry_block")
 
-    def test_geometry_block_invalid_Nx(self):
-        """Invalid: Nx not allowed in geometry block."""
+    def test_geometry_block_valid_Nx(self):
+        """Valid: Nx is allowed in geometry block node painting after implicit symbols are added."""
+        from gelb.tests.test_utils import get_ast
+        from gelb.frontend.stage1_frontend import prevent_clashes_of_symbol_refs_with_implicits
+        
         test_string = """
         geometry {
-          set_grid_size(Nx);
-          set_grid_periodicity(false);
-          nodes[:] = BULK;
+          nodes[0:Nx] = BULK;
         }
         """
-        assert_symbol_not_allowed_error(test_string, "geometry_block")
+        # This should not raise any exception since geometry blocks allow Nx references
+        ast = get_ast("geometry_block", test_string)
+        prevent_clashes_of_symbol_refs_with_implicits(ast)
 
-    def test_geometry_block_invalid_Ny(self):
-        """Invalid: Ny not allowed in geometry block."""
+    def test_geometry_block_valid_Ny(self):
+        """Valid: Ny is allowed in geometry block node painting after implicit symbols are added."""
+        from gelb.tests.test_utils import get_ast
+        from gelb.frontend.stage1_frontend import prevent_clashes_of_symbol_refs_with_implicits
+        
         test_string = """
         geometry {
-          set_grid_size(Ny);
-          set_grid_periodicity(false);
-          nodes[:] = BULK;
+          nodes[:, 0:Ny] = BULK;
         }
         """
-        assert_symbol_not_allowed_error(test_string, "geometry_block")
+        # This should not raise any exception since geometry blocks allow Ny references
+        ast = get_ast("geometry_block", test_string)
+        prevent_clashes_of_symbol_refs_with_implicits(ast)
 
-    def test_geometry_block_invalid_Nz(self):
-        """Invalid: Nz not allowed in geometry block."""
+    def test_geometry_block_valid_Nz(self):
+        """Valid: Nz is allowed in geometry block node painting after implicit symbols are added."""
+        from gelb.tests.test_utils import get_ast
+        from gelb.frontend.stage1_frontend import prevent_clashes_of_symbol_refs_with_implicits
+        
         test_string = """
         geometry {
-          set_grid_size(Nz);
-          set_grid_periodicity(false);
-          nodes[:] = BULK;
+          nodes[:, :, 0:Nz] = BULK;
         }
         """
-        assert_symbol_not_allowed_error(test_string, "geometry_block")
+        # This should not raise any exception since geometry blocks allow Nz references
+        ast = get_ast("geometry_block", test_string)
+        prevent_clashes_of_symbol_refs_with_implicits(ast)
 
     # Positive tests - cases where symbols should be allowed
     def test_initializer_block_valid1(self):
@@ -192,8 +195,6 @@ class TestImplicitSymbolsInBlocks:
         
         test_string = """
         geometry {
-          set_grid_size(32);
-          set_grid_periodicity(false);
           nodes[:] = BULK;
         }
         """

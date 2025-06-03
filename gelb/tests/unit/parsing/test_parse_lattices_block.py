@@ -4,10 +4,10 @@ import pytest
 from gelb.frontend.stage1_frontend import get_cst_as_string
 
 
-def test_one_lattice_instance_no_arg_keywords():
+def test_one_lattice_instance():
     # Arrange
     test_string = """lattices {
-        lattice f(2, 9, bool);
+        lattice f(2, 9, bool, 32, false);
     }"""
     # Act (trigger parsing)
     result = get_cst_as_string("lattices_block", test_string)
@@ -22,6 +22,10 @@ def test_one_lattice_instance_no_arg_keywords():
                 " (expr 9)"
                 " ,"
                 " (scalar_data_type (scalar_bool_data_type bool))"
+                " ,"
+                " (expr 32)"
+                " ,"
+                " (expr false)"
             " )"
         " ;)"
         " })"

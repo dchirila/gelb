@@ -8,10 +8,12 @@ global_constants {
 }
 
 lattices {
-  // Should be able to use Q from global_constants
+  // Should be able to use Q and N from global_constants
   lattice f(1,        // d (dimensions)
             Q,        // q (number of DFs) - from global_constants!
-            real      // df_type
+            real,     // df_type
+            N,        // grid_size - from global_constants!
+            true      // periodicity
   );
 }
 
@@ -35,8 +37,6 @@ node_classes {
 }
 
 geometry {
-  // Should be able to use N from global_constants
-  set_grid_size(N);          // Using N from global_constants!
-  set_grid_periodicity(true);
+  // Grid size and periodicity are now specified in the lattice declaration
   nodes[:] = BULK;
 }

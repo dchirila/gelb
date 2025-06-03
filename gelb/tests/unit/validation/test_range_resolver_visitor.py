@@ -21,7 +21,7 @@ def test_resolve_all_elements_range_in_paint_nodes_1d():
     simulation_description("Test 1D range");
     
     lattices {
-        lattice f(1, 1, int);
+        lattice f(1, 1, int, 32, false);
     }
     
     initializer Init {
@@ -41,8 +41,6 @@ def test_resolve_all_elements_range_in_paint_nodes_1d():
     }
     
     geometry {
-        set_grid_size(32);
-        set_grid_periodicity(false);
         nodes[:] = BULK;
     }
     """
@@ -76,7 +74,7 @@ def test_resolve_all_elements_range_in_paint_nodes_2d():
     simulation_description("Test 2D range");
     
     lattices {
-        lattice f(2, 9, real);
+        lattice f(2, 9, real, {128, 64}, {true, true});
     }
     
     initializer Init {
@@ -96,8 +94,6 @@ def test_resolve_all_elements_range_in_paint_nodes_2d():
     }
     
     geometry {
-        set_grid_size({128, 64});
-        set_grid_periodicity({true, true});
         nodes[:,:] = BULK;
     }
     """
@@ -136,7 +132,7 @@ def test_resolve_low_bound_range():
     simulation_description("Test low bound range");
     
     lattices {
-        lattice f(1, 1, int);
+        lattice f(1, 1, int, 100, false);
     }
     
     initializer Init {
@@ -157,8 +153,6 @@ def test_resolve_low_bound_range():
     }
     
     geometry {
-        set_grid_size(100);
-        set_grid_periodicity(false);
         nodes[5:] = BOUNDARY;
         nodes[:5] = BULK;
     }
@@ -190,7 +184,7 @@ def test_resolve_high_bound_range():
     simulation_description("Test high bound range");
     
     lattices {
-        lattice f(1, 1, int);
+        lattice f(1, 1, int, 100, false);
     }
     
     initializer Init {
@@ -211,8 +205,6 @@ def test_resolve_high_bound_range():
     }
     
     geometry {
-        set_grid_size(100);
-        set_grid_periodicity(false);
         nodes[:10] = BOUNDARY;
         nodes[10:] = BULK;
     }
@@ -244,7 +236,7 @@ def test_resolve_range_in_lattice_out_selection():
     simulation_description("Test lattice out range");
     
     lattices {
-        lattice f(2, 9, real);
+        lattice f(2, 9, real, {100, 100}, {true, true});
     }
     
     initializer InitTest {
@@ -264,8 +256,6 @@ def test_resolve_range_in_lattice_out_selection():
     }
     
     geometry {
-        set_grid_size({100, 100});
-        set_grid_periodicity({true, true});
         nodes[:,:] = BULK;
     }
     """
@@ -297,7 +287,7 @@ def test_resolve_range_in_lattice_in_selection():
     simulation_description("Test lattice in range");
     
     lattices {
-        lattice f(2, 9, real);
+        lattice f(2, 9, real, {100, 100}, {true, true});
     }
     
     initializer Init {
@@ -317,8 +307,6 @@ def test_resolve_range_in_lattice_in_selection():
     }
     
     geometry {
-        set_grid_size({100, 100});
-        set_grid_periodicity({true, true});
         nodes[:,:] = BULK;
     }
     """
@@ -351,7 +339,7 @@ def test_no_modification_of_explicit_ranges():
     simulation_description("Test explicit range");
     
     lattices {
-        lattice f(1, 1, int);
+        lattice f(1, 1, int, 100, false);
     }
     
     initializer Init {
@@ -371,8 +359,6 @@ def test_no_modification_of_explicit_ranges():
     }
     
     geometry {
-        set_grid_size(100);
-        set_grid_periodicity(false);
         nodes[3:7] = BULK;
     }
     """
@@ -403,7 +389,7 @@ def test_complete_program_with_ranges():
     simulation_description("Test program with ranges");
     
     lattices {
-        lattice f(1, 3, real);
+        lattice f(1, 3, real, 100, false);
     }
     
     initializer Init {
@@ -423,8 +409,6 @@ def test_complete_program_with_ranges():
     }
     
     geometry {
-        set_grid_size(100);
-        set_grid_periodicity(false);
         nodes[:] = BULK;
     }
     """
@@ -460,7 +444,7 @@ def test_ast_unchanged_str():
     simulation_description("Test AST string");
     
     lattices {
-        lattice f(1, 1, int);
+        lattice f(1, 1, int, 32, false);
     }
     
     initializer Init {
@@ -480,8 +464,6 @@ def test_ast_unchanged_str():
     }
     
     geometry {
-        set_grid_size(32);
-        set_grid_periodicity(false);
         nodes[:] = BULK;
     }
     """

@@ -28,6 +28,7 @@ from gelb.frontend.ImplicitSymbolsAdderVisitor import ImplicitSymbolsAdderVisito
 from gelb.frontend.NodeClassesValidationVisitor import NodeClassesValidationVisitor
 from gelb.frontend.GeometryInitialValidationVisitor import GeometryInitialValidationVisitor
 from gelb.frontend.ConstantsResolverVisitor import ConstantsResolverVisitor
+from gelb.frontend.LatticeConsistencyValidator import LatticeConsistencyValidator
 from gelb.frontend.RectangularArraysEnforcerVisitor import RectangularArraysEnforcerVisitor
 from gelb.frontend.RangeResolverVisitor import RangeResolverVisitor
 from gelb.frontend.TypeInferenceVisitor import TypeInferenceVisitor
@@ -121,6 +122,12 @@ def add_implicit_symbols(ast):
 
 def validate_node_classes(ast):
     ast_visitor = NodeClassesValidationVisitor()
+    ast_visitor.visit(ast, ast)  # nothing to return here
+
+
+def validate_lattice_consistency(ast):
+    """Validate that all lattices have identical grid_size and periodicity."""
+    ast_visitor = LatticeConsistencyValidator()
     ast_visitor.visit(ast, ast)  # nothing to return here
 
 

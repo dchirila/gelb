@@ -61,7 +61,7 @@ class TestMidwareIntegration:
         simulation_description("Pretty much the hello world of GeLB");
 
         lattices {
-          lattice f(1, 1, int);
+          lattice f(1, 1, int, 32, false);
         }
 
         initializer SetDFsToZero {
@@ -81,8 +81,6 @@ class TestMidwareIntegration:
         }
 
         geometry {
-          set_grid_size(32);
-          set_grid_periodicity(false);
           nodes[:] = BULK;
         }
         '''
@@ -130,7 +128,7 @@ class TestMidwareIntegration:
         }
         
         lattices {
-            lattice f(1, 1, real);
+            lattice f(1, 1, real, N, true);
         }
         
         initializer Init {
@@ -150,8 +148,6 @@ class TestMidwareIntegration:
         }
         
         geometry {
-            set_grid_size(N);
-            set_grid_periodicity(true);
             nodes[:] = BULK;
         }
         '''

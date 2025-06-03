@@ -122,7 +122,7 @@ def get_implicit_symbols_test_data():
         ("lattices_dimension_forbidden", "lattices",
          """
          lattices {
-           lattice myLattice(x, 5, int);
+           lattice myLattice(x, 5, int, 32, false);
          }
          """, False),
         
@@ -136,9 +136,7 @@ def get_implicit_symbols_test_data():
         ("geometry_forbidden", "geometry",
          """
          geometry {
-           set_grid_size(x);
-           set_grid_periodicity(false);
-           nodes[:] = BULK;
+           nodes[x] = BULK;
          }
          """, False),
     ]

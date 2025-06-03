@@ -134,7 +134,7 @@ def minimal_gelb_program_1d(
     simulation_description("{description}");
     {constants_block}
     lattices {{
-        lattice f(1, 1, int);
+        lattice f(1, 1, int, 32, false);
     }}
     initializer Init {{
         {init_stmt}
@@ -149,8 +149,6 @@ def minimal_gelb_program_1d(
         node_class BULK(Init, Dyn, Out);
     }}
     geometry {{
-        set_grid_size(32);
-        set_grid_periodicity(false);
         {geom_stmt}
     }}
     """
@@ -204,7 +202,7 @@ def minimal_gelb_program_2d(
         {constants_block}
     }}
     lattices {{
-        lattice f(2, 9, int);
+        lattice f(2, 9, int, {{N, N}}, {{false, false}});
     }}
     initializer Init {{
         {init_stmt}
@@ -220,8 +218,6 @@ def minimal_gelb_program_2d(
         node_class WALL(Init, Dyn, Out);
     }}
     geometry {{
-        set_grid_size({{N, N}});
-        set_grid_periodicity({{false, false}});
         {geom_stmt}
     }}
     """
@@ -274,7 +270,7 @@ def minimal_gelb_program_3d(
         {constants_block}
     }}
     lattices {{
-        lattice f(3, 27, int);
+        lattice f(3, 27, int, {{N, N, N}}, {{false, false, false}});
     }}
     initializer Init {{
         {init_stmt}
@@ -290,8 +286,6 @@ def minimal_gelb_program_3d(
         node_class WALL(Init, Dyn, Out);
     }}
     geometry {{
-        set_grid_size({{N, N, N}});
-        set_grid_periodicity({{false, false, false}});
         {geom_stmt}
     }}
     """
