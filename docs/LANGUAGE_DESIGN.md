@@ -185,14 +185,52 @@ w = -(a + b);    // Unary minus applied to expression
 - Avoids imposing unnecessary constraints on users
 - More flexible than the thesis version (which allowed only one)
 
-### Lattice size and periodicity location
+### Lattice size and periodicity location (Major revision from current implementation)
 
-**Decision**: Size and periodicity are specified during lattice instantiation (in `lattices` block), not in `geometry` block.
+**Original Design Decision (PhD thesis)**: Size and periodicity were to be specified in the `geometry` block using `set_grid_size` and `set_grid_periodicity` statements.
 
-**Rationale**:
-- More natural to specify these properties with the lattice
-- Allows different lattices to have different sizes and periodicity traits
-- Better separation of concerns
+**Current Implementation (temporary)**: Following the PhD thesis approach with `set_grid_size` and `set_grid_periodicity` in the geometry block.
+
+**Final Design Decision (to be implemented)**: Size and periodicity will be specified during lattice instantiation (in `lattices` block), not in `geometry` block.
+
+**New Syntax**:
+```gelb
+lattices {
+  // 1D example
+  lattice f(1,        // d: dimensionality
+            1,        // q: number of discrete velocities  
+            int,      // df_type: distribution function type
+            32,       // grid_size: can be int or array {Nx} for 1D
+            false     // periodicity: can be bool or array {periodic_x} for 1D
+  );
+  
+  // 2D example
+  lattice g(2, 9, real, {64, 32}, {true, false});
+  
+  // 3D example  
+  lattice h(3, 27, real, {64, 64, 32}, {true, true, false});
+}
+
+geometry {
+  // Simplified - only assigns node classes
+  nodes[:] = BULK;     // 1D
+  nodes[:,:] = BULK;   // 2D
+  nodes[:,:,:] = BULK; // 3D
+}
+```
+
+**Rationale for the change**:
+- **Logical cohesion**: Grid size and periodicity are inherent properties of the lattice structure, not the geometry
+- **Self-contained lattice definitions**: All lattice properties (dimensions, velocities, data types, size, periodicity) in one place
+- **Better separation of concerns**: Geometry block focuses solely on node class assignment
+- **Cleaner dependency flow**: Nx, Ny, Nz are derived from lattice definitions, not geometry
+- **Consistency**: Aligns with the principle that each block has a single, well-defined purpose
+
+**Migration notes**:
+- This is a breaking change from the current implementation
+- All existing GeLB programs will need to be updated
+- The compiler will need significant refactoring (grammar, AST, visitors)
+- For GeLB v1, all lattices must have identical grid_size and periodicity
 
 ## Syntax Conventions
 
