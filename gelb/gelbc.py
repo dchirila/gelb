@@ -21,7 +21,8 @@ from gelb.frontend.stage1_frontend import (
     prevent_clashes_of_symbol_defs_with_implicits,
     add_implicit_symbols,
     infer_types,
-    validate_constant_assignments
+    validate_constant_assignments,
+    validate_lattice_consistency
 )
 from gelb.midware.stage2_midware import process_ast as midware_process_ast
 
@@ -144,6 +145,9 @@ def cli(t, input_file, backend, visualize_ast, ast_output, ast_format, keep_dot,
 
     # ... validate that constants are not assigned to
     ast = validate_constant_assignments(ast)
+
+    # ... validate lattice consistency (all lattices must have same grid properties)
+    validate_lattice_consistency(ast)
 
     # ... validate node-classes
     validate_node_classes(ast)
