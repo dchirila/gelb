@@ -4,7 +4,7 @@ import pytest
 from gelb.frontend.stage1_frontend import get_cst_as_string
 
 
-def test_no_arg_keywords():
+def test_lattice_instantiation():
     # Arrange
     test_string = "lattice f(2, 9, bool, {32, 32}, {true, true});"
     # Act (trigger parsing)
