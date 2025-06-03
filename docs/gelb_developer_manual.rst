@@ -925,6 +925,174 @@ The implicit coordinate system enables a CUDA-like programming model where:
 
 This programming model makes GeLB suitable for both CPU and GPU execution while maintaining a clean, mathematical notation for lattice-based algorithms.
 
+Visitor Pattern Design
+======================
+
+GeLB uses the Visitor pattern extensively for AST traversal and transformation. Understanding the design decisions behind our visitor implementation is crucial for compiler development.
+
+Design Philosophy
+-----------------
+
+The GeLB compiler uses a **dynamic dispatch visitor pattern** rather than the traditional abstract visitor pattern. This design choice was made deliberately to provide flexibility and reduce boilerplate code.
+
+**Traditional Abstract Visitor Pattern:**
+  * Requires abstract methods for every possible node type
+  * Forces all visitors to implement every visit method
+  * Results in many empty/pass-through implementations
+  * Makes adding new node types cumbersome (must update base class)
+
+**GeLB's Dynamic Dispatch Pattern:**
+  * Base class (``ASTBaseVisitor``) provides only the dispatch mechanism
+  * Visitors implement only the methods they need
+  * Missing methods are caught at runtime with clear error messages
+  * Adding new node types requires no base class changes
+
+Implementation Details
+----------------------
+
+The ``ASTBaseVisitor`` class provides a single ``visit()`` method that:
+
+1. Extracts the node's class name (e.g., ``Program_N``)
+2. Constructs the method name (e.g., ``visitProgram_N``)
+3. Uses ``getattr()`` to find and call the method dynamically
+4. Raises ``GeLBExMissingASTVisitationMethod`` if method not found
+
+Example implementation:
+
+.. code-block:: python
+
+    class ASTBaseVisitor:
+        def visit(self, node, ast_root_node):
+            ast_node_type_name = type(node).__name__
+            visitation_method_name = f"visit{ast_node_type_name}"
+            if hasattr(self, visitation_method_name):
+                visitation_method = getattr(self, visitation_method_name)
+                return visitation_method(node, ast_root_node)
+            else:
+                raise GeLBExMissingASTVisitationMethod(...)
+
+Writing New Visitors
+--------------------
+
+When creating a new visitor:
+
+1. **Inherit from ASTBaseVisitor:**
+
+   .. code-block:: python
+
+       from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
+
+       class MyNewVisitor(ASTBaseVisitor):
+           """Description of what this visitor does."""
+
+2. **Implement only needed visit methods:**
+
+   .. code-block:: python
+
+       def visitProgram_N(self, node, ast_root_node):
+           # Process program node
+           # Visit children as needed
+           for initializer in node.initializers:
+               self.visit(initializer, ast_root_node)
+           return node
+
+       def visitIdentifier_N(self, node, ast_root_node):
+           # Process identifier
+           return node
+
+3. **Use mixins for common functionality:**
+
+   .. code-block:: python
+
+       from gelb.frontend.visitor_mixins import SymbolTableUtilityMixin
+
+       class MyNewVisitor(ASTBaseVisitor, SymbolTableUtilityMixin):
+           # Now you have access to symbol table utilities
+
+Best Practices
+--------------
+
+**DO:**
+  * Implement only the visit methods you actually need
+  * Use descriptive names and docstrings for your visitor class
+  * Leverage existing mixins for common functionality
+  * Call ``self.visit()`` to recursively process child nodes
+  * Return the node (potentially modified) from visit methods
+
+**DON'T:**
+  * Implement empty visit methods just to avoid errors
+  * Access node internals directly when traversal is needed
+  * Forget to pass ``ast_root_node`` through recursive calls
+  * Assume all nodes have all fields (use ``hasattr()`` checks)
+
+Example: Focused Visitor
+------------------------
+
+Here's an example of a visitor that only cares about constant definitions:
+
+.. code-block:: python
+
+    class ConstantCollectorVisitor(ASTBaseVisitor):
+        """Collects all constant definitions in the program."""
+        
+        def __init__(self):
+            self.constants = []
+        
+        def visitProgram_N(self, node, ast_root_node):
+            # Only visit global constants block
+            if node.global_constants:
+                self.visit(node.global_constants, ast_root_node)
+            return node
+        
+        def visitGlobalConstantsBlock_N(self, node, ast_root_node):
+            # Visit all statements in the block
+            for stmt in node.stmts:
+                self.visit(stmt, ast_root_node)
+            return node
+        
+        def visitConstantDefinitionStmt_N(self, node, ast_root_node):
+            # Collect the constant
+            self.constants.append({
+                'name': node.name,
+                'type': node.data_type,
+                'value': node.value
+            })
+            return node
+
+This visitor only implements 3 methods instead of 40+, making it much cleaner and easier to understand.
+
+Comparison with Existing Visitors
+---------------------------------
+
+Most GeLB visitors follow this pattern effectively:
+
+* **TypeInferenceVisitor**: ~20 methods for type-related nodes
+* **ConstantAssignmentValidationVisitor**: ~35 methods but many are simple pass-throughs
+* **SymbolsTablesBuilderVisitor**: ~15 methods focused on symbol definitions
+* **RangeResolverVisitor**: ~10 methods for range-related nodes
+
+Some visitors like ``ConstantAssignmentValidationVisitor`` implement more methods than strictly necessary for traversal completeness, but this is still more maintainable than forcing all visitors to implement all methods.
+
+Performance Considerations
+--------------------------
+
+The dynamic dispatch approach has minimal performance impact:
+
+* ``getattr()`` lookups are fast in Python
+* Method resolution happens once per node visit
+* The flexibility gained outweighs any micro-optimization concerns
+* Real performance bottlenecks will be in code generation, not AST traversal
+
+Future Extensibility
+--------------------
+
+This design makes the compiler easily extensible:
+
+* New AST node types can be added without touching ``ASTBaseVisitor``
+* New visitors can be created without implementing unnecessary methods
+* Visitors can be composed using mixins for shared functionality
+* The pattern scales well as the language grows
+
 Array Selection Assignment Statements
 =====================================
 
