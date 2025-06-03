@@ -11,7 +11,7 @@ class ImplicitSymbolsAdderVisitor(ASTBaseVisitor):
     corresponding to the implicit variables & constants.
 
     Adds the following implicit symbols:
-    - Nx, Ny, Nz: Grid dimensions (constants derived from geometry block)
+    - Nx, Ny, Nz: Grid dimensions (constants derived from lattices block grid_size)
     - x, y, z: Lattice site coordinates (like CUDA thread indices, uint64 at runtime)
 
     The x, y, z variables represent the current lattice site being processed,
@@ -29,12 +29,12 @@ class ImplicitSymbolsAdderVisitor(ASTBaseVisitor):
     
     def visitProgram_N(self, node: Program_N, ast_root_node: Program_N):
         """
-        Main entry point. Extract grid dimensions from geometry and add
+        Main entry point. Extract grid dimensions from lattices and add
         implicit symbols to relevant blocks.
         """
-        # First, extract grid dimensions from geometry block
-        if node.geometry:
-            self._extract_grid_dimensions(node.geometry)
+        # First, extract grid dimensions from lattices block
+        if node.lattices:
+            self._extract_grid_dimensions(node.lattices)
         
         # Add implicit constants (Nx, Ny, Nz) to global_constants block
         if node.global_constants:
@@ -63,25 +63,35 @@ class ImplicitSymbolsAdderVisitor(ASTBaseVisitor):
         
         return node
     
-    def _extract_grid_dimensions(self, geometry_block):
+    def _extract_grid_dimensions(self, lattices_block):
         """
-        Extract grid dimensions from the geometry block's set_grid_size call.
+        Extract grid dimensions from the lattices block's first lattice grid_size parameter.
+        For GeLB v1, all lattices must have identical grid sizes.
         """
-        if not geometry_block.grid_size:
+        if not lattices_block.stmts or not lattices_block.stmts.elements:
+            # No lattices specified, use default 1D with size 1
+            self.grid_dimensions = [IntLiteral_N(None, 1)]
+            self.dimensionality = 1
+            return
+        
+        # Get the first lattice instantiation statement
+        first_lattice = lattices_block.stmts.elements[0]
+        
+        if not hasattr(first_lattice, 'grid_size') or not first_lattice.grid_size:
             # No grid size specified, use default 1D with size 1
             self.grid_dimensions = [IntLiteral_N(None, 1)]
             self.dimensionality = 1
             return
         
-        grid_size = geometry_block.grid_size
+        grid_size = first_lattice.grid_size
         
         if isinstance(grid_size, IntLiteral_N):
-            # 1D case: set_grid_size(32)
+            # 1D case: lattice f(1, 1, int, 32, false)
             self.grid_dimensions = [grid_size]
             self.dimensionality = 1
             
         elif isinstance(grid_size, Array1DLiteral_N):
-            # Multi-dimensional case: set_grid_size({64, 32}) or set_grid_size({64, 32, 16})
+            # Multi-dimensional case: lattice f(2, 9, real, {64, 32}, {true, false})
             # grid_size.value is a List_N object containing the elements
             if hasattr(grid_size.value, 'elements'):
                 self.grid_dimensions = grid_size.value.elements
