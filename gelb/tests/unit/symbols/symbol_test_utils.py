@@ -78,23 +78,23 @@ def get_symbol_table_error_test_data():
         ("lattices_block", "symbol_exists", GeLBExSymbolExists,
          """
          lattices {
-           lattice f(3, 19, real64);
-           lattice g(3, 5, real64);
-           lattice f(3, 19, real64);
+           lattice f(3, 19, real64, {32, 32, 32}, {true, true, true});
+           lattice g(3, 5, real64, {32, 32, 32}, {true, true, true});
+           lattice f(3, 19, real64, {32, 32, 32}, {true, true, true});
          }
          """, None),
         
         ("lattices_block", "symbol_unknown_d", GeLBExSymbolUnknown,
          """
          lattices {
-           lattice f(1 + TWO, 19, real64);
+           lattice f(1 + TWO, 19, real64, 32, false);
          }
          """, None),
         
         ("lattices_block", "symbol_unknown_q", GeLBExSymbolUnknown,
          """
          lattices {
-           lattice f(3, TWO + 17, real64);
+           lattice f(3, TWO + 17, real64, {32, 32, 32}, {true, true, true});
          }
          """, None),
         
@@ -233,11 +233,11 @@ def get_symbol_table_valid_test_data():
         ("lattices_block",
          """
          lattices {
-           lattice f(2, 9, real);
-           lattice g(3, 15, int);
+           lattice f(2, 9, real, {32, 32}, {true, false});
+           lattice g(3, 15, int, {32, 32, 32}, {true, true, true});
          }
          """, None,
-         "(f \"lattice instance\" (LatticeInstaStmt (Identifier f) (IntLiteral 2) (IntLiteral 9) (ScalarDataType real))) (g \"lattice instance\" (LatticeInstaStmt (Identifier g) (IntLiteral 3) (IntLiteral 15) (ScalarDataType int)))"),
+         "(f \"lattice instance\" (LatticeInstaStmt (Identifier f) (IntLiteral 2) (IntLiteral 9) (ScalarDataType real) (ArrayLiteral1D (IntLiteral 32) (IntLiteral 32)) (ArrayLiteral1D (BoolLiteral true) (BoolLiteral false)))) (g \"lattice instance\" (LatticeInstaStmt (Identifier g) (IntLiteral 3) (IntLiteral 15) (ScalarDataType int) (ArrayLiteral1D (IntLiteral 32) (IntLiteral 32) (IntLiteral 32)) (ArrayLiteral1D (BoolLiteral true) (BoolLiteral true) (BoolLiteral true))))"),
         
         # Initializer block - valid cases
         ("initializer_block",

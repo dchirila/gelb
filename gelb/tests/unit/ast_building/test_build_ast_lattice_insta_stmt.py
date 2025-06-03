@@ -6,23 +6,25 @@ from gelb.frontend.stage1_frontend import get_ast
 
 def test_1d_no_arg_keywords():
     # Arrange
-    test_string = "lattice f(2, 9, bool);"
+    test_string = "lattice f(1, 3, bool, 32, true);"
     # Act
     ast = get_ast("lattice_insta_stmt", test_string)
     # Assert (test the AST)
     assert str(ast) == (
         "(LatticeInstaStmt"
         " (Identifier f)"
-        " (IntLiteral 2)"
-        " (IntLiteral 9)"
+        " (IntLiteral 1)"
+        " (IntLiteral 3)"
         " (ScalarDataType bool)"
+        " (IntLiteral 32)"
+        " (BoolLiteral true)"
         ")"
     )
 
 
 def test_2d_no_arg_keywords():
     # Arrange
-    test_string = "lattice g(2, 9, real32);"
+    test_string = "lattice g(2, 9, real32, {64, 64}, {false, true});"
     # Act
     ast = get_ast("lattice_insta_stmt", test_string)
     # Assert (test the AST)
@@ -32,5 +34,7 @@ def test_2d_no_arg_keywords():
         " (IntLiteral 2)"
         " (IntLiteral 9)"
         " (ScalarDataType real32)"
+        " (ArrayLiteral1D (IntLiteral 64) (IntLiteral 64))"
+        " (ArrayLiteral1D (BoolLiteral false) (BoolLiteral true))"
         ")"
     )

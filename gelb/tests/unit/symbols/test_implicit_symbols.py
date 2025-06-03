@@ -16,7 +16,7 @@ global_constants {
 }
 
 lattices {
-    lattice f(1, 1, int);
+    lattice f(1, 1, int, 32, false);
 }
 
 initializer Init {
@@ -36,8 +36,6 @@ node_classes {
 }
 
 geometry {
-    set_grid_size(32);
-    set_grid_periodicity(false);
     nodes[:] = BULK;
 }"""
     
@@ -75,7 +73,7 @@ global_constants {
 }
 
 lattices {
-    lattice f(2, 9, real);
+    lattice f(2, 9, real, {64, 32}, {true, false});
 }
 
 initializer Init {
@@ -95,8 +93,6 @@ node_classes {
 }
 
 geometry {
-    set_grid_size({64, 32});
-    set_grid_periodicity({true, false});
     nodes[:,:] = BULK;
 }"""
     
@@ -130,7 +126,7 @@ global_constants {
 }
 
 lattices {
-    lattice f(3, 19, real);
+    lattice f(3, 19, real, {64, 32, 16}, {true, false, true});
 }
 
 initializer Init {
@@ -150,8 +146,6 @@ node_classes {
 }
 
 geometry {
-    set_grid_size({64, 32, 16});
-    set_grid_periodicity({true, false, true});
     nodes[:,:,:] = BULK;
 }"""
     
@@ -187,7 +181,7 @@ global_constants {
 }
 
 lattices {
-    lattice f(1, 3, int);
+    lattice f(1, 3, int, SIZE, false);
 }
 
 initializer Init {
@@ -207,8 +201,6 @@ node_classes {
 }
 
 geometry {
-    set_grid_size(SIZE);
-    set_grid_periodicity(false);
     nodes[:] = BULK;
 }"""
     
@@ -230,7 +222,7 @@ global_constants {
 }
 
 lattices {
-    lattice f(1, 1, int);
+    lattice f(1, 1, int, 32, false);
 }
 
 initializer Init {
@@ -250,8 +242,6 @@ node_classes {
 }
 
 geometry {
-    set_grid_size(32);
-    set_grid_periodicity(false);
     nodes[:] = BULK;
 }"""
     
@@ -285,7 +275,7 @@ global_constants {
 }
 
 lattices {
-    lattice f(1, 1, int);
+    lattice f(1, 1, int, SIZE, false);
 }
 
 initializer Init {
@@ -305,8 +295,6 @@ node_classes {
 }
 
 geometry {
-    set_grid_size(SIZE);
-    set_grid_periodicity(false);
     nodes[:] = BULK;
 }"""
     

@@ -161,26 +161,26 @@ def get_lattice_access_type_inference_test_data():
         # Simple lattice access  
         ("lattice_in_single_df",
          """
-         lattice f(2, 9, real);
+         lattice f(2, 9, real, {32, 32}, {true, false});
          const real value = f.in[x, y | 0];
          """, "value", "real"),
         
         ("lattice_out_single_df",
          """
-         lattice f(2, 9, int);
+         lattice f(2, 9, int, {32, 32}, {true, false});
          const int value = f.out[x, y | 5];
          """, "value", "int"),
         
         # Lattice range access
         ("lattice_in_df_range",
          """
-         lattice f(1, 3, real);
+         lattice f(1, 3, real, 32, false);
          const array[real, 3] df_vector = f.in[x | :];
          """, "df_vector", "array[real, 3]"),
         
         ("lattice_out_df_range",
          """
-         lattice f(2, 9, int);
+         lattice f(2, 9, int, {32, 32}, {true, false});
          const array[int, 5] df_slice = f.out[x, y | 2:7];
          """, "df_slice", "array[int, 5]"),
     ]

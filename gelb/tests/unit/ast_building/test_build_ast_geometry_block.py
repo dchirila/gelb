@@ -8,8 +8,6 @@ def test_valid1():
     # Arrange
     test_string = """
     geometry { //
-      set_grid_size(32);
-      set_grid_periodicity(false);
       nodes[:] = BULK;
     }
     """
@@ -18,8 +16,6 @@ def test_valid1():
     # Assert
     assert str(ast) == (
         "(GeometryBlock"
-            " (GridSize (IntLiteral 32))"
-            " (GridPeriodicity (BoolLiteral false))"
             " (PaintNodesStmt"
             " (List (Range (RangePlaceholder Min) (RangePlaceholder Max)))"
             " (Identifier BULK)"
@@ -32,9 +28,7 @@ def test_valid2():
     # Arrange
     test_string = """
     geometry { //
-      set_grid_size({32, 32});
-      set_grid_periodicity({true, false});
-      nodes[:] = BULK;
+      nodes[:, :] = BULK;
     }
     """
     # Act
@@ -42,12 +36,11 @@ def test_valid2():
     # Assert
     assert str(ast) == (
         "(GeometryBlock"
-        " (GridSize (ArrayLiteral1D (IntLiteral 32) (IntLiteral 32)))"
-        " (GridPeriodicity"
-            " (ArrayLiteral1D (BoolLiteral true) (BoolLiteral false))"
-        ")"
         " (PaintNodesStmt"
-        " (List (Range (RangePlaceholder Min) (RangePlaceholder Max)))"
+        " (List"
+            " (Range (RangePlaceholder Min) (RangePlaceholder Max))"
+            " (Range (RangePlaceholder Min) (RangePlaceholder Max))"
+        ")"
         " (Identifier BULK)"
         ")"
         ")"

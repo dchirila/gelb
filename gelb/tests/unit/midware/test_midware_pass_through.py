@@ -117,8 +117,8 @@ class TestMidwareWithComplexPrograms:
         }
         
         lattices {
-            lattice f(1, 1, int);
-            lattice g(1, 1, real);
+            lattice f(1, 1, int, N, false);
+            lattice g(1, 1, real, N, false);
         }
         
         initializer Init1 {
@@ -151,8 +151,6 @@ class TestMidwareWithComplexPrograms:
         }
         
         geometry {
-            set_grid_size(N);
-            set_grid_periodicity(false);
             nodes[:] = BULK;
         }
         '''
@@ -178,7 +176,7 @@ class TestMidwareWithComplexPrograms:
         }
         
         lattices {
-            lattice f(1, 1, real);
+            lattice f(1, 1, real, M, true);
         }
         
         initializer Init {
@@ -198,8 +196,6 @@ class TestMidwareWithComplexPrograms:
         }
         
         geometry {
-            set_grid_size(M);
-            set_grid_periodicity(true);
             nodes[:] = BULK;
         }
         '''
