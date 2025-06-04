@@ -1,0 +1,60 @@
+simulation_description("Test type promotion and validation");
+
+global_constants {
+    const int N = 32;
+    const real TAU = 0.6;
+}
+
+lattices {
+    lattice f(2, 9, real, {N, N}, {true, true});
+}
+
+initializer TestPromotion {
+    // Test arithmetic promotion: int + real
+    real x1;
+    x1 = 1 + 2.5;  // int + real → real(1) + 2.5
+    
+    // Test bool → int promotion
+    int x2;
+    x2 = true + 5;  // bool + int → int(true) + 5
+    
+    // Test bool → real promotion  
+    real x3;
+    x3 = false * 3.14;  // bool * real → real(false) * 3.14
+    
+    // Test comparison with promotion
+    bool b1;
+    b1 = 1 < 2.5;  // int < real → real(1) < 2.5
+    
+    // Test assignment promotion
+    real z1;
+    z1 = 42;  // int → real
+    
+    // Test array literal promotion
+    array[real, 3] data;
+    data[0] = 1;     // int → real
+    data[1] = 2.5;   // already real
+    data[2] = 3;     // int → real
+    
+    f.out[x,y|:] = 0.0;
+}
+
+dynamic TestValidation {
+    // This should work - same types after promotion
+    real result;
+    result = 2 * 3.14;
+    
+    f.out[x,y|:] = f.in[x,y|:];
+}
+
+gauge TestGauge(out = {real density;}) {
+    density = 1.0;
+}
+
+node_classes {
+    node_class BULK(TestPromotion, TestValidation, TestGauge);
+}
+
+geometry {
+    nodes[:,:] = BULK;
+}

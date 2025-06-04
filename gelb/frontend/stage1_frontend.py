@@ -32,6 +32,8 @@ from gelb.frontend.LatticeConsistencyValidator import LatticeConsistencyValidato
 from gelb.frontend.RectangularArraysEnforcerVisitor import RectangularArraysEnforcerVisitor
 from gelb.frontend.RangeResolverVisitor import RangeResolverVisitor
 from gelb.frontend.TypeInferenceVisitor import TypeInferenceVisitor
+from gelb.frontend.TypePromotionVisitor import TypePromotionVisitor
+from gelb.frontend.TypeValidationVisitor import TypeValidationVisitor
 from gelb.frontend.ConstantAssignmentValidationVisitor import ConstantAssignmentValidationVisitor
 from gelb.frontend.ParsingError import ParsingError
 from gelb.utils.exceptions import *
@@ -172,6 +174,39 @@ def infer_types(ast):
     - Ranges are resolved
     """
     ast_visitor = TypeInferenceVisitor()
+    ast_visitor.visit(ast, ast)
+    return ast
+
+
+def promote_types(ast):
+    """
+    Apply implicit type promotions to the AST.
+    
+    Inserts TypePromotionNode_N wherever implicit type conversion
+    is needed, making promotions explicit in the AST.
+    
+    Type promotion hierarchy: bool → int → real
+    
+    Must run after:
+    - Type inference
+    """
+    ast_visitor = TypePromotionVisitor()
+    ast_visitor.visit(ast, ast)
+    return ast
+
+
+def validate_types(ast):
+    """
+    Validate type compatibility in operations and assignments.
+    
+    Checks that all operations have type-compatible operands after
+    promotions have been applied. Raises GeLBTypeError if validation fails.
+    
+    Must run after:
+    - Type inference
+    - Type promotion
+    """
+    ast_visitor = TypeValidationVisitor()
     ast_visitor.visit(ast, ast)
     return ast
 

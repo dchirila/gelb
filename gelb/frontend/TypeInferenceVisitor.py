@@ -219,14 +219,14 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
     
     def visitNotExpr_N(self, node: NotExpr_N, ast_root_node: Program_N):
         """Logical NOT requires bool operand and returns bool."""
-        self.visit(node.expr, ast_root_node)
+        self.visit(node.value, ast_root_node)
         node.inferred_type = ScalarDataType_N(node.code_range, "bool")
         return node
     
     def visitUnaryMinusExpr_N(self, node: UnaryMinusExpr_N, ast_root_node: Program_N):
         """Unary minus preserves the operand type."""
-        self.visit(node.expr, ast_root_node)
-        node.inferred_type = node.expr.inferred_type
+        self.visit(node.value, ast_root_node)
+        node.inferred_type = node.value.inferred_type
         return node
     
     # Lattice and array selection type inference

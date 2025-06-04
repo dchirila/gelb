@@ -277,27 +277,98 @@ class ConstantAssignmentValidationVisitor(ASTBaseVisitor, SymbolTableUtilityMixi
         self.visit(node.right, ast_root_node)
         return node
 
+    # Comparison operations
+    def visitLess_N(self, node, ast_root_node):
+        """Visit less-than expression."""
+        self.visit(node.left, ast_root_node)
+        self.visit(node.right, ast_root_node)
+        return node
+
+    def visitGreater_N(self, node, ast_root_node):
+        """Visit greater-than expression."""
+        self.visit(node.left, ast_root_node)
+        self.visit(node.right, ast_root_node)
+        return node
+
+    def visitLessEqual_N(self, node, ast_root_node):
+        """Visit less-equal expression."""
+        self.visit(node.left, ast_root_node)
+        self.visit(node.right, ast_root_node)
+        return node
+
+    def visitGreaterEqual_N(self, node, ast_root_node):
+        """Visit greater-equal expression."""
+        self.visit(node.left, ast_root_node)
+        self.visit(node.right, ast_root_node)
+        return node
+
+    def visitEqual_N(self, node, ast_root_node):
+        """Visit equality expression."""
+        self.visit(node.left, ast_root_node)
+        self.visit(node.right, ast_root_node)
+        return node
+
+    def visitNotEqual_N(self, node, ast_root_node):
+        """Visit not-equal expression."""
+        self.visit(node.left, ast_root_node)
+        self.visit(node.right, ast_root_node)
+        return node
+
+    # Logical operations
+    def visitAnd_N(self, node, ast_root_node):
+        """Visit logical AND expression."""
+        self.visit(node.left, ast_root_node)
+        self.visit(node.right, ast_root_node)
+        return node
+
+    def visitOr_N(self, node, ast_root_node):
+        """Visit logical OR expression."""
+        self.visit(node.left, ast_root_node)
+        self.visit(node.right, ast_root_node)
+        return node
+
+    # Unary operations
+    def visitNotExpr_N(self, node, ast_root_node):
+        """Visit logical NOT expression."""
+        self.visit(node.expr, ast_root_node)
+        return node
+
+    def visitUnaryMinusExpr_N(self, node, ast_root_node):
+        """Visit unary minus expression."""
+        self.visit(node.expr, ast_root_node)
+        return node
+
+    # Type promotion nodes
+    def visitTypePromotionNode_N(self, node, ast_root_node):
+        """Visit type promotion node."""
+        self.visit(node.expr, ast_root_node)
+        return node
+
     # Array literals - might appear in RHS
-    def visitArrayLiteral1D_N(self, node, ast_root_node):
+    def visitArray1DLiteral_N(self, node, ast_root_node):
         """Visit 1D array literal."""
-        for element in node.elements:
-            self.visit(element, ast_root_node)
+        if hasattr(node, 'value') and hasattr(node.value, 'elements'):
+            for element in node.value.elements:
+                self.visit(element, ast_root_node)
         return node
 
-    def visitArrayLiteral2D_N(self, node, ast_root_node):
+    def visitArray2DLiteral_N(self, node, ast_root_node):
         """Visit 2D array literal."""
-        for element in node.elements:
-            self.visit(element, ast_root_node)
+        if hasattr(node, 'value') and hasattr(node.value, 'elements'):
+            for element in node.value.elements:
+                self.visit(element, ast_root_node)
         return node
 
-    def visitArrayLiteral3D_N(self, node, ast_root_node):
+    def visitArray3DLiteral_N(self, node, ast_root_node):
         """Visit 3D array literal."""
-        for element in node.elements:
-            self.visit(element, ast_root_node)
+        if hasattr(node, 'value') and hasattr(node.value, 'elements'):
+            for element in node.value.elements:
+                self.visit(element, ast_root_node)
         return node
 
-    def visitArrayLiteral4D_N(self, node, ast_root_node):
+    def visitArray4DLiteral_N(self, node, ast_root_node):
         """Visit 4D array literal."""
-        for element in node.elements:
-            self.visit(element, ast_root_node)
+        if hasattr(node, 'value') and hasattr(node.value, 'elements'):
+            for element in node.value.elements:
+                self.visit(element, ast_root_node)
         return node

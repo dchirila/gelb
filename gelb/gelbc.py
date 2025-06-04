@@ -21,6 +21,8 @@ from gelb.frontend.stage1_frontend import (
     prevent_clashes_of_symbol_defs_with_implicits,
     add_implicit_symbols,
     infer_types,
+    promote_types,
+    validate_types,
     validate_constant_assignments,
     validate_lattice_consistency
 )
@@ -75,9 +77,9 @@ from gelb.midware.stage2_midware import process_ast as midware_process_ast
 )
 @click.option(
     "--ast-stage",
-    type=click.Choice(['parsing', 'symbols', 'constants', 'ranges', 'types', 'midware', 'all']),
-    default='types',
-    help="Which compilation stage to visualize (default: types)"
+    type=click.Choice(['parsing', 'symbols', 'constants', 'ranges', 'types', 'promotions', 'midware', 'all']),
+    default='promotions',
+    help="Which compilation stage to visualize (default: promotions)"
 )
 def cli(t, input_file, backend, visualize_ast, ast_output, ast_format, keep_dot, ast_stage):
     """
@@ -142,6 +144,13 @@ def cli(t, input_file, backend, visualize_ast, ast_output, ast_format, keep_dot,
     # ... infer types for all expressions
     ast = infer_types(ast)
     capture_ast_if_requested(ast, 'types')
+
+    # ... apply implicit type promotions
+    ast = promote_types(ast)
+    capture_ast_if_requested(ast, 'promotions')
+
+    # ... validate type compatibility
+    ast = validate_types(ast)
 
     # ... validate that constants are not assigned to
     ast = validate_constant_assignments(ast)

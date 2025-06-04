@@ -642,6 +642,37 @@ class UnaryMinusExpr_N(UnaryExpr_N):
         return f"(UnaryMinusExpr {self.value})"
 
 
+class TypePromotionNode_N(Expr_N):
+    """
+    Represents an implicit type promotion in the AST.
+    
+    This node wraps an expression that needs to be implicitly promoted
+    to a different type. It makes type conversions explicit in the AST,
+    which helps with code generation and debugging.
+    
+    Examples:
+        int → real: TypePromotionNode_N(IntLiteral_N(5), ScalarDataType_N("real"))
+        bool → int: TypePromotionNode_N(BoolLiteral_N(true), ScalarDataType_N("int"))
+    """
+    def __init__(self, code_range, expr, target_type):
+        super().__init__(code_range)
+        self.expr = expr  # Original expression to be promoted
+        self.target_type = target_type  # Type to promote to
+        # The inferred type of a promotion node is its target type
+        self.inferred_type = target_type
+    
+    def get_children(self):
+        children = set()
+        if self.expr is not None:
+            children.add(self.expr)
+        if self.target_type is not None:
+            children.add(self.target_type)
+        return children
+    
+    def __str__(self):
+        return f"(TypePromotion {self.expr} -> {self.target_type})"
+
+
 class Literal_N(Expr_N):
     """
     Base-class for all GeLB literals.

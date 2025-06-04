@@ -153,6 +153,14 @@ class RangeResolverVisitor(ASTBaseVisitor, BinaryOperationMixin, ProgramTraversa
         # RealLiteral nodes don't need modification
         return node
         
+    def visitBoolLiteral_N(self, node, ast_root_node):
+        # BoolLiteral nodes don't need modification
+        return node
+        
+    def visitStringLiteral_N(self, node, ast_root_node):
+        # StringLiteral nodes don't need modification
+        return node
+        
     def visitIdentifier_N(self, node, ast_root_node):
         # Identifier nodes don't need modification
         return node
@@ -177,12 +185,22 @@ class RangeResolverVisitor(ASTBaseVisitor, BinaryOperationMixin, ProgramTraversa
         return node
         
     def visitConstantDefinitionStmt_N(self, node, ast_root_node):
-        # Constants have a variable assignment statement
-        self.visit(node.assignment, ast_root_node)
+        # Constants have a value expression
+        self.visit(node.value, ast_root_node)
         return node
         
     def visitVariableDeclarationStmt_N(self, node, ast_root_node):
         # Variable declarations don't contain ranges
+        return node
+        
+    def visitUnaryMinusExpr_N(self, node, ast_root_node):
+        # Visit the operand expression
+        self.visit(node.value, ast_root_node)
+        return node
+        
+    def visitNotExpr_N(self, node, ast_root_node):
+        # Visit the operand expression
+        self.visit(node.value, ast_root_node)
         return node
         
     # Default handler for expressions without ranges
