@@ -748,14 +748,22 @@ class GeLBExTypeError(GeLBException):
     This exception is raised when type validation fails after type promotion,
     indicating incompatible types in operations or assignments.
     """
-    def __init__(self, error, hint):
+    def __init__(self, node, error, hint):
+        self.node = node
         super().__init__(error, hint)
         if not running_within_pytest():
             print(self)
     
     def __str__(self):
-        """Return formatted error message for testing"""
-        if running_within_pytest():
-            return f"{self.error}: {self.hint}"
+        """Override base-class's __str__, because we want to print the code"""
+        if not running_within_pytest():
+            show_error_in_src(
+                self.node.code_range.start_line,
+                self.node.code_range.start_col,
+                self.error,
+                self.hint
+            )
+            os._exit(1)  # really abort
         else:
-            super().__str__()
+            # For pytest, return formatted error message
+            return f"{self.error}: {self.hint}"

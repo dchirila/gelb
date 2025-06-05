@@ -61,20 +61,23 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         allowed_types = self.validation_rules['arithmetic']
         if left_name not in allowed_types:
             raise GeLBExTypeError(
-                f"Left operand of {op_name} has non-numeric type '{left_name}' at {node.left.code_range}",
+                node.left,
+                f"Left operand of {op_name} has non-numeric type '{left_name}'",
                 f"Arithmetic operations require numeric types (int or real)"
             )
         
         if right_name not in allowed_types:
             raise GeLBExTypeError(
-                f"Right operand of {op_name} has non-numeric type '{right_name}' at {node.right.code_range}",
+                node.right,
+                f"Right operand of {op_name} has non-numeric type '{right_name}'",
                 f"Arithmetic operations require numeric types (int or real)"
             )
         
         # After promotion, types should match
         if not self._types_match(left_type, right_type):
             raise GeLBExTypeError(
-                f"Type mismatch in {op_name}: '{left_name}' and '{right_name}' at {node.code_range}",
+                node,
+                f"Type mismatch in {op_name}: '{left_name}' and '{right_name}'",
                 f"This should not happen after type promotion - internal compiler error"
             )
         
@@ -91,7 +94,8 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         # After promotion, types should match
         if not self._types_match(left_type, right_type):
             raise GeLBExTypeError(
-                f"Type mismatch in {op_name}: '{left_name}' and '{right_name}' at {node.code_range}",
+                node,
+                f"Type mismatch in {op_name}: '{left_name}' and '{right_name}'",
                 f"Comparison requires operands of the same type"
             )
         
@@ -108,13 +112,15 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         allowed_types = self.validation_rules['logical']
         if left_name not in allowed_types:
             raise GeLBExTypeError(
-                f"Left operand of {op_name} has type '{left_name}', expected 'bool' at {node.left.code_range}",
+                node.left,
+                f"Left operand of {op_name} has type '{left_name}', expected 'bool'",
                 f"Logical operations require boolean operands"
             )
         
         if right_name not in allowed_types:
             raise GeLBExTypeError(
-                f"Right operand of {op_name} has type '{right_name}', expected 'bool' at {node.right.code_range}",
+                node.right,
+                f"Right operand of {op_name} has type '{right_name}', expected 'bool'",
                 f"Logical operations require boolean operands"
             )
         
@@ -131,7 +137,8 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         # After promotion, types should match
         if not self._types_match(lhs_type, rhs_type):
             raise GeLBExTypeError(
-                f"Cannot assign '{rhs_name}' to '{lhs_name}' at {node.code_range}",
+                node,
+                f"Cannot assign '{rhs_name}' to '{lhs_name}'",
                 f"Assignment requires compatible types"
             )
         
@@ -187,7 +194,7 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         
         # Validate types
         if not hasattr(node.left, 'inferred_type') or not hasattr(node.right, 'inferred_type'):
-            raise GeLBExTypeError(f"Type validation requires type inference to run first at {node.code_range}", "Internal compiler error")
+            raise GeLBExTypeError(node.code_range, f"Type validation requires type inference to run first", "Internal compiler error")
         
         left_type = node.left.inferred_type
         right_type = node.right.inferred_type
@@ -234,7 +241,7 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         
         # Validate types
         if not hasattr(node.left, 'inferred_type') or not hasattr(node.right, 'inferred_type'):
-            raise GeLBExTypeError(f"Type validation requires type inference to run first at {node.code_range}", "Internal compiler error")
+            raise GeLBExTypeError(node.code_range, f"Type validation requires type inference to run first", "Internal compiler error")
         
         left_type = node.left.inferred_type
         right_type = node.right.inferred_type
@@ -261,7 +268,7 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         
         # Validate types
         if not hasattr(node.left, 'inferred_type') or not hasattr(node.right, 'inferred_type'):
-            raise GeLBExTypeError(f"Type validation requires type inference to run first at {node.code_range}", "Internal compiler error")
+            raise GeLBExTypeError(node.code_range, f"Type validation requires type inference to run first", "Internal compiler error")
         
         left_type = node.left.inferred_type
         right_type = node.right.inferred_type
@@ -277,7 +284,7 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         
         # Validate type
         if not hasattr(node.value, 'inferred_type'):
-            raise GeLBExTypeError(f"Type validation requires type inference to run first at {node.code_range}", "Internal compiler error")
+            raise GeLBExTypeError(node.code_range, f"Type validation requires type inference to run first", "Internal compiler error")
         
         expr_type = node.value.inferred_type
         expr_name = self._get_type_name(expr_type)
@@ -285,7 +292,8 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         allowed_types = self.validation_rules['logical_not']
         if expr_name not in allowed_types:
             raise GeLBExTypeError(
-                f"Operand of logical NOT has type '{expr_name}', expected 'bool' at {node.value.code_range}",
+                node.value,
+                f"Operand of logical NOT has type '{expr_name}', expected 'bool'",
                 f"Logical NOT requires a boolean operand"
             )
         
@@ -298,14 +306,17 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         
         # Validate type
         if not hasattr(node.value, 'inferred_type'):
-            raise GeLBExTypeError(f"Type validation requires type inference to run first at {node.code_range}", "Internal compiler error")
+            raise GeLBExTypeError(node.code_range, f"Type validation requires type inference to run first", "Internal compiler error")
         
         expr_type = node.value.inferred_type
         expr_name = self._get_type_name(expr_type)
         
         allowed_types = self.validation_rules['unary_minus']
         if expr_name not in allowed_types:
-            raise GeLBExTypeError(f"Operand of unary minus has type '{expr_name}' at {node.value.code_range}", f"Unary minus requires a numeric operand (int or real)"
+            raise GeLBExTypeError(
+                node.value,
+                f"Operand of unary minus has type '{expr_name}'",
+                f"Unary minus requires a numeric operand (int or real)"
             )
         
         return node
@@ -324,7 +335,7 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         
         # Validate type compatibility
         if not hasattr(node.value, 'inferred_type'):
-            raise GeLBExTypeError(f"Type validation requires type inference to run first at {node.code_range}", "Internal compiler error")
+            raise GeLBExTypeError(node.code_range, f"Type validation requires type inference to run first", "Internal compiler error")
         
         value_type = node.value.inferred_type
         declared_type = node.data_type
@@ -355,7 +366,7 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         
         # Validate types
         if not hasattr(node.lhs, 'inferred_type') or not hasattr(node.rhs, 'inferred_type'):
-            raise GeLBExTypeError(f"Type validation requires type inference to run first at {node.code_range}", "Internal compiler error")
+            raise GeLBExTypeError(node.code_range, f"Type validation requires type inference to run first", "Internal compiler error")
         
         lhs_type = node.lhs.inferred_type
         rhs_type = node.rhs.inferred_type
