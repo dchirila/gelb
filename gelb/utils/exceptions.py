@@ -739,3 +739,23 @@ class GeLBExConstantAssignment(GeLBException):
             )
             # super().__str__()
             os._exit(1)  # really abort
+
+
+class GeLBExTypeError(GeLBException):
+    """
+    GeLB exception, for signaling type validation errors.
+    
+    This exception is raised when type validation fails after type promotion,
+    indicating incompatible types in operations or assignments.
+    """
+    def __init__(self, error, hint):
+        super().__init__(error, hint)
+        if not running_within_pytest():
+            print(self)
+    
+    def __str__(self):
+        """Return formatted error message for testing"""
+        if running_within_pytest():
+            return f"{self.error}: {self.hint}"
+        else:
+            super().__str__()

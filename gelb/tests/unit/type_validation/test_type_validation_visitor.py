@@ -9,7 +9,7 @@ import pytest
 from gelb.gelb_ast.ASTNodes import *
 from gelb.tests.test_utils import get_typed_ast, minimal_gelb_program_1d
 from gelb.frontend.stage1_frontend import promote_types, validate_types
-from gelb.frontend.TypeValidationVisitor import GeLBTypeError
+from gelb.utils.exceptions import GeLBExTypeError
 
 
 class TestTypeValidationSuccess:
@@ -97,7 +97,7 @@ class TestTypeValidationErrors:
         ast = get_typed_ast(test_code)
         ast = promote_types(ast)
         
-        with pytest.raises(GeLBTypeError) as exc_info:
+        with pytest.raises(GeLBExTypeError) as exc_info:
             validate_types(ast)
         
         assert "logical AND" in str(exc_info.value)
@@ -111,7 +111,7 @@ class TestTypeValidationErrors:
         ast = get_typed_ast(test_code)
         ast = promote_types(ast)
         
-        with pytest.raises(GeLBTypeError) as exc_info:
+        with pytest.raises(GeLBExTypeError) as exc_info:
             validate_types(ast)
         
         assert "logical OR" in str(exc_info.value)
@@ -125,7 +125,7 @@ class TestTypeValidationErrors:
         ast = get_typed_ast(test_code)
         ast = promote_types(ast)
         
-        with pytest.raises(GeLBTypeError) as exc_info:
+        with pytest.raises(GeLBExTypeError) as exc_info:
             validate_types(ast)
         
         assert "logical NOT" in str(exc_info.value)
@@ -142,7 +142,7 @@ class TestTypeValidationErrors:
         ast = get_typed_ast(test_code)
         ast = promote_types(ast)
         
-        with pytest.raises(GeLBTypeError) as exc_info:
+        with pytest.raises(GeLBExTypeError) as exc_info:
             validate_types(ast)
         
         assert "Cannot assign" in str(exc_info.value)
@@ -159,7 +159,7 @@ class TestTypeValidationErrors:
         ast = get_typed_ast(test_code)
         ast = promote_types(ast)
         
-        with pytest.raises(GeLBTypeError) as exc_info:
+        with pytest.raises(GeLBExTypeError) as exc_info:
             validate_types(ast)
         
         assert "non-numeric type" in str(exc_info.value)
@@ -173,7 +173,7 @@ class TestTypeValidationErrors:
         ast = get_typed_ast(test_code)
         ast = promote_types(ast)
         
-        with pytest.raises(GeLBTypeError) as exc_info:
+        with pytest.raises(GeLBExTypeError) as exc_info:
             validate_types(ast)
         
         assert "unary minus" in str(exc_info.value)
