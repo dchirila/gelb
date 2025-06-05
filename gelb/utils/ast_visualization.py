@@ -26,6 +26,7 @@ def _get_numbered_stage_name(stage_name):
         'constants': '1_3_constants',
         'ranges': '1_4_ranges',
         'types': '1_5_types',
+        'promotions': '1_6_promotions',
         'midware': '2_1_midware',
         # Future backend stages can be added as:
         # 'backend': '3_1_backend',
