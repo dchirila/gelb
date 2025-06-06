@@ -185,7 +185,7 @@ The Midware is designed to support these future transformations:
 
 * **Dead Code Elimination** - Remove unreachable code
 * **Common Subexpression Elimination** - Reuse computed values
-* **Loop Optimizations** - Optimize lattice iteration patterns
+* **Lattice Access Optimizations** - Optimize implicit iteration patterns
 * **Constant Propagation** - Propagate constant values across statements
 
 3. Validation Passes

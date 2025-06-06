@@ -442,10 +442,10 @@ The implicit coordinate system enables a CUDA-like programming model where:
 * Each site executes the same code but operates on different data
 * Sites can be processed in parallel (hardware-dependent)
 
-**Grid-Stride Loops:**
+**Implicit Grid Iteration:**
 * Grid dimensions (Nx, Ny, Nz) define the problem size
-* Runtime system handles iteration over all lattice sites
-* User code focuses on per-site computation
+* Runtime system automatically iterates over all lattice sites
+* User code focuses on per-site computation without explicit iteration
 
 **Data Locality:**
 * Each site primarily accesses its own data: ``f[x,y | :]``

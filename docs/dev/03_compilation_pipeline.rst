@@ -135,7 +135,7 @@ The midware is designed to support these transformations:
 - Constant folding and expression simplification
 - Dead code elimination
 - Common subexpression elimination
-- Loop optimizations for lattice iterations
+- Lattice access pattern optimizations
 
 **Backend Preparation:**
 - Lower high-level constructs to backend-friendly forms

@@ -86,7 +86,7 @@ Code is generated using template-based emission:
 Common code patterns are handled through a template system:
 
 - **Variable declarations** - Type-specific allocation
-- **Loop structures** - Lattice site iteration
+- **Implicit iteration patterns** - Lattice site traversal
 - **Boundary conditions** - Edge case handling
 - **I/O operations** - Data input/output formatting
 
@@ -96,7 +96,7 @@ Common code patterns are handled through a template system:
 Target-specific optimizations are applied:
 
 - **Memory layout optimization** - Efficient array access patterns
-- **Loop optimization** - Minimize memory bandwidth requirements
+- **Lattice iteration optimization** - Minimize memory bandwidth requirements for implicit iterations
 - **Instruction scheduling** - Platform-specific performance tuning
 
 Fortran Backend Implementation Details
