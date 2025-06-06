@@ -22,6 +22,55 @@ However, they are still very pertinent, and worthy of future consideration.
   - Could enable more complex geometry specifications without external tools
 
 
+## Compiler Optimizations
+
+### Advanced Constant Folding
+
+The basic constant folding optimization is implemented, but several advanced features remain for future implementation:
+
+#### Cross-Statement Constant Propagation
+- Propagate constant values across statement boundaries
+- Example:
+  ```gelb
+  const int A = 5;
+  const int B = A + 3;  // Should fold to B = 8
+  ```
+- Implementation considerations:
+  - Requires tracking constant definitions across the symbol table
+  - Must respect scoping rules and block boundaries
+  - Could enable significant optimization in complex constant expressions
+
+#### Dead Code Elimination Based on Constant Conditions
+- Remove unreachable code when conditions can be evaluated at compile time
+- Example:
+  ```gelb
+  if (true && false) {  // Constant folds to: if (false)
+      // This code becomes unreachable and can be eliminated
+  }
+  ```
+- Benefits:
+  - Reduces generated code size
+  - Eliminates unnecessary computations
+  - Improves static analysis accuracy
+
+#### Array and String Constant Folding
+- Fold expressions within constant array literals
+- Example:
+  ```gelb
+  const array[int, 3] data = {1+1, 2+2, 3+3};  // Fold to {2, 4, 6}
+  ```
+- Implementation considerations:
+  - Must handle multi-dimensional arrays
+  - Should preserve array structure and indexing
+  - Could enable better array bounds analysis
+
+#### Function Call Folding for Pure Functions
+- Evaluate calls to pure (side-effect-free) functions at compile time
+- Requirements:
+  - Function purity analysis
+  - Compile-time function evaluation
+  - Integration with intrinsic function system
+
 ## Input / Output (I/O)
 
 - Test & enable compression for HDF5 / NetCDF files:

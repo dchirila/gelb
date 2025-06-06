@@ -7,14 +7,15 @@ The Midware stage (Stage 2) sits between the Frontend and Backend stages in the 
 Current Implementation
 ======================
 
-The Midware currently implements a **minimal pass-through design** to enable MVP (Minimum Viable Product) development. This allows the backend to be developed immediately while providing a clean insertion point for future transformations.
+The Midware implements **optimization and transformation passes** on the validated AST from the Frontend. It currently includes constant folding optimization with a modular design for adding more transformations.
 
 Key Components
 --------------
 
 * **process_ast(ast)** - Main entry point that accepts and returns the AST
-* **validate_midware_input(ast)** - Validates the AST is ready for processing
-* **apply_optimizations(ast)** - Placeholder for optimization passes
+* **validate_midware_input(ast)** - Validates the AST is ready for processing  
+* **apply_constant_folding(ast)** - Evaluates constant expressions at compile time
+* **apply_optimizations(ast)** - Applies optimization passes (currently constant folding)
 * **apply_transformations(ast)** - Placeholder for AST transformations
 
 Current Behavior
@@ -24,14 +25,91 @@ Current Behavior
 
     def process_ast(ast):
         """Process the AST through the midware stage."""
-        if not isinstance(ast, Program_N):
-            raise TypeError(
-                f"Midware expects a Program_N AST root, but got {type(ast).__name__}. "
-                "Ensure the frontend properly validates the AST root."
-            )
+        validate_midware_input(ast)
         
-        # For MVP: return the AST unchanged
+        # Apply constant folding optimization
+        ast = apply_constant_folding(ast)
+        
+        # Apply other optimizations
+        ast = apply_optimizations(ast)
+        
+        # Apply transformations for backend compatibility
+        ast = apply_transformations(ast)
+        
         return ast
+
+Implemented Optimizations
+=========================
+
+Constant Folding
+----------------
+
+**Status**: ✅ **IMPLEMENTED**
+
+Constant folding evaluates constant expressions at compile time, replacing them with their computed literal values. This optimization improves performance and enables better static analysis.
+
+**Supported Operations:**
+
+* **Arithmetic**: ``+``, ``-``, ``*``, ``/``, ``^`` (power)
+* **Comparison**: ``<``, ``>``, ``<=``, ``>=``, ``==``, ``!=``
+* **Logical**: ``&&``, ``||``, ``!``
+* **Unary**: ``-`` (negation)
+* **Mixed types**: ``int`` + ``real``, with proper type promotion
+
+**Examples:**
+
+.. code-block:: gelb
+
+    // Before constant folding:
+    const int A = 2 + 3;           // Expression: Add_N(2, 3)
+    const real B = (10.0 - 5.0) / 2.5;  // Nested expressions
+    
+    // After constant folding:
+    const int A = 5;               // Literal: IntLiteral_N(5)
+    const real B = 2.0;            // Literal: RealLiteral_N(2.0)
+
+**Implementation:** ``gelb/midware/ConstantFoldingVisitor.py``
+
+The ``ConstantFoldingVisitor`` class uses the visitor pattern to traverse the AST and fold constant expressions:
+
+.. code-block:: python
+
+    class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
+        """Performs constant folding optimizations on the AST."""
+        
+        def visitAdd_N(self, node: Add_N, ast_root_node: Program_N):
+            """Fold addition operations."""
+            return self._handle_arithmetic_binary_op(node, ast_root_node, self._evaluate_add)
+        
+        def _handle_arithmetic_binary_op(self, node, ast_root_node, evaluator):
+            # Visit children first (bottom-up processing)
+            node.left = self.visit(node.left, ast_root_node)
+            node.right = self.visit(node.right, ast_root_node)
+            
+            # Check if both operands are constant literals
+            if self._is_constant_literal(node.left) and self._is_constant_literal(node.right):
+                try:
+                    result_value = evaluator(node.left, node.right)
+                    return self._create_literal_from_value(result_value, node)
+                except (ZeroDivisionError, OverflowError, ValueError):
+                    # Don't fold if evaluation fails - preserve for validation
+                    pass
+            
+            return node
+
+**Key Features:**
+
+1. **Bottom-up Processing**: Evaluates nested expressions from innermost to outermost
+2. **Type Preservation**: Maintains GeLB type semantics (e.g., ``int / int`` → ``real``)
+3. **Error Handling**: Division by zero and overflow errors are caught gracefully
+4. **Boolean Handling**: Preserves GeLB's string-based boolean literals (``'true'``/``'false'``)
+
+**Benefits:**
+
+* **Performance**: Eliminates redundant runtime calculations
+* **Static Analysis**: Enables division by zero detection on folded expressions
+* **Code Size**: Reduces generated code complexity
+* **Error Detection**: Catches arithmetic errors at compile time
 
 Architecture and Design
 =======================
@@ -105,10 +183,10 @@ The Midware is designed to support these future transformations:
 2. Optimization Passes
 ---------------------
 
-* **Constant Folding** - Evaluate constant expressions at compile time
 * **Dead Code Elimination** - Remove unreachable code
 * **Common Subexpression Elimination** - Reuse computed values
 * **Loop Optimizations** - Optimize lattice iteration patterns
+* **Constant Propagation** - Propagate constant values across statements
 
 3. Validation Passes
 --------------------
@@ -165,31 +243,34 @@ When adding new transformations to the Midware:
    * Integration tests for transformation pipelines
    * Edge case and error handling tests
 
-Example: Adding Constant Folding
-=================================
+Example: Adding New Transformations
+===================================
 
-Here's how to add a constant folding optimization:
+Here's how to add a new optimization or transformation:
 
 1. **Create the Visitor**:
 
    .. code-block:: python
 
-       # In gelb/midware/constant_folding.py
-       class ConstantFoldingVisitor(ASTBaseVisitor):
-           """Folds constant expressions at compile time."""
+       # In gelb/midware/dead_code_elimination.py
+       class DeadCodeEliminationVisitor(ASTBaseVisitor):
+           """Removes unreachable code from the AST."""
            
-           def visitAdd_N(self, node, ast_root_node):
-               # Visit children first
-               node.left = self.visit(node.left, ast_root_node)
-               node.right = self.visit(node.right, ast_root_node)
+           def visitIfStmt_N(self, node, ast_root_node):
+               # Visit condition first
+               node.condition = self.visit(node.condition, ast_root_node)
                
-               # Fold if both operands are constants
-               if (isinstance(node.left, IntLiteral_N) and 
-                   isinstance(node.right, IntLiteral_N)):
-                   return IntLiteral_N(
-                       code_range=node.code_range,
-                       value=node.left.value + node.right.value
-                   )
+               # If condition is a constant boolean, eliminate dead branch
+               if isinstance(node.condition, BoolLiteral_N):
+                   if node.condition.value == 'true':
+                       # Only keep the 'then' branch
+                       return self.visit(node.then_stmt, ast_root_node)
+                   else:
+                       # Only keep the 'else' branch (if it exists)
+                       if node.else_stmt:
+                           return self.visit(node.else_stmt, ast_root_node)
+                       else:
+                           return None  # Remove the entire if statement
                
                return node
 
@@ -198,30 +279,16 @@ Here's how to add a constant folding optimization:
    .. code-block:: python
 
        # In stage2_midware.py
-       from gelb.midware.constant_folding import ConstantFoldingVisitor
+       from gelb.midware.dead_code_elimination import DeadCodeEliminationVisitor
        
        def apply_optimizations(ast):
            """Apply optimization passes to the AST."""
-           # Add constant folding
-           folder = ConstantFoldingVisitor()
-           ast = folder.visit(ast, ast)
+           # Apply constant folding first
+           ast = apply_constant_folding(ast)
            
-           # Future: Add more optimizations here
-           return ast
-
-3. **Update process_ast**:
-
-   .. code-block:: python
-
-       def process_ast(ast):
-           """Process the AST through the midware stage."""
-           validate_midware_input(ast)
-           
-           # Apply transformations
-           ast = apply_transformations(ast)
-           
-           # Apply optimizations
-           ast = apply_optimizations(ast)
+           # Apply dead code elimination
+           eliminator = DeadCodeEliminationVisitor()
+           ast = eliminator.visit(ast, ast)
            
            return ast
 
@@ -262,10 +329,11 @@ Debugging Tools
 
    .. code-block:: python
 
-       def test_constant_folding():
-           ast = get_typed_ast("const int X = 2 + 3;")
-           ast = apply_constant_folding(ast)
-           assert ast.global_constants.stmts[0].value.value == 5
+       def test_dead_code_elimination():
+           source = "if (true) { x = 1; } else { x = 2; }"
+           ast = get_typed_ast(source)
+           ast = apply_dead_code_elimination(ast)
+           # Should eliminate the else branch
 
 Best Practices
 ==============
