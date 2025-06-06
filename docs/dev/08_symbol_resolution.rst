@@ -280,11 +280,9 @@ Nx, Ny, Nz constants are available throughout the program for boundary checks an
 .. code-block:: gelb
 
     dynamic BoundaryConditions {
-        // Use dimension constants for boundary detection
-        if (x == 0 || x == Nx-1) {
-            // Handle boundary conditions
-            f.out[x,y | :] = boundary_value;
-        }
+        // Use dimension constants in boundary calculations
+        real distance_from_edge = x * (Nx - 1 - x);
+        f.out[x,y | :] = base_value + distance_from_edge;
     }
 
 Implementation Architecture

@@ -40,18 +40,16 @@ The basic constant folding optimization is implemented, but several advanced fea
   - Must respect scoping rules and block boundaries
   - Could enable significant optimization in complex constant expressions
 
-#### Dead Code Elimination Based on Constant Conditions
-- Remove unreachable code when conditions can be evaluated at compile time
-- Example:
-  ```gelb
-  if (true && false) {  // Constant folds to: if (false)
-      // This code becomes unreachable and can be eliminated
-  }
-  ```
+#### Dead Code Elimination
+- Remove unreachable code and unused definitions
 - Benefits:
   - Reduces generated code size
   - Eliminates unnecessary computations
   - Improves static analysis accuracy
+- Implementation considerations:
+  - Identify unused constant definitions
+  - Remove unreferenced symbols
+  - Optimize away redundant calculations
 
 #### Array and String Constant Folding
 - Fold expressions within constant array literals

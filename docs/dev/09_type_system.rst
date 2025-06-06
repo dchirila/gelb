@@ -324,8 +324,8 @@ The type system provides clear error messages:
       Hint: Explicit casting will be supported in future versions
 
     ERROR: Logical operator '&&' requires 'bool' operands
-      if (x && y) { ... }
-          ^    ^
+      bool result = x && y;
+                    ^    ^
       Found: 'int' && 'int'
       Hint: Use comparison operators to create boolean expressions
 

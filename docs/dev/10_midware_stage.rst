@@ -254,25 +254,25 @@ Here's how to add a new optimization or transformation:
 
        # In gelb/midware/dead_code_elimination.py
        class DeadCodeEliminationVisitor(ASTBaseVisitor):
-           """Removes unreachable code from the AST."""
+           """Removes unreachable code and unused definitions from the AST."""
            
-           def visitIfStmt_N(self, node, ast_root_node):
-               # Visit condition first
-               node.condition = self.visit(node.condition, ast_root_node)
+           def visitGlobalConstantsBlock_N(self, node, ast_root_node):
+               # Visit all statements first
+               for i, stmt in enumerate(node.stmts):
+                   node.stmts[i] = self.visit(stmt, ast_root_node)
                
-               # If condition is a constant boolean, eliminate dead branch
-               if isinstance(node.condition, BoolLiteral_N):
-                   if node.condition.value == 'true':
-                       # Only keep the 'then' branch
-                       return self.visit(node.then_stmt, ast_root_node)
-                   else:
-                       # Only keep the 'else' branch (if it exists)
-                       if node.else_stmt:
-                           return self.visit(node.else_stmt, ast_root_node)
-                       else:
-                           return None  # Remove the entire if statement
+               # Remove unused constant definitions
+               used_constants = self._find_used_constants(ast_root_node)
+               node.stmts = [stmt for stmt in node.stmts 
+                           if stmt.name.name in used_constants]
                
                return node
+           
+           def _find_used_constants(self, ast_root_node):
+               """Find all constants that are actually referenced."""
+               # Implementation would traverse the AST to find references
+               # This is a simplified example
+               pass
 
 2. **Integrate into Midware**:
 
@@ -330,10 +330,18 @@ Debugging Tools
    .. code-block:: python
 
        def test_dead_code_elimination():
-           source = "if (true) { x = 1; } else { x = 2; }"
+           source = """
+           global_constants {
+               const int UNUSED = 42;
+               const int USED = 10;
+           }
+           dynamic Test {
+               f.out[x | 0] = USED;
+           }
+           """
            ast = get_typed_ast(source)
            ast = apply_dead_code_elimination(ast)
-           # Should eliminate the else branch
+           # Should eliminate UNUSED constant
 
 Best Practices
 ==============
