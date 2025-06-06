@@ -3,53 +3,18 @@
 """
 GeLB Midware Stage 2 - AST Transformations and Optimizations
 
-This module handles the middle stage of the GeLB compilation pipeline,
-between the frontend (stage 1) and backend (stage 3).
+This module provides individual midware stage functions that can be called
+explicitly from the main compiler driver. Each function represents a specific
+optimization or transformation pass.
 
-Implements optimization passes including:
-- Constant folding
-- Future: Dead code elimination, common subexpression elimination
+Functions are organized in the order they should be applied:
+1. validate_midware_input() - Input validation
+2. fold_constants() - Constant folding optimization
+3. Future: dead code elimination, common subexpression elimination, etc.
 """
 
 from gelb.gelb_ast.ASTNodes import Program_N
 from gelb.midware.ConstantFoldingVisitor import ConstantFoldingVisitor
-
-
-def process_ast(ast):
-    """
-    Process the AST through the midware stage.
-    
-    Applies optimization passes in the correct order:
-    1. Constant folding - evaluates constant expressions
-    2. Future optimizations - dead code elimination, etc.
-    
-    Args:
-        ast (Program_N): The AST from frontend stage 1
-        
-    Returns:
-        Program_N: The processed AST with optimizations applied
-        
-    Raises:
-        TypeError: If ast is not a Program_N instance
-    """
-    if not isinstance(ast, Program_N):
-        raise TypeError(
-            f"Midware expects a Program_N AST root, but got {type(ast).__name__}. "
-            "Ensure the frontend properly validates the AST root."
-        )
-    
-    validate_midware_input(ast)
-    
-    # Apply constant folding optimization
-    ast = apply_constant_folding(ast)
-    
-    # Apply other optimizations
-    ast = apply_optimizations(ast)
-    
-    # Apply transformations for backend compatibility
-    ast = apply_transformations(ast)
-    
-    return ast
 
 
 def validate_midware_input(ast):
@@ -77,7 +42,7 @@ def validate_midware_input(ast):
             raise AttributeError(f"AST missing required attribute: {attr}")
 
 
-def apply_constant_folding(ast):
+def fold_constants(ast):
     """
     Apply constant folding optimization to the AST.
     
@@ -94,43 +59,67 @@ def apply_constant_folding(ast):
     return folder.visit(ast, ast)
 
 
-def apply_optimizations(ast):
+# Future midware stage functions:
+
+def eliminate_dead_code(ast):
     """
-    Apply additional optimization passes to the AST.
-    
-    Currently empty - future optimizations will be added here.
+    Remove unreachable code and unused definitions from the AST.
     
     Args:
         ast (Program_N): The AST to optimize
         
     Returns:
-        Program_N: The optimized AST
+        Program_N: The AST with dead code eliminated
     """
-    # Future: implement additional optimization passes here
+    # TODO: Implement dead code elimination
     # Examples:
-    # - Dead code elimination  
-    # - Common subexpression elimination
-    # - Loop optimizations
-    
+    # - Remove unused constant definitions
+    # - Remove unreferenced symbols
+    # - Optimize away redundant calculations
     return ast
 
 
-def apply_transformations(ast):
+def eliminate_common_subexpressions(ast):
+    """
+    Identify and reuse common subexpressions.
+    
+    Args:
+        ast (Program_N): The AST to optimize
+        
+    Returns:
+        Program_N: The AST with common subexpressions eliminated
+    """
+    # TODO: Implement common subexpression elimination
+    return ast
+
+
+def optimize_lattice_access_patterns(ast):
+    """
+    Optimize lattice access patterns for better memory locality.
+    
+    Args:
+        ast (Program_N): The AST to optimize
+        
+    Returns:
+        Program_N: The AST with optimized lattice access patterns
+    """
+    # TODO: Implement lattice access pattern optimizations
+    return ast
+
+
+def prepare_for_backend(ast):
     """
     Apply necessary AST transformations for backend compatibility.
-    
-    Currently empty for MVP implementation.
     
     Args:
         ast (Program_N): The AST to transform
         
     Returns:
-        Program_N: The transformed AST
+        Program_N: The transformed AST ready for backend processing
     """
-    # Future: implement transformations here
+    # TODO: Implement backend preparation transformations
     # Examples:
     # - Expand compact notations
     # - Normalize lattice operations
-    # - Prepare for code generation
-    
+    # - Add backend-specific annotations
     return ast

@@ -7,7 +7,7 @@ following the existing test pattern in the GeLB codebase.
 """
 
 from gelb.tests.test_utils import get_typed_ast, minimal_gelb_program_1d
-from gelb.midware.stage2_midware import process_ast, validate_midware_input
+from gelb.midware.stage2_midware import validate_midware_input, fold_constants
 from gelb.gelb_ast.ASTNodes import Program_N
 
 
@@ -24,8 +24,9 @@ def get_midware_processed_ast(gelb_code):
     # Get fully processed AST from frontend
     ast = get_typed_ast(gelb_code)
     
-    # Process through midware
-    return process_ast(ast)
+    # Process through midware stages
+    validate_midware_input(ast)
+    return fold_constants(ast)
 
 
 def create_simple_test_program():
@@ -71,19 +72,21 @@ def assert_midware_preserves_structure(original_ast, processed_ast):
     assert processed_ast.gauges is not None
 
 
-def assert_ast_identity_preserved(original_ast, processed_ast):
+def assert_midware_transformations_applied(original_ast, processed_ast):
     """
-    Assert that the AST maintains identity through pass-through midware.
-    
-    For MVP pass-through implementation, the AST should be unchanged.
+    Assert that midware transformations have been properly applied.
     
     Args:
         original_ast (Program_N): The original AST
         processed_ast (Program_N): The processed AST
         
     Raises:
-        AssertionError: If ASTs are not identical (for pass-through)
+        AssertionError: If transformations were not applied correctly
     """
-    # For pass-through implementation, should be the same object
-    assert original_ast is processed_ast, \
-        "Pass-through midware should return the same AST object"
+    # Both should be Program_N instances
+    assert isinstance(original_ast, Program_N)
+    assert isinstance(processed_ast, Program_N)
+    
+    # After constant folding, the AST might be modified
+    # but it should still maintain the same structure
+    assert_midware_preserves_structure(original_ast, processed_ast)

@@ -2,7 +2,7 @@
 
 import pytest
 from gelb.tests.test_utils import get_typed_ast
-from gelb.midware.stage2_midware import apply_constant_folding
+from gelb.midware.stage2_midware import fold_constants
 from gelb.gelb_ast.ASTNodes import *
 
 
@@ -47,7 +47,7 @@ class TestConstantFoldingIntegration:
         ast = get_typed_ast(source)
         
         # Apply constant folding
-        folded_ast = apply_constant_folding(ast)
+        folded_ast = fold_constants(ast)
         
         # Check global constants - COMPUTED should be folded to 8
         const_stmt = folded_ast.global_constants.stmts[0]
@@ -98,7 +98,7 @@ class TestConstantFoldingIntegration:
         ast = get_typed_ast(source)
         
         # Apply constant folding
-        folded_ast = apply_constant_folding(ast)
+        folded_ast = fold_constants(ast)
         
         # Check that (5 - 5) is folded to 0
         dynamic_stmt = folded_ast.dynamics.elements[0].stmts[0]
@@ -147,7 +147,7 @@ class TestConstantFoldingIntegration:
         ast = get_typed_ast(source)
         
         # Apply constant folding
-        folded_ast = apply_constant_folding(ast)
+        folded_ast = fold_constants(ast)
         
         # Check that (2+3) * (4-1) = 5 * 3 = 15
         const_stmt = folded_ast.global_constants.stmts[0]
@@ -192,7 +192,7 @@ class TestConstantFoldingIntegration:
         ast = get_typed_ast(source)
         
         # Apply constant folding
-        folded_ast = apply_constant_folding(ast)
+        folded_ast = fold_constants(ast)
         
         # Check that 5 > 3 is folded to true
         const_stmt = folded_ast.global_constants.stmts[0]
@@ -237,7 +237,7 @@ class TestConstantFoldingIntegration:
         ast = get_typed_ast(source)
         
         # Apply constant folding
-        folded_ast = apply_constant_folding(ast)
+        folded_ast = fold_constants(ast)
         
         # Check that 5 + 2.5 is folded to 7.5
         const_stmt = folded_ast.global_constants.stmts[0]

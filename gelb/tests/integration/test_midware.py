@@ -17,7 +17,7 @@ from gelb.frontend.stage1_frontend import (
     infer_types,
     validate_constant_assignments
 )
-from gelb.midware.stage2_midware import process_ast
+from gelb.midware.stage2_midware import validate_midware_input, fold_constants
 from gelb.gelb_ast.ASTNodes import Program_N
 from gelb.tests.test_utils import minimal_gelb_program_1d
 
@@ -46,7 +46,8 @@ class TestMidwareIntegration:
         ast = validate_constant_assignments(ast)
         
         # Process through midware
-        processed_ast = process_ast(ast)
+        validate_midware_input(ast)
+        processed_ast = fold_constants(ast)
         
         # Verify output is suitable for backend
         assert isinstance(processed_ast, Program_N)
@@ -96,7 +97,8 @@ class TestMidwareIntegration:
         ast = validate_constant_assignments(ast)
         
         # Process through midware
-        processed_ast = process_ast(ast)
+        validate_midware_input(ast)
+        processed_ast = fold_constants(ast)
         
         # Verify key structures for backend
         assert isinstance(processed_ast, Program_N)
@@ -167,7 +169,8 @@ class TestMidwareIntegration:
         assert hasattr(initializer_stmt.rhs, 'inferred_type')
         
         # Process through midware
-        processed_ast = process_ast(ast)
+        validate_midware_input(ast)
+        processed_ast = fold_constants(ast)
         
         # Verify type information is preserved
         processed_initializer_stmt = processed_ast.initializers[0].stmts[0]
@@ -183,7 +186,6 @@ class TestMidwareIntegration:
         invalid_ast = IntLiteral_N(code_range=None, value=42)
         
         with pytest.raises(TypeError) as excinfo:
-            process_ast(invalid_ast)
+            validate_midware_input(invalid_ast)
         
-        assert "Midware expects a Program_N AST root" in str(excinfo.value)
-        assert "IntLiteral_N" in str(excinfo.value)
+        assert "Expected Program_N, got IntLiteral_N" in str(excinfo.value)

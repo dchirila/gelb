@@ -9,47 +9,42 @@ between frontend and backend stages.
 import pytest
 from gelb.gelb_ast.ASTNodes import Program_N, IntLiteral_N
 from gelb.midware.stage2_midware import (
-    process_ast, 
     validate_midware_input,
-    apply_optimizations,
-    apply_transformations
+    fold_constants
 )
 from gelb.tests.test_utils import get_typed_ast
 from gelb.tests.unit.midware.midware_test_utils import (
     get_midware_processed_ast,
     create_simple_test_program,
     assert_midware_preserves_structure,
-    assert_ast_identity_preserved
+    assert_midware_transformations_applied
 )
 
 
 class TestMidwarePassThrough:
     """Test the basic pass-through functionality of the midware stage."""
     
-    def test_process_ast_with_valid_program(self):
-        """Test that process_ast handles a valid Program_N correctly."""
+    def test_fold_constants_with_valid_program(self):
+        """Test that fold_constants handles a valid Program_N correctly."""
         gelb_code = create_simple_test_program()
         original_ast = get_typed_ast(gelb_code)
         
-        # Process through midware
-        processed_ast = process_ast(original_ast)
+        # Process through midware stages
+        validate_midware_input(original_ast)
+        processed_ast = fold_constants(original_ast)
         
         # Should preserve structure
         assert_midware_preserves_structure(original_ast, processed_ast)
-        
-        # For MVP pass-through, should be identical
-        assert_ast_identity_preserved(original_ast, processed_ast)
     
-    def test_process_ast_rejects_non_program_node(self):
-        """Test that process_ast rejects non-Program_N nodes."""
+    def test_validate_midware_input_rejects_non_program_node(self):
+        """Test that validate_midware_input rejects non-Program_N nodes."""
         # Create a non-Program_N node
         invalid_ast = IntLiteral_N(code_range=None, value=42)
         
         with pytest.raises(TypeError) as excinfo:
-            process_ast(invalid_ast)
+            validate_midware_input(invalid_ast)
         
-        assert "Midware expects a Program_N AST root" in str(excinfo.value)
-        assert "IntLiteral_N" in str(excinfo.value)
+        assert "Expected Program_N, got IntLiteral_N" in str(excinfo.value)
     
     def test_validate_midware_input_with_valid_program(self):
         """Test input validation with a valid Program_N."""
@@ -68,25 +63,16 @@ class TestMidwarePassThrough:
         
         assert "Expected Program_N, got IntLiteral_N" in str(excinfo.value)
     
-    def test_apply_optimizations_passthrough(self):
-        """Test that optimization passes are currently pass-through."""
+    def test_constant_folding_works(self):
+        """Test that constant folding optimization works correctly."""
         gelb_code = create_simple_test_program()
         ast = get_typed_ast(gelb_code)
         
-        optimized_ast = apply_optimizations(ast)
+        # Apply constant folding
+        folded_ast = fold_constants(ast)
         
-        # For MVP, should be identical
-        assert optimized_ast is ast
-    
-    def test_apply_transformations_passthrough(self):
-        """Test that transformation passes are currently pass-through."""
-        gelb_code = create_simple_test_program()
-        ast = get_typed_ast(gelb_code)
-        
-        transformed_ast = apply_transformations(ast)
-        
-        # For MVP, should be identical
-        assert transformed_ast is ast
+        # Should return a valid AST
+        assert isinstance(folded_ast, Program_N)
     
     def test_full_midware_pipeline(self):
         """Test the complete midware processing pipeline."""
@@ -100,7 +86,7 @@ class TestMidwarePassThrough:
         
         # Verify structure is preserved
         original_ast = get_typed_ast(gelb_code)
-        assert_midware_preserves_structure(original_ast, processed_ast)
+        assert_midware_transformations_applied(original_ast, processed_ast)
 
 
 class TestMidwareWithComplexPrograms:

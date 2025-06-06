@@ -27,7 +27,12 @@ def _get_numbered_stage_name(stage_name):
         'ranges': '1_4_ranges',
         'types': '1_5_types',
         'promotions': '1_6_promotions',
-        'midware': '2_1_midware',
+        'constant_folding': '2_1_constant_folding',
+        # Future midware stages:
+        'dead_code_elimination': '2_2_dead_code_elimination',
+        'common_subexpression_elimination': '2_3_common_subexpression_elimination',
+        'lattice_access_optimization': '2_4_lattice_access_optimization',
+        'backend_preparation': '2_5_backend_preparation',
         # Future backend stages can be added as:
         # 'backend': '3_1_backend',
         # 'optimization': '3_2_optimization',
@@ -49,8 +54,8 @@ def generate_ast_visualization(ast, input_file, ast_output, ast_format, keep_dot
         stage_name: Name of the compilation stage (for output naming)
     """
     try:
-        # Import visualization functionality (will be implemented in Step 2)
-        from gelb.frontend.ASTVisualizationVisitor import ASTVisualizationVisitor
+        # Import visualization functionality
+        from gelb.debugging.ASTVisualizationVisitor import ASTVisualizationVisitor
         
         # Determine output file name
         if ast_output is None:
@@ -104,7 +109,7 @@ def generate_ast_visualization(ast, input_file, ast_output, ast_format, keep_dot
             print(f"DOT file saved at: {dot_file}")
             
     except ImportError:
-        print("❌ AST visualization not yet implemented (ASTVisualizationVisitor missing)")
+        print("❌ AST visualization module not available (ASTVisualizationVisitor missing from debugging module)")
     except FileNotFoundError:
         print("❌ Graphviz 'dot' command not found. Please install Graphviz and ensure it's in your PATH.")
     except Exception as e:

@@ -26,7 +26,15 @@ from gelb.frontend.stage1_frontend import (
     validate_constant_assignments,
     validate_lattice_consistency
 )
-from gelb.midware.stage2_midware import process_ast as midware_process_ast
+from gelb.midware.stage2_midware import (
+    validate_midware_input,
+    fold_constants
+    # Future imports when implemented:
+    # eliminate_dead_code,
+    # eliminate_common_subexpressions,
+    # optimize_lattice_access_patterns,
+    # prepare_for_backend
+)
 
 
 @click.command()
@@ -77,7 +85,7 @@ from gelb.midware.stage2_midware import process_ast as midware_process_ast
 )
 @click.option(
     "--ast-stage",
-    type=click.Choice(['parsing', 'symbols', 'constants', 'ranges', 'types', 'promotions', 'midware', 'all']),
+    type=click.Choice(['parsing', 'symbols', 'constants', 'ranges', 'types', 'promotions', 'constant_folding', 'midware', 'all']),
     default='promotions',
     help="Which compilation stage to visualize (default: promotions)"
 )
@@ -171,9 +179,26 @@ def cli(t, input_file, backend, visualize_ast, ast_output, ast_format, keep_dot,
     # ... TODO semantic analysis, checks, etc.
 
     # Stage 2 :: MidWare
-    # ... Apply AST transformations and optimizations
-    ast = midware_process_ast(ast)
-    capture_ast_if_requested(ast, 'midware')
+    
+    # ... validate input is ready for midware processing
+    validate_midware_input(ast)
+    
+    # ... fold constant expressions at compile time
+    ast = fold_constants(ast)
+    capture_ast_if_requested(ast, 'constant_folding')
+    
+    # ... TODO: Future midware optimizations (not yet implemented)
+    # ast = eliminate_dead_code(ast)
+    # capture_ast_if_requested(ast, 'dead_code_elimination')
+    #
+    # ast = eliminate_common_subexpressions(ast)
+    # capture_ast_if_requested(ast, 'common_subexpression_elimination')
+    #
+    # ast = optimize_lattice_access_patterns(ast)
+    # capture_ast_if_requested(ast, 'lattice_access_optimization')
+    #
+    # ast = prepare_for_backend(ast)
+    # capture_ast_if_requested(ast, 'backend_preparation')
 
     # Stage 3 :: BackEnd
     # ... TODO code-generation (will use 'backend' parameter)
