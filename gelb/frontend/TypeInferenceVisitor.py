@@ -415,9 +415,20 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         return False
     
     def _get_shape_if_array(self, expr_type):
-        """Get shape of array type, or empty list for scalars."""
+        """Get shape of array type as List_N, or empty list for scalars."""
         if isinstance(expr_type, ArrayDataType_N):
-            return expr_type.shape
+            shape = expr_type.shape
+            # Normalize shape to List_N format
+            if isinstance(shape, List_N):
+                return shape
+            elif isinstance(shape, (IntLiteral_N, Identifier_N)):
+                # 1D array with single dimension
+                result = List_N(expr_type.code_range)
+                result.elements = [shape]
+                return result
+            else:
+                # Unknown shape format, treat as empty
+                return List_N(expr_type.code_range)
         else:
             # This shouldn't happen after our changes, but handle legacy code
             return List_N(expr_type.code_range if hasattr(expr_type, 'code_range') else None)
@@ -445,9 +456,34 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
                 result_type = "int"
             
             # For arithmetic ops, result shape follows broadcasting rules
-            # For now, assume both operands are scalars (0-dimensional)
-            # TODO: Implement proper broadcasting for array operations
-            node.inferred_type = self._create_scalar_array_type(node.code_range, result_type)
+            # Implement basic broadcasting: larger shape wins, or scalar broadcasts to array
+            left_shape = self._get_shape_if_array(left_type)
+            right_shape = self._get_shape_if_array(right_type)
+            
+            # Basic broadcasting rule: if one operand is scalar (0D), result takes shape of other operand
+            # If both are arrays, they must have compatible shapes (for now, require identical shapes)
+            left_dims = len(left_shape.elements)
+            right_dims = len(right_shape.elements)
+            
+            if left_dims == 0 and right_dims == 0:
+                # Both scalars -> scalar result
+                result_shape = List_N(node.code_range)
+            elif left_dims == 0:
+                # Left is scalar, right is array -> result has right's shape
+                result_shape = right_shape
+            elif right_dims == 0:
+                # Right is scalar, left is array -> result has left's shape  
+                result_shape = left_shape
+            else:
+                # Both are arrays - for now, require identical shapes
+                # TODO: Implement full broadcasting rules
+                if left_dims == right_dims:
+                    result_shape = left_shape  # Assume shapes are compatible
+                else:
+                    # For now, default to scalar if shapes are incompatible
+                    result_shape = List_N(node.code_range)
+            
+            node.inferred_type = ArrayDataType_N(node.code_range, result_type, result_shape)
         
         elif op_category == "comparison":
             # Comparison operations always return array[bool, ()]
@@ -507,19 +543,41 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         # The DF range is the last element in element_ranges
         df_range = node.element_ranges[-1] if node.element_ranges else None
         
-        # If DF range is ':', result is 1D array of size q
+        # If DF range spans full DF dimension, result is 1D array of size q
         # Otherwise, it's a scalar (0-dimensional array)
-        if df_range is not None and isinstance(df_range, Range_N) and df_range.low is None and df_range.high is None:
-            # Full DF selection: f.in[x,y|:] returns array of size q
-            q_value = lattice_def.q
-            if isinstance(q_value, IntLiteral_N):
-                shape = IntLiteral_N(node.code_range, q_value.value)
+        if df_range is not None and isinstance(df_range, Range_N):
+            # Check if this is a full DF range (0 to q-1)
+            # This covers both explicit ranges like [0:q-1] and colon ranges [:]
+            is_full_range = False
+            
+            # Pattern 1: Range from 0 to q-1 (or similar)
+            if (isinstance(df_range.low, IntLiteral_N) and df_range.low.value == 0 and
+                isinstance(df_range.high, Sub_N) and
+                isinstance(df_range.high.left, Identifier_N) and df_range.high.left.name == "q" and
+                isinstance(df_range.high.right, IntLiteral_N) and df_range.high.right.value == 1):
+                is_full_range = True
+            
+            # Pattern 2: True colon range (low=None, high=None)
+            elif df_range.low is None and df_range.high is None:
+                is_full_range = True
+            
+            if is_full_range:
+                # Full DF selection: f.in[x,y|:] or f.in[x,y|0:q-1] returns array of size q
+                q_value = lattice_def.q
+                if isinstance(q_value, IntLiteral_N):
+                    shape_elements = [Identifier_N(node.code_range, "q")]
+                else:
+                    # q is an expression, use it as-is
+                    shape_elements = [q_value]
+                
+                shape = List_N(node.code_range)
+                shape.elements = shape_elements
+                node.inferred_type = ArrayDataType_N(node.code_range, base_type, shape)
             else:
-                # q is an expression, use it as-is
-                shape = q_value
-            node.inferred_type = ArrayDataType_N(node.code_range, base_type, shape)
+                # Partial DF selection: f.in[x,y|0] or f.in[x,y|1:3] returns scalar
+                node.inferred_type = self._create_scalar_array_type(node.code_range, base_type)
         else:
-            # Single DF selection: f.in[x,y|0] returns scalar
+            # No DF range specified, treat as scalar
             node.inferred_type = self._create_scalar_array_type(node.code_range, base_type)
         
         return node
