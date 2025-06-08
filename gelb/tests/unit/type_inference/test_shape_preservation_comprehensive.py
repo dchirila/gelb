@@ -6,7 +6,8 @@ These tests validate that array shapes are correctly preserved and inferred
 across different types of operations: scalar-scalar, scalar-array, array-array.
 """
 
-import pytest
+# Remove unused import to fix diagnostic
+# import pytest
 from gelb.gelb_ast.ASTNodes import *
 from gelb.tests.test_utils import get_typed_ast, minimal_gelb_program_1d
 

@@ -142,7 +142,7 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
                 
                 # Convert Python boolean result to string for consistency
                 result_str = self._bool_to_string(result)
-                return BoolLiteral_N(node.code_range, result_str)
+                return self._create_typed_bool_literal(node.code_range, result_str, node)
             except (TypeError, ValueError):
                 # Don't fold if comparison fails (e.g., incompatible types)
                 pass
@@ -181,7 +181,7 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
             result = operator(left_bool, right_bool)
             # Convert result back to string for consistency with GeLB AST
             result_str = self._bool_to_string(result)
-            return BoolLiteral_N(node.code_range, result_str)
+            return self._create_typed_bool_literal(node.code_range, result_str, node)
         
         return node
     
@@ -196,7 +196,7 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
             bool_val = self._string_to_bool(node.value.value)
             result = not bool_val
             result_str = self._bool_to_string(result)
-            return BoolLiteral_N(node.code_range, result_str)
+            return self._create_typed_bool_literal(node.code_range, result_str, node.value)
         
         return node
     
@@ -205,9 +205,9 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         node.value = self.visit(node.value, ast_root_node)
         
         if isinstance(node.value, IntLiteral_N):
-            return IntLiteral_N(node.code_range, -node.value.value)
+            return self._create_typed_int_literal(node.code_range, -node.value.value, node.value)
         elif isinstance(node.value, RealLiteral_N):
-            return RealLiteral_N(node.code_range, -node.value.value)
+            return self._create_typed_real_literal(node.code_range, -node.value.value, node.value)
         
         return node
     
@@ -242,13 +242,72 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         if isinstance(value, bool):
             # Convert Python boolean to GeLB boolean string
             bool_str = self._bool_to_string(value)
-            return BoolLiteral_N(original_node.code_range, bool_str)
+            result = BoolLiteral_N(original_node.code_range, bool_str)
         elif isinstance(value, int):
-            return IntLiteral_N(original_node.code_range, value)
+            result = IntLiteral_N(original_node.code_range, value)
         elif isinstance(value, float):
-            return RealLiteral_N(original_node.code_range, value)
+            result = RealLiteral_N(original_node.code_range, value)
         else:
             return None
+        
+        # Preserve ArrayDataType_N inferred_type if available
+        self._preserve_inferred_type(result, original_node)
+        return result
+    
+    def _preserve_inferred_type(self, new_literal, original_node):
+        """
+        Preserve the inferred_type from the original node to the new literal.
+        
+        This is crucial for maintaining ArrayDataType_N consistency after constant folding.
+        The original node should have an inferred_type set by TypeInferenceVisitor.
+        """
+        if hasattr(original_node, 'inferred_type'):
+            new_literal.inferred_type = original_node.inferred_type
+        else:
+            # Fallback: create appropriate ArrayDataType_N based on literal type
+            self._set_default_array_type(new_literal)
+    
+    def _set_default_array_type(self, literal_node):
+        """Set default ArrayDataType_N for a literal node."""
+        if isinstance(literal_node, IntLiteral_N):
+            scalar_dtype = "int"
+        elif isinstance(literal_node, RealLiteral_N):
+            scalar_dtype = "real"
+        elif isinstance(literal_node, BoolLiteral_N):
+            scalar_dtype = "bool"
+        else:
+            return  # Unknown type, skip
+        
+        # Create 0-dimensional array type (scalar as array)
+        empty_shape = List_N(literal_node.code_range)
+        literal_node.inferred_type = ArrayDataType_N(literal_node.code_range, scalar_dtype, empty_shape)
+    
+    def _create_typed_bool_literal(self, code_range, bool_str, reference_node=None):
+        """Create a BoolLiteral_N with proper ArrayDataType_N type."""
+        result = BoolLiteral_N(code_range, bool_str)
+        if reference_node and hasattr(reference_node, 'inferred_type'):
+            result.inferred_type = reference_node.inferred_type
+        else:
+            self._set_default_array_type(result)
+        return result
+    
+    def _create_typed_int_literal(self, code_range, value, reference_node=None):
+        """Create an IntLiteral_N with proper ArrayDataType_N type."""
+        result = IntLiteral_N(code_range, value)
+        if reference_node and hasattr(reference_node, 'inferred_type'):
+            result.inferred_type = reference_node.inferred_type
+        else:
+            self._set_default_array_type(result)
+        return result
+    
+    def _create_typed_real_literal(self, code_range, value, reference_node=None):
+        """Create a RealLiteral_N with proper ArrayDataType_N type."""
+        result = RealLiteral_N(code_range, value)
+        if reference_node and hasattr(reference_node, 'inferred_type'):
+            result.inferred_type = reference_node.inferred_type
+        else:
+            self._set_default_array_type(result)
+        return result
     
     # Arithmetic evaluators
     

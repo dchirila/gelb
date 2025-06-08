@@ -426,12 +426,32 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
                 result = List_N(expr_type.code_range)
                 result.elements = [shape]
                 return result
+            elif isinstance(shape, Array1DLiteral_N):
+                # 2D+ array with Array1DLiteral_N shape
+                return shape.value  # Return the List_N inside the Array1DLiteral_N
             else:
                 # Unknown shape format, treat as empty
                 return List_N(expr_type.code_range)
         else:
             # This shouldn't happen after our changes, but handle legacy code
             return List_N(expr_type.code_range if hasattr(expr_type, 'code_range') else None)
+    
+    def _denormalize_shape(self, normalized_shape, code_range):
+        """Convert normalized List_N shape back to the appropriate format."""
+        if not isinstance(normalized_shape, List_N):
+            return normalized_shape
+        
+        num_dims = len(normalized_shape.elements)
+        
+        if num_dims == 0:
+            # 0D (scalar) - return empty List_N
+            return List_N(code_range)
+        elif num_dims == 1:
+            # 1D array - return the single IntLiteral_N directly
+            return normalized_shape.elements[0]
+        else:
+            # 2D+ array - return Array1DLiteral_N
+            return Array1DLiteral_N(code_range, normalized_shape)
     
     def _infer_binary_op_type(self, node, ast_root_node, op_category):
         """Infer type of binary operation based on operand types."""
@@ -483,7 +503,9 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
                     # For now, default to scalar if shapes are incompatible
                     result_shape = List_N(node.code_range)
             
-            node.inferred_type = ArrayDataType_N(node.code_range, result_type, result_shape)
+            # Convert normalized List_N shape back to proper format
+            final_shape = self._denormalize_shape(result_shape, node.code_range)
+            node.inferred_type = ArrayDataType_N(node.code_range, result_type, final_shape)
         
         elif op_category == "comparison":
             # Comparison operations always return array[bool, ()]
