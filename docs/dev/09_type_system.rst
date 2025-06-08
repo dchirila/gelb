@@ -66,13 +66,25 @@ Examples:
 
 **ScalarDataType_N (Declaration Context)**
 
-Used for scalar type declarations and metadata:
+Used for scalar type declarations in computational contexts:
 - Variable declarations: ``int x;``, ``real y;``, ``bool b;``
 - Lattice df_type specifications: ``lattice f(d=2, q=9, df_type=int)``
 - Gauge output type declarations: ``out = {int state;}``
-- String literals: ``"hello"`` *(only expression context)*
 
 Note: While declarations use ``ScalarDataType_N``, the type inference system converts these to ``ArrayDataType_N`` for expressions and computations.
+
+**StringType_N (Metadata Only)**
+
+Used exclusively for non-computational metadata contexts:
+- Simulation descriptions: ``simulation_description("text");``
+
+**Important**: Strings are NOT part of the computational type system and cannot be used in:
+- Expressions or computations
+- Variable/constant declarations  
+- Type promotion or validation
+- Array/scalar type relationships
+
+StringType_N is completely independent from the DataType_N hierarchy (ScalarDataType_N/ArrayDataType_N).
 
 Expression Type Inference
 =========================
@@ -85,7 +97,7 @@ All literals extend Literal_N which extends Expr_N:
 - **IntLiteral_N** → inferred type: ArrayDataType_N("int", List_N([]))
 - **RealLiteral_N** → inferred type: ArrayDataType_N("real", List_N([]))
 - **BoolLiteral_N** → inferred type: ArrayDataType_N("bool", List_N([]))
-- **StringLiteral_N** → inferred type: ScalarDataType_N("string") *(exception)*
+- **StringLiteral_N** → StringType_N *(metadata only, not part of computational type system)*
 - **Array1DLiteral_N** → inferred type: ArrayDataType_N(element_type, IntLiteral_N(size))
 - **Array2DLiteral_N** → inferred type: ArrayDataType_N(element_type, Array1DLiteral_N(dimensions))
 - **Array3DLiteral_N** → inferred type: ArrayDataType_N(element_type, Array1DLiteral_N(dimensions))
@@ -249,11 +261,12 @@ Logical operations do NOT perform type promotion:
 
 **2. String Type**
 
-The ``string`` type does not participate in promotions:
+Strings are NOT part of the computational type system and cannot be used in expressions:
 
 .. code-block:: gelb
 
-    "hello" + 1    // ERROR: No promotion between string and numeric types
+    "hello" + 1    // ERROR: Strings cannot be used in computational expressions
+    int x = "hello";  // ERROR: Strings cannot be used in variable declarations
 
 **3. Array Types**
 

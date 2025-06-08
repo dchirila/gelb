@@ -109,8 +109,8 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         return node
     
     def visitStringLiteral_N(self, node: StringLiteral_N, ast_root_node: Program_N):
-        """String literals have type 'string' (exception to universal array rule)."""
-        node.inferred_type = ScalarDataType_N(node.code_range, "string")
+        """String literals have StringType_N (separate from computational type system)."""
+        node.inferred_type = StringType_N(node.code_range)
         return node
     
     # Array literal type inference
@@ -159,10 +159,13 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         if symbol_def.tag == "constant" or symbol_def.tag == "constant definition":
             # For constants, value is ConstantDefinitionStmt_N
             data_type = symbol_def.value.data_type
-            # Wrap scalar types as 0-dimensional arrays, except strings
+            # Wrap scalar types as 0-dimensional arrays (strings not allowed in constants)
             if isinstance(data_type, ScalarDataType_N):
                 if data_type.scalar_dtype == "string":
-                    node.inferred_type = data_type  # Keep strings as ScalarDataType_N
+                    raise GeLBException(
+                        f"String types are not allowed in computational contexts (constants)",
+                        node.code_range
+                    )
                 else:
                     node.inferred_type = self._create_scalar_array_type(node.code_range, data_type.scalar_dtype)
             else:
@@ -170,10 +173,13 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         elif symbol_def.tag == "variable" or symbol_def.tag == "variable declaration":
             # For variables, value is VariableDeclarationStmt_N
             data_type = symbol_def.value.data_type
-            # Wrap scalar types as 0-dimensional arrays, except strings
+            # Wrap scalar types as 0-dimensional arrays (strings not allowed in variables)
             if isinstance(data_type, ScalarDataType_N):
                 if data_type.scalar_dtype == "string":
-                    node.inferred_type = data_type  # Keep strings as ScalarDataType_N
+                    raise GeLBException(
+                        f"String types are not allowed in computational contexts (variables)",
+                        node.code_range
+                    )
                 else:
                     node.inferred_type = self._create_scalar_array_type(node.code_range, data_type.scalar_dtype)
             else:
@@ -188,10 +194,13 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         elif symbol_def.tag == "output variable declaration":
             # For gauge outputs, value is VariableDeclarationStmt_N
             data_type = symbol_def.value.data_type
-            # Wrap scalar types as 0-dimensional arrays, except strings
+            # Wrap scalar types as 0-dimensional arrays (strings not allowed in gauge outputs)
             if isinstance(data_type, ScalarDataType_N):
                 if data_type.scalar_dtype == "string":
-                    node.inferred_type = data_type  # Keep strings as ScalarDataType_N
+                    raise GeLBException(
+                        f"String types are not allowed in computational contexts (gauge outputs)",
+                        node.code_range
+                    )
                 else:
                     node.inferred_type = self._create_scalar_array_type(node.code_range, data_type.scalar_dtype)
             else:
@@ -406,13 +415,6 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
                 "This is likely an internal compiler error"
             )
     
-    def _is_string_type(self, data_type):
-        """Check if a data type represents a string."""
-        if isinstance(data_type, ScalarDataType_N):
-            return data_type.scalar_dtype == "string"
-        elif isinstance(data_type, ArrayDataType_N):
-            return data_type.scalar_dtype == "string"
-        return False
     
     def _get_shape_if_array(self, expr_type):
         """Get shape of array type as List_N, or empty list for scalars."""

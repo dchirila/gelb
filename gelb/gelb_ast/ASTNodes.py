@@ -490,6 +490,33 @@ class ArrayDataType_N(DataType_N):
         )
 
 
+class StringType_N(Node_N):
+    """
+    AST node representing the string type for metadata contexts.
+    This is separate from the computational type system (ScalarDataType_N/ArrayDataType_N).
+    
+    Used only for:
+    - simulation_description("text") statements
+    - Future string metadata contexts
+    
+    NOT used for:
+    - Expressions or computations
+    - Type promotion or validation
+    - Array/scalar type relationships
+    """
+    def __init__(self, code_range):
+        super().__init__(code_range)
+    
+    def __str__(self):
+        return "(StringType)"
+    
+    def __repr__(self):
+        return f"StringType_N({self.code_range})"
+    
+    def get_children(self):
+        return set()
+
+
 class BinaryExpr_N(Expr_N):
     """
     Base-class for all GeLB binary expressions.
