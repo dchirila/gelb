@@ -37,18 +37,42 @@ DataType_N (Abstract Base Class)
 Base class for all GeLB data types:
 - Contains: ``scalar_dtype`` (string: "int", "real", "bool", "string")
 
-ScalarDataType_N (Concrete)
-----------------------------
+Universal ArrayDataType_N System
+---------------------------------
 
-Represents scalar types: int, real, bool, string
-- Used for variables, constants, and expression results
+**Core Design Philosophy:**
+GeLB uses a universal type system where **all types are represented as ArrayDataType_N**, treating scalars as 0-dimensional arrays. This provides uniform type handling throughout the compiler and enables powerful array-aware optimizations.
 
-ArrayDataType_N (Concrete)
----------------------------
+**ArrayDataType_N (Primary Type)**
 
-Represents array types:
+Represents all numeric and boolean types as arrays:
 - Contains: ``scalar_dtype`` (element type) and ``shape`` (dimensions)
-- Shape can be: IntLiteral_N (1D) or Array1DLiteral_N (multi-dimensional)
+- **Scalars**: 0-dimensional arrays with empty shape ``List_N([])``
+- **1D Arrays**: Shape is ``IntLiteral_N`` (array size)
+- **2D+ Arrays**: Shape is ``Array1DLiteral_N`` (dimension list)
+
+Examples:
+
+.. code-block:: python
+
+    # Integer literal "42" has type:
+    ArrayDataType_N(code_range, "int", List_N([]))  # 0-dimensional
+    
+    # Array literal "{1, 2, 3}" has type:
+    ArrayDataType_N(code_range, "int", IntLiteral_N(3))  # 1-dimensional
+    
+    # 2D array "{{1, 2}, {3, 4}}" has type:
+    ArrayDataType_N(code_range, "int", Array1DLiteral_N([2, 2]))  # 2-dimensional
+
+**ScalarDataType_N (Declaration Context)**
+
+Used for scalar type declarations and metadata:
+- Variable declarations: ``int x;``, ``real y;``, ``bool b;``
+- Lattice df_type specifications: ``lattice f(d=2, q=9, df_type=int)``
+- Gauge output type declarations: ``out = {int state;}``
+- String literals: ``"hello"`` *(only expression context)*
+
+Note: While declarations use ``ScalarDataType_N``, the type inference system converts these to ``ArrayDataType_N`` for expressions and computations.
 
 Expression Type Inference
 =========================
@@ -58,14 +82,23 @@ Literals
 
 All literals extend Literal_N which extends Expr_N:
 
-- **IntLiteral_N** → inferred type: ScalarDataType_N("int")
-- **RealLiteral_N** → inferred type: ScalarDataType_N("real")
-- **BoolLiteral_N** → inferred type: ScalarDataType_N("bool")
-- **StringLiteral_N** → inferred type: ScalarDataType_N("string")
-- **Array1DLiteral_N** → inferred type: ArrayDataType_N(element_type, shape)
-- **Array2DLiteral_N** → inferred type: ArrayDataType_N(element_type, shape)
-- **Array3DLiteral_N** → inferred type: ArrayDataType_N(element_type, shape)
-- **Array4DLiteral_N** → inferred type: ArrayDataType_N(element_type, shape)
+- **IntLiteral_N** → inferred type: ArrayDataType_N("int", List_N([]))
+- **RealLiteral_N** → inferred type: ArrayDataType_N("real", List_N([]))
+- **BoolLiteral_N** → inferred type: ArrayDataType_N("bool", List_N([]))
+- **StringLiteral_N** → inferred type: ScalarDataType_N("string") *(exception)*
+- **Array1DLiteral_N** → inferred type: ArrayDataType_N(element_type, IntLiteral_N(size))
+- **Array2DLiteral_N** → inferred type: ArrayDataType_N(element_type, Array1DLiteral_N(dimensions))
+- **Array3DLiteral_N** → inferred type: ArrayDataType_N(element_type, Array1DLiteral_N(dimensions))
+- **Array4DLiteral_N** → inferred type: ArrayDataType_N(element_type, Array1DLiteral_N(dimensions))
+
+**Key Implementation Methods:**
+
+.. code-block:: python
+
+    def _create_scalar_array_type(self, code_range, scalar_dtype):
+        """Create a 0-dimensional array type representing a scalar."""
+        empty_shape = List_N(code_range)
+        return ArrayDataType_N(code_range, scalar_dtype, empty_shape)
 
 Binary Expressions
 -------------------
@@ -73,38 +106,74 @@ Binary Expressions
 All binary expressions extend BinaryExpr_N which extends Expr_N:
 
 **Arithmetic Operations:**
-- **Add_N** (+) → type promotion rules apply
-- **Sub_N** (-) → type promotion rules apply
-- **Mul_N** (*) → type promotion rules apply
-- **Div_N** (/) → type promotion rules apply
-- **Pow_N** (^) → type promotion rules apply
+- **Add_N** (+) → type promotion rules + broadcasting apply
+- **Sub_N** (-) → type promotion rules + broadcasting apply
+- **Mul_N** (*) → type promotion rules + broadcasting apply
+- **Div_N** (/) → type promotion rules + broadcasting apply
+- **Pow_N** (^) → type promotion rules + broadcasting apply
 
 **Comparison Operations:**
-- **Less_N** (<) → always returns bool
-- **Greater_N** (>) → always returns bool
-- **LessEqual_N** (<=) → always returns bool
-- **GreaterEqual_N** (>=) → always returns bool
-- **Equal_N** (==) → always returns bool
-- **NotEqual_N** (!=) → always returns bool
+- **Less_N** (<) → always returns ArrayDataType_N("bool", ...)
+- **Greater_N** (>) → always returns ArrayDataType_N("bool", ...)
+- **LessEqual_N** (<=) → always returns ArrayDataType_N("bool", ...)
+- **GreaterEqual_N** (>=) → always returns ArrayDataType_N("bool", ...)
+- **Equal_N** (==) → always returns ArrayDataType_N("bool", ...)
+- **NotEqual_N** (!=) → always returns ArrayDataType_N("bool", ...)
 
 **Logical Operations:**
-- **And_N** (&&) → requires bool operands, returns bool
-- **Or_N** (||) → requires bool operands, returns bool
+- **And_N** (&&) → requires ArrayDataType_N("bool", ...) operands
+- **Or_N** (||) → requires ArrayDataType_N("bool", ...) operands
+
+**Broadcasting Rules:**
+
+For mixed scalar/array operations:
+
+- **Scalar + Array → Array**: Result preserves array shape
+- **Array + Scalar → Array**: Result preserves array shape  
+- **Type Promotion**: Applies to scalar types while preserving shapes
+
+Example:
+
+.. code-block:: gelb
+
+    const array[int, 3] vec = {1, 2, 3};
+    const int scalar = 5;
+    const array[int, 3] result = scalar + vec;  // Broadcasting: scalar → array shape
+
+**Key Implementation Methods:**
+
+.. code-block:: python
+
+    def _get_shape_if_array(self, expr_type):
+        """Normalize shape to List_N format for broadcasting."""
+        # Handles IntLiteral_N, Array1DLiteral_N, and List_N shapes
+    
+    def _denormalize_shape(self, normalized_shape, code_range):
+        """Convert normalized List_N back to proper shape format."""
+        # 0D → List_N, 1D → IntLiteral_N, 2D+ → Array1DLiteral_N
 
 Unary Expressions
 -----------------
 
 All unary expressions extend UnaryExpr_N which extends Expr_N:
-- **NotExpr_N** (!) → requires bool operand, returns bool
-- **UnaryMinusExpr_N** (-) → preserves operand type
+- **NotExpr_N** (!) → requires ArrayDataType_N("bool", ...) operand, preserves shape
+- **UnaryMinusExpr_N** (-) → preserves operand type and shape
 
 Other Expression Types
 ----------------------
 
-- **Identifier_N** → type from symbol table lookup
-- **RectSelOfLatticeInDFs_N** → type from lattice definition
-- **RectSelOfLatticeOutDFs_N** → type from lattice definition
-- **RectSelOfArrayElems_N** → type from array definition
+- **Identifier_N** → ArrayDataType_N from symbol table lookup
+- **RectSelOfLatticeInDFs_N** → ArrayDataType_N from lattice definition with proper shape
+- **RectSelOfLatticeOutDFs_N** → ArrayDataType_N from lattice definition with proper shape
+- **RectSelOfArrayElems_N** → ArrayDataType_N with scalar shape (0D) for element access
+
+**Lattice Selection Integration:**
+
+Lattice selections integrate seamlessly with the array type system:
+
+- **Full DF selection** ``f.in[x|:]`` returns ArrayDataType_N(df_type, IntLiteral_N(q))
+- **Single DF selection** ``f.in[x|0]`` returns ArrayDataType_N(df_type, List_N([]))
+- **Mixed operations** with lattice selections follow broadcasting rules
 
 Type Promotion System
 =====================
@@ -188,13 +257,17 @@ The ``string`` type does not participate in promotions:
 
 **3. Array Types**
 
-Array types do not promote to other array types or to scalars:
+Array types follow the universal ArrayDataType_N system:
 
 .. code-block:: gelb
 
     array[int, 3] a = {1, 2, 3};
     array[real, 3] b = a;  // ERROR: No array-to-array promotion
     real x = a;            // ERROR: No array-to-scalar promotion
+    
+    // But scalars (0D arrays) can be promoted:
+    real y = 5;            // int literal (0D) promoted to real (0D)
+    array[real, 3] c = {1, 2.5, 3};  // Mixed elements promoted to common type
 
 TypePromotionNode_N
 -------------------
@@ -214,7 +287,7 @@ The compiler inserts ``TypePromotionNode_N`` in the AST wherever implicit promot
     Add_N {
       left: TypePromotionNode_N {
         expr: IntLiteral_N(1)
-        target_type: ScalarDataType_N("real")
+        target_type: ArrayDataType_N("real", List_N([]))
       }
       right: RealLiteral_N(2.5)
     }
@@ -404,7 +477,9 @@ Common Testing Patterns
         # Check that RHS is wrapped in TypePromotionNode_N
         assign_stmt = ast.initializers[0].stmts.elements[1]
         assert isinstance(assign_stmt.rhs, TypePromotionNode_N)
+        assert isinstance(assign_stmt.rhs.target_type, ArrayDataType_N)
         assert assign_stmt.rhs.target_type.scalar_dtype == "real"
+        assert len(assign_stmt.rhs.target_type.shape.elements) == 0  # 0D array
 
 **Testing Type Errors:**
 
@@ -420,6 +495,28 @@ Common Testing Patterns
         
         assert "logical AND" in str(exc_info.value)
         assert "expected 'bool'" in str(exc_info.value)
+
+**Testing Array Type System:**
+
+.. code-block:: python
+
+    def test_scalar_as_array_type():
+        """Test that scalar literals have ArrayDataType_N with 0D shape."""
+        code = minimal_gelb_program_1d(initializer_content="int x; x = 42;")
+        ast = get_typed_ast(code)
+        
+        # Find the assignment statement
+        assign_stmt = ast.initializers[0].stmts.elements[1]
+        rhs = assign_stmt.rhs
+        
+        # Check ArrayDataType_N
+        assert isinstance(rhs.inferred_type, ArrayDataType_N)
+        assert rhs.inferred_type.scalar_dtype == "int"
+        
+        # Check 0D shape
+        shape = rhs.inferred_type.shape
+        assert isinstance(shape, List_N)
+        assert len(shape.elements) == 0  # 0D scalar
 
 Extending the Type System
 =========================
@@ -504,6 +601,9 @@ For Type System Development
 * **Maintain promotion transitivity** - If A→B and B→C, then A→C
 * **Document type rules clearly** - Make promotion hierarchy explicit
 * **Preserve type information** - Don't lose types during transformations
+* **Handle universal ArrayDataType_N** - All numeric types are 0D arrays
+* **Implement broadcasting correctly** - Scalar/array operations preserve array shapes
+* **Test shape preservation** - Ensure array shapes are maintained through operations
 
 For Language Users
 ------------------

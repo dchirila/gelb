@@ -70,6 +70,47 @@ Constant folding evaluates constant expressions at compile time, replacing them 
 
 **Implementation:** ``gelb/midware/ConstantFoldingVisitor.py``
 
+Arithmetic Safety Analysis
+---------------------------
+
+**Status**: ✅ **IMPLEMENTED**
+
+Arithmetic safety analysis detects potential runtime errors (like division by zero) at compile time. This analysis has been moved from the Frontend to the Midware stage for more effective error detection after constant folding.
+
+**Benefits of Midware Placement:**
+
+* **Enhanced Detection**: Expressions like ``1 / (5-5)`` are detected after folding to ``1 / 0``
+* **Better Error Messages**: Errors are reported on simplified expressions
+* **Logical Separation**: Safety analysis runs after optimizations but before code generation
+
+**Implementation:** ``gelb/midware/ArithmeticSafetyVisitor.py``
+
+The ``ArithmeticSafetyVisitor`` analyzes folded expressions for potential arithmetic errors:
+
+.. code-block:: python
+
+    class ArithmeticSafetyVisitor(ASTBaseVisitor, ProgramTraversalMixin):
+        """Detects arithmetic safety violations in the AST."""
+        
+        def visitDiv_N(self, node: Div_N, ast_root_node: Program_N):
+            """Check for division by zero."""
+            # Visit children first
+            node.left = self.visit(node.left, ast_root_node)
+            node.right = self.visit(node.right, ast_root_node)
+            
+            # Check for literal zero in denominator
+            if (isinstance(node.right, IntLiteral_N) and node.right.value == 0) or \
+               (isinstance(node.right, RealLiteral_N) and node.right.value == 0.0):
+                raise GeLBExArithmeticError(f"Division by zero detected", node.code_range)
+            
+            return node
+
+**Testing Impact:**
+
+- Use ``get_midware_ast()`` for testing division by zero errors
+- Use ``get_typed_ast()`` for general frontend testing  
+- Use ``get_promoted_ast()`` for testing type validation errors
+
 The ``ConstantFoldingVisitor`` class uses the visitor pattern to traverse the AST and fold constant expressions:
 
 .. code-block:: python
@@ -101,8 +142,28 @@ The ``ConstantFoldingVisitor`` class uses the visitor pattern to traverse the AS
 
 1. **Bottom-up Processing**: Evaluates nested expressions from innermost to outermost
 2. **Type Preservation**: Maintains GeLB type semantics (e.g., ``int / int`` → ``real``)
-3. **Error Handling**: Division by zero and overflow errors are caught gracefully
-4. **Boolean Handling**: Preserves GeLB's string-based boolean literals (``'true'``/``'false'``)
+3. **ArrayDataType_N Compatibility**: Preserves universal array type system for folded literals
+4. **Error Handling**: Division by zero and overflow errors are caught gracefully
+5. **Boolean Handling**: Preserves GeLB's string-based boolean literals (``'true'``/``'false'``)
+
+**ArrayDataType_N Type Preservation:**
+
+The constant folding pass preserves the universal ArrayDataType_N type system:
+
+.. code-block:: python
+
+    def _preserve_inferred_type(self, new_literal, original_node):
+        """Preserve ArrayDataType_N type on folded literals."""
+        if hasattr(original_node, 'inferred_type'):
+            new_literal.inferred_type = original_node.inferred_type
+        else:
+            self._set_default_array_type(new_literal)
+
+**Typed Literal Creation:**
+
+- ``_create_typed_bool_literal()`` - Creates BoolLiteral_N with ArrayDataType_N("bool", List_N([]))
+- ``_create_typed_int_literal()`` - Creates IntLiteral_N with ArrayDataType_N("int", List_N([]))
+- ``_create_typed_real_literal()`` - Creates RealLiteral_N with ArrayDataType_N("real", List_N([]))
 
 **Benefits:**
 
@@ -156,17 +217,22 @@ The Midware has comprehensive test coverage:
 
 **Unit Tests** (``gelb/tests/unit/midware/``):
 * ``test_midware_pass_through.py`` - Core functionality tests
+* ``test_constant_folding.py`` - Comprehensive constant folding tests
+* ``test_constant_folding_simple.py`` - Basic constant folding tests
 * ``midware_test_utils.py`` - Shared test utilities
 
 **Integration Tests** (``gelb/tests/integration/test_midware.py``):
 * Frontend-to-midware pipeline tests
 * Type information preservation tests
 * Error handling validation
+* Constant folding integration tests
 
 **Test Utilities:**
-* ``get_midware_processed_ast()`` - Helper for full pipeline testing
+* ``get_midware_ast()`` - Helper for full frontend + midware pipeline testing
+* ``get_promoted_ast()`` - Helper for type inference + promotion only
+* ``get_typed_ast()`` - Helper for full frontend pipeline
 * ``assert_midware_preserves_structure()`` - Validates AST integrity
-* ``assert_ast_identity_preserved()`` - Ensures pass-through behavior
+* ``assert_constant_folding_preserves_types()`` - Validates ArrayDataType_N preservation
 
 Future Transformations
 ======================

@@ -60,10 +60,26 @@ Type System Tests
 **Purpose:** Comprehensive type system validation
 
 **Key Areas:**
+- Universal ArrayDataType_N type system testing
+- Scalar-as-array representation validation
 - Type inference for all expression types
-- Type promotion rule verification
+- Type promotion rule verification with broadcasting
+- Shape preservation in operations
+- Mixed scalar/array operation testing
+- Lattice selection type inference
 - Type validation error detection
 - Edge cases and boundary conditions
+
+**Array Type System Tests:**
+
+.. code-block::
+
+    gelb/tests/unit/type_inference/
+    ├── test_array_type_system_comprehensive.py     # 19 scalar-as-array tests
+    ├── test_shape_preservation_comprehensive.py    # 15 shape preservation tests
+    ├── test_lattice_selection_type_inference.py    # 12 lattice selection tests
+    ├── test_mixed_scalar_array_operations.py       # 12 mixed operation tests
+    └── test_constant_folding_array_types.py        # 4 constant folding tests
 
 Symbol Resolution Tests
 ----------------------
@@ -103,7 +119,9 @@ Shared Test Infrastructure
 
     # ✅ CORRECT - Use shared utilities
     from gelb.tests.test_utils import (
-        get_typed_ast,           # For type inference tests
+        get_typed_ast,           # For full frontend pipeline tests
+        get_promoted_ast,        # For type inference + promotion only
+        get_midware_ast,         # For frontend + midware pipeline tests
         get_validated_ast,       # For symbol table tests  
         get_resolved_ast,        # For constant/range resolution tests
         minimal_gelb_program_1d, # For 1D program templates
@@ -198,13 +216,14 @@ Test complete pipelines with realistic scenarios:
         )
         
         # Should complete without errors
-        ast = get_typed_ast(source_code)
-        ast = promote_types(ast)
-        ast = validate_types(ast)
+        ast = get_typed_ast(source_code)  # Full frontend pipeline
         
         # Verify final state
         assign_stmt = find_assignment_statement(ast)
         assert isinstance(assign_stmt.rhs, TypePromotionNode_N)
+        assert isinstance(assign_stmt.rhs.target_type, ArrayDataType_N)
+        assert assign_stmt.rhs.target_type.scalar_dtype == "real"
+        assert len(assign_stmt.rhs.target_type.shape.elements) == 0  # 0D array
 
 Error Testing
 ------------
@@ -223,8 +242,61 @@ Systematically test error conditions:
         for source, expected_error in error_cases:
             test_code = minimal_gelb_program_1d(initializer_content=source)
             with pytest.raises(GeLBExTypeError) as exc_info:
-                validate_types(get_promoted_ast(test_code))
+                get_typed_ast(test_code)  # Full frontend pipeline includes validation
             assert expected_error in str(exc_info.value)
+
+**Testing Array Type System:**
+
+.. code-block:: python
+
+    def test_scalar_as_array_representation():
+        """Test that scalar literals have ArrayDataType_N with 0D shape."""
+        code = minimal_gelb_program_1d(initializer_content="int x; x = 42;")
+        ast = get_typed_ast(code)
+        
+        # Find the assignment statement
+        assign_stmt = ast.initializers[0].stmts.elements[1]
+        rhs = assign_stmt.rhs
+        
+        # Check ArrayDataType_N with 0D shape
+        assert isinstance(rhs.inferred_type, ArrayDataType_N)
+        assert rhs.inferred_type.scalar_dtype == "int"
+        assert isinstance(rhs.inferred_type.shape, List_N)
+        assert len(rhs.inferred_type.shape.elements) == 0
+    
+    def test_shape_preservation_in_operations():
+        """Test that array shapes are preserved in arithmetic operations."""
+        code = minimal_gelb_program_1d(
+            global_constants_content="const array[int, 3] vec = {1, 2, 3};",
+            initializer_content="array[int, 3] result; result = vec + 5;"
+        )
+        ast = get_typed_ast(code)
+        
+        # Find assignment and check result type
+        assign_stmt = ast.initializers[0].stmts.elements[1]
+        add_expr = assign_stmt.rhs
+        
+        # Should preserve array shape from vec
+        assert isinstance(add_expr.inferred_type, ArrayDataType_N)
+        assert isinstance(add_expr.inferred_type.shape, IntLiteral_N)
+        assert add_expr.inferred_type.shape.value == 3
+
+    def test_lattice_selection_type_inference():
+        """Test lattice selection type inference with ArrayDataType_N."""
+        code = minimal_gelb_program_2d(
+            lattices_content="lattice f(d=2, q=9, df_type=real);",
+            initializer_content="real scalar; scalar = f.in[x,y|0];"
+        )
+        ast = get_typed_ast(code)
+        
+        # Find assignment and check lattice selection type
+        assign_stmt = ast.initializers[0].stmts.elements[1]
+        lattice_sel = assign_stmt.rhs
+        
+        # Single DF selection should return 0D array (scalar)
+        assert isinstance(lattice_sel.inferred_type, ArrayDataType_N)
+        assert lattice_sel.inferred_type.scalar_dtype == "real"
+        assert len(lattice_sel.inferred_type.shape.elements) == 0  # 0D
 
 Test Development Workflow
 =========================
@@ -404,6 +476,75 @@ Monitor test effectiveness:
 - **Test failure analysis** - Understand and fix flaky tests
 - **Test maintenance** - Keep tests up to date with code changes
 
+Type System Debugging
+====================
+
+Debugging Array Type Issues
+---------------------------
+
+When debugging the universal ArrayDataType_N system, use these patterns:
+
+.. code-block:: python
+
+    def test_debug_array_type_issue():
+        problematic_code = minimal_gelb_program_1d(
+            initializer_content="int x; x = 42 + 3.14;"
+        )
+        
+        # Use appropriate pipeline helper for debugging
+        
+        # For type inference only:
+        ast = get_promoted_ast(problematic_code)
+        print("After promotion:", ast.some_expr.inferred_type)
+        
+        # For full frontend pipeline:
+        ast = get_typed_ast(problematic_code)
+        print("After full frontend:", ast.some_expr.inferred_type)
+        
+        # For midware testing (includes constant folding):
+        ast = get_midware_ast(problematic_code)
+        print("After midware:", type(ast.some_expr))
+        
+        # Check ArrayDataType_N properties
+        if isinstance(ast.some_expr.inferred_type, ArrayDataType_N):
+            shape = ast.some_expr.inferred_type.shape
+            if isinstance(shape, List_N):
+                print(f"Scalar (0D): {len(shape.elements) == 0}")
+            elif isinstance(shape, IntLiteral_N):
+                print(f"1D array size: {shape.value}")
+            elif isinstance(shape, Array1DLiteral_N):
+                print(f"Multi-D shape: {[elem.value for elem in shape.value.elements]}")
+
+**Pipeline Helper Selection:**
+
+- **get_promoted_ast()** - For testing type promotion only
+- **get_typed_ast()** - For full frontend pipeline (includes validation)
+- **get_midware_ast()** - For frontend + midware (includes constant folding)
+
+**Common Array Type Debugging Checks:**
+
+.. code-block:: python
+
+    def debug_array_type_properties(expr_type):
+        """Helper function to inspect ArrayDataType_N properties."""
+        if not isinstance(expr_type, ArrayDataType_N):
+            print(f"Not ArrayDataType_N: {type(expr_type)}")
+            return
+        
+        print(f"Scalar type: {expr_type.scalar_dtype}")
+        
+        shape = expr_type.shape
+        if isinstance(shape, List_N):
+            if len(shape.elements) == 0:
+                print("Type: 0D array (scalar)")
+            else:
+                print(f"Type: {len(shape.elements)}D array with shape elements")
+        elif isinstance(shape, IntLiteral_N):
+            print(f"Type: 1D array of size {shape.value}")
+        elif isinstance(shape, Array1DLiteral_N):
+            dims = [elem.value for elem in shape.value.elements]
+            print(f"Type: {len(dims)}D array with shape {dims}")
+
 Best Practices Summary
 =====================
 
@@ -414,6 +555,9 @@ Best Practices Summary
 - Use descriptive test names and documentation
 - Keep tests focused and independent
 - Maintain test data systematically
+- Test ArrayDataType_N properties for all expressions
+- Verify shape preservation in array operations
+- Use appropriate pipeline helpers (get_typed_ast, get_promoted_ast, get_midware_ast)
 
 **DON'T:**
 - Duplicate test utility functions
@@ -422,5 +566,8 @@ Best Practices Summary
 - Ignore test failures or mark them as expected
 - Create interdependent tests
 - Skip edge case testing
+- Assume ScalarDataType_N for numeric types (use ArrayDataType_N)
+- Forget to test shape preservation in operations
+- Mix pipeline stages in tests without clear purpose
 
 The GeLB testing framework provides a solid foundation for maintaining compiler quality while enabling confident refactoring and feature development.
