@@ -17,8 +17,10 @@ class TestBinaryOperationTypeInference:
         
         # Check that the Add_N node has inferred type
         assert hasattr(add_expr, 'inferred_type')
-        assert isinstance(add_expr.inferred_type, ScalarDataType_N)
+        assert isinstance(add_expr.inferred_type, ArrayDataType_N)
         assert add_expr.inferred_type.scalar_dtype == "int"
+        # Check that it's 0-dimensional (scalar)
+        assert len(add_expr.inferred_type.shape.elements) == 0
     
     def test_real_plus_real(self):
         gelb_code = minimal_gelb_program("const real result = 1.5 + 2.5;")
@@ -28,8 +30,10 @@ class TestBinaryOperationTypeInference:
         add_expr = const_stmt.value
         
         assert hasattr(add_expr, 'inferred_type')
-        assert isinstance(add_expr.inferred_type, ScalarDataType_N)
+        assert isinstance(add_expr.inferred_type, ArrayDataType_N)
         assert add_expr.inferred_type.scalar_dtype == "real"
+        # Check that it's 0-dimensional (scalar)
+        assert len(add_expr.inferred_type.shape.elements) == 0
     
     def test_int_plus_real(self):
         gelb_code = minimal_gelb_program("const real result = 1 + 2.5;")
@@ -40,8 +44,10 @@ class TestBinaryOperationTypeInference:
         
         # Mixed int + real should promote to real
         assert hasattr(add_expr, 'inferred_type')
-        assert isinstance(add_expr.inferred_type, ScalarDataType_N)
+        assert isinstance(add_expr.inferred_type, ArrayDataType_N)
         assert add_expr.inferred_type.scalar_dtype == "real"
+        # Check that it's 0-dimensional (scalar)
+        assert len(add_expr.inferred_type.shape.elements) == 0
     
     def test_multiplication(self):
         gelb_code = minimal_gelb_program("const int result = 3 * 4;")
@@ -51,8 +57,10 @@ class TestBinaryOperationTypeInference:
         mul_expr = const_stmt.value
         
         assert hasattr(mul_expr, 'inferred_type')
-        assert isinstance(mul_expr.inferred_type, ScalarDataType_N)
+        assert isinstance(mul_expr.inferred_type, ArrayDataType_N)
         assert mul_expr.inferred_type.scalar_dtype == "int"
+        # Check that it's 0-dimensional (scalar)
+        assert len(mul_expr.inferred_type.shape.elements) == 0
     
     def test_division(self):
         gelb_code = minimal_gelb_program("const real result = 10.0 / 3.0;")
@@ -62,8 +70,10 @@ class TestBinaryOperationTypeInference:
         div_expr = const_stmt.value
         
         assert hasattr(div_expr, 'inferred_type')
-        assert isinstance(div_expr.inferred_type, ScalarDataType_N)
+        assert isinstance(div_expr.inferred_type, ArrayDataType_N)
         assert div_expr.inferred_type.scalar_dtype == "real"
+        # Check that it's 0-dimensional (scalar)
+        assert len(div_expr.inferred_type.shape.elements) == 0
     
     def test_power(self):
         gelb_code = minimal_gelb_program("const int result = 2^3;")
@@ -73,8 +83,10 @@ class TestBinaryOperationTypeInference:
         pow_expr = const_stmt.value
         
         assert hasattr(pow_expr, 'inferred_type')
-        assert isinstance(pow_expr.inferred_type, ScalarDataType_N)
+        assert isinstance(pow_expr.inferred_type, ArrayDataType_N)
         assert pow_expr.inferred_type.scalar_dtype == "int"
+        # Check that it's 0-dimensional (scalar)
+        assert len(pow_expr.inferred_type.shape.elements) == 0
     
     def test_comparison_less(self):
         gelb_code = minimal_gelb_program("const bool result = 1 < 2;")
@@ -85,8 +97,10 @@ class TestBinaryOperationTypeInference:
         
         # Comparison operations always return bool
         assert hasattr(less_expr, 'inferred_type')
-        assert isinstance(less_expr.inferred_type, ScalarDataType_N)
+        assert isinstance(less_expr.inferred_type, ArrayDataType_N)
         assert less_expr.inferred_type.scalar_dtype == "bool"
+        # Check that it's 0-dimensional (scalar)
+        assert len(less_expr.inferred_type.shape.elements) == 0
     
     def test_comparison_equal(self):
         gelb_code = minimal_gelb_program("const bool result = 3.14 == 3.14;")
@@ -96,8 +110,10 @@ class TestBinaryOperationTypeInference:
         eq_expr = const_stmt.value
         
         assert hasattr(eq_expr, 'inferred_type')
-        assert isinstance(eq_expr.inferred_type, ScalarDataType_N)
+        assert isinstance(eq_expr.inferred_type, ArrayDataType_N)
         assert eq_expr.inferred_type.scalar_dtype == "bool"
+        # Check that it's 0-dimensional (scalar)
+        assert len(eq_expr.inferred_type.shape.elements) == 0
     
     def test_logical_and(self):
         gelb_code = minimal_gelb_program("const bool result = true && false;")
@@ -107,8 +123,10 @@ class TestBinaryOperationTypeInference:
         and_expr = const_stmt.value
         
         assert hasattr(and_expr, 'inferred_type')
-        assert isinstance(and_expr.inferred_type, ScalarDataType_N)
+        assert isinstance(and_expr.inferred_type, ArrayDataType_N)
         assert and_expr.inferred_type.scalar_dtype == "bool"
+        # Check that it's 0-dimensional (scalar)
+        assert len(and_expr.inferred_type.shape.elements) == 0
     
     def test_logical_or(self):
         gelb_code = minimal_gelb_program("const bool result = true || false;")
@@ -118,8 +136,10 @@ class TestBinaryOperationTypeInference:
         or_expr = const_stmt.value
         
         assert hasattr(or_expr, 'inferred_type')
-        assert isinstance(or_expr.inferred_type, ScalarDataType_N)
+        assert isinstance(or_expr.inferred_type, ArrayDataType_N)
         assert or_expr.inferred_type.scalar_dtype == "bool"
+        # Check that it's 0-dimensional (scalar)
+        assert len(or_expr.inferred_type.shape.elements) == 0
     
     def test_complex_expression(self):
         gelb_code = minimal_gelb_program("const real result = (1 + 2) * 3.5 / 2.0;")
@@ -130,5 +150,7 @@ class TestBinaryOperationTypeInference:
         
         # The top-level expression should be real (due to 3.5 and 2.0)
         assert hasattr(expr, 'inferred_type')
-        assert isinstance(expr.inferred_type, ScalarDataType_N)
+        assert isinstance(expr.inferred_type, ArrayDataType_N)
         assert expr.inferred_type.scalar_dtype == "real"
+        # Check that it's 0-dimensional (scalar)
+        assert len(expr.inferred_type.shape.elements) == 0

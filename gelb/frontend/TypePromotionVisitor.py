@@ -79,10 +79,12 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         """Extract type name from DataType_N or string."""
         if isinstance(data_type, ScalarDataType_N):
             return data_type.scalar_dtype
+        elif isinstance(data_type, ArrayDataType_N):
+            # For arrays, return the base scalar type
+            return data_type.scalar_dtype
         elif isinstance(data_type, str):
             return data_type
         else:
-            # For now, we only handle scalar types
             return None
     
     def _get_common_type(self, type1, type2):
@@ -118,7 +120,14 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         Returns:
             TypePromotionNode_N: The promotion node
         """
-        target_type = ScalarDataType_N(expr.code_range, target_type_name)
+        # Create target type with same shape as source expression
+        if hasattr(expr, 'inferred_type') and isinstance(expr.inferred_type, ArrayDataType_N):
+            # Preserve the shape from the source expression
+            shape = expr.inferred_type.shape
+            target_type = ArrayDataType_N(expr.code_range, target_type_name, shape)
+        else:
+            # Fallback to scalar type (shouldn't happen after our changes)
+            target_type = ScalarDataType_N(expr.code_range, target_type_name)
         return TypePromotionNode_N(expr.code_range, expr, target_type)
     
     # Program traversal
@@ -191,8 +200,10 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         if self._needs_promotion(right_type, common_type):
             node.right = self._create_promotion(node.right, common_type)
         
-        # Update the operation's inferred type
-        node.inferred_type = ScalarDataType_N(node.code_range, common_type)
+        # Update the operation's inferred type to match new array-based system
+        # Create 0-dimensional array type for scalar result
+        empty_shape = List_N(node.code_range)
+        node.inferred_type = ArrayDataType_N(node.code_range, common_type, empty_shape)
         
         return node
     
@@ -256,8 +267,9 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         if self._needs_promotion(right_type, common_type):
             node.right = self._create_promotion(node.right, common_type)
         
-        # Comparison always returns bool
-        node.inferred_type = ScalarDataType_N(node.code_range, 'bool')
+        # Comparison always returns array[bool, ()]
+        empty_shape = List_N(node.code_range)
+        node.inferred_type = ArrayDataType_N(node.code_range, 'bool', empty_shape)
         
         return node
     

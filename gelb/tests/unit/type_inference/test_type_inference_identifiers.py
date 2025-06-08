@@ -19,7 +19,9 @@ class TestIdentifierTypeInference:
         # After constant resolution, N should be replaced with 32
         # But let's check if the multiplication has correct type
         assert hasattr(mul_expr, 'inferred_type')
-        assert isinstance(mul_expr.inferred_type, ScalarDataType_N)
+        assert isinstance(mul_expr.inferred_type, ArrayDataType_N)
+        # Check that it's 0-dimensional (scalar)
+        assert len(mul_expr.inferred_type.shape.elements) == 0
         assert mul_expr.inferred_type.scalar_dtype == "int"
     
     def test_implicit_constant_Nx(self):
@@ -41,7 +43,7 @@ class TestIdentifierTypeInference:
         # Check that Nx has been resolved and has int type
         nx_identifier = sub_expr.left
         assert hasattr(nx_identifier, 'inferred_type')
-        assert isinstance(nx_identifier.inferred_type, ScalarDataType_N)
+        assert isinstance(nx_identifier.inferred_type, ArrayDataType_N)
         assert nx_identifier.inferred_type.scalar_dtype == "int"
     
     def test_implicit_variable_x_in_initializer(self):
@@ -58,7 +60,7 @@ class TestIdentifierTypeInference:
         # x should have int type (it's a lattice coordinate)
         assert isinstance(x_identifier, Identifier_N)
         assert hasattr(x_identifier, 'inferred_type')
-        assert isinstance(x_identifier.inferred_type, ScalarDataType_N)
+        assert isinstance(x_identifier.inferred_type, ArrayDataType_N)
         assert x_identifier.inferred_type.scalar_dtype == "int"
     
     def test_array_identifier(self):

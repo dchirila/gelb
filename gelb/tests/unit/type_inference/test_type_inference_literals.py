@@ -16,10 +16,12 @@ class TestLiteralTypeInference:
         const_stmt = ast.global_constants.stmts.elements[0]
         literal = const_stmt.value
         
-        # Check that type was inferred
+        # Check that type was inferred as 0-dimensional array
         assert hasattr(literal, 'inferred_type')
-        assert isinstance(literal.inferred_type, ScalarDataType_N)
+        assert isinstance(literal.inferred_type, ArrayDataType_N)
         assert literal.inferred_type.scalar_dtype == "int"
+        # Check that it's 0-dimensional (scalar)
+        assert len(literal.inferred_type.shape.elements) == 0
     
     def test_real_literal(self):
         gelb_code = minimal_gelb_program("const real pi = 3.14159;")
@@ -29,8 +31,10 @@ class TestLiteralTypeInference:
         literal = const_stmt.value
         
         assert hasattr(literal, 'inferred_type')
-        assert isinstance(literal.inferred_type, ScalarDataType_N)
+        assert isinstance(literal.inferred_type, ArrayDataType_N)
         assert literal.inferred_type.scalar_dtype == "real"
+        # Check that it's 0-dimensional (scalar)
+        assert len(literal.inferred_type.shape.elements) == 0
     
     def test_bool_literal_true(self):
         gelb_code = minimal_gelb_program("const bool flag = true;")
@@ -40,8 +44,10 @@ class TestLiteralTypeInference:
         literal = const_stmt.value
         
         assert hasattr(literal, 'inferred_type')
-        assert isinstance(literal.inferred_type, ScalarDataType_N)
+        assert isinstance(literal.inferred_type, ArrayDataType_N)
         assert literal.inferred_type.scalar_dtype == "bool"
+        # Check that it's 0-dimensional (scalar)
+        assert len(literal.inferred_type.shape.elements) == 0
     
     def test_bool_literal_false(self):
         gelb_code = minimal_gelb_program("const bool flag = false;")
@@ -51,8 +57,10 @@ class TestLiteralTypeInference:
         literal = const_stmt.value
         
         assert hasattr(literal, 'inferred_type')
-        assert isinstance(literal.inferred_type, ScalarDataType_N)
+        assert isinstance(literal.inferred_type, ArrayDataType_N)
         assert literal.inferred_type.scalar_dtype == "bool"
+        # Check that it's 0-dimensional (scalar)
+        assert len(literal.inferred_type.shape.elements) == 0
     
     def test_array_1d_literal(self):
         gelb_code = minimal_gelb_program("const array[int, 3] vec = {1, 2, 3};")

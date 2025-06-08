@@ -37,7 +37,9 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         if isinstance(data_type, ScalarDataType_N):
             return data_type.scalar_dtype
         elif isinstance(data_type, ArrayDataType_N):
-            return f"array[{data_type.scalar_dtype}]"
+            # Return just the base type for validation purposes
+            # Shape compatibility would be checked separately if needed
+            return data_type.scalar_dtype
         elif isinstance(data_type, str):
             return data_type
         else:
@@ -45,9 +47,18 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
     
     def _types_match(self, type1, type2):
         """Check if two types match exactly."""
-        name1 = self._get_type_name(type1)
-        name2 = self._get_type_name(type2)
-        return name1 == name2
+        # For array types, we need to check both base type and shape
+        if isinstance(type1, ArrayDataType_N) and isinstance(type2, ArrayDataType_N):
+            # Check base types match
+            if type1.scalar_dtype != type2.scalar_dtype:
+                return False
+            # For now, ignore shape compatibility (future enhancement)
+            return True
+        else:
+            # Fallback to name comparison
+            name1 = self._get_type_name(type1)
+            name2 = self._get_type_name(type2)
+            return name1 == name2
     
     def _validate_arithmetic_op(self, left_type, right_type, op_name, node):
         """

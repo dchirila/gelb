@@ -12,20 +12,33 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
     Concrete visitor for inferring types of all expression elements in the AST.
     
     This visitor traverses the AST and adds a 'inferred_type' attribute to each
-    expression node containing its data type (ScalarDataType_N or ArrayDataType_N).
+    expression node containing its data type. ALL types are represented as ArrayDataType_N,
+    with scalars being 0-dimensional arrays.
     
     The type inference rules are:
-    - Literals have their obvious types (int, real, bool, etc.)
-    - Identifiers get their types from symbol tables
+    - Literals are 0-dimensional arrays of their type (e.g., int literal -> array[int, ()])
+    - Identifiers get their types from symbol tables (wrapped as arrays if needed)
     - Binary operations follow standard type promotion rules
     - Array literals have array types based on their structure
-    - Lattice selections have array types based on the lattice definition
+    - Lattice selections have array types based on the lattice definition and selection
     """
     
     def __init__(self):
         super().__init__()
         # Track current block context for symbol lookup
         self.current_block = None
+    
+    # Helper method to create scalar array types
+    def _create_scalar_array_type(self, code_range, scalar_dtype):
+        """Create a 0-dimensional array type representing a scalar."""
+        empty_shape = List_N(code_range)
+        return ArrayDataType_N(code_range, scalar_dtype, empty_shape)
+    
+    def _is_scalar_array(self, array_type):
+        """Check if an ArrayDataType_N represents a scalar (0-dimensional)."""
+        if not isinstance(array_type, ArrayDataType_N):
+            return False
+        return len(array_type.shape.elements) == 0
     
     def visitProgram_N(self, node: Program_N, ast_root_node: Program_N):
         """Visit all blocks in the program to infer types."""
@@ -81,22 +94,22 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
     # Literal type inference
     
     def visitIntLiteral_N(self, node: IntLiteral_N, ast_root_node: Program_N):
-        """Integer literals have type 'int'."""
-        node.inferred_type = ScalarDataType_N(node.code_range, "int")
+        """Integer literals have type array[int, ()]."""
+        node.inferred_type = self._create_scalar_array_type(node.code_range, "int")
         return node
     
     def visitRealLiteral_N(self, node: RealLiteral_N, ast_root_node: Program_N):
-        """Real literals have type 'real'."""
-        node.inferred_type = ScalarDataType_N(node.code_range, "real")
+        """Real literals have type array[real, ()]."""
+        node.inferred_type = self._create_scalar_array_type(node.code_range, "real")
         return node
     
     def visitBoolLiteral_N(self, node: BoolLiteral_N, ast_root_node: Program_N):
-        """Boolean literals have type 'bool'."""
-        node.inferred_type = ScalarDataType_N(node.code_range, "bool")
+        """Boolean literals have type array[bool, ()]."""
+        node.inferred_type = self._create_scalar_array_type(node.code_range, "bool")
         return node
     
     def visitStringLiteral_N(self, node: StringLiteral_N, ast_root_node: Program_N):
-        """String literals have type 'string'."""
+        """String literals have type 'string' (exception to universal array rule)."""
         node.inferred_type = ScalarDataType_N(node.code_range, "string")
         return node
     
@@ -145,10 +158,26 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         # Get type from symbol definition based on tag
         if symbol_def.tag == "constant" or symbol_def.tag == "constant definition":
             # For constants, value is ConstantDefinitionStmt_N
-            node.inferred_type = symbol_def.value.data_type
+            data_type = symbol_def.value.data_type
+            # Wrap scalar types as 0-dimensional arrays, except strings
+            if isinstance(data_type, ScalarDataType_N):
+                if data_type.scalar_dtype == "string":
+                    node.inferred_type = data_type  # Keep strings as ScalarDataType_N
+                else:
+                    node.inferred_type = self._create_scalar_array_type(node.code_range, data_type.scalar_dtype)
+            else:
+                node.inferred_type = data_type
         elif symbol_def.tag == "variable" or symbol_def.tag == "variable declaration":
             # For variables, value is VariableDeclarationStmt_N
-            node.inferred_type = symbol_def.value.data_type
+            data_type = symbol_def.value.data_type
+            # Wrap scalar types as 0-dimensional arrays, except strings
+            if isinstance(data_type, ScalarDataType_N):
+                if data_type.scalar_dtype == "string":
+                    node.inferred_type = data_type  # Keep strings as ScalarDataType_N
+                else:
+                    node.inferred_type = self._create_scalar_array_type(node.code_range, data_type.scalar_dtype)
+            else:
+                node.inferred_type = data_type
         elif symbol_def.tag == "lattice":
             # For lattices, value is LatticeInstaStmt_N
             # A lattice reference itself doesn't have a type, only selections do
@@ -157,20 +186,28 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
                 "Lattices must be accessed through selections like f.in[x,y|:]"
             )
         elif symbol_def.tag == "output variable declaration":
-            # For gauge outputs, value is VariableDeclarationStmt_N  
-            node.inferred_type = symbol_def.value.data_type
+            # For gauge outputs, value is VariableDeclarationStmt_N
+            data_type = symbol_def.value.data_type
+            # Wrap scalar types as 0-dimensional arrays, except strings
+            if isinstance(data_type, ScalarDataType_N):
+                if data_type.scalar_dtype == "string":
+                    node.inferred_type = data_type  # Keep strings as ScalarDataType_N
+                else:
+                    node.inferred_type = self._create_scalar_array_type(node.code_range, data_type.scalar_dtype)
+            else:
+                node.inferred_type = data_type
         elif symbol_def.tag == "implicit constant" or symbol_def.tag == "implicit dimension constant":
             # For implicit constants like Nx, Ny, Nz
-            node.inferred_type = ScalarDataType_N(node.code_range, "int")
+            node.inferred_type = self._create_scalar_array_type(node.code_range, "int")
         elif symbol_def.tag == "implicit variable" or symbol_def.tag == "implicit lattice coordinate":
             # For implicit variables like x, y, z
-            node.inferred_type = ScalarDataType_N(node.code_range, "int")
+            node.inferred_type = self._create_scalar_array_type(node.code_range, "int")
         else:
             # Handle any remaining cases
             if node.name in ['x', 'y', 'z']:
-                node.inferred_type = ScalarDataType_N(node.code_range, "int")
+                node.inferred_type = self._create_scalar_array_type(node.code_range, "int")
             elif node.name in ['Nx', 'Ny', 'Nz']:
-                node.inferred_type = ScalarDataType_N(node.code_range, "int")
+                node.inferred_type = self._create_scalar_array_type(node.code_range, "int")
             else:
                 raise GeLBException(
                     f"Unknown symbol type '{symbol_def.tag}' for '{node.name}'",
@@ -218,9 +255,9 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
     # Unary operation type inference
     
     def visitNotExpr_N(self, node: NotExpr_N, ast_root_node: Program_N):
-        """Logical NOT requires bool operand and returns bool."""
+        """Logical NOT requires bool operand and returns array[bool, ()]."""
         self.visit(node.value, ast_root_node)
-        node.inferred_type = ScalarDataType_N(node.code_range, "bool")
+        node.inferred_type = self._create_scalar_array_type(node.code_range, "bool")
         return node
     
     def visitUnaryMinusExpr_N(self, node: UnaryMinusExpr_N, ast_root_node: Program_N):
@@ -369,6 +406,22 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
                 "This is likely an internal compiler error"
             )
     
+    def _is_string_type(self, data_type):
+        """Check if a data type represents a string."""
+        if isinstance(data_type, ScalarDataType_N):
+            return data_type.scalar_dtype == "string"
+        elif isinstance(data_type, ArrayDataType_N):
+            return data_type.scalar_dtype == "string"
+        return False
+    
+    def _get_shape_if_array(self, expr_type):
+        """Get shape of array type, or empty list for scalars."""
+        if isinstance(expr_type, ArrayDataType_N):
+            return expr_type.shape
+        else:
+            # This shouldn't happen after our changes, but handle legacy code
+            return List_N(expr_type.code_range if hasattr(expr_type, 'code_range') else None)
+    
     def _infer_binary_op_type(self, node, ast_root_node, op_category):
         """Infer type of binary operation based on operand types."""
         # First infer types of operands
@@ -391,15 +444,18 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
             else:
                 result_type = "int"
             
-            node.inferred_type = ScalarDataType_N(node.code_range, result_type)
+            # For arithmetic ops, result shape follows broadcasting rules
+            # For now, assume both operands are scalars (0-dimensional)
+            # TODO: Implement proper broadcasting for array operations
+            node.inferred_type = self._create_scalar_array_type(node.code_range, result_type)
         
         elif op_category == "comparison":
-            # Comparison operations always return bool
-            node.inferred_type = ScalarDataType_N(node.code_range, "bool")
+            # Comparison operations always return array[bool, ()]
+            node.inferred_type = self._create_scalar_array_type(node.code_range, "bool")
         
         elif op_category == "logical":
-            # Logical operations require bool operands and return bool
-            node.inferred_type = ScalarDataType_N(node.code_range, "bool")
+            # Logical operations require bool operands and return array[bool, ()]
+            node.inferred_type = self._create_scalar_array_type(node.code_range, "bool")
         
         return node
     
@@ -439,8 +495,6 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         
         # Lattice selections have the df_type of the lattice
         # The shape depends on the selection ranges
-        # For now, assume selections preserve the lattice df_type as array
-        # TODO: Implement proper shape inference based on selection ranges
         
         # Get the df_type from lattice definition
         df_type = lattice_def.df_type
@@ -449,7 +503,23 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         else:
             base_type = "real"  # Default to real if not specified
         
-        # For now, return scalar type for single DF selection
-        # TODO: This needs to be refined based on actual selection
-        node.inferred_type = ScalarDataType_N(node.code_range, base_type)
+        # Determine shape based on DF selection
+        # The DF range is the last element in element_ranges
+        df_range = node.element_ranges[-1] if node.element_ranges else None
+        
+        # If DF range is ':', result is 1D array of size q
+        # Otherwise, it's a scalar (0-dimensional array)
+        if df_range is not None and isinstance(df_range, Range_N) and df_range.low is None and df_range.high is None:
+            # Full DF selection: f.in[x,y|:] returns array of size q
+            q_value = lattice_def.q
+            if isinstance(q_value, IntLiteral_N):
+                shape = IntLiteral_N(node.code_range, q_value.value)
+            else:
+                # q is an expression, use it as-is
+                shape = q_value
+            node.inferred_type = ArrayDataType_N(node.code_range, base_type, shape)
+        else:
+            # Single DF selection: f.in[x,y|0] returns scalar
+            node.inferred_type = self._create_scalar_array_type(node.code_range, base_type)
+        
         return node

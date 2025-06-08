@@ -28,7 +28,7 @@ class TestPaintNodesTypeInference:
         # After constant resolution, N is replaced with 32
         # So we have 32 / 2 which might be further evaluated
         assert hasattr(first_range.high, 'inferred_type')
-        assert isinstance(first_range.high.inferred_type, ScalarDataType_N)
+        assert isinstance(first_range.high.inferred_type, ArrayDataType_N)
         assert first_range.high.inferred_type.scalar_dtype == "int"
     
     def test_paint_nodes_with_arithmetic_expression(self):
@@ -44,12 +44,12 @@ class TestPaintNodesTypeInference:
         
         # Check low bound (2 * 5)
         if hasattr(first_range.low, 'inferred_type'):
-            assert isinstance(first_range.low.inferred_type, ScalarDataType_N)
+            assert isinstance(first_range.low.inferred_type, ArrayDataType_N)
             assert first_range.low.inferred_type.scalar_dtype == "int"
         
         # Check high bound (N - 10)
         if hasattr(first_range.high, 'inferred_type'):
-            assert isinstance(first_range.high.inferred_type, ScalarDataType_N)
+            assert isinstance(first_range.high.inferred_type, ArrayDataType_N)
             assert first_range.high.inferred_type.scalar_dtype == "int"
     
     def test_paint_nodes_with_constant_ranges(self):
@@ -74,11 +74,11 @@ class TestPaintNodesTypeInference:
         
         # Check that the low bound (0) has int type
         assert hasattr(second_range.low, 'inferred_type')
-        assert isinstance(second_range.low.inferred_type, ScalarDataType_N)
+        assert isinstance(second_range.low.inferred_type, ArrayDataType_N)
         assert second_range.low.inferred_type.scalar_dtype == "int"
         
         # Check that WALL_HEIGHT has been resolved and has int type
         # After constant resolution, WALL_HEIGHT might be replaced with 5
         if hasattr(second_range.high, 'inferred_type'):
-            assert isinstance(second_range.high.inferred_type, ScalarDataType_N)
+            assert isinstance(second_range.high.inferred_type, ArrayDataType_N)
             assert second_range.high.inferred_type.scalar_dtype == "int"
