@@ -153,9 +153,10 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
                 symbol_def = parent_table.get_symbol_definition(node.name)
             
             if symbol_def is None:
-                raise GeLBException(
-                    f"Undefined identifier '{node.name}'",
-                    f"at {node.code_range}"
+                raise GeLBExTypeError(
+                    node,
+                    f"Identifier '{node.name}' is not defined",
+                    f"You need to declare '{node.name}' before using it, or check if it's spelled correctly"
                 )
         
         # Get type from symbol definition based on tag
@@ -172,9 +173,10 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         elif symbol_def.tag == "lattice":
             # For lattices, value is LatticeInstaStmt_N
             # A lattice reference itself doesn't have a type, only selections do
-            raise GeLBException(
-                f"Cannot infer type of lattice '{node.name}' directly",
-                "Lattices must be accessed through selections like f.in[x,y|:]"
+            raise GeLBExTypeError(
+                node,
+                f"Cannot use lattice '{node.name}' directly as a value",
+                f"Lattices must be accessed through selections like '{node.name}.in[x,y|:]' or '{node.name}.out[x,y|:]'"
             )
         elif symbol_def.tag == "output variable declaration":
             # For gauge outputs, value is VariableDeclarationStmt_N
@@ -194,9 +196,10 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
             elif node.name in ['Nx', 'Ny', 'Nz']:
                 node.inferred_type = self._create_scalar_array_type(node.code_range, "int")
             else:
-                raise GeLBException(
-                    f"Unknown symbol type '{symbol_def.tag}' for '{node.name}'",
-                    "This is likely an internal compiler error"
+                raise GeLBExTypeError(
+                    node,
+                    f"Symbol '{node.name}' has unrecognized type '{symbol_def.tag}'",
+                    "This appears to be an internal compiler error. Please report this issue."
                 )
         return node
     
