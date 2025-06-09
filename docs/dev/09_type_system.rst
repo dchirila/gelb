@@ -137,6 +137,27 @@ Example:
     const int scalar = 5;
     const array[int, 3] result = scalar + vec;  // Broadcasting: scalar → array shape
 
+**Scalar-to-Array Assignment Broadcasting:**
+
+When assigning a scalar to an array variable, the scalar is broadcast to fill the entire array:
+
+- **Scalar → Array Assignment**: Creates BroadcastNode_N in AST
+- **Type Promotion + Broadcasting**: Type promotion occurs first, then broadcasting
+- **Backend Optimization**: Allows efficient target-specific code generation
+
+Examples:
+
+.. code-block:: gelb
+
+    array[real, 5] data;
+    data = 3.14;        // Direct broadcast: real scalar → real array
+    
+    array[real, {2, 3}] matrix;
+    matrix = 42;        // Type promotion + broadcast: int → real → broadcast
+    
+    array[bool, 8] flags;
+    flags = true;       // Direct broadcast: bool scalar → bool array
+
 **Key Implementation Methods:**
 
 .. code-block:: python
@@ -290,6 +311,40 @@ The compiler inserts ``TypePromotionNode_N`` in the AST wherever implicit promot
       right: RealLiteral_N(2.5)
     }
 
+BroadcastNode_N  
+---------------
+
+The compiler inserts ``BroadcastNode_N`` in the AST for scalar-to-array assignment operations:
+
+.. code-block::
+
+    // Source: array[real, 5] data; data = 42;
+    // AST after type inference:
+    VariableAssignmentStmt_N {
+      lhs: Identifier_N("data") 
+      rhs: IntLiteral_N(42)
+    }
+
+    // AST after type promotion:
+    VariableAssignmentStmt_N {
+      lhs: Identifier_N("data")
+      rhs: BroadcastNode_N {
+        scalar_expr: TypePromotionNode_N {
+          expr: IntLiteral_N(42)
+          target_type: ArrayDataType_N("real", List_N([]))
+        }
+        target_array_type: ArrayDataType_N("real", IntLiteral_N(5))
+        inferred_type: ArrayDataType_N("real", IntLiteral_N(5))
+      }
+    }
+
+**Key Design Principles:**
+
+1. **Efficiency**: Preserves scalar value rather than expanding to full array
+2. **Backend Optimization**: Enables target-specific optimized code generation
+3. **Type Safety**: Integrates with type promotion system for safe conversions
+4. **Compiler Pipeline**: Works seamlessly with existing type inference and validation
+
 TypePromotionVisitor Implementation
 ===================================
 
@@ -310,6 +365,12 @@ Key Methods
 ``_create_promotion(expr, target_type_name)``
   Create a TypePromotionNode_N wrapping the expression
 
+``_is_scalar_array(array_type)``
+  Check if a type represents a scalar (0-dimensional array)
+
+``_create_broadcast(scalar_expr, target_array_type)``
+  Create a BroadcastNode_N for scalar-to-array assignment
+
 Promotion Contexts
 ------------------
 
@@ -317,9 +378,35 @@ The visitor handles promotion in these contexts:
 
 1. **Arithmetic Binary Operations** - Both operands promoted to common type
 2. **Comparison Operations** - Both operands promoted to common type
-3. **Assignment Statements** - RHS promoted to LHS type
+3. **Assignment Statements** - RHS promoted to LHS type, with broadcasting for scalar→array
 4. **Constant Definitions** - Value promoted to declared type
 5. **Array Literals** - All elements promoted to common type
+
+**Broadcasting in Assignment Statements:**
+
+When the TypePromotionVisitor encounters a scalar-to-array assignment:
+
+1. **Type Promotion First**: Scalar is promoted to the array's element type if needed
+2. **Broadcasting Second**: Promoted scalar is wrapped in BroadcastNode_N
+3. **Preserves Efficiency**: Scalar value is not expanded in the frontend
+4. **Backend Flexibility**: Allows backends to choose optimal implementation strategy
+
+.. code-block:: python
+
+    def _handle_assignment(self, node, ast_root_node):
+        lhs_type = node.lhs.inferred_type
+        rhs_type = node.rhs.inferred_type
+        
+        lhs_is_scalar = self._is_scalar_array(lhs_type)
+        rhs_is_scalar = self._is_scalar_array(rhs_type)
+        
+        if not lhs_is_scalar and rhs_is_scalar:
+            # Scalar-to-array broadcasting case
+            node.rhs = self._create_broadcast(node.rhs, lhs_type)
+        elif lhs_is_scalar and rhs_is_scalar:
+            # Regular scalar assignment with promotion
+            if self._needs_promotion(rhs_type, lhs_type):
+                node.rhs = self._create_promotion(node.rhs, lhs_type.element_dtype)
 
 Type Validation System
 ======================
@@ -364,6 +451,10 @@ Assignment Validation
 **4. Array Selection Assignment:**
 - RHS type must match array element type (after promotion)
 
+**5. Broadcast Operations:**
+- BroadcastNode_N operations are always valid (created by TypePromotionVisitor)
+- Scalar expression within broadcast is validated recursively
+
 TypeValidationVisitor Implementation
 ====================================
 
@@ -381,6 +472,9 @@ Key Methods
 
 ``_validate_assignment(lhs_type, rhs_type, node)``
   Validate assignment compatibility
+
+``visitBroadcastNode_N(node, ast_root_node)``
+  Validate broadcast operations (always valid, validates scalar expression)
 
 Error Reporting
 ===============
@@ -442,12 +536,22 @@ Test Categories
 - Assignment promotion (real x = 5 → real x = real(5))
 - Array literal promotion
 - Nested expression promotion
+- Broadcasting tests (scalar → array assignment)
+- Broadcasting with type promotion (int → real → broadcast)
 
 **Type Validation Tests** (``gelb/tests/unit/type_validation/``):
 - Valid operations after promotion
 - Invalid logical operations (int && int)
 - Invalid assignments (real → int)
 - Type mismatch detection
+- Broadcasting validation (BroadcastNode_N always valid)
+- Scalar expression validation within broadcasts
+
+**Midware Tests** (``gelb/tests/unit/midware/``):
+- Constant folding within broadcast nodes
+- Broadcast preservation during optimization
+- Type promotion integration with constant folding
+- Broadcast with complex scalar expressions
 
 Test Utilities
 --------------

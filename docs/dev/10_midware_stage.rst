@@ -68,6 +68,24 @@ Constant folding evaluates constant expressions at compile time, replacing them 
     const int A = 5;               // Literal: IntLiteral_N(5)
     const real B = 2.0;            // Literal: RealLiteral_N(2.0)
 
+**Broadcasting Support:**
+
+Constant folding fully supports broadcasting operations introduced by the Frontend:
+
+* **BroadcastNode_N**: Scalar expressions within broadcast nodes are folded when possible
+* **Type Promotion Integration**: Folding respects type promotion within broadcast operations
+* **Efficiency Preservation**: Broadcast nodes preserve their scalar values after folding
+
+.. code-block:: gelb
+
+    // Before constant folding:
+    array[real, 5] data;
+    data = 2 + 3;  // BroadcastNode_N with Add_N(2, 3) as scalar
+    
+    // After constant folding:
+    array[real, 5] data;
+    data = 5;      // BroadcastNode_N with IntLiteral_N(5) as scalar
+
 **Implementation:** ``gelb/midware/ConstantFoldingVisitor.py``
 
 Arithmetic Safety Analysis
@@ -121,6 +139,12 @@ The ``ConstantFoldingVisitor`` class uses the visitor pattern to traverse the AS
         def visitAdd_N(self, node: Add_N, ast_root_node: Program_N):
             """Fold addition operations."""
             return self._handle_arithmetic_binary_op(node, ast_root_node, self._evaluate_add)
+        
+        def visitBroadcastNode_N(self, node: BroadcastNode_N, ast_root_node: Program_N):
+            """Fold expressions within broadcast operations."""
+            # Fold the scalar expression (preserving broadcast structure)
+            node.scalar_expr = self.visit(node.scalar_expr, ast_root_node)
+            return node
         
         def _handle_arithmetic_binary_op(self, node, ast_root_node, evaluator):
             # Visit children first (bottom-up processing)

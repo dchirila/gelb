@@ -120,13 +120,21 @@ Type System Visitors
 
 **TypePromotionVisitor**
 
-*Purpose:* Inserts ``TypePromotionNode_N`` for implicit conversions
+*Purpose:* Inserts ``TypePromotionNode_N`` for implicit conversions and ``BroadcastNode_N`` for scalar-to-array assignments
 
 *Key Features:*
 - Implements type promotion hierarchy (bool → int → real)
 - Handles arithmetic, comparison, and assignment promotions
+- Creates broadcast nodes for scalar-to-array assignments (e.g., ``array = scalar``)
+- Integrates type promotion with broadcasting for efficient code generation
 - Makes implicit conversions explicit in AST
 - Prepares AST for type validation
+
+*Broadcasting Implementation:*
+- Detects scalar-to-array assignment patterns
+- Applies type promotion first (if needed), then broadcasting
+- Preserves scalar values for backend optimization
+- Supports all array dimensions (1D, 2D, 3D, 4D)
 
 *Dependencies:* Type inference completed
 
@@ -134,15 +142,22 @@ Type System Visitors
 
 **TypeValidationVisitor**
 
-*Purpose:* Validates type compatibility after promotions
+*Purpose:* Validates type compatibility after promotions and broadcasting
 
 *Key Features:*
 - Enforces type rules for all operations
 - Validates assignment compatibility
 - Ensures logical operations use bool types only
+- Validates broadcast operations (always valid since created by TypePromotionVisitor)
+- Recursively validates scalar expressions within broadcast nodes
 - Provides clear error messages with source locations
 
-*Dependencies:* Type promotion applied
+*Broadcasting Validation:*
+- ``BroadcastNode_N`` operations are considered always valid
+- Validates the inner scalar expression recursively
+- Ensures type consistency between scalar and target array element type
+
+*Dependencies:* Type promotion and broadcasting applied
 
 *Location:* ``gelb/frontend/TypeValidationVisitor.py``
 

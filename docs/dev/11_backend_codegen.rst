@@ -154,6 +154,79 @@ GeLB expressions are mapped to Fortran equivalents:
 - **Array selections** → Fortran array indexing
 - **Function calls** → Fortran function invocations
 - **Type promotions** → Fortran type conversions
+- **Broadcasting operations** → Fortran array assignment with scalar values
+
+Broadcasting Translation
+-----------------------
+
+**Status**: 🚧 **PENDING IMPLEMENTATION**
+
+GeLB's ``BroadcastNode_N`` enables efficient scalar-to-array assignment translation:
+
+.. code-block:: gelb
+
+    // GeLB source
+    array[real, {64, 32}] density;
+    density = 1.0;
+
+**Fortran Translation:**
+
+.. code-block:: fortran
+
+    ! Efficient Fortran broadcast
+    real(kind=8), allocatable :: density(:,:)
+    allocate(density(64, 32))
+    density(:,:) = 1.0d0
+
+**C++ Translation:**
+
+.. code-block:: cpp
+
+    // Efficient C++ broadcast using std::fill
+    std::vector<std::vector<double>> density(64, std::vector<double>(32));
+    for (auto& row : density) {
+        std::fill(row.begin(), row.end(), 1.0);
+    }
+
+**OpenCL Translation:**
+
+.. code-block:: c
+
+    // GPU kernel for broadcast
+    __kernel void broadcast_fill(__global float* density, float value) {
+        int idx = get_global_id(0);
+        density[idx] = value;
+    }
+
+**Key Backend Advantages:**
+
+1. **Fortran**: Native array assignment syntax (``array(:,:) = value``)
+2. **C/C++**: Optimized with ``memset`` for numeric types or ``std::fill``
+3. **GPU**: Embarrassingly parallel kernel operations
+4. **SIMD**: Vector instruction utilization for performance
+
+**Implementation Strategy:**
+
+.. code-block:: python
+
+    def visitBroadcastNode_N(self, node: BroadcastNode_N, ast_root_node):
+        """Generate efficient broadcast code for target platform."""
+        scalar_code = self.visit(node.scalar_expr, ast_root_node)
+        target_type = node.target_array_type
+        
+        if self.target == "fortran":
+            return f"{self.get_array_name()} = {scalar_code}"
+        elif self.target == "cpp":
+            return self.generate_cpp_fill(scalar_code)
+        elif self.target == "opencl":
+            return self.generate_gpu_kernel(scalar_code)
+
+**Benefits for Backend Optimization:**
+
+- **No Array Expansion**: Scalar value preserved through entire pipeline
+- **Target-Specific**: Each backend can choose optimal implementation
+- **Memory Efficient**: Avoids creating temporary arrays
+- **Performance**: Leverages platform-specific optimizations
 
 Future Backend Targets
 ======================
@@ -242,6 +315,8 @@ Creating a New Backend
    - Expressions (arithmetic, logical, comparisons)
    - Statements (assignments, lattice operations)
    - Literals and identifiers
+   - Type promotions (TypePromotionNode_N)
+   - Broadcasting operations (BroadcastNode_N)
 
 4. **Implement Code Templates:**
    - Variable declarations

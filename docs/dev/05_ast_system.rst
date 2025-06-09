@@ -108,6 +108,7 @@ All inherit from **UnaryExpr_N** with a ``value`` operand:
 * **RectSelOfLatticeOutDFs_N** - Lattice output selections  
 * **RectSelOfArrayElems_N** - Array element selections
 * **TypePromotionNode_N** - Implicit type conversions (inserted by TypePromotionVisitor)
+* **BroadcastNode_N** - Scalar-to-array broadcasting operations (inserted by TypePromotionVisitor)
 
 Statement Nodes
 ----------------
@@ -149,6 +150,39 @@ Utility Nodes
   Generic container for ordered collections of AST nodes
   
   * ``elements`` - List of child nodes
+
+**BroadcastNode_N**
+  Represents scalar-to-array broadcasting operations in the AST
+  
+  * ``scalar_expr`` - The scalar expression to broadcast
+  * ``target_array_type`` - The target array type with shape information
+  * ``inferred_type`` - Set to target_array_type during creation
+  
+  **Purpose:**
+  BroadcastNode_N enables efficient scalar-to-array assignment (e.g., ``array = scalar``) by preserving the scalar value in the AST rather than expanding it to a full array. This allows backends to generate optimized code using target language features like Fortran's ``array(:) = value``, C's ``memset``, or NumPy's ``np.full()``.
+  
+  **Creation:**
+  Created automatically by TypePromotionVisitor when detecting scalar-to-array assignment patterns. The visitor handles type promotion first (if needed), then wraps the result in a broadcast operation.
+  
+  **Example:**
+  
+  .. code-block:: gelb
+  
+      array[real, 5] data;
+      data = 42;  // int promoted to real, then broadcast to array shape
+  
+  **AST Representation:**
+  
+  .. code-block::
+  
+      BroadcastNode_N {
+        scalar_expr: TypePromotionNode_N {
+          expr: IntLiteral_N(42)
+          target_type: ArrayDataType_N("real", List_N([]))
+        }
+        target_array_type: ArrayDataType_N("real", IntLiteral_N(5))
+        inferred_type: ArrayDataType_N("real", IntLiteral_N(5))
+      }
 
 Code Range Tracking
 ====================
@@ -238,6 +272,8 @@ When extending AST nodes with new information:
 * ``symbol_defs`` - Symbol table references (blocks)
 * ``resolved_value`` - Compile-time constant values
 * ``target_type`` - Type promotion information
+* ``scalar_expr`` - Scalar expression in broadcast operations
+* ``target_array_type`` - Target array type for broadcasting
 
 AST Debugging and Inspection
 =============================
