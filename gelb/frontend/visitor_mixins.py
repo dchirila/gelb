@@ -125,9 +125,11 @@ class ArrayLiteralProcessingMixin:
             The processed node
         """
         if not node.value.elements:
-            raise GeLBException(
-                "Cannot process empty array literal",
-                "Array literals must contain at least one element"
+            from gelb.utils.exceptions import GeLBExTypeError
+            raise GeLBExTypeError(
+                node,
+                "Array literal cannot be empty",
+                "Array literals must contain at least one element. Use: [1, 2, 3] instead of []"
             )
         
         # Process all elements recursively

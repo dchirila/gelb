@@ -170,7 +170,7 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
             data_type = symbol_def.value.data_type
             # All data types are now ArrayDataType_N (scalars are 0D arrays)
             node.inferred_type = data_type
-        elif symbol_def.tag == "lattice":
+        elif symbol_def.tag == "lattice" or symbol_def.tag == "lattice instance":
             # For lattices, value is LatticeInstaStmt_N
             # A lattice reference itself doesn't have a type, only selections do
             raise GeLBExTypeError(
@@ -293,9 +293,10 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         # Get base type from array
         array_type = symbol_def.data_type if hasattr(symbol_def, 'data_type') else symbol_def.value.data_type
         if not isinstance(array_type, ArrayDataType_N):
-            raise GeLBException(
-                f"'{array_name_str}' is not an array",
-                f"at {node.code_range}"
+            raise GeLBExTypeError(
+                node,
+                f"Cannot index '{array_name_str}' because it is not an array",
+                f"Only arrays can be indexed with []. '{array_name_str}' appears to be a scalar or other non-indexable type"
             )
         
         # Infer type based on selection ranges
@@ -310,9 +311,18 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         
         # Check for too many indices before proceeding
         if len(node.element_ranges.elements) > len(original_dimensions):
-            raise GeLBException(
-                f"Too many indices: array has {len(original_dimensions)} dimensions but {len(node.element_ranges.elements)} indices provided",
-                f"at {node.code_range}"
+            # Determine user-friendly description
+            if len(original_dimensions) == 0:
+                type_description = "scalar"
+                hint = f"'{array_name_str}' is a scalar value and cannot be indexed. Only arrays can be indexed with []"
+            else:
+                type_description = f"{len(original_dimensions)}D array"
+                hint = f"Remove {len(node.element_ranges.elements) - len(original_dimensions)} index(es) to match the array dimensions"
+            
+            raise GeLBExTypeError(
+                node,
+                f"Cannot index {type_description} '{array_name_str}' with {len(node.element_ranges.elements)} indices",
+                hint
             )
         
         # Count how many ranges select single elements vs ranges
@@ -571,9 +581,10 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
                     break
         
         if lattice_def is None:
-            raise GeLBException(
-                f"Undefined lattice '{lattice_name}'",
-                f"at {node.code_range}"
+            raise GeLBExTypeError(
+                node,
+                f"Lattice '{lattice_name}' is not defined",
+                f"You need to declare the lattice '{lattice_name}' in the lattices block before using it"
             )
         
         # Lattice selections have the df_type of the lattice

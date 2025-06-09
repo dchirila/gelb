@@ -132,6 +132,8 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor, SymbolTableUtilityMixin):
             if node.lattices is not None:
                 # trigger symbol_defs-table creation @lattices block
                 node.lattices = self.visit(node.lattices, ast_root_node)
+                # Promote lattices to Program level
+                self._promote_lattices_to_program(node.lattices, node)
 
             # BEGIN :: build global (program-wide) symbol_defs table #
             # ... add initializer-names to the program's global symbol_defs
@@ -392,4 +394,14 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor, SymbolTableUtilityMixin):
         if global_constants_block.symbol_defs:
             for symbol_def in global_constants_block.symbol_defs.symbol_defs:
                 # Add each global constant to the Program's symbol table
+                program_node.symbol_defs.append(symbol_def)
+    
+    def _promote_lattices_to_program(self, lattices_block, program_node):
+        """
+        Promote lattices from LatticesBlock to Program level.
+        This allows all blocks to access lattice references through the Program.symbol_defs hierarchy.
+        """
+        if lattices_block.symbol_defs:
+            for symbol_def in lattices_block.symbol_defs.symbol_defs:
+                # Add each lattice to the Program's symbol table
                 program_node.symbol_defs.append(symbol_def)

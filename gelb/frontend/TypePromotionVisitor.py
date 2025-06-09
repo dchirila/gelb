@@ -209,9 +209,10 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         
         # Check if operands have inferred types
         if not hasattr(node.left, 'inferred_type') or not hasattr(node.right, 'inferred_type'):
-            raise GeLBException(
-                f"Type promotion requires type inference to run first",
-                "Internal compiler error"
+            raise GeLBExTypeError(
+                node,
+                "Missing type information for type promotion",
+                "This appears to be an internal compiler error - type inference should run before type promotion"
             )
         
         left_type = node.left.inferred_type
@@ -276,9 +277,10 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         
         # Check if operands have inferred types
         if not hasattr(node.left, 'inferred_type') or not hasattr(node.right, 'inferred_type'):
-            raise GeLBException(
-                f"Type promotion requires type inference to run first",
-                "Internal compiler error"
+            raise GeLBExTypeError(
+                node,
+                "Missing type information for type promotion",
+                "This appears to be an internal compiler error - type inference should run before type promotion"
             )
         
         left_type = node.left.inferred_type
