@@ -452,48 +452,31 @@ class RectSelOfArrayElems_N(RectSel_N):
         )
 
 
-class DataType_N(Node_N):
+class ArrayDataType_N(Node_N):
     """
-    Base-class for all GeLB data-types.
+    Represents all computational data types (scalars and arrays).
+    Scalars are represented as 0-dimensional arrays with empty List_N shape.
     """
-    def __init__(self, code_range, scalar_dtype):
+    def __init__(self, code_range, element_dtype, shape):
         super().__init__(code_range)
-        self.scalar_dtype = scalar_dtype
-
-    @abstractmethod
-    def __str__(self):
-        pass
-
-
-class ScalarDataType_N(DataType_N):
-    """
-    Represents a scalar data-type (for variables & constants).
-    """
-    def __str__(self):
-        return f"(ScalarDataType {self.scalar_dtype})"
-
-    def get_children(self):
-        return set()
-
-
-class ArrayDataType_N(DataType_N):
-    """
-    Represents an array data-type (for variables & constants).
-    """
-    def __init__(self, code_range, scalar_dtype, shape):
-        super().__init__(code_range, scalar_dtype)
+        self.element_dtype = element_dtype
         self.shape = shape  # might be either Array1DLiteral_N or IntLiteral_N
 
     def __str__(self):
         return (
-            f"(ArrayDataType {self.scalar_dtype} {self.shape})"
+            f"(ArrayDataType {self.element_dtype} {self.shape})"
         )
+
+    def get_children(self):
+        # Only return shape as child since element_dtype is a string
+        # and doesn't have get_referenced_symbols method
+        return {self.shape}
 
 
 class StringType_N(Node_N):
     """
     AST node representing the string type for metadata contexts.
-    This is separate from the computational type system (ScalarDataType_N/ArrayDataType_N).
+    This is separate from the computational type system (ArrayDataType_N).
     
     Used only for:
     - simulation_description("text") statements
@@ -678,8 +661,8 @@ class TypePromotionNode_N(Expr_N):
     which helps with code generation and debugging.
     
     Examples:
-        int → real: TypePromotionNode_N(IntLiteral_N(5), ScalarDataType_N("real"))
-        bool → int: TypePromotionNode_N(BoolLiteral_N(true), ScalarDataType_N("int"))
+        int → real: TypePromotionNode_N(IntLiteral_N(5), ArrayDataType_N("real", List_N()))
+        bool → int: TypePromotionNode_N(BoolLiteral_N(true), ArrayDataType_N("int", List_N()))
     """
     def __init__(self, code_range, expr, target_type):
         super().__init__(code_range)

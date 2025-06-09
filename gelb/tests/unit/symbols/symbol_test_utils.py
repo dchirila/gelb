@@ -227,7 +227,7 @@ def get_symbol_table_valid_test_data():
            const real TAU = 0.6;
          }
          """, None,
-         "(N \"constant definition\" (ConstantDefinitionStmt (Identifier N) (ScalarDataType int) (IntLiteral 32))) (TAU \"constant definition\" (ConstantDefinitionStmt (Identifier TAU) (ScalarDataType real) (RealLiteral 0.6)))"),
+         "(N \"constant definition\" (ConstantDefinitionStmt (Identifier N) (ArrayDataType int (List )) (IntLiteral 32))) (TAU \"constant definition\" (ConstantDefinitionStmt (Identifier TAU) (ArrayDataType real (List )) (RealLiteral 0.6)))"),
         
         # Lattices block - valid cases
         ("lattices_block",
@@ -237,7 +237,7 @@ def get_symbol_table_valid_test_data():
            lattice g(3, 15, int, {32, 32, 32}, {true, true, true});
          }
          """, None,
-         "(f \"lattice instance\" (LatticeInstaStmt (Identifier f) (IntLiteral 2) (IntLiteral 9) (ScalarDataType real) (ArrayLiteral1D (IntLiteral 32) (IntLiteral 32)) (ArrayLiteral1D (BoolLiteral true) (BoolLiteral false)))) (g \"lattice instance\" (LatticeInstaStmt (Identifier g) (IntLiteral 3) (IntLiteral 15) (ScalarDataType int) (ArrayLiteral1D (IntLiteral 32) (IntLiteral 32) (IntLiteral 32)) (ArrayLiteral1D (BoolLiteral true) (BoolLiteral true) (BoolLiteral true))))"),
+         "(f \"lattice instance\" (LatticeInstaStmt (Identifier f) (IntLiteral 2) (IntLiteral 9) (ArrayDataType real (List )) (ArrayLiteral1D (IntLiteral 32) (IntLiteral 32)) (ArrayLiteral1D (BoolLiteral true) (BoolLiteral false)))) (g \"lattice instance\" (LatticeInstaStmt (Identifier g) (IntLiteral 3) (IntLiteral 15) (ArrayDataType int (List )) (ArrayLiteral1D (IntLiteral 32) (IntLiteral 32) (IntLiteral 32)) (ArrayLiteral1D (BoolLiteral true) (BoolLiteral true) (BoolLiteral true))))"),
         
         # Initializer block - valid cases
         ("initializer_block",
@@ -264,7 +264,7 @@ def get_symbol_table_valid_test_data():
            rho = f.in[x | 0];
          }
          """, "f",
-         "(rho \"output variable declaration\" (VariableDeclarationStmt (Identifier rho) (ScalarDataType real)))"),
+         "(rho \"output variable declaration\" (VariableDeclarationStmt (Identifier rho) (ArrayDataType real (List ))))"),
         
         # Node classes block - valid cases  
         ("node_classes_block",

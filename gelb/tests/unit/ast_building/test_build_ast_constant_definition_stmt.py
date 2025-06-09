@@ -13,7 +13,7 @@ def test_scalar_int():
     assert str(ast) == (
             "(ConstantDefinitionStmt"
             " (Identifier LENGTH)"
-            " (ScalarDataType int)"
+            " (ArrayDataType int (List ))"
             " (IntLiteral 32)"
             ")"
     )
@@ -27,7 +27,7 @@ def test_1d_array_real32_init_with_scalar():
     assert str(ast) == (
             "(ConstantDefinitionStmt"
             " (Identifier DFS)"
-            " (ArrayDataType (ScalarDataType real32) (IntLiteral 9))"
+            " (ArrayDataType real32 (IntLiteral 9))"
             " (IntLiteral 1)"
             ")"
     )
@@ -41,7 +41,7 @@ def test_1d_array_real32_init_with_array_lit():
     assert str(ast) == (
         "(ConstantDefinitionStmt"
         " (Identifier TMP)"
-        " (ArrayDataType (ScalarDataType real32) (IntLiteral 3))"
+        " (ArrayDataType real32 (IntLiteral 3))"
         " (ArrayLiteral1D (IntLiteral 1) (IntLiteral 0) (IntLiteral 29))"
         ")"
     )
@@ -56,7 +56,7 @@ def test_2d_array_real_init_with_2d_array_lit():
         "(ConstantDefinitionStmt"
         " (Identifier W)"
         " (ArrayDataType"
-            " (ScalarDataType real)"
+            " real"
             " (ArrayLiteral1D (IntLiteral 2) (IntLiteral 2))"
         ")"
         " (ArrayLiteral2D"
@@ -76,7 +76,7 @@ def test_3d_array_real_init_with_3d_array_lit():
         "(ConstantDefinitionStmt"
         " (Identifier Q)"
         " (ArrayDataType"
-        " (ScalarDataType real)"
+        " real"
         " (ArrayLiteral1D (IntLiteral 2) (IntLiteral 2) (IntLiteral 2))"
         ")"
         " (ArrayLiteral3D"

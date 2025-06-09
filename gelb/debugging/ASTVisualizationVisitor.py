@@ -108,7 +108,7 @@ class ASTVisualizationVisitor(ASTBaseVisitor):
             return 'lightpink'
         
         # Data types - Cyan
-        elif any(x in node_type for x in ['DataType', 'ScalarDataType', 'ArrayDataType']):
+        elif any(x in node_type for x in ['ArrayDataType']):
             return 'lightcyan'
         
         # Default - Light gray
@@ -152,9 +152,9 @@ class ASTVisualizationVisitor(ASTBaseVisitor):
             # Operator nodes
             return f"{display_type}\\n{node.operator}"
         
-        elif hasattr(node, 'scalar_dtype'):
-            # ScalarDataType and ArrayDataType nodes
-            return f"{display_type}\\n{node.scalar_dtype}"
+        elif hasattr(node, 'element_dtype'):
+            # ArrayDataType nodes
+            return f"{display_type}\\n{node.element_dtype}"
         
         else:
             # Generic nodes - just show type

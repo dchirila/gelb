@@ -163,7 +163,7 @@ class TestTypeValidationErrors:
             validate_types(ast)
         
         assert "non-numeric type" in str(exc_info.value)
-        assert "Arithmetic operations require numeric types" in str(exc_info.value)
+        assert "Arithmetic operations require" in str(exc_info.value)
     
     def test_unary_minus_non_numeric(self):
         """Test unary minus with non-numeric operand fails."""

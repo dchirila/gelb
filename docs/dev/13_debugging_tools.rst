@@ -90,7 +90,7 @@ Visual Design
     - Literal values for ``IntLiteral``, ``StringLiteral``, etc.
     - Identifier names for ``Identifier`` nodes
     - Operators for expression nodes (``+``, ``-``, ``*``, ``/``)
-    - Data types for ``ScalarDataType`` nodes (e.g., ``int``, ``float``)
+    - Data types for ``ArrayDataType`` nodes (e.g., ``int``, ``real``)
     - Range bounds for ``Range`` nodes (e.g., ``0:Nx-1``)
 
 **Color Coding**

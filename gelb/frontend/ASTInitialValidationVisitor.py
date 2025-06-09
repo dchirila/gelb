@@ -21,23 +21,29 @@ class ASTInitialValidationVisitor(ASTBaseVisitor):
         for field in node.elements:
             self.visit(field, ast_root_node)
 
-    # def visitScalarDataType_N(
-    #         self,
-    #         node: ScalarDataType_N,
-    #         ast_root_node: Program_N
-    # ):
-    #     supported_scalar_types = [
-    #         'bool',  # boolean
-    #         'int64', 'int32', 'int16', 'int8', 'int',  # integer
-    #         'real64', 'real32', 'real16', 'real'  # real
-    #     ]
-    #     if node.data_type not in supported_scalar_types:
-    #         raise TypeError(
-    #             f"<<<GeLB-Error>>> {str(node.data_type)} is not a valid"
-    #             f" scalar data-type!"
-    #             f"\nHint: you can use one of the following values: "
-    #             f"{supported_scalar_types}"
-    #         )
+    def visitArrayDataType_N(
+            self,
+            node: ArrayDataType_N,
+            ast_root_node: Program_N
+    ):
+        """Validate that array data types use supported scalar type names."""
+        supported_scalar_types = [
+            'bool',  # boolean
+            'int64', 'int32', 'int16', 'int8', 'int',  # integer
+            'real64', 'real32', 'real16', 'real'  # real
+        ]
+        
+        if node.element_dtype not in supported_scalar_types:
+            from gelb.utils.exceptions import GeLBException
+            raise GeLBException(
+                f"'{node.element_dtype}' is not a valid element data type",
+                f"Supported types: {', '.join(supported_scalar_types)}"
+            )
+        
+        # Continue validation for child nodes (shape)
+        for child in node.get_children():
+            if child is not None:
+                self.visit(child, ast_root_node)
 
     # def visitIntLiteral_N(
     #         self,
@@ -207,19 +213,7 @@ class ASTInitialValidationVisitor(ASTBaseVisitor):
     ):
         raise NotImplementedError()
 
-    def visitScalarDataType_N(
-            self,
-            node: ScalarDataType_N,
-            ast_root_node: Program_N
-    ):
-        raise NotImplementedError()
 
-    def visitArrayDataType_N(
-            self,
-            node: ArrayDataType_N,
-            ast_root_node: Program_N
-    ):
-        raise NotImplementedError()
 
     def visitMul_N(
             self,

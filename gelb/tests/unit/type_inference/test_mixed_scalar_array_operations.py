@@ -30,7 +30,7 @@ class TestScalarArrayArithmeticOperations:
         assert isinstance(add_expr.inferred_type, ArrayDataType_N)
         
         # Result should have the shape of the array operand (1D with size 3)
-        assert add_expr.inferred_type.scalar_dtype == "int"
+        assert add_expr.inferred_type.element_dtype == "int"
         shape = add_expr.inferred_type.shape
         assert isinstance(shape, IntLiteral_N)
         assert shape.value == 3
@@ -64,7 +64,7 @@ class TestScalarArrayArithmeticOperations:
         assert isinstance(add_expr.inferred_type, ArrayDataType_N)
         
         # Result should have the shape of the array operand (1D with size 4)
-        assert add_expr.inferred_type.scalar_dtype == "real"
+        assert add_expr.inferred_type.element_dtype == "real"
         shape = add_expr.inferred_type.shape
         assert isinstance(shape, IntLiteral_N)
         assert shape.value == 4
@@ -98,7 +98,7 @@ class TestScalarArrayArithmeticOperations:
         assert isinstance(mul_expr.inferred_type, ArrayDataType_N)
         
         # Result should have the shape of the array operand (2D with shape {2, 3})
-        assert mul_expr.inferred_type.scalar_dtype == "int"
+        assert mul_expr.inferred_type.element_dtype == "int"
         shape = mul_expr.inferred_type.shape
         assert isinstance(shape, Array1DLiteral_N)
         assert len(shape.value.elements) == 2
@@ -134,7 +134,7 @@ class TestScalarArrayArithmeticOperations:
         assert isinstance(div_expr.inferred_type, ArrayDataType_N)
         
         # Result should have the shape of the array operand (2D with shape {3, 2})
-        assert div_expr.inferred_type.scalar_dtype == "real"
+        assert div_expr.inferred_type.element_dtype == "real"
         shape = div_expr.inferred_type.shape
         assert isinstance(shape, Array1DLiteral_N)
         assert len(shape.value.elements) == 2
@@ -161,7 +161,7 @@ class TestScalarArrayTypePromotion:
         assert isinstance(add_expr.inferred_type, ArrayDataType_N)
         
         # Result should be promoted to real and have array shape
-        assert add_expr.inferred_type.scalar_dtype == "real"
+        assert add_expr.inferred_type.element_dtype == "real"
         shape = add_expr.inferred_type.shape
         assert isinstance(shape, IntLiteral_N)
         assert shape.value == 3
@@ -171,11 +171,11 @@ class TestScalarArrayTypePromotion:
         array_operand = add_expr.right  # real array
         
         # Scalar is int (0D)
-        assert scalar_operand.inferred_type.scalar_dtype == "int"
+        assert scalar_operand.inferred_type.element_dtype == "int"
         assert len(scalar_operand.inferred_type.shape.elements) == 0
         
         # Array is real (1D)
-        assert array_operand.inferred_type.scalar_dtype == "real"
+        assert array_operand.inferred_type.element_dtype == "real"
         assert isinstance(array_operand.inferred_type.shape, IntLiteral_N)
     
     def test_real_array_multiply_int_scalar_promotes_to_real(self):
@@ -194,7 +194,7 @@ class TestScalarArrayTypePromotion:
         assert isinstance(mul_expr.inferred_type, ArrayDataType_N)
         
         # Result should be promoted to real and have 2D array shape
-        assert mul_expr.inferred_type.scalar_dtype == "real"
+        assert mul_expr.inferred_type.element_dtype == "real"
         shape = mul_expr.inferred_type.shape
         assert isinstance(shape, Array1DLiteral_N)
         assert len(shape.value.elements) == 2
@@ -221,7 +221,7 @@ class TestScalarArrayComparisonOperations:
         assert isinstance(less_expr.inferred_type, ArrayDataType_N)
         
         # Result should be bool array with same shape as array operand
-        assert less_expr.inferred_type.scalar_dtype == "bool"
+        assert less_expr.inferred_type.element_dtype == "bool"
         # Note: For comparison ops, current implementation returns scalar bool
         # This test documents the expected behavior for future broadcasting
         
@@ -241,7 +241,7 @@ class TestScalarArrayComparisonOperations:
         assert isinstance(ge_expr.inferred_type, ArrayDataType_N)
         
         # Result should be bool (current behavior is scalar bool)
-        assert ge_expr.inferred_type.scalar_dtype == "bool"
+        assert ge_expr.inferred_type.element_dtype == "bool"
 
 
 class TestScalarArrayLogicalOperations:
@@ -263,18 +263,18 @@ class TestScalarArrayLogicalOperations:
         assert isinstance(and_expr.inferred_type, ArrayDataType_N)
         
         # Result should be bool (current behavior may be scalar)
-        assert and_expr.inferred_type.scalar_dtype == "bool"
+        assert and_expr.inferred_type.element_dtype == "bool"
         
         # Check operand types
         scalar_operand = and_expr.left  # bool scalar
         array_operand = and_expr.right  # bool array
         
         # Scalar should be 0-dimensional bool
-        assert scalar_operand.inferred_type.scalar_dtype == "bool"
+        assert scalar_operand.inferred_type.element_dtype == "bool"
         assert len(scalar_operand.inferred_type.shape.elements) == 0
         
         # Array should be 1-dimensional bool
-        assert array_operand.inferred_type.scalar_dtype == "bool"
+        assert array_operand.inferred_type.element_dtype == "bool"
         assert isinstance(array_operand.inferred_type.shape, IntLiteral_N)
         assert array_operand.inferred_type.shape.value == 3
 
@@ -299,7 +299,7 @@ class TestComplexScalarArrayExpressions:
         assert isinstance(add_expr.inferred_type, ArrayDataType_N)
         
         # Final result should be real array with shape of vec
-        assert add_expr.inferred_type.scalar_dtype == "real"
+        assert add_expr.inferred_type.element_dtype == "real"
         shape = add_expr.inferred_type.shape
         assert isinstance(shape, IntLiteral_N)
         assert shape.value == 3
@@ -308,12 +308,12 @@ class TestComplexScalarArrayExpressions:
         mul_expr = add_expr.left
         assert isinstance(mul_expr, Mul_N)
         assert isinstance(mul_expr.inferred_type, ArrayDataType_N)
-        assert mul_expr.inferred_type.scalar_dtype == "real"
+        assert mul_expr.inferred_type.element_dtype == "real"
         
         # Right operand should be scalar2 -> real scalar (0D)
         scalar_operand = add_expr.right
         assert isinstance(scalar_operand.inferred_type, ArrayDataType_N)
-        assert scalar_operand.inferred_type.scalar_dtype == "real"
+        assert scalar_operand.inferred_type.element_dtype == "real"
         assert len(scalar_operand.inferred_type.shape.elements) == 0
     
     def test_scalar_array_with_type_promotion_chain(self):
@@ -332,7 +332,7 @@ class TestComplexScalarArrayExpressions:
         assert isinstance(add_expr.inferred_type, ArrayDataType_N)
         
         # Result should be promoted to real and have array shape
-        assert add_expr.inferred_type.scalar_dtype == "real"
+        assert add_expr.inferred_type.element_dtype == "real"
         shape = add_expr.inferred_type.shape
         assert isinstance(shape, IntLiteral_N)
         assert shape.value == 2
@@ -342,11 +342,11 @@ class TestComplexScalarArrayExpressions:
         scalar_operand = add_expr.right # real scalar
         
         # Array operand should be int array
-        assert array_operand.inferred_type.scalar_dtype == "int"
+        assert array_operand.inferred_type.element_dtype == "int"
         assert isinstance(array_operand.inferred_type.shape, IntLiteral_N)
         
         # Scalar operand should be real scalar
-        assert scalar_operand.inferred_type.scalar_dtype == "real"
+        assert scalar_operand.inferred_type.element_dtype == "real"
         assert len(scalar_operand.inferred_type.shape.elements) == 0
 
 
@@ -384,7 +384,7 @@ class TestScalarArrayBroadcastingDocumentation:
         # Principle 4: All use ArrayDataType_N universally
         for literal in [scalar_literal, array_1d_literal, array_2d_literal]:
             assert isinstance(literal.inferred_type, ArrayDataType_N)
-            assert literal.inferred_type.scalar_dtype == "int"
+            assert literal.inferred_type.element_dtype == "int"
         
         # Principle 5: Broadcasting rules (when implemented) should:
         # - Scalar + Array -> Array shape

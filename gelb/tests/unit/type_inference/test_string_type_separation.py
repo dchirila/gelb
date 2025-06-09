@@ -75,15 +75,13 @@ class TestStringTypeNotInComputationalContexts:
     # The type system validation is more of a safeguard against future grammar changes.
     
     def test_string_type_conceptual_separation(self):
-        """Test that StringType_N is conceptually separate from DataType_N hierarchy."""
+        """Test that StringType_N is conceptually separate from computational types."""
         string_type = StringType_N(None)
-        scalar_type = ScalarDataType_N(None, "int")
         array_type = ArrayDataType_N(None, "int", List_N(None))
         
-        # StringType_N should not be a DataType_N
-        assert not isinstance(string_type, DataType_N)
-        assert isinstance(scalar_type, DataType_N)
-        assert isinstance(array_type, DataType_N)
+        # StringType_N should not be an ArrayDataType_N (the only computational type)
+        assert not isinstance(string_type, ArrayDataType_N)
+        assert isinstance(array_type, ArrayDataType_N)
         
         # StringType_N should have no children (terminal node)
         assert string_type.get_children() == set()

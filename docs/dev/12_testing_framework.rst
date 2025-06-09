@@ -195,9 +195,9 @@ Use parameterized tests for systematic coverage:
 .. code-block:: python
 
     @pytest.mark.parametrize("data_type,expected", [
-        ("int", ScalarDataType_N("int")),
-        ("real", ScalarDataType_N("real")),
-        ("bool", ScalarDataType_N("bool")),
+        ("int", ArrayDataType_N("int", List_N())),
+        ("real", ArrayDataType_N("real", List_N())),
+        ("bool", ArrayDataType_N("bool", List_N())),
     ])
     def test_scalar_data_type(self, data_type, expected):
         result = parse_data_type(data_type)
@@ -222,7 +222,7 @@ Test complete pipelines with realistic scenarios:
         assign_stmt = find_assignment_statement(ast)
         assert isinstance(assign_stmt.rhs, TypePromotionNode_N)
         assert isinstance(assign_stmt.rhs.target_type, ArrayDataType_N)
-        assert assign_stmt.rhs.target_type.scalar_dtype == "real"
+        assert assign_stmt.rhs.target_type.element_dtype == "real"
         assert len(assign_stmt.rhs.target_type.shape.elements) == 0  # 0D array
 
 Error Testing
@@ -260,7 +260,7 @@ Systematically test error conditions:
         
         # Check ArrayDataType_N with 0D shape
         assert isinstance(rhs.inferred_type, ArrayDataType_N)
-        assert rhs.inferred_type.scalar_dtype == "int"
+        assert rhs.inferred_type.element_dtype == "int"
         assert isinstance(rhs.inferred_type.shape, List_N)
         assert len(rhs.inferred_type.shape.elements) == 0
     
@@ -295,7 +295,7 @@ Systematically test error conditions:
         
         # Single DF selection should return 0D array (scalar)
         assert isinstance(lattice_sel.inferred_type, ArrayDataType_N)
-        assert lattice_sel.inferred_type.scalar_dtype == "real"
+        assert lattice_sel.inferred_type.element_dtype == "real"
         assert len(lattice_sel.inferred_type.shape.elements) == 0  # 0D
 
 Test Development Workflow
@@ -531,7 +531,7 @@ When debugging the universal ArrayDataType_N system, use these patterns:
             print(f"Not ArrayDataType_N: {type(expr_type)}")
             return
         
-        print(f"Scalar type: {expr_type.scalar_dtype}")
+        print(f"Scalar type: {expr_type.element_dtype}")
         
         shape = expr_type.shape
         if isinstance(shape, List_N):
@@ -566,7 +566,7 @@ Best Practices Summary
 - Ignore test failures or mark them as expected
 - Create interdependent tests
 - Skip edge case testing
-- Assume ScalarDataType_N for numeric types (use ArrayDataType_N)
+- Forget to use ArrayDataType_N for all computational types
 - Forget to test shape preservation in operations
 - Mix pipeline stages in tests without clear purpose
 

@@ -19,7 +19,7 @@ class TestLiteralTypeInference:
         # Check that type was inferred as 0-dimensional array
         assert hasattr(literal, 'inferred_type')
         assert isinstance(literal.inferred_type, ArrayDataType_N)
-        assert literal.inferred_type.scalar_dtype == "int"
+        assert literal.inferred_type.element_dtype == "int"
         # Check that it's 0-dimensional (scalar)
         assert len(literal.inferred_type.shape.elements) == 0
     
@@ -32,7 +32,7 @@ class TestLiteralTypeInference:
         
         assert hasattr(literal, 'inferred_type')
         assert isinstance(literal.inferred_type, ArrayDataType_N)
-        assert literal.inferred_type.scalar_dtype == "real"
+        assert literal.inferred_type.element_dtype == "real"
         # Check that it's 0-dimensional (scalar)
         assert len(literal.inferred_type.shape.elements) == 0
     
@@ -45,7 +45,7 @@ class TestLiteralTypeInference:
         
         assert hasattr(literal, 'inferred_type')
         assert isinstance(literal.inferred_type, ArrayDataType_N)
-        assert literal.inferred_type.scalar_dtype == "bool"
+        assert literal.inferred_type.element_dtype == "bool"
         # Check that it's 0-dimensional (scalar)
         assert len(literal.inferred_type.shape.elements) == 0
     
@@ -58,7 +58,7 @@ class TestLiteralTypeInference:
         
         assert hasattr(literal, 'inferred_type')
         assert isinstance(literal.inferred_type, ArrayDataType_N)
-        assert literal.inferred_type.scalar_dtype == "bool"
+        assert literal.inferred_type.element_dtype == "bool"
         # Check that it's 0-dimensional (scalar)
         assert len(literal.inferred_type.shape.elements) == 0
     
@@ -71,7 +71,7 @@ class TestLiteralTypeInference:
         
         assert hasattr(literal, 'inferred_type')
         assert isinstance(literal.inferred_type, ArrayDataType_N)
-        assert literal.inferred_type.scalar_dtype == "int"
+        assert literal.inferred_type.element_dtype == "int"
         
         # Check shape
         shape = literal.inferred_type.shape
@@ -87,7 +87,7 @@ class TestLiteralTypeInference:
         
         assert hasattr(literal, 'inferred_type')
         assert isinstance(literal.inferred_type, ArrayDataType_N)
-        assert literal.inferred_type.scalar_dtype == "real"
+        assert literal.inferred_type.element_dtype == "real"
         
         # Check shape
         shape = literal.inferred_type.shape

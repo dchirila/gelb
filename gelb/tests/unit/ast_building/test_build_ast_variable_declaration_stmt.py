@@ -13,7 +13,7 @@ def test_scalar():
     assert str(ast) == (
         "(VariableDeclarationStmt"
         " (Identifier x)"
-        " (ScalarDataType int)"
+        " (ArrayDataType int (List ))"
         ")"
     )
 
@@ -27,7 +27,7 @@ def test_1d_array():
         "(VariableDeclarationStmt"
         " (Identifier x)"
         " (ArrayDataType"
-            " (ScalarDataType real)"
+            " real"
             " (IntLiteral 2)"
         ")"
         ")"
@@ -43,7 +43,7 @@ def test_2d_array():
         "(VariableDeclarationStmt"
         " (Identifier y)"
         " (ArrayDataType"
-            " (ScalarDataType real)"
+            " real"
             " (ArrayLiteral1D (IntLiteral 2) (IntLiteral 3))"
         ")"
         ")"

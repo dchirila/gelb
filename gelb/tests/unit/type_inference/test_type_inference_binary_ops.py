@@ -18,7 +18,7 @@ class TestBinaryOperationTypeInference:
         # Check that the Add_N node has inferred type
         assert hasattr(add_expr, 'inferred_type')
         assert isinstance(add_expr.inferred_type, ArrayDataType_N)
-        assert add_expr.inferred_type.scalar_dtype == "int"
+        assert add_expr.inferred_type.element_dtype == "int"
         # Check that it's 0-dimensional (scalar)
         assert len(add_expr.inferred_type.shape.elements) == 0
     
@@ -31,7 +31,7 @@ class TestBinaryOperationTypeInference:
         
         assert hasattr(add_expr, 'inferred_type')
         assert isinstance(add_expr.inferred_type, ArrayDataType_N)
-        assert add_expr.inferred_type.scalar_dtype == "real"
+        assert add_expr.inferred_type.element_dtype == "real"
         # Check that it's 0-dimensional (scalar)
         assert len(add_expr.inferred_type.shape.elements) == 0
     
@@ -45,7 +45,7 @@ class TestBinaryOperationTypeInference:
         # Mixed int + real should promote to real
         assert hasattr(add_expr, 'inferred_type')
         assert isinstance(add_expr.inferred_type, ArrayDataType_N)
-        assert add_expr.inferred_type.scalar_dtype == "real"
+        assert add_expr.inferred_type.element_dtype == "real"
         # Check that it's 0-dimensional (scalar)
         assert len(add_expr.inferred_type.shape.elements) == 0
     
@@ -58,7 +58,7 @@ class TestBinaryOperationTypeInference:
         
         assert hasattr(mul_expr, 'inferred_type')
         assert isinstance(mul_expr.inferred_type, ArrayDataType_N)
-        assert mul_expr.inferred_type.scalar_dtype == "int"
+        assert mul_expr.inferred_type.element_dtype == "int"
         # Check that it's 0-dimensional (scalar)
         assert len(mul_expr.inferred_type.shape.elements) == 0
     
@@ -71,7 +71,7 @@ class TestBinaryOperationTypeInference:
         
         assert hasattr(div_expr, 'inferred_type')
         assert isinstance(div_expr.inferred_type, ArrayDataType_N)
-        assert div_expr.inferred_type.scalar_dtype == "real"
+        assert div_expr.inferred_type.element_dtype == "real"
         # Check that it's 0-dimensional (scalar)
         assert len(div_expr.inferred_type.shape.elements) == 0
     
@@ -84,7 +84,7 @@ class TestBinaryOperationTypeInference:
         
         assert hasattr(pow_expr, 'inferred_type')
         assert isinstance(pow_expr.inferred_type, ArrayDataType_N)
-        assert pow_expr.inferred_type.scalar_dtype == "int"
+        assert pow_expr.inferred_type.element_dtype == "int"
         # Check that it's 0-dimensional (scalar)
         assert len(pow_expr.inferred_type.shape.elements) == 0
     
@@ -98,7 +98,7 @@ class TestBinaryOperationTypeInference:
         # Comparison operations always return bool
         assert hasattr(less_expr, 'inferred_type')
         assert isinstance(less_expr.inferred_type, ArrayDataType_N)
-        assert less_expr.inferred_type.scalar_dtype == "bool"
+        assert less_expr.inferred_type.element_dtype == "bool"
         # Check that it's 0-dimensional (scalar)
         assert len(less_expr.inferred_type.shape.elements) == 0
     
@@ -111,7 +111,7 @@ class TestBinaryOperationTypeInference:
         
         assert hasattr(eq_expr, 'inferred_type')
         assert isinstance(eq_expr.inferred_type, ArrayDataType_N)
-        assert eq_expr.inferred_type.scalar_dtype == "bool"
+        assert eq_expr.inferred_type.element_dtype == "bool"
         # Check that it's 0-dimensional (scalar)
         assert len(eq_expr.inferred_type.shape.elements) == 0
     
@@ -124,7 +124,7 @@ class TestBinaryOperationTypeInference:
         
         assert hasattr(and_expr, 'inferred_type')
         assert isinstance(and_expr.inferred_type, ArrayDataType_N)
-        assert and_expr.inferred_type.scalar_dtype == "bool"
+        assert and_expr.inferred_type.element_dtype == "bool"
         # Check that it's 0-dimensional (scalar)
         assert len(and_expr.inferred_type.shape.elements) == 0
     
@@ -137,7 +137,7 @@ class TestBinaryOperationTypeInference:
         
         assert hasattr(or_expr, 'inferred_type')
         assert isinstance(or_expr.inferred_type, ArrayDataType_N)
-        assert or_expr.inferred_type.scalar_dtype == "bool"
+        assert or_expr.inferred_type.element_dtype == "bool"
         # Check that it's 0-dimensional (scalar)
         assert len(or_expr.inferred_type.shape.elements) == 0
     
@@ -151,6 +151,6 @@ class TestBinaryOperationTypeInference:
         # The top-level expression should be real (due to 3.5 and 2.0)
         assert hasattr(expr, 'inferred_type')
         assert isinstance(expr.inferred_type, ArrayDataType_N)
-        assert expr.inferred_type.scalar_dtype == "real"
+        assert expr.inferred_type.element_dtype == "real"
         # Check that it's 0-dimensional (scalar)
         assert len(expr.inferred_type.shape.elements) == 0

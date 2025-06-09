@@ -338,8 +338,8 @@ def assert_ast_equals(test_string, expected, rule):
 # Parameterized Test Data Generators
 # ============================================================================
 
-def get_scalar_data_types():
-    """Return test data for scalar data types supported by GeLB grammar."""
+def get_scalar_cst_test_data():
+    """Return CST test data for scalar data types parsing (for testing the grammar parser)."""
     return [
         ("bool", "(scalar_data_type (scalar_bool_data_type bool))"),
         ("int64", "(scalar_data_type (scalar_int_data_type int64))"),
@@ -598,7 +598,7 @@ def get_symbol_table_valid_test_data():
             const int CX = 0;
             const real64 Z = 123;
         }
-        """, None, "(CX \"constant definition\" (ConstantDefinitionStmt (Identifier CX) (ScalarDataType int) (IntLiteral 0))) (Z \"constant definition\" (ConstantDefinitionStmt (Identifier Z) (ScalarDataType real64) (IntLiteral 123)))"),
+        """, None, "(CX \"constant definition\" (ConstantDefinitionStmt (Identifier CX) (ArrayDataType int (List )) (IntLiteral 0))) (Z \"constant definition\" (ConstantDefinitionStmt (Identifier Z) (ArrayDataType real64 (List )) (IntLiteral 123)))"),
         
         # Lattices block valid test  
         ("lattices_block", """
@@ -606,7 +606,7 @@ def get_symbol_table_valid_test_data():
           lattice f(2, 9, real64);
           lattice g(2, 5, real64);
         }
-        """, None, "(f \"lattice instance\" (LatticeInstaStmt (Identifier f) (IntLiteral 2) (IntLiteral 9) (ScalarDataType real64))) (g \"lattice instance\" (LatticeInstaStmt (Identifier g) (IntLiteral 2) (IntLiteral 5) (ScalarDataType real64)))"),
+        """, None, "(f \"lattice instance\" (LatticeInstaStmt (Identifier f) (IntLiteral 2) (IntLiteral 9) (ArrayDataType real64 (List )))) (g \"lattice instance\" (LatticeInstaStmt (Identifier g) (IntLiteral 2) (IntLiteral 5) (ArrayDataType real64 (List ))))"),
         
         # Node classes block valid test
         ("node_classes_block", """
@@ -622,7 +622,7 @@ def get_symbol_table_valid_test_data():
           const real64 PI = 3.141592653589793;
           f.out[x, y, z | :] = PI;
         }
-        """, "f", "(PI \"constant definition\" (ConstantDefinitionStmt (Identifier PI) (ScalarDataType real64) (RealLiteral 3.141592653589793)))"),
+        """, "f", "(PI \"constant definition\" (ConstantDefinitionStmt (Identifier PI) (ArrayDataType real64 (List )) (RealLiteral 3.141592653589793)))"),
         
         # Initializer block valid test  
         ("initializer_block", """
@@ -630,7 +630,7 @@ def get_symbol_table_valid_test_data():
           const real64 PI = 3.141592653589793;
           f.out[x, y, z | :] = PI;
         }
-        """, "f", "(PI \"constant definition\" (ConstantDefinitionStmt (Identifier PI) (ScalarDataType real64) (RealLiteral 3.141592653589793)))"),
+        """, "f", "(PI \"constant definition\" (ConstantDefinitionStmt (Identifier PI) (ArrayDataType real64 (List )) (RealLiteral 3.141592653589793)))"),
         
         # Gauge block valid test
         ("gauge_block", """
@@ -638,7 +638,7 @@ def get_symbol_table_valid_test_data():
           const real64 PI = 3.141592653589793;
           state = f.in[x | 0];
         }
-        """, "f", "(PI \"constant definition\" (ConstantDefinitionStmt (Identifier PI) (ScalarDataType real64) (RealLiteral 3.141592653589793))) (state \"output variable declaration\" (VariableDeclarationStmt (Identifier state) (ScalarDataType int)))"),
+        """, "f", "(PI \"constant definition\" (ConstantDefinitionStmt (Identifier PI) (ArrayDataType real64 (List )) (RealLiteral 3.141592653589793))) (state \"output variable declaration\" (VariableDeclarationStmt (Identifier state) (ArrayDataType int (List ))))"),
     ]
 
 
@@ -760,37 +760,37 @@ def get_expression_parse_test_data():
 def get_data_type_test_data():
     """Return test data for data type testing (both scalar and array types)."""
     return [
-        # Scalar data types for "data_type" rule
-        ("scalar", "data_type", "bool", "(ScalarDataType bool)"),
-        ("scalar", "data_type", "int64", "(ScalarDataType int64)"),
-        ("scalar", "data_type", "int32", "(ScalarDataType int32)"),
-        ("scalar", "data_type", "int16", "(ScalarDataType int16)"),
-        ("scalar", "data_type", "int8", "(ScalarDataType int8)"),
-        ("scalar", "data_type", "int", "(ScalarDataType int)"),
-        ("scalar", "data_type", "real64", "(ScalarDataType real64)"),
-        ("scalar", "data_type", "real32", "(ScalarDataType real32)"),
-        ("scalar", "data_type", "real16", "(ScalarDataType real16)"),
-        ("scalar", "data_type", "real", "(ScalarDataType real)"),
+        # Scalar data types for "data_type" rule (now create ArrayDataType_N with empty shape)
+        ("scalar", "data_type", "bool", "(ArrayDataType bool (List ))"),
+        ("scalar", "data_type", "int64", "(ArrayDataType int64 (List ))"),
+        ("scalar", "data_type", "int32", "(ArrayDataType int32 (List ))"),
+        ("scalar", "data_type", "int16", "(ArrayDataType int16 (List ))"),
+        ("scalar", "data_type", "int8", "(ArrayDataType int8 (List ))"),
+        ("scalar", "data_type", "int", "(ArrayDataType int (List ))"),
+        ("scalar", "data_type", "real64", "(ArrayDataType real64 (List ))"),
+        ("scalar", "data_type", "real32", "(ArrayDataType real32 (List ))"),
+        ("scalar", "data_type", "real16", "(ArrayDataType real16 (List ))"),
+        ("scalar", "data_type", "real", "(ArrayDataType real (List ))"),
         
         # Scalar data types for "scalar_data_type" rule (same expected output)
-        ("scalar", "scalar_data_type", "bool", "(ScalarDataType bool)"),
-        ("scalar", "scalar_data_type", "int64", "(ScalarDataType int64)"),
-        ("scalar", "scalar_data_type", "int32", "(ScalarDataType int32)"),
-        ("scalar", "scalar_data_type", "int16", "(ScalarDataType int16)"),
-        ("scalar", "scalar_data_type", "int8", "(ScalarDataType int8)"),
-        ("scalar", "scalar_data_type", "int", "(ScalarDataType int)"),
-        ("scalar", "scalar_data_type", "real64", "(ScalarDataType real64)"),
-        ("scalar", "scalar_data_type", "real32", "(ScalarDataType real32)"),
-        ("scalar", "scalar_data_type", "real16", "(ScalarDataType real16)"),
-        ("scalar", "scalar_data_type", "real", "(ScalarDataType real)"),
+        ("scalar", "scalar_data_type", "bool", "(ArrayDataType bool (List ))"),
+        ("scalar", "scalar_data_type", "int64", "(ArrayDataType int64 (List ))"),
+        ("scalar", "scalar_data_type", "int32", "(ArrayDataType int32 (List ))"),
+        ("scalar", "scalar_data_type", "int16", "(ArrayDataType int16 (List ))"),
+        ("scalar", "scalar_data_type", "int8", "(ArrayDataType int8 (List ))"),
+        ("scalar", "scalar_data_type", "int", "(ArrayDataType int (List ))"),
+        ("scalar", "scalar_data_type", "real64", "(ArrayDataType real64 (List ))"),
+        ("scalar", "scalar_data_type", "real32", "(ArrayDataType real32 (List ))"),
+        ("scalar", "scalar_data_type", "real16", "(ArrayDataType real16 (List ))"),
+        ("scalar", "scalar_data_type", "real", "(ArrayDataType real (List ))"),
         
-        # Array data types for "data_type" rule
-        ("array", "data_type", "array[int64, 3]", "(ArrayDataType (ScalarDataType int64) (IntLiteral 3))"),
-        ("array", "data_type", "array[real64, {2, 3}]", "(ArrayDataType (ScalarDataType real64) (ArrayLiteral1D (IntLiteral 2) (IntLiteral 3)))"),
+        # Array data types for "data_type" rule (element_dtype is now a string)
+        ("array", "data_type", "array[int64, 3]", "(ArrayDataType int64 (IntLiteral 3))"),
+        ("array", "data_type", "array[real64, {2, 3}]", "(ArrayDataType real64 (ArrayLiteral1D (IntLiteral 2) (IntLiteral 3)))"),
         
         # Array data types for "array_data_type" rule (same expected output)
-        ("array", "array_data_type", "array[int64, 3]", "(ArrayDataType (ScalarDataType int64) (IntLiteral 3))"),
-        ("array", "array_data_type", "array[real64, {2, 3}]", "(ArrayDataType (ScalarDataType real64) (ArrayLiteral1D (IntLiteral 2) (IntLiteral 3)))"),
+        ("array", "array_data_type", "array[int64, 3]", "(ArrayDataType int64 (IntLiteral 3))"),
+        ("array", "array_data_type", "array[real64, {2, 3}]", "(ArrayDataType real64 (ArrayLiteral1D (IntLiteral 2) (IntLiteral 3)))"),
     ]
 
 

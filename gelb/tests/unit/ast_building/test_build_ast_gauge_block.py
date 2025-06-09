@@ -19,7 +19,7 @@ def test_simple():
         " (Identifier CurrentState)"
         " (VariableDeclarationStmt"
             " (Identifier state)"
-            " (ScalarDataType int)"
+            " (ArrayDataType int (List ))"
             ")"
         " (VariableAssignmentStmt"
             " (Identifier state)"

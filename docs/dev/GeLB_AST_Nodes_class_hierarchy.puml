@@ -164,20 +164,11 @@ class RectSelOfArrayElems_N #palegreen;line:green;text:black {
     + __str__(self)
 }
 
-class DataType_N {
-    + scalar_dtype
-
-    + __init__(self, code_range, scalar_dtype)
-}
-
-class ScalarDataType_N #palegreen;line:green;text:black {
-    + __str__(self)
-}
-
 class ArrayDataType_N #palegreen;line:green;text:black {
+    + element_dtype
     + shape
 
-    + __init__(self, code_range, scalar_dtype, shape)
+    + __init__(self, code_range, element_dtype, shape)
     + __str__(self)
 }
 
@@ -324,9 +315,7 @@ RectSel_N <|-- RectSelOfLatticeDFs_N
 RectSelOfLatticeDFs_N <|-- RectSelOfLatticeInDFs_N
 RectSelOfLatticeDFs_N <|-- RectSelOfLatticeOutDFs_N
 RectSel_N <|-- RectSelOfArrayElems_N
-Node_N <|-- DataType_N
-DataType_N <|-- ScalarDataType_N
-DataType_N <|-- ArrayDataType_N
+Node_N <|-- ArrayDataType_N
 Expr_N <|-- BinaryExpr_N
 BinaryExpr_N <|-- Mul_N
 BinaryExpr_N <|-- Div_N

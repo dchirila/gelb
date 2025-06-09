@@ -39,13 +39,13 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         Check if a type can be promoted to another type.
         
         Args:
-            from_type: ScalarDataType_N or string
-            to_type: ScalarDataType_N or string
+            from_type: ArrayDataType_N or string
+            to_type: ArrayDataType_N or string
             
         Returns:
             bool: True if promotion is valid
         """
-        # Extract type names if DataType_N objects
+        # Extract type names if ArrayDataType_N objects
         from_name = self._get_type_name(from_type)
         to_name = self._get_type_name(to_type)
         
@@ -76,12 +76,10 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         return self._can_promote(expr_type, target_type)
     
     def _get_type_name(self, data_type):
-        """Extract type name from DataType_N or string."""
-        if isinstance(data_type, ScalarDataType_N):
-            return data_type.scalar_dtype
-        elif isinstance(data_type, ArrayDataType_N):
+        """Extract type name from ArrayDataType_N or string."""
+        if isinstance(data_type, ArrayDataType_N):
             # For arrays, return the base scalar type
-            return data_type.scalar_dtype
+            return data_type.element_dtype
         elif isinstance(data_type, str):
             return data_type
         else:
@@ -126,8 +124,9 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
             shape = expr.inferred_type.shape
             target_type = ArrayDataType_N(expr.code_range, target_type_name, shape)
         else:
-            # Fallback to scalar type (shouldn't happen after our changes)
-            target_type = ScalarDataType_N(expr.code_range, target_type_name)
+            # Fallback to scalar array type (0-dimensional)
+            empty_shape = List_N(expr.code_range)
+            target_type = ArrayDataType_N(expr.code_range, target_type_name, empty_shape)
         return TypePromotionNode_N(expr.code_range, expr, target_type)
     
     # Program traversal
@@ -360,8 +359,8 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         
         # For array selections, we need the element type, not the array type
         target_type = lhs_type
-        if hasattr(lhs_type, 'scalar_dtype'):  # It's an ArrayDataType_N
-            target_type = lhs_type.scalar_dtype
+        if hasattr(lhs_type, 'element_dtype'):  # It's an ArrayDataType_N
+            target_type = lhs_type.element_dtype
         
         # Check if RHS needs promotion to target type
         if self._needs_promotion(rhs_type, target_type):
@@ -465,7 +464,7 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
             # Find common type among all elements
             # For simplicity, we'll use the array's inferred type
             if hasattr(node, 'inferred_type') and isinstance(node.inferred_type, ArrayDataType_N):
-                target_type_name = node.inferred_type.scalar_dtype
+                target_type_name = node.inferred_type.element_dtype
                 
                 # Promote each element if needed
                 for i, elem in enumerate(node.value.elements):

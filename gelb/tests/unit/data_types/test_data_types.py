@@ -4,7 +4,7 @@ import pytest
 from gelb.tests.test_utils import (
     assert_ast_equals, assert_cst_equals, 
     get_data_type_test_data, get_data_type_parse_test_data,
-    get_scalar_data_types
+    get_scalar_cst_test_data
 )
 
 
@@ -20,7 +20,7 @@ class TestDataTypeAST:
 class TestDataTypeParsing:
     """Consolidated tests for data type parsing (CST)."""
     
-    @pytest.mark.parametrize("data_type,expected", get_scalar_data_types())
+    @pytest.mark.parametrize("data_type,expected", get_scalar_cst_test_data())
     def test_scalar_data_type_parsing(self, data_type, expected):
         """Test parsing of scalar data types."""
         assert_cst_equals(data_type, expected, "scalar_data_type")

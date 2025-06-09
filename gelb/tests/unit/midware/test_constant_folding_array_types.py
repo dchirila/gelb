@@ -59,7 +59,7 @@ class TestConstantFoldingArrayTypeCompatibility:
         
         const_stmts = folded_ast.global_constants.stmts
         
-        # Check that folded literals are ArrayDataType_N (not ScalarDataType_N)
+        # Check that folded literals have ArrayDataType_N
         folded_int = const_stmts[0].value  # 5 + 3 = 8
         folded_real = const_stmts[1].value  # 2.0 * 3.5 = 7.0  
         folded_bool = const_stmts[2].value  # 10 > 5 = true
@@ -76,17 +76,17 @@ class TestConstantFoldingArrayTypeCompatibility:
         # This is crucial because downstream passes rely on consistent type representation
         assert hasattr(folded_int, 'inferred_type')
         assert isinstance(folded_int.inferred_type, ArrayDataType_N)
-        assert folded_int.inferred_type.scalar_dtype == "int"
+        assert folded_int.inferred_type.element_dtype == "int"
         assert len(folded_int.inferred_type.shape.elements) == 0  # 0-dimensional
         
         assert hasattr(folded_real, 'inferred_type')
         assert isinstance(folded_real.inferred_type, ArrayDataType_N)
-        assert folded_real.inferred_type.scalar_dtype == "real"
+        assert folded_real.inferred_type.element_dtype == "real"
         assert len(folded_real.inferred_type.shape.elements) == 0  # 0-dimensional
         
         assert hasattr(folded_bool, 'inferred_type')
         assert isinstance(folded_bool.inferred_type, ArrayDataType_N)
-        assert folded_bool.inferred_type.scalar_dtype == "bool"
+        assert folded_bool.inferred_type.element_dtype == "bool"
         assert len(folded_bool.inferred_type.shape.elements) == 0  # 0-dimensional
     
     def test_nested_folding_preserves_array_types(self):
@@ -137,7 +137,7 @@ class TestConstantFoldingArrayTypeCompatibility:
         # Verify ArrayDataType_N preservation
         assert hasattr(folded_result, 'inferred_type')
         assert isinstance(folded_result.inferred_type, ArrayDataType_N)
-        assert folded_result.inferred_type.scalar_dtype == "int"
+        assert folded_result.inferred_type.element_dtype == "int"
         assert len(folded_result.inferred_type.shape.elements) == 0
     
     def test_unary_minus_preserves_array_types(self):
@@ -193,12 +193,12 @@ class TestConstantFoldingArrayTypeCompatibility:
         # Verify ArrayDataType_N preservation
         assert hasattr(neg_int, 'inferred_type')
         assert isinstance(neg_int.inferred_type, ArrayDataType_N)
-        assert neg_int.inferred_type.scalar_dtype == "int"
+        assert neg_int.inferred_type.element_dtype == "int"
         assert len(neg_int.inferred_type.shape.elements) == 0
         
         assert hasattr(neg_real, 'inferred_type')
         assert isinstance(neg_real.inferred_type, ArrayDataType_N)
-        assert neg_real.inferred_type.scalar_dtype == "real"
+        assert neg_real.inferred_type.element_dtype == "real"
         assert len(neg_real.inferred_type.shape.elements) == 0
 
 
@@ -254,12 +254,12 @@ class TestConstantFoldingArrayTypeIntegration:
         assert isinstance(a_value, IntLiteral_N)
         assert a_value.value == 5
         assert isinstance(a_value.inferred_type, ArrayDataType_N)
-        assert a_value.inferred_type.scalar_dtype == "int"
+        assert a_value.inferred_type.element_dtype == "int"
         
         assert isinstance(b_value, RealLiteral_N)
         assert b_value.value == 6.0
         assert isinstance(b_value.inferred_type, ArrayDataType_N)
-        assert b_value.inferred_type.scalar_dtype == "real"
+        assert b_value.inferred_type.element_dtype == "real"
         
         # Check that MIXED expression - this demonstrates advanced constant propagation
         mixed_value = const_stmts[2].value
@@ -269,4 +269,4 @@ class TestConstantFoldingArrayTypeIntegration:
         assert isinstance(mixed_value, RealLiteral_N)
         assert mixed_value.value == 11.0  # 5 + 6.0 = 11.0
         assert isinstance(mixed_value.inferred_type, ArrayDataType_N)
-        assert mixed_value.inferred_type.scalar_dtype == "real"
+        assert mixed_value.inferred_type.element_dtype == "real"

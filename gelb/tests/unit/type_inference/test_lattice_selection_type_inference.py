@@ -80,7 +80,7 @@ class TestLatticeSelectionBasicTypeInference:
         assert isinstance(lattice_in_sel, RectSelOfLatticeInDFs_N)
         assert hasattr(lattice_in_sel, 'inferred_type')
         assert isinstance(lattice_in_sel.inferred_type, ArrayDataType_N)
-        assert lattice_in_sel.inferred_type.scalar_dtype == "real"
+        assert lattice_in_sel.inferred_type.element_dtype == "real"
     
     def test_lattice_out_selection_uses_array_types(self):
         """Lattice OUT selections should use ArrayDataType_N consistently."""
@@ -99,7 +99,7 @@ class TestLatticeSelectionBasicTypeInference:
         assert isinstance(lattice_out_sel, RectSelOfLatticeOutDFs_N)
         assert hasattr(lattice_out_sel, 'inferred_type')
         assert isinstance(lattice_out_sel.inferred_type, ArrayDataType_N)
-        assert lattice_out_sel.inferred_type.scalar_dtype == "real"
+        assert lattice_out_sel.inferred_type.element_dtype == "real"
 
 
 class TestLatticeSelectionShapeInference:
@@ -119,7 +119,7 @@ class TestLatticeSelectionShapeInference:
         
         inferred_type = lattice_in_sel.inferred_type
         assert isinstance(inferred_type, ArrayDataType_N)
-        assert inferred_type.scalar_dtype == "real"
+        assert inferred_type.element_dtype == "real"
         
         # Should be 1D array (vector of DFs)
         assert len(inferred_type.shape.elements) == 1
@@ -141,7 +141,7 @@ class TestLatticeSelectionShapeInference:
         
         inferred_type = lattice_in_sel.inferred_type
         assert isinstance(inferred_type, ArrayDataType_N)
-        assert inferred_type.scalar_dtype == "real"
+        assert inferred_type.element_dtype == "real"
         
         # Should be 1D array (vector of DFs)
         assert len(inferred_type.shape.elements) == 1
@@ -163,7 +163,7 @@ class TestLatticeSelectionShapeInference:
         
         inferred_type = lattice_in_sel.inferred_type
         assert isinstance(inferred_type, ArrayDataType_N)
-        assert inferred_type.scalar_dtype == "real"
+        assert inferred_type.element_dtype == "real"
         
         # Should be 0D array (scalar DF)
         assert len(inferred_type.shape.elements) == 0
@@ -196,7 +196,7 @@ class TestLatticeSelectionOperations:
         else:
             # Should be List_N with 1 element for 1D array
             assert len(shape.elements) == 1
-        assert mul_expr.inferred_type.scalar_dtype == "real"
+        assert mul_expr.inferred_type.element_dtype == "real"
         
         # Left operand (lattice selection) should be vector
         lattice_sel = mul_expr.left
@@ -236,7 +236,7 @@ class TestLatticeSelectionOperations:
         else:
             # Should be List_N with 1 element for 1D array
             assert len(shape.elements) == 1
-        assert add_expr.inferred_type.scalar_dtype == "real"
+        assert add_expr.inferred_type.element_dtype == "real"
         
         # Both operands should be vectors
         left_sel = add_expr.left
@@ -287,7 +287,7 @@ class TestLatticeSelectionConsistency:
         
         assert isinstance(left_type, ArrayDataType_N)
         assert isinstance(right_type, ArrayDataType_N)
-        assert left_type.scalar_dtype == right_type.scalar_dtype
+        assert left_type.element_dtype == right_type.element_dtype
         assert len(left_type.shape.elements) == len(right_type.shape.elements)
     
     def test_in_vs_out_selection_type_compatibility(self):
@@ -313,7 +313,7 @@ class TestLatticeSelectionConsistency:
         
         assert isinstance(out_type, ArrayDataType_N)
         assert isinstance(in_type, ArrayDataType_N)
-        assert out_type.scalar_dtype == in_type.scalar_dtype
+        assert out_type.element_dtype == in_type.element_dtype
         assert len(out_type.shape.elements) == len(in_type.shape.elements)
 
 
@@ -337,7 +337,7 @@ class TestLatticeSelectionIntegrationWithTypeSystem:
         assert isinstance(add_expr.inferred_type, ArrayDataType_N)
         
         # Result should promote to real and maintain vector shape
-        assert add_expr.inferred_type.scalar_dtype == "real"
+        assert add_expr.inferred_type.element_dtype == "real"
         shape = add_expr.inferred_type.shape
         if isinstance(shape, Identifier_N):
             # Shape is 'q' identifier - represents 1D array of size q
@@ -348,7 +348,7 @@ class TestLatticeSelectionIntegrationWithTypeSystem:
         
         # Left operand (lattice) is real vector
         lattice_sel = add_expr.left
-        assert lattice_sel.inferred_type.scalar_dtype == "real"
+        assert lattice_sel.inferred_type.element_dtype == "real"
         lattice_shape = lattice_sel.inferred_type.shape
         if isinstance(lattice_shape, Identifier_N):
             assert lattice_shape.name == "q"
@@ -357,7 +357,7 @@ class TestLatticeSelectionIntegrationWithTypeSystem:
         
         # Right operand (integer literal) is int scalar (0D array)
         int_lit = add_expr.right
-        assert int_lit.inferred_type.scalar_dtype == "int"
+        assert int_lit.inferred_type.element_dtype == "int"
         assert len(int_lit.inferred_type.shape.elements) == 0
     
     def test_lattice_selection_in_dynamic_block(self):
@@ -378,8 +378,8 @@ class TestLatticeSelectionIntegrationWithTypeSystem:
         
         assert isinstance(out_sel.inferred_type, ArrayDataType_N)
         assert isinstance(in_sel.inferred_type, ArrayDataType_N)
-        assert out_sel.inferred_type.scalar_dtype == "real"
-        assert in_sel.inferred_type.scalar_dtype == "real"
+        assert out_sel.inferred_type.element_dtype == "real"
+        assert in_sel.inferred_type.element_dtype == "real"
         assert len(out_sel.inferred_type.shape.elements) == 1
         assert len(in_sel.inferred_type.shape.elements) == 1
 
@@ -420,4 +420,4 @@ class TestLatticeSelectionDocumentation:
         # Principle 3: All use ArrayDataType_N universally
         for selection in [scalar_out, scalar_in, vector_out, vector_in]:
             assert isinstance(selection.inferred_type, ArrayDataType_N)
-            assert selection.inferred_type.scalar_dtype == "real"
+            assert selection.inferred_type.element_dtype == "real"

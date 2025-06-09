@@ -31,12 +31,6 @@ This means:
 Data Type AST Nodes
 ===================
 
-DataType_N (Abstract Base Class)
----------------------------------
-
-Base class for all GeLB data types:
-- Contains: ``scalar_dtype`` (string: "int", "real", "bool", "string")
-
 Universal ArrayDataType_N System
 ---------------------------------
 
@@ -46,7 +40,7 @@ GeLB uses a universal type system where **all types are represented as ArrayData
 **ArrayDataType_N (Primary Type)**
 
 Represents all numeric and boolean types as arrays:
-- Contains: ``scalar_dtype`` (element type) and ``shape`` (dimensions)
+- Contains: ``element_dtype`` (element type) and ``shape`` (dimensions)
 - **Scalars**: 0-dimensional arrays with empty shape ``List_N([])``
 - **1D Arrays**: Shape is ``IntLiteral_N`` (array size)
 - **2D+ Arrays**: Shape is ``Array1DLiteral_N`` (dimension list)
@@ -64,15 +58,6 @@ Examples:
     # 2D array "{{1, 2}, {3, 4}}" has type:
     ArrayDataType_N(code_range, "int", Array1DLiteral_N([2, 2]))  # 2-dimensional
 
-**ScalarDataType_N (Declaration Context)**
-
-Used for scalar type declarations in computational contexts:
-- Variable declarations: ``int x;``, ``real y;``, ``bool b;``
-- Lattice df_type specifications: ``lattice f(d=2, q=9, df_type=int)``
-- Gauge output type declarations: ``out = {int state;}``
-
-Note: While declarations use ``ScalarDataType_N``, the type inference system converts these to ``ArrayDataType_N`` for expressions and computations.
-
 **StringType_N (Metadata Only)**
 
 Used exclusively for non-computational metadata contexts:
@@ -84,7 +69,7 @@ Used exclusively for non-computational metadata contexts:
 - Type promotion or validation
 - Array/scalar type relationships
 
-StringType_N is completely independent from the DataType_N hierarchy (ScalarDataType_N/ArrayDataType_N).
+StringType_N is completely independent from the computational type system (ArrayDataType_N).
 
 Expression Type Inference
 =========================
@@ -107,10 +92,10 @@ All literals extend Literal_N which extends Expr_N:
 
 .. code-block:: python
 
-    def _create_scalar_array_type(self, code_range, scalar_dtype):
+    def _create_scalar_array_type(self, code_range, element_dtype):
         """Create a 0-dimensional array type representing a scalar."""
         empty_shape = List_N(code_range)
-        return ArrayDataType_N(code_range, scalar_dtype, empty_shape)
+        return ArrayDataType_N(code_range, element_dtype, empty_shape)
 
 Binary Expressions
 -------------------
@@ -491,7 +476,7 @@ Common Testing Patterns
         assign_stmt = ast.initializers[0].stmts.elements[1]
         assert isinstance(assign_stmt.rhs, TypePromotionNode_N)
         assert isinstance(assign_stmt.rhs.target_type, ArrayDataType_N)
-        assert assign_stmt.rhs.target_type.scalar_dtype == "real"
+        assert assign_stmt.rhs.target_type.element_dtype == "real"
         assert len(assign_stmt.rhs.target_type.shape.elements) == 0  # 0D array
 
 **Testing Type Errors:**
@@ -524,7 +509,7 @@ Common Testing Patterns
         
         # Check ArrayDataType_N
         assert isinstance(rhs.inferred_type, ArrayDataType_N)
-        assert rhs.inferred_type.scalar_dtype == "int"
+        assert rhs.inferred_type.element_dtype == "int"
         
         # Check 0D shape
         shape = rhs.inferred_type.shape

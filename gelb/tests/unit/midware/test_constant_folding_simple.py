@@ -182,7 +182,7 @@ class TestConstantFoldingProgram:
         code_range = CodeRange(1, 1, 1, 5)
         
         # Create const int RESULT = 5 + 3;
-        data_type = ScalarDataType_N(code_range, "int")
+        data_type = ArrayDataType_N(code_range, "int", List_N(code_range))
         name = Identifier_N(code_range, "RESULT")
         
         # Value: 5 + 3

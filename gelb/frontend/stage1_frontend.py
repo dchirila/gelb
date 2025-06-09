@@ -166,7 +166,7 @@ def infer_types(ast):
     Infer types for all expressions in the AST.
     
     Adds an 'inferred_type' attribute to each expression node
-    containing its data type (ScalarDataType_N or ArrayDataType_N).
+    containing its data type (ArrayDataType_N).
     
     Must run after:
     - Symbol tables are built

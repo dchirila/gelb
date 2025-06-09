@@ -543,9 +543,11 @@ class ASTBuilderVisitor(GeLBVisitor):
             self,
             ctx: GeLBParser.Scalar_bool_data_typeContext
     ):
-        return ScalarDataType_N(
+        empty_shape = List_N(code_range_from_ctx(ctx))
+        return ArrayDataType_N(
             code_range_from_ctx(ctx),
-            "bool"
+            "bool",
+            empty_shape
         )
 
     # Visit a parse tree produced by GeLBParser#scalar_int_data_type.
@@ -553,39 +555,50 @@ class ASTBuilderVisitor(GeLBVisitor):
             self,
             ctx: GeLBParser.Scalar_int_data_typeContext
     ):
+        empty_shape = List_N(code_range_from_ctx(ctx))
         if ctx.INT64():
-            return ScalarDataType_N(code_range_from_ctx(ctx), "int64")
+            return ArrayDataType_N(code_range_from_ctx(ctx), "int64", empty_shape)
         elif ctx.INT32():
-            return ScalarDataType_N(code_range_from_ctx(ctx), "int32")
+            return ArrayDataType_N(code_range_from_ctx(ctx), "int32", empty_shape)
         elif ctx.INT16():
-            return ScalarDataType_N(code_range_from_ctx(ctx), "int16")
+            return ArrayDataType_N(code_range_from_ctx(ctx), "int16", empty_shape)
         elif ctx.INT8():
-            return ScalarDataType_N(code_range_from_ctx(ctx), "int8")
+            return ArrayDataType_N(code_range_from_ctx(ctx), "int8", empty_shape)
         elif ctx.INT():
-            return ScalarDataType_N(code_range_from_ctx(ctx), "int")
+            return ArrayDataType_N(code_range_from_ctx(ctx), "int", empty_shape)
 
     # Visit a parse tree produced by GeLBParser#scalar_real_data_type.
     def visitScalar_real_data_type(
             self,
             ctx: GeLBParser.Scalar_real_data_typeContext
     ):
+        empty_shape = List_N(code_range_from_ctx(ctx))
         if ctx.REAL64():
-            return ScalarDataType_N(code_range_from_ctx(ctx), "real64")
+            return ArrayDataType_N(code_range_from_ctx(ctx), "real64", empty_shape)
         elif ctx.REAL32():
-            return ScalarDataType_N(code_range_from_ctx(ctx), "real32")
+            return ArrayDataType_N(code_range_from_ctx(ctx), "real32", empty_shape)
         elif ctx.REAL16():
-            return ScalarDataType_N(code_range_from_ctx(ctx), "real16")
+            return ArrayDataType_N(code_range_from_ctx(ctx), "real16", empty_shape)
         elif ctx.REAL():
-            return ScalarDataType_N(code_range_from_ctx(ctx), "real")
+            return ArrayDataType_N(code_range_from_ctx(ctx), "real", empty_shape)
 
     # Visit a parse tree produced by GeLBParser#array_data_type.
     def visitArray_data_type(
             self,
             ctx: GeLBParser.Array_data_typeContext
     ):
+        # For array types, extract the scalar string from the element type
+        element_type_node = self.visit(ctx.element_type)
+        if isinstance(element_type_node, ArrayDataType_N):
+            # Element type is a 0D array, extract the scalar string
+            scalar_type = element_type_node.element_dtype
+        else:
+            # Legacy fallback
+            scalar_type = element_type_node
+        
         return ArrayDataType_N(
             code_range_from_ctx(ctx),
-            self.visit(ctx.element_type),
+            scalar_type,
             self.visit(ctx.shape)
         )
 

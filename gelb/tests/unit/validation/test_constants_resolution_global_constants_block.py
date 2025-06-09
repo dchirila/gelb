@@ -30,11 +30,11 @@ def test_valid1():
         "(GlobalConstantsBlock"
         " (ConstantDefinitionStmt"
             " (Identifier TWELVE)"
-            " (ScalarDataType int)"
+            " (ArrayDataType int (List ))"
             " (IntLiteral 12))"
         " (ConstantDefinitionStmt"
             " (Identifier TWENTYFOUR)"
-            " (ScalarDataType int)"
+            " (ArrayDataType int (List ))"
             " (Add (Mul (IntLiteral 2) (IntLiteral 12)) (IntLiteral 12))))"
     )
 
@@ -57,11 +57,11 @@ def test_valid2():
         "(GlobalConstantsBlock"
         " (ConstantDefinitionStmt"
             " (Identifier PI)"
-            " (ScalarDataType real64)"
+            " (ArrayDataType real64 (List ))"
             " (RealLiteral 3.141592653589793))"
         " (ConstantDefinitionStmt"
             " (Identifier TENPI)"
-            " (ScalarDataType real64)"
+            " (ArrayDataType real64 (List ))"
             " (Mul (RealLiteral 3.141592653589793) (RealLiteral 10.0))))"
     )
 

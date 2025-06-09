@@ -33,13 +33,11 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         }
     
     def _get_type_name(self, data_type):
-        """Extract type name from DataType_N or string."""
-        if isinstance(data_type, ScalarDataType_N):
-            return data_type.scalar_dtype
-        elif isinstance(data_type, ArrayDataType_N):
+        """Extract type name from ArrayDataType_N or string."""
+        if isinstance(data_type, ArrayDataType_N):
             # Return just the base type for validation purposes
             # Shape compatibility would be checked separately if needed
-            return data_type.scalar_dtype
+            return data_type.element_dtype
         elif isinstance(data_type, str):
             return data_type
         else:
@@ -50,15 +48,50 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         # For array types, we need to check both base type and shape
         if isinstance(type1, ArrayDataType_N) and isinstance(type2, ArrayDataType_N):
             # Check base types match
-            if type1.scalar_dtype != type2.scalar_dtype:
+            if type1.element_dtype != type2.element_dtype:
                 return False
-            # For now, ignore shape compatibility (future enhancement)
-            return True
+            # Check shape compatibility
+            return self._shapes_match(type1.shape, type2.shape)
         else:
             # Fallback to name comparison
             name1 = self._get_type_name(type1)
             name2 = self._get_type_name(type2)
             return name1 == name2
+    
+    def _shapes_match(self, shape1, shape2):
+        """Check if two shapes match exactly."""
+        # Handle List_N shapes (0D and 2D+)
+        if isinstance(shape1, List_N) and isinstance(shape2, List_N):
+            if len(shape1.elements) != len(shape2.elements):
+                return False
+            # For now, assume shapes match if they have the same number of dimensions
+            # A more sophisticated implementation would check dimension values
+            return True
+        
+        # Handle 1D shapes (IntLiteral_N or Identifier_N)
+        elif isinstance(shape1, (IntLiteral_N, Identifier_N)) and isinstance(shape2, (IntLiteral_N, Identifier_N)):
+            # Both are 1D arrays - for now assume they match
+            # A more sophisticated implementation would check dimension values
+            return True
+        
+        # Handle Array1DLiteral_N shapes (2D+)
+        elif isinstance(shape1, Array1DLiteral_N) and isinstance(shape2, Array1DLiteral_N):
+            return self._shapes_match(shape1.value, shape2.value)
+        
+        # Different shape types - no match
+        else:
+            return False
+    
+    def _is_scalar_array(self, array_type):
+        """Check if an ArrayDataType_N represents a scalar (0-dimensional)."""
+        if not isinstance(array_type, ArrayDataType_N):
+            return False
+        # Check if shape represents 0 dimensions
+        if isinstance(array_type.shape, List_N):
+            return len(array_type.shape.elements) == 0
+        else:
+            # Non-List_N shapes (IntLiteral_N, Identifier_N, Array1DLiteral_N) represent non-scalar arrays
+            return False
     
     def _validate_arithmetic_op(self, left_type, right_type, op_name, node):
         """
@@ -83,6 +116,26 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
                 f"Right operand of {op_name} has non-numeric type '{right_name}'",
                 f"Arithmetic operations require numeric types (int or real)"
             )
+        
+        # Check shape compatibility for arithmetic operations
+        if isinstance(left_type, ArrayDataType_N) and isinstance(right_type, ArrayDataType_N):
+            # Special case: if one operand is a non-scalar array, that's not allowed in basic arithmetic
+            left_is_scalar = self._is_scalar_array(left_type)
+            right_is_scalar = self._is_scalar_array(right_type)
+            
+            if not left_is_scalar:
+                raise GeLBExTypeError(
+                    node.left,
+                    f"Left operand of {op_name} has non-numeric type 'array'",
+                    f"Arithmetic operations require scalar numeric types, not arrays"
+                )
+            
+            if not right_is_scalar:
+                raise GeLBExTypeError(
+                    node.right,
+                    f"Right operand of {op_name} has non-numeric type 'array'",
+                    f"Arithmetic operations require scalar numeric types, not arrays"
+                )
         
         # After promotion, types should match
         if not self._types_match(left_type, right_type):
@@ -382,12 +435,8 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         lhs_type = node.lhs.inferred_type
         rhs_type = node.rhs.inferred_type
         
-        # For array selections, we need the element type, not the array type
-        target_type = lhs_type
-        if hasattr(lhs_type, 'scalar_dtype'):  # It's an ArrayDataType_N
-            target_type = lhs_type.scalar_dtype
-        
-        self._validate_assignment(target_type, rhs_type, node)
+        # Compare the full types (including shapes)
+        self._validate_assignment(lhs_type, rhs_type, node)
     
     # Block traversal
     
@@ -491,7 +540,7 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
             if len(node.value.elements) > 1 and hasattr(node, 'inferred_type'):
                 expected_type = None
                 if isinstance(node.inferred_type, ArrayDataType_N):
-                    expected_type = node.inferred_type.scalar_dtype
+                    expected_type = node.inferred_type.element_dtype
                 
                 # Check all elements match expected type
                 for i, elem in enumerate(node.value.elements):

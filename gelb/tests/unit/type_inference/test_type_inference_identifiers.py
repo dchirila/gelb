@@ -22,7 +22,7 @@ class TestIdentifierTypeInference:
         assert isinstance(mul_expr.inferred_type, ArrayDataType_N)
         # Check that it's 0-dimensional (scalar)
         assert len(mul_expr.inferred_type.shape.elements) == 0
-        assert mul_expr.inferred_type.scalar_dtype == "int"
+        assert mul_expr.inferred_type.element_dtype == "int"
     
     def test_implicit_constant_Nx(self):
         # Test that Nx can be accessed from blocks via parent symbol table
@@ -44,7 +44,7 @@ class TestIdentifierTypeInference:
         nx_identifier = sub_expr.left
         assert hasattr(nx_identifier, 'inferred_type')
         assert isinstance(nx_identifier.inferred_type, ArrayDataType_N)
-        assert nx_identifier.inferred_type.scalar_dtype == "int"
+        assert nx_identifier.inferred_type.element_dtype == "int"
     
     def test_implicit_variable_x_in_initializer(self):
         gelb_code = minimal_gelb_program(initializer_content="f.out[x | 0] = x;")
@@ -61,7 +61,7 @@ class TestIdentifierTypeInference:
         assert isinstance(x_identifier, Identifier_N)
         assert hasattr(x_identifier, 'inferred_type')
         assert isinstance(x_identifier.inferred_type, ArrayDataType_N)
-        assert x_identifier.inferred_type.scalar_dtype == "int"
+        assert x_identifier.inferred_type.element_dtype == "int"
     
     def test_array_identifier(self):
         # Test array variable declaration
@@ -81,16 +81,9 @@ class TestIdentifierTypeInference:
         assert isinstance(vec_lhs, Identifier_N)
         assert hasattr(vec_lhs, 'inferred_type')
         assert isinstance(vec_lhs.inferred_type, ArrayDataType_N)
-        # scalar_dtype might be a ScalarDataType_N node
-        if isinstance(vec_lhs.inferred_type.scalar_dtype, ScalarDataType_N):
-            assert vec_lhs.inferred_type.scalar_dtype.scalar_dtype == "int"
-        else:
-            assert vec_lhs.inferred_type.scalar_dtype == "int"
+        assert vec_lhs.inferred_type.element_dtype == "int"
         
         assert isinstance(vec_rhs, Identifier_N)
         assert hasattr(vec_rhs, 'inferred_type')
         assert isinstance(vec_rhs.inferred_type, ArrayDataType_N)
-        if isinstance(vec_rhs.inferred_type.scalar_dtype, ScalarDataType_N):
-            assert vec_rhs.inferred_type.scalar_dtype.scalar_dtype == "int"
-        else:
-            assert vec_rhs.inferred_type.scalar_dtype == "int"
+        assert vec_rhs.inferred_type.element_dtype == "int"

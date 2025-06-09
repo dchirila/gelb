@@ -232,7 +232,7 @@ Define type rules for the new operator:
         
         # Example: modulo returns same type as operands
         if are_both_integers(left_type, right_type):
-            node.inferred_type = ScalarDataType_N("int")
+            node.inferred_type = ArrayDataType_N("int", List_N())
         else:
             raise GeLBExTypeError("Modulo requires integer operands")
 
@@ -296,12 +296,12 @@ Adding new data types requires careful integration with the type system:
 
 .. code-block:: python
 
-    class ComplexDataType_N(DataType_N):
+    class ComplexDataType_N(Node_N):
         """Complex number data type."""
         
         def __init__(self, code_range):
             super().__init__(code_range)
-            self.scalar_dtype = "complex"
+            self.element_dtype = "complex"
 
 2. Type System Updates
 ---------------------

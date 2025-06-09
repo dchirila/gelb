@@ -130,19 +130,11 @@ All inherit from **AssignmentStmt_N** with ``lhs`` and ``rhs`` components:
 Data Type Nodes
 ----------------
 
-**DataType_N** (Abstract Base Class)
-  Base class for all type representations
-
-**ScalarDataType_N**
-  Represents scalar types: int, real, bool, string
-  
-  * ``scalar_dtype`` - Type name as string
-
 **ArrayDataType_N**
-  Represents array types
+  Represents all computational types (scalars and arrays)
   
-  * ``scalar_dtype`` - Element type name
-  * ``shape`` - Dimension specification
+  * ``element_dtype`` - Base type name (int, real, bool)
+  * ``shape`` - Dimension specification (empty List_N for scalars)
 
 Utility Nodes
 --------------

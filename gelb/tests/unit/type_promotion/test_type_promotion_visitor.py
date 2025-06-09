@@ -31,7 +31,7 @@ class TestTypePromotionVisitor:
         assert isinstance(add_expr.left, TypePromotionNode_N)
         assert isinstance(add_expr.left.expr, IntLiteral_N)
         assert add_expr.left.expr.value == 1
-        assert add_expr.left.target_type.scalar_dtype == "real"
+        assert add_expr.left.target_type.element_dtype == "real"
         
         # Right operand (2.5) should not be promoted
         assert isinstance(add_expr.right, RealLiteral_N)
@@ -54,7 +54,7 @@ class TestTypePromotionVisitor:
         assert isinstance(add_expr.left, TypePromotionNode_N)
         assert isinstance(add_expr.left.expr, BoolLiteral_N)
         assert add_expr.left.expr.value == "true"
-        assert add_expr.left.target_type.scalar_dtype == "int"
+        assert add_expr.left.target_type.element_dtype == "int"
     
     def test_arithmetic_bool_real_promotion(self):
         """Test bool * real promotes bool to real."""
@@ -73,7 +73,7 @@ class TestTypePromotionVisitor:
         assert isinstance(mul_expr.left, TypePromotionNode_N)
         assert isinstance(mul_expr.left.expr, BoolLiteral_N)
         assert mul_expr.left.expr.value == "false"
-        assert mul_expr.left.target_type.scalar_dtype == "real"
+        assert mul_expr.left.target_type.element_dtype == "real"
     
     def test_comparison_promotion(self):
         """Test comparison with different types promotes to common type."""
@@ -92,7 +92,7 @@ class TestTypePromotionVisitor:
         assert isinstance(less_expr.left, TypePromotionNode_N)
         assert isinstance(less_expr.left.expr, IntLiteral_N)
         assert less_expr.left.expr.value == 1
-        assert less_expr.left.target_type.scalar_dtype == "real"
+        assert less_expr.left.target_type.element_dtype == "real"
     
     def test_assignment_promotion(self):
         """Test assignment promotes RHS to LHS type."""
@@ -110,7 +110,7 @@ class TestTypePromotionVisitor:
         assert isinstance(assign_stmt.rhs, TypePromotionNode_N)
         assert isinstance(assign_stmt.rhs.expr, IntLiteral_N)
         assert assign_stmt.rhs.expr.value == 42
-        assert assign_stmt.rhs.target_type.scalar_dtype == "real"
+        assert assign_stmt.rhs.target_type.element_dtype == "real"
     
     def test_constant_definition_promotion(self):
         """Test constant definition promotes value to declared type."""
@@ -127,7 +127,7 @@ class TestTypePromotionVisitor:
         assert isinstance(const_def.value, TypePromotionNode_N)
         assert isinstance(const_def.value.expr, IntLiteral_N)
         assert const_def.value.expr.value == 10
-        assert const_def.value.target_type.scalar_dtype == "real"
+        assert const_def.value.target_type.element_dtype == "real"
     
     def test_no_promotion_same_types(self):
         """Test no promotion when types already match."""
@@ -179,7 +179,7 @@ class TestTypePromotionVisitor:
         # The (1 + 2) result should be promoted to real
         assert isinstance(mul_expr.left, TypePromotionNode_N)
         assert isinstance(mul_expr.left.expr, Add_N)
-        assert mul_expr.left.target_type.scalar_dtype == "real"
+        assert mul_expr.left.target_type.element_dtype == "real"
     
     def test_array_element_assignment_promotion(self):
         """Test promotion in array element assignments."""
@@ -197,7 +197,7 @@ class TestTypePromotionVisitor:
         assert isinstance(assign_stmt.rhs, TypePromotionNode_N)
         assert isinstance(assign_stmt.rhs.expr, IntLiteral_N)
         assert assign_stmt.rhs.expr.value == 1
-        assert assign_stmt.rhs.target_type.scalar_dtype == "real"
+        assert assign_stmt.rhs.target_type.element_dtype == "real"
 
 
 class TestTypePromotionInExpressions:
@@ -226,16 +226,16 @@ class TestTypePromotionInExpressions:
         
         # 1 should be promoted to real
         assert isinstance(add_expr.left, TypePromotionNode_N)
-        assert add_expr.left.target_type.scalar_dtype == "real"
+        assert add_expr.left.target_type.element_dtype == "real"
         
         # 2 * 3.0: 2 should be promoted to real
         mul_expr = add_expr.right
         assert isinstance(mul_expr.left, TypePromotionNode_N)
-        assert mul_expr.left.target_type.scalar_dtype == "real"
+        assert mul_expr.left.target_type.element_dtype == "real"
         
         # 4 should be promoted to real
         assert isinstance(sub_expr.right, TypePromotionNode_N)
-        assert sub_expr.right.target_type.scalar_dtype == "real"
+        assert sub_expr.right.target_type.element_dtype == "real"
     
     def test_mixed_bool_int_real(self):
         """Test promotion with mixed bool, int, and real."""
@@ -256,4 +256,4 @@ class TestTypePromotionInExpressions:
         # (true + 1) should result in int, then promoted to real
         inner_add = outer_add.left
         assert isinstance(inner_add, TypePromotionNode_N)
-        assert inner_add.target_type.scalar_dtype == "real"
+        assert inner_add.target_type.element_dtype == "real"

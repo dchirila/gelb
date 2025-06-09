@@ -25,7 +25,7 @@ class TestScalarAsArrayRepresentation:
         assert isinstance(int_literal, IntLiteral_N)
         assert hasattr(int_literal, 'inferred_type')
         assert isinstance(int_literal.inferred_type, ArrayDataType_N)
-        assert int_literal.inferred_type.scalar_dtype == "int"
+        assert int_literal.inferred_type.element_dtype == "int"
         assert len(int_literal.inferred_type.shape.elements) == 0
     
     def test_real_literal_as_zero_dimensional_array(self):
@@ -39,7 +39,7 @@ class TestScalarAsArrayRepresentation:
         assert isinstance(real_literal, RealLiteral_N)
         assert hasattr(real_literal, 'inferred_type')
         assert isinstance(real_literal.inferred_type, ArrayDataType_N)
-        assert real_literal.inferred_type.scalar_dtype == "real"
+        assert real_literal.inferred_type.element_dtype == "real"
         assert len(real_literal.inferred_type.shape.elements) == 0
     
     def test_bool_literal_as_zero_dimensional_array(self):
@@ -53,11 +53,11 @@ class TestScalarAsArrayRepresentation:
         assert isinstance(bool_literal, BoolLiteral_N)
         assert hasattr(bool_literal, 'inferred_type')
         assert isinstance(bool_literal.inferred_type, ArrayDataType_N)
-        assert bool_literal.inferred_type.scalar_dtype == "bool"
+        assert bool_literal.inferred_type.element_dtype == "bool"
         assert len(bool_literal.inferred_type.shape.elements) == 0
     
     def test_string_literal_exception_confirmed(self):
-        """Confirm that string literals remain as ScalarDataType_N (design exception)."""
+        """Confirm that string literals use StringType_N (design exception)."""
         # Note: Strings don't have explicit constants in GeLB since they're not part 
         # of the numerical computation focus. String literals only appear in 
         # simulation_description and similar contexts.
@@ -88,7 +88,7 @@ class TestArithmeticOperationsArrayTypes:
         assert isinstance(add_expr, Add_N)
         assert hasattr(add_expr, 'inferred_type')
         assert isinstance(add_expr.inferred_type, ArrayDataType_N)
-        assert add_expr.inferred_type.scalar_dtype == "int"
+        assert add_expr.inferred_type.element_dtype == "int"
         assert len(add_expr.inferred_type.shape.elements) == 0
     
     def test_multiplication_preserves_scalar_array_semantics(self):
@@ -102,7 +102,7 @@ class TestArithmeticOperationsArrayTypes:
         assert isinstance(mul_expr, Mul_N)
         assert hasattr(mul_expr, 'inferred_type')
         assert isinstance(mul_expr.inferred_type, ArrayDataType_N)
-        assert mul_expr.inferred_type.scalar_dtype == "int"
+        assert mul_expr.inferred_type.element_dtype == "int"
         assert len(mul_expr.inferred_type.shape.elements) == 0
     
     def test_comparison_operations_return_scalar_bool_arrays(self):
@@ -116,7 +116,7 @@ class TestArithmeticOperationsArrayTypes:
         assert isinstance(gt_expr, Greater_N)
         assert hasattr(gt_expr, 'inferred_type')
         assert isinstance(gt_expr.inferred_type, ArrayDataType_N)
-        assert gt_expr.inferred_type.scalar_dtype == "bool"
+        assert gt_expr.inferred_type.element_dtype == "bool"
         assert len(gt_expr.inferred_type.shape.elements) == 0
     
     def test_equality_operations_return_scalar_bool_arrays(self):
@@ -130,7 +130,7 @@ class TestArithmeticOperationsArrayTypes:
         assert isinstance(eq_expr, Equal_N)
         assert hasattr(eq_expr, 'inferred_type')
         assert isinstance(eq_expr.inferred_type, ArrayDataType_N)
-        assert eq_expr.inferred_type.scalar_dtype == "bool"
+        assert eq_expr.inferred_type.element_dtype == "bool"
         assert len(eq_expr.inferred_type.shape.elements) == 0
     
     def test_logical_and_operations_return_scalar_bool_arrays(self):
@@ -144,7 +144,7 @@ class TestArithmeticOperationsArrayTypes:
         assert isinstance(and_expr, And_N)
         assert hasattr(and_expr, 'inferred_type')
         assert isinstance(and_expr.inferred_type, ArrayDataType_N)
-        assert and_expr.inferred_type.scalar_dtype == "bool"
+        assert and_expr.inferred_type.element_dtype == "bool"
         assert len(and_expr.inferred_type.shape.elements) == 0
     
     def test_logical_or_operations_return_scalar_bool_arrays(self):
@@ -158,7 +158,7 @@ class TestArithmeticOperationsArrayTypes:
         assert isinstance(or_expr, Or_N)
         assert hasattr(or_expr, 'inferred_type')
         assert isinstance(or_expr.inferred_type, ArrayDataType_N)
-        assert or_expr.inferred_type.scalar_dtype == "bool"
+        assert or_expr.inferred_type.element_dtype == "bool"
         assert len(or_expr.inferred_type.shape.elements) == 0
     
     def test_unary_minus_preserves_operand_array_semantics(self):
@@ -172,7 +172,7 @@ class TestArithmeticOperationsArrayTypes:
         assert isinstance(minus_expr, UnaryMinusExpr_N)
         assert hasattr(minus_expr, 'inferred_type')
         assert isinstance(minus_expr.inferred_type, ArrayDataType_N)
-        assert minus_expr.inferred_type.scalar_dtype == "int"
+        assert minus_expr.inferred_type.element_dtype == "int"
         assert len(minus_expr.inferred_type.shape.elements) == 0
     
     def test_logical_not_preserves_operand_array_semantics(self):
@@ -186,7 +186,7 @@ class TestArithmeticOperationsArrayTypes:
         assert isinstance(not_expr, NotExpr_N)
         assert hasattr(not_expr, 'inferred_type')
         assert isinstance(not_expr.inferred_type, ArrayDataType_N)
-        assert not_expr.inferred_type.scalar_dtype == "bool"
+        assert not_expr.inferred_type.element_dtype == "bool"
         assert len(not_expr.inferred_type.shape.elements) == 0
 
 
@@ -204,7 +204,7 @@ class TestMixedTypeOperationsWithArraySemantics:
         assert isinstance(add_expr, Add_N)
         assert hasattr(add_expr, 'inferred_type')
         assert isinstance(add_expr.inferred_type, ArrayDataType_N)
-        assert add_expr.inferred_type.scalar_dtype == "real"
+        assert add_expr.inferred_type.element_dtype == "real"
         assert len(add_expr.inferred_type.shape.elements) == 0
     
     def test_mixed_int_real_multiplication_promotes_to_real_array(self):
@@ -218,7 +218,7 @@ class TestMixedTypeOperationsWithArraySemantics:
         assert isinstance(mul_expr, Mul_N)
         assert hasattr(mul_expr, 'inferred_type')
         assert isinstance(mul_expr.inferred_type, ArrayDataType_N)
-        assert mul_expr.inferred_type.scalar_dtype == "real"
+        assert mul_expr.inferred_type.element_dtype == "real"
         assert len(mul_expr.inferred_type.shape.elements) == 0
     
     def test_nested_expressions_maintain_array_types(self):
@@ -233,7 +233,7 @@ class TestMixedTypeOperationsWithArraySemantics:
         assert isinstance(mul_expr, Mul_N)
         assert hasattr(mul_expr, 'inferred_type')
         assert isinstance(mul_expr.inferred_type, ArrayDataType_N)
-        assert mul_expr.inferred_type.scalar_dtype == "real"
+        assert mul_expr.inferred_type.element_dtype == "real"
         assert len(mul_expr.inferred_type.shape.elements) == 0
         
         # Check inner addition (left operand of multiplication)
@@ -241,7 +241,7 @@ class TestMixedTypeOperationsWithArraySemantics:
         assert isinstance(add_expr, Add_N)
         assert hasattr(add_expr, 'inferred_type')
         assert isinstance(add_expr.inferred_type, ArrayDataType_N)
-        assert add_expr.inferred_type.scalar_dtype == "int"
+        assert add_expr.inferred_type.element_dtype == "int"
         assert len(add_expr.inferred_type.shape.elements) == 0
 
 
@@ -264,14 +264,14 @@ class TestConstantFoldingWithArrayTypes:
         assert isinstance(mul_expr, Mul_N)
         assert hasattr(mul_expr, 'inferred_type')
         assert isinstance(mul_expr.inferred_type, ArrayDataType_N)
-        assert mul_expr.inferred_type.scalar_dtype == "int"
+        assert mul_expr.inferred_type.element_dtype == "int"
         assert len(mul_expr.inferred_type.shape.elements) == 0
         
         # The operands should also be array-typed literals
         assert isinstance(mul_expr.left, IntLiteral_N)
         assert hasattr(mul_expr.left, 'inferred_type')
         assert isinstance(mul_expr.left.inferred_type, ArrayDataType_N)
-        assert mul_expr.left.inferred_type.scalar_dtype == "int"
+        assert mul_expr.left.inferred_type.element_dtype == "int"
 
 
 class TestTypePromotionWithArrayTypes:
@@ -288,7 +288,7 @@ class TestTypePromotionWithArrayTypes:
         assert isinstance(add_expr, Add_N)
         assert hasattr(add_expr, 'inferred_type')
         assert isinstance(add_expr.inferred_type, ArrayDataType_N)
-        assert add_expr.inferred_type.scalar_dtype == "int"
+        assert add_expr.inferred_type.element_dtype == "int"
         assert len(add_expr.inferred_type.shape.elements) == 0
     
     def test_int_to_real_promotion_preserves_array_semantics(self):
@@ -302,7 +302,7 @@ class TestTypePromotionWithArrayTypes:
         assert isinstance(add_expr, Add_N)
         assert hasattr(add_expr, 'inferred_type')
         assert isinstance(add_expr.inferred_type, ArrayDataType_N)
-        assert add_expr.inferred_type.scalar_dtype == "real"
+        assert add_expr.inferred_type.element_dtype == "real"
         assert len(add_expr.inferred_type.shape.elements) == 0
     
     def test_complex_promotion_chain_preserves_array_semantics(self):
@@ -316,5 +316,5 @@ class TestTypePromotionWithArrayTypes:
         assert isinstance(outer_add, Add_N)
         assert hasattr(outer_add, 'inferred_type')
         assert isinstance(outer_add.inferred_type, ArrayDataType_N)
-        assert outer_add.inferred_type.scalar_dtype == "real"
+        assert outer_add.inferred_type.element_dtype == "real"
         assert len(outer_add.inferred_type.shape.elements) == 0

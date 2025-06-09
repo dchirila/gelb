@@ -270,17 +270,17 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
     def _set_default_array_type(self, literal_node):
         """Set default ArrayDataType_N for a literal node."""
         if isinstance(literal_node, IntLiteral_N):
-            scalar_dtype = "int"
+            element_dtype = "int"
         elif isinstance(literal_node, RealLiteral_N):
-            scalar_dtype = "real"
+            element_dtype = "real"
         elif isinstance(literal_node, BoolLiteral_N):
-            scalar_dtype = "bool"
+            element_dtype = "bool"
         else:
             return  # Unknown type, skip
         
         # Create 0-dimensional array type (scalar as array)
         empty_shape = List_N(literal_node.code_range)
-        literal_node.inferred_type = ArrayDataType_N(literal_node.code_range, scalar_dtype, empty_shape)
+        literal_node.inferred_type = ArrayDataType_N(literal_node.code_range, element_dtype, empty_shape)
     
     def _create_typed_bool_literal(self, code_range, bool_str, reference_node=None):
         """Create a BoolLiteral_N with proper ArrayDataType_N type."""

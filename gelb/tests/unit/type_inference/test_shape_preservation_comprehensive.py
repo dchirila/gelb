@@ -26,7 +26,7 @@ class TestScalarOperationsShapePreservation:
         # Check result shape
         assert isinstance(add_expr.inferred_type, ArrayDataType_N)
         assert len(add_expr.inferred_type.shape.elements) == 0  # 0-dimensional
-        assert add_expr.inferred_type.scalar_dtype == "int"
+        assert add_expr.inferred_type.element_dtype == "int"
         
         # Check operand shapes are also 0-dimensional
         left_operand = add_expr.left
@@ -46,7 +46,7 @@ class TestScalarOperationsShapePreservation:
         
         assert isinstance(mul_expr.inferred_type, ArrayDataType_N)
         assert len(mul_expr.inferred_type.shape.elements) == 0  # 0-dimensional
-        assert mul_expr.inferred_type.scalar_dtype == "real"
+        assert mul_expr.inferred_type.element_dtype == "real"
     
     def test_scalar_comparison_produces_zero_dimensional_bool(self):
         """Scalar comparison should result in 0-dimensional bool array."""
@@ -58,7 +58,7 @@ class TestScalarOperationsShapePreservation:
         
         assert isinstance(gt_expr.inferred_type, ArrayDataType_N)
         assert len(gt_expr.inferred_type.shape.elements) == 0  # 0-dimensional
-        assert gt_expr.inferred_type.scalar_dtype == "bool"
+        assert gt_expr.inferred_type.element_dtype == "bool"
     
     def test_logical_operations_preserve_zero_dimensional_bool_shape(self):
         """Logical operations should result in 0-dimensional bool arrays."""
@@ -70,7 +70,7 @@ class TestScalarOperationsShapePreservation:
         
         assert isinstance(and_expr.inferred_type, ArrayDataType_N)
         assert len(and_expr.inferred_type.shape.elements) == 0  # 0-dimensional
-        assert and_expr.inferred_type.scalar_dtype == "bool"
+        assert and_expr.inferred_type.element_dtype == "bool"
 
 
 class TestArrayLiteralShapeInference:
@@ -85,7 +85,7 @@ class TestArrayLiteralShapeInference:
         array_literal = const_stmt.value
         
         assert isinstance(array_literal.inferred_type, ArrayDataType_N)
-        assert array_literal.inferred_type.scalar_dtype == "int"
+        assert array_literal.inferred_type.element_dtype == "int"
         
         # Check shape - should be 1-dimensional with size 3
         shape = array_literal.inferred_type.shape
@@ -101,7 +101,7 @@ class TestArrayLiteralShapeInference:
         array_literal = const_stmt.value
         
         assert isinstance(array_literal.inferred_type, ArrayDataType_N)
-        assert array_literal.inferred_type.scalar_dtype == "real"
+        assert array_literal.inferred_type.element_dtype == "real"
         
         # Check shape - should be 2-dimensional with shape {2, 3}
         shape = array_literal.inferred_type.shape
@@ -124,7 +124,7 @@ class TestArrayLiteralShapeInference:
             assert isinstance(element, IntLiteral_N)
             assert hasattr(element, 'inferred_type')
             assert isinstance(element.inferred_type, ArrayDataType_N)
-            assert element.inferred_type.scalar_dtype == "int"
+            assert element.inferred_type.element_dtype == "int"
             assert len(element.inferred_type.shape.elements) == 0  # 0-dimensional
 
 
@@ -174,7 +174,7 @@ class TestUnaryOperationsShapePreservation:
         # Result should be 0-dimensional
         assert isinstance(minus_expr.inferred_type, ArrayDataType_N)
         assert len(minus_expr.inferred_type.shape.elements) == 0
-        assert minus_expr.inferred_type.scalar_dtype == "int"
+        assert minus_expr.inferred_type.element_dtype == "int"
         
         # Operand should also be 0-dimensional
         operand = minus_expr.value
@@ -192,7 +192,7 @@ class TestUnaryOperationsShapePreservation:
         # Result should be 0-dimensional bool
         assert isinstance(not_expr.inferred_type, ArrayDataType_N)
         assert len(not_expr.inferred_type.shape.elements) == 0
-        assert not_expr.inferred_type.scalar_dtype == "bool"
+        assert not_expr.inferred_type.element_dtype == "bool"
 
 
 class TestComplexExpressionShapePreservation:
@@ -209,19 +209,19 @@ class TestComplexExpressionShapePreservation:
         # Outer multiplication should be 0-dimensional real
         assert isinstance(mul_expr.inferred_type, ArrayDataType_N)
         assert len(mul_expr.inferred_type.shape.elements) == 0
-        assert mul_expr.inferred_type.scalar_dtype == "real"
+        assert mul_expr.inferred_type.element_dtype == "real"
         
         # Left operand (1 + 2) should be 0-dimensional int
         left_add = mul_expr.left
         assert isinstance(left_add.inferred_type, ArrayDataType_N)
         assert len(left_add.inferred_type.shape.elements) == 0
-        assert left_add.inferred_type.scalar_dtype == "int"
+        assert left_add.inferred_type.element_dtype == "int"
         
         # Right operand (3.0 / 4.0) should be 0-dimensional real
         right_div = mul_expr.right
         assert isinstance(right_div.inferred_type, ArrayDataType_N)
         assert len(right_div.inferred_type.shape.elements) == 0
-        assert right_div.inferred_type.scalar_dtype == "real"
+        assert right_div.inferred_type.element_dtype == "real"
     
     def test_mixed_type_promotion_preserves_shapes(self):
         """Type promotion should preserve array shapes while promoting scalar types."""
@@ -234,7 +234,7 @@ class TestComplexExpressionShapePreservation:
         # Result should be 0-dimensional real (promoted from int + real)
         assert isinstance(add_expr.inferred_type, ArrayDataType_N)
         assert len(add_expr.inferred_type.shape.elements) == 0
-        assert add_expr.inferred_type.scalar_dtype == "real"
+        assert add_expr.inferred_type.element_dtype == "real"
         
         # Operands should be 0-dimensional with their original types
         int_operand = add_expr.left
@@ -242,11 +242,11 @@ class TestComplexExpressionShapePreservation:
         
         assert isinstance(int_operand.inferred_type, ArrayDataType_N)
         assert len(int_operand.inferred_type.shape.elements) == 0
-        assert int_operand.inferred_type.scalar_dtype == "int"
+        assert int_operand.inferred_type.element_dtype == "int"
         
         assert isinstance(real_operand.inferred_type, ArrayDataType_N)
         assert len(real_operand.inferred_type.shape.elements) == 0
-        assert real_operand.inferred_type.scalar_dtype == "real"
+        assert real_operand.inferred_type.element_dtype == "real"
 
 
 class TestShapeCompatibilityValidation:
@@ -265,7 +265,7 @@ class TestShapeCompatibilityValidation:
         for element in elements:
             assert isinstance(element.inferred_type, ArrayDataType_N)
             assert len(element.inferred_type.shape.elements) == 0
-            assert element.inferred_type.scalar_dtype == "int"
+            assert element.inferred_type.element_dtype == "int"
     
     def test_shape_inference_with_constants(self):
         """Shape inference should work correctly with constant references."""
@@ -282,7 +282,7 @@ class TestShapeCompatibilityValidation:
         size_literal = size_stmt.value
         assert isinstance(size_literal.inferred_type, ArrayDataType_N)
         assert len(size_literal.inferred_type.shape.elements) == 0
-        assert size_literal.inferred_type.scalar_dtype == "int"
+        assert size_literal.inferred_type.element_dtype == "int"
         
         # Array should be 1-dimensional
         vec_literal = vec_stmt.value

@@ -19,21 +19,6 @@ def assert_cst_equals(test_string, expected, rule):
     assert result == expected
 
 
-def get_scalar_data_types():
-    """Return test data for scalar data types supported by GeLB grammar."""
-    return [
-        ("bool", "(scalar_data_type (scalar_bool_data_type bool))"),
-        ("int64", "(scalar_data_type (scalar_int_data_type int64))"),
-        ("int32", "(scalar_data_type (scalar_int_data_type int32))"),
-        ("int16", "(scalar_data_type (scalar_int_data_type int16))"),
-        ("int8", "(scalar_data_type (scalar_int_data_type int8))"),
-        ("int", "(scalar_data_type (scalar_int_data_type int))"),
-        ("real64", "(scalar_data_type (scalar_real_data_type real64))"),
-        ("real32", "(scalar_data_type (scalar_real_data_type real32))"),
-        ("real16", "(scalar_data_type (scalar_real_data_type real16))"),
-        ("real", "(scalar_data_type (scalar_real_data_type real))"),
-    ]
-
 
 def get_expression_parse_test_data():
     """Return test data for expression parsing tests (CST) across all expression types."""
