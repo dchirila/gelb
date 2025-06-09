@@ -7,7 +7,7 @@ Tests implicit type promotions in various contexts.
 
 import pytest
 from gelb.gelb_ast.ASTNodes import *
-from gelb.tests.test_utils import get_typed_ast, minimal_gelb_program_1d
+from gelb.tests.test_utils import get_typed_ast, minimal_gelb_program_1d, minimal_gelb_program_2d
 from gelb.frontend.stage1_frontend import promote_types
 
 
@@ -257,3 +257,58 @@ class TestTypePromotionInExpressions:
         inner_add = outer_add.left
         assert isinstance(inner_add, TypePromotionNode_N)
         assert inner_add.target_type.element_dtype == "real"
+    
+    def test_scalar_to_array_broadcast_basic(self):
+        """Test basic scalar-to-array broadcasting."""
+        test_code = minimal_gelb_program_1d(
+            initializer_content="""
+                array[int, 5] arr;
+                arr = 42;
+            """
+        )
+        ast = get_typed_ast(test_code)
+        ast = promote_types(ast)
+        
+        # Find the assignment
+        init_block = ast.initializers[0]
+        assign_stmt = init_block.stmts.elements[1]  # arr = 42
+        
+        # Check that RHS is a BroadcastNode_N
+        assert isinstance(assign_stmt.rhs, BroadcastNode_N)
+        
+        # Check the scalar expression
+        broadcast = assign_stmt.rhs
+        assert isinstance(broadcast.scalar_expr, IntLiteral_N)
+        assert broadcast.scalar_expr.value == 42
+        
+        # Check the target type
+        assert isinstance(broadcast.target_array_type, ArrayDataType_N)
+        assert broadcast.target_array_type.element_dtype == "int"
+    
+    def test_scalar_to_array_broadcast_with_promotion(self):
+        """Test scalar-to-array broadcasting with type promotion."""
+        test_code = minimal_gelb_program_2d(
+            initializer_content="""
+                array[real, {3, 3}] matrix;
+                matrix = 1;  // int promoted to real, then broadcast
+            """
+        )
+        ast = get_typed_ast(test_code)
+        ast = promote_types(ast)
+        
+        # Find the assignment
+        init_block = ast.initializers[0]
+        assign_stmt = init_block.stmts.elements[1]  # matrix = 1
+        
+        # Check that RHS is a BroadcastNode_N
+        assert isinstance(assign_stmt.rhs, BroadcastNode_N)
+        
+        # Check the scalar expression is promoted
+        broadcast = assign_stmt.rhs
+        assert isinstance(broadcast.scalar_expr, TypePromotionNode_N)
+        assert isinstance(broadcast.scalar_expr.expr, IntLiteral_N)
+        assert broadcast.scalar_expr.expr.value == 1
+        assert broadcast.scalar_expr.target_type.element_dtype == "real"
+        
+        # Check the target type
+        assert broadcast.target_array_type.element_dtype == "real"

@@ -508,6 +508,12 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         self.visit(node.expr, ast_root_node)
         return node
     
+    def visitBroadcastNode_N(self, node: BroadcastNode_N, ast_root_node: Program_N):
+        """Broadcast nodes are always valid (created by TypePromotionVisitor)."""
+        # Visit the wrapped scalar expression
+        self.visit(node.scalar_expr, ast_root_node)
+        return node
+    
     # Array literals
     
     def visitArray1DLiteral_N(self, node: Array1DLiteral_N, ast_root_node: Program_N):

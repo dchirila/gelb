@@ -216,6 +216,18 @@ class ConstantAssignmentValidationVisitor(ASTBaseVisitor, SymbolTableUtilityMixi
     def visitRealLiteral_N(self, node, ast_root_node):
         """Visit real literal (no validation needed)."""
         return node
+    
+    def visitBroadcastNode_N(self, node, ast_root_node):
+        """Visit broadcast node (no validation needed)."""
+        # Visit the wrapped scalar expression
+        self.visit(node.scalar_expr, ast_root_node)
+        return node
+    
+    def visitTypePromotionNode_N(self, node, ast_root_node):
+        """Visit type promotion node (no validation needed)."""
+        # Visit the wrapped expression
+        self.visit(node.expr, ast_root_node)
+        return node
 
     def visitBoolLiteral_N(self, node, ast_root_node):
         """Visit boolean literal (no validation needed)."""

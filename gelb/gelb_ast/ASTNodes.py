@@ -683,6 +683,42 @@ class TypePromotionNode_N(Expr_N):
         return f"(TypePromotion {self.expr} -> {self.target_type})"
 
 
+class BroadcastNode_N(Expr_N):
+    """
+    Represents a scalar-to-array broadcast operation in the AST.
+    
+    This node wraps a scalar expression that needs to be broadcast
+    to fill an array of a specific shape. It makes broadcasting explicit
+    in the AST, allowing backends to generate efficient code.
+    
+    Examples:
+        Broadcast scalar 1 to array[real, {2, 3}]:
+        BroadcastNode_N(IntLiteral_N(1), ArrayDataType_N("real", shape))
+        
+        In backend, this could generate:
+        - Fortran: a(:,:) = 1.0
+        - C: memset or loop with single value
+        - NumPy: np.full(shape, 1.0)
+    """
+    def __init__(self, code_range, scalar_expr, target_array_type):
+        super().__init__(code_range)
+        self.scalar_expr = scalar_expr  # Scalar expression to broadcast
+        self.target_array_type = target_array_type  # Target array type with shape
+        # The inferred type is the target array type
+        self.inferred_type = target_array_type
+    
+    def get_children(self):
+        children = set()
+        if self.scalar_expr is not None:
+            children.add(self.scalar_expr)
+        if self.target_array_type is not None:
+            children.add(self.target_array_type)
+        return children
+    
+    def __str__(self):
+        return f"(Broadcast {self.scalar_expr} -> {self.target_array_type})"
+
+
 class Literal_N(Expr_N):
     """
     Base-class for all GeLB literals.

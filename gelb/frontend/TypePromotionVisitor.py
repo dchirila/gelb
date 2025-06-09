@@ -129,6 +129,38 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
             target_type = ArrayDataType_N(expr.code_range, target_type_name, empty_shape)
         return TypePromotionNode_N(expr.code_range, expr, target_type)
     
+    def _is_scalar_array(self, array_type):
+        """Check if an ArrayDataType_N represents a scalar (0-dimensional)."""
+        if not isinstance(array_type, ArrayDataType_N):
+            return False
+        # Check if shape represents 0 dimensions
+        if isinstance(array_type.shape, List_N):
+            return len(array_type.shape.elements) == 0
+        else:
+            # Non-List_N shapes (IntLiteral_N, Identifier_N, Array1DLiteral_N) represent non-scalar arrays
+            return False
+    
+    def _create_broadcast(self, scalar_expr, target_array_type):
+        """
+        Create a BroadcastNode_N for scalar-to-array broadcasting.
+        
+        Args:
+            scalar_expr: Scalar expression to broadcast
+            target_array_type: Target array type with shape
+            
+        Returns:
+            BroadcastNode_N: The broadcast node
+        """
+        # First, check if the scalar needs type promotion
+        scalar_type_name = self._get_type_name(scalar_expr.inferred_type)
+        target_element_type = target_array_type.element_dtype
+        
+        # If scalar needs promotion to match array element type, wrap it first
+        if self._needs_promotion(scalar_type_name, target_element_type):
+            scalar_expr = self._create_promotion(scalar_expr, target_element_type)
+        
+        return BroadcastNode_N(scalar_expr.code_range, scalar_expr, target_array_type)
+    
     # Program traversal
     
     def visitProgram_N(self, node: Program_N, ast_root_node: Program_N):
@@ -342,6 +374,7 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         """
         Handle type promotion in assignment statements.
         RHS is promoted to LHS type if compatible.
+        Supports scalar-to-array broadcasting.
         """
         # Visit both sides
         node.lhs = self.visit(node.lhs, ast_root_node)
@@ -357,15 +390,25 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         lhs_type = node.lhs.inferred_type
         rhs_type = node.rhs.inferred_type
         
-        # For array selections, we need the element type, not the array type
-        target_type = lhs_type
-        if hasattr(lhs_type, 'element_dtype'):  # It's an ArrayDataType_N
-            target_type = lhs_type.element_dtype
+        # Check if this is a scalar-to-array broadcast case
+        lhs_is_scalar = self._is_scalar_array(lhs_type) if isinstance(lhs_type, ArrayDataType_N) else True
+        rhs_is_scalar = self._is_scalar_array(rhs_type) if isinstance(rhs_type, ArrayDataType_N) else True
         
-        # Check if RHS needs promotion to target type
-        if self._needs_promotion(rhs_type, target_type):
-            target_type_name = self._get_type_name(target_type)
-            node.rhs = self._create_promotion(node.rhs, target_type_name)
+        if not lhs_is_scalar and rhs_is_scalar:
+            # Scalar-to-array broadcasting case
+            # Create a broadcast node that will expand the scalar to the array shape
+            node.rhs = self._create_broadcast(node.rhs, lhs_type)
+        else:
+            # Regular assignment or array-to-array
+            # For array selections, we need the element type, not the array type
+            target_type = lhs_type
+            if hasattr(lhs_type, 'element_dtype'):  # It's an ArrayDataType_N
+                target_type = lhs_type.element_dtype
+            
+            # Check if RHS needs promotion to target type
+            if self._needs_promotion(rhs_type, target_type):
+                target_type_name = self._get_type_name(target_type)
+                node.rhs = self._create_promotion(node.rhs, target_type_name)
         
         return node
     

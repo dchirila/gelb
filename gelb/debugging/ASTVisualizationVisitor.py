@@ -96,7 +96,7 @@ class ASTVisualizationVisitor(ASTBaseVisitor):
             return 'lightyellow'
         
         # Operators and expressions - Orange
-        elif any(x in node_type for x in ['Add', 'Sub', 'Mul', 'Div', 'Pow', 'Equal', 'Less', 'Greater', 'And', 'Or', 'Not']):
+        elif any(x in node_type for x in ['Add', 'Sub', 'Mul', 'Div', 'Pow', 'Equal', 'Less', 'Greater', 'And', 'Or', 'Not', 'TypePromotion', 'Broadcast']):
             return 'orange'
         
         # Statements and control flow - Purple

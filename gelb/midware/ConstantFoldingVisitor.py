@@ -519,6 +519,16 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         node.expr = self.visit(node.expr, ast_root_node)
         return node
     
+    def visitBroadcastNode_N(self, node: BroadcastNode_N, ast_root_node: Program_N):
+        """
+        Fold the scalar expression in broadcast nodes.
+        
+        Broadcasting itself cannot be folded (it's a runtime operation),
+        but we can fold the scalar expression being broadcast.
+        """
+        node.scalar_expr = self.visit(node.scalar_expr, ast_root_node)
+        return node
+    
     # Helper methods for boolean conversion
     
     def _string_to_bool(self, string_value):
