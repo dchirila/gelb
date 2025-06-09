@@ -499,9 +499,57 @@ Code Quality
 
 * **Consistent Style:** Follow existing code formatting
 * **Clear Naming:** Use descriptive names for new constructs
-* **Error Handling:** Provide clear error messages
+* **Error Handling:** Provide clear error messages using GeLBExTypeError for source context
 * **Performance:** Consider compilation and runtime performance
 * **Maintainability:** Write code that's easy to understand and modify
+
+Implementation Patterns
+----------------------
+
+**AST Node Design for Optimization:**
+
+When adding nodes that enable backend optimization (like BroadcastNode_N):
+
+.. code-block:: python
+
+    class OptimizationNode_N(Expr_N):
+        """Preserve original value for backend optimization."""
+        def __init__(self, code_range, original_expr, target_info):
+            super().__init__(code_range)
+            self.original_expr = original_expr  # Preserve for backend
+            self.target_info = target_info      # Additional metadata
+            self.inferred_type = target_info    # Set type during creation
+
+**Visitor Pattern for Validation:**
+
+For compile-time validation (like range expressions):
+
+.. code-block:: python
+
+    def _validate_compile_time_evaluable(self, expr, context):
+        """Recursively validate expression can be evaluated at compile time."""
+        if isinstance(expr, allowed_types):
+            return True
+        elif isinstance(expr, Identifier_N):
+            if self._is_compile_time_constant(expr.name):
+                return True
+            else:
+                raise GeLBExTypeError(expr, 
+                    f"Expression in {context} must be compile-time evaluable",
+                    f"Variable '{expr.name}' is not allowed here...")
+
+**Extending Existing Nodes:**
+
+When enhancing existing functionality (like VariableDeclarationStmt_N):
+
+.. code-block:: python
+
+    # Add optional fields with None default for backward compatibility
+    def __init__(self, code_range, data_type, name, initial_value=None):
+        super().__init__(code_range)
+        self.data_type = data_type
+        self.name = name
+        self.initial_value = initial_value  # Optional new field
 
 Review Process
 -------------

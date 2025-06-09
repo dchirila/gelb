@@ -609,6 +609,29 @@ GeLB enforces compile-time evaluable range expressions, enabling superior optimi
 3. **Grid dimensions**: ``Nx``, ``Ny``, ``Nz`` from lattice definitions
 4. **Simple arithmetic**: ``N-1``, ``q+1``, ``Nx/2`` using compile-time values
 
+**Target Application Patterns:**
+
+Lattice Boltzmann Method simulations typically use static access patterns that work perfectly with compile-time ranges:
+
+.. code-block:: gelb
+
+    // Full distribution function access
+    f.out[x,y|:] = f.in[x,y|:];
+    
+    // Specific distribution function access
+    rho = f.in[x,y|0] + f.in[x,y|1];
+    
+    // Boundary conditions with grid dimensions
+    inlet[0,1:Ny-2] = INLET;
+    boundary[:,:] = WALL;
+    
+    // Neighbor access patterns
+    f.out[x,y|0] = f.in[x+1,y|0];
+    
+    // Range selections with constants
+    const int HALF = Nx/2;
+    center_region[HALF-5:HALF+5, :] = data;
+
 **Validation Process:**
 
 The **TypeInferenceVisitor** validates range expressions using ``_validate_compile_time_evaluable``:

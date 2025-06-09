@@ -98,6 +98,41 @@ Target-specific optimizations are applied:
 - **Memory layout optimization** - Efficient array access patterns
 - **Lattice iteration optimization** - Minimize memory bandwidth requirements for implicit iterations
 - **Instruction scheduling** - Platform-specific performance tuning
+- **Compile-time range optimization** - Static loop bounds enable unrolling and vectorization
+
+Compile-Time Range Benefits
+---------------------------
+
+GeLB's compile-time range restriction enables powerful backend optimizations:
+
+**Static Loop Generation:**
+All array and lattice access patterns have known bounds at compile time, allowing:
+
+- **Loop unrolling** - Known iteration counts enable aggressive unrolling
+- **Vectorization** - Static access patterns facilitate SIMD optimizations
+- **Memory prefetching** - Predictable access patterns for cache optimization
+- **Bounds check elimination** - No runtime overhead for range validation
+
+**Example Backend Optimization:**
+
+.. code-block:: fortran
+
+    ! GeLB: array[real, 64] data; data[16:48] = 0.0;
+    ! Fortran backend can generate:
+    data(16:48) = 0.0d0  ! Direct array slice assignment
+    
+    ! Or with loop unrolling:
+    !$OMP SIMD
+    do i = 16, 48
+        data(i) = 0.0d0
+    end do
+
+**Memory Access Patterns:**
+Compile-time ranges ensure:
+
+- **Contiguous memory access** - Better cache utilization
+- **Predictable stride patterns** - Hardware prefetcher optimization
+- **No indirect indexing** - Simplified address calculation
 
 Fortran Backend Implementation Details
 =====================================

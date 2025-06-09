@@ -19,6 +19,17 @@ Main Goal
 
 The specification focuses on high-level abstractions that make researchers and practitioners interested in Lattice Boltzmann methods more productive.
 
+Core Design Principles
+----------------------
+
+**Compile-Time Determinism**: GeLB prioritizes compile-time knowledge wherever possible, enabling:
+- Superior optimization opportunities through static analysis
+- Early error detection with precise diagnostics
+- Predictable performance characteristics
+- Simplified backend code generation
+
+This principle is exemplified by compile-time range validation, which ensures all array access patterns are known during compilation.
+
 Language Specification
 -----------------------
 

@@ -79,7 +79,10 @@ Type System Tests
     ├── test_shape_preservation_comprehensive.py    # 15 shape preservation tests
     ├── test_lattice_selection_type_inference.py    # 12 lattice selection tests
     ├── test_mixed_scalar_array_operations.py       # 12 mixed operation tests
-    └── test_constant_folding_array_types.py        # 4 constant folding tests
+    ├── test_constant_folding_array_types.py        # 4 constant folding tests
+    ├── test_scalar_to_array_broadcasting.py        # Scalar-to-array broadcasting
+    ├── test_array_range_shape_reduction.py         # Array selection shape reduction
+    └── test_compile_time_range_validation.py       # Compile-time range validation
 
 Symbol Resolution Tests
 ----------------------

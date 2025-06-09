@@ -182,6 +182,20 @@ Debugging Range Issues
 1. **Missing grid dimensions** - Nx, Ny, Nz not available
 2. **Wrong dimensionality** - 2D ranges used in 1D context
 3. **Bounds checking** - Range exceeds array dimensions
+4. **Runtime expressions in ranges** - Variables used where constants required
+
+**Compile-Time Range Error Detection:**
+
+GeLB's compile-time range validation catches errors during compilation:
+
+.. code-block::
+
+    ERROR: Expression in range expression must be compile-time evaluable
+      array[i:i+3, :]
+            ^
+      Variable 'i' is not allowed here. Only compile-time constants, literals, and grid dimensions (Nx, Ny, Nz) are permitted.
+
+This early error detection prevents runtime surprises and enables clear error messages with exact source locations.
 
 **Debug Techniques:**
 1. **Visualize before/after range resolution**::
