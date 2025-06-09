@@ -554,7 +554,16 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         return node
     
     def visitVariableDeclarationStmt_N(self, node: VariableDeclarationStmt_N, ast_root_node: Program_N):
-        """Variable declarations don't have expressions to promote."""
+        """Variable declarations may have initial value expressions to promote."""
+        if node.initial_value:
+            # Handle potential type promotion for initialization
+            self.visit(node.initial_value, ast_root_node)
+            # Check if the initial value needs promotion to the declared type
+            if hasattr(node.initial_value, 'inferred_type'):
+                declared_type = node.data_type
+                initial_type = node.initial_value.inferred_type
+                if self._needs_promotion(initial_type, declared_type):
+                    node.initial_value = self._create_promotion(node.initial_value, declared_type.element_dtype)
         return node
     
     def visitLatticeInstaStmt_N(self, node: LatticeInstaStmt_N, ast_root_node: Program_N):

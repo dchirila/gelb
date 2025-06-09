@@ -66,6 +66,7 @@ lattice_insta_stmt :                   // Example:
 // TODO
 block_stmt : constant_definition_stmt
            | variable_declaration_stmt
+           | variable_declaration_with_init_stmt
            // BEGIN :: assignment stmts //
            | lattice_out_selection_assignment_stmt
            | variable_assignment_stmt
@@ -161,6 +162,8 @@ constant_definition_stmt : CONST type=data_type assignment=variable_assignment_s
 
 // NOTE: Label 'type' becomes 'type_' in Python due to keyword conflict
 variable_declaration_stmt : type=data_type name=identifier SEMICOLON ;
+
+variable_declaration_with_init_stmt : type=data_type assignment=variable_assignment_stmt ;
 
 data_type : scalar_data_type
           | array_data_type ;

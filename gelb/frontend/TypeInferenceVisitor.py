@@ -70,7 +70,10 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         return node
     
     def visitVariableDeclarationStmt_N(self, node: VariableDeclarationStmt_N, ast_root_node: Program_N):
-        """Variable declarations don't have expressions to infer."""
+        """Variable declarations may have initial value expressions to infer."""
+        if node.initial_value:
+            # Infer type of the initial value expression
+            self.visit(node.initial_value, ast_root_node)
         return node
     
     def visitVariableAssignmentStmt_N(self, node: VariableAssignmentStmt_N, ast_root_node: Program_N):

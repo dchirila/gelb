@@ -878,18 +878,21 @@ class VariableDeclarationStmt_N(Stmt_N):
     """
     Represents a variable-declaration statement.
 
-    NOTE: No immediate assignment -- in GeLB-v0, we separate the variable
-    declaration from the assignment.
+    Supports both:
+    - Simple declaration: int x;
+    - Declaration with initialization: int x = 5;
     """
-    def __init__(self, code_range, data_type, name):
+    def __init__(self, code_range, data_type, name, initial_value=None):
         super().__init__(code_range)
         self.data_type = data_type
         self.name = name
+        self.initial_value = initial_value  # Optional initialization expression
 
     def __str__(self):
-        return (
-            f"(VariableDeclarationStmt {self.name} {self.data_type})"
-        )
+        if self.initial_value:
+            return f"(VariableDeclarationStmt {self.name} {self.data_type} {self.initial_value})"
+        else:
+            return f"(VariableDeclarationStmt {self.name} {self.data_type})"
 
 
 class AssignmentStmt_N(Stmt_N):

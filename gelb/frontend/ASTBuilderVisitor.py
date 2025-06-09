@@ -538,6 +538,20 @@ class ASTBuilderVisitor(GeLBVisitor):
             self.visit(ctx.name)
         )
 
+    def visitVariable_declaration_with_init_stmt(
+            self,
+            ctx: GeLBParser.Variable_declaration_with_init_stmtContext
+    ):
+        # NOTE: 'type' label becomes 'type_' due to Python keyword conflict
+        # Create a variable declaration with the type and assignment info
+        assignment = self.visit(ctx.assignment)
+        return VariableDeclarationStmt_N(
+            code_range_from_ctx(ctx),
+            self.visit(ctx.type_),
+            assignment.lhs,  # The identifier from the assignment
+            assignment.rhs   # The initial value expression
+        )
+
     # Visit a parse tree produced by GeLBParser#scalar_bool_data_type.
     def visitScalar_bool_data_type(
             self,
