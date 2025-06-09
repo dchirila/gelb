@@ -315,7 +315,7 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         
         for r in node.element_ranges.elements:
             if isinstance(r, Range_N):
-                if r.low is not None and r.high is not None and r.low == r.high:
+                if r.low is not None and r.high is not None and self._are_range_bounds_equal(r.low, r.high):
                     # Single element: arr[3] or arr[3:3]
                     single_element_count += 1
                 elif r.low is None and r.high is None:
@@ -327,6 +327,13 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         
         # If all selections are single elements, result is scalar (0D array)
         if single_element_count == len(node.element_ranges.elements):
+            # Validate that all single element expressions are compile-time evaluable
+            for r in node.element_ranges.elements:
+                if isinstance(r, Range_N):
+                    self._validate_compile_time_evaluable(r.low, "array index")
+                    if r.high != r.low:  # Only validate high if it's different from low
+                        self._validate_compile_time_evaluable(r.high, "array index")
+            
             empty_shape = List_N(node.code_range)
             node.inferred_type = ArrayDataType_N(node.code_range, base_type, empty_shape)
         else:
@@ -769,11 +776,69 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
             # Invalid range
             return "partial_range", 1  # Fallback
     
+    def _validate_compile_time_evaluable(self, expr, context="range expression"):
+        """Ensure expression can be evaluated at compile time."""
+        if expr is None:
+            return True  # None is valid (open-ended ranges)
+        elif isinstance(expr, (IntLiteral_N, RealLiteral_N, BoolLiteral_N)):
+            return True  # Literals are always compile-time
+        elif isinstance(expr, Identifier_N):
+            # Check if it's a compile-time constant or grid dimension
+            if self._is_compile_time_constant(expr.name):
+                return True
+            else:
+                # Variable is not a compile-time constant
+                raise GeLBException(
+                    f"Expression in {context} must be compile-time evaluable",
+                    f"Found variable '{expr.name}' at {expr.code_range}. Variables are not allowed in range expressions, only constants."
+                )
+        elif isinstance(expr, (Add_N, Sub_N, Mul_N, Div_N)):
+            # Recursively check operands for arithmetic expressions
+            self._validate_compile_time_evaluable(expr.left, context)
+            self._validate_compile_time_evaluable(expr.right, context)
+            return True
+        else:
+            # Any other expression type is not allowed
+            raise GeLBException(
+                f"Expression in {context} must be compile-time evaluable",
+                f"Found: {type(expr).__name__} at {expr.code_range}"
+            )
+    
+    def _is_compile_time_constant(self, identifier_name):
+        """Check if an identifier represents a compile-time constant."""
+        # Grid dimensions (Nx, Ny, Nz) are compile-time constants
+        if identifier_name in ['Nx', 'Ny', 'Nz']:
+            return True
+        
+        # Check if it's a user-defined constant in symbol table
+        if self.current_block and self.current_block.symbol_defs:
+            symbol_def = self.current_block.symbol_defs.get_symbol_definition(identifier_name)
+            if symbol_def is None and self.current_block.symbol_defs.parent_table:
+                symbol_def = self.current_block.symbol_defs.parent_table.get_symbol_definition(identifier_name)
+            
+            if symbol_def:
+                # Only actual constants are compile-time evaluable
+                # Variables (even if they have assigned values) are NOT compile-time
+                if symbol_def.tag in ["constant", "constant definition", 
+                                     "implicit constant", "implicit dimension constant"]:
+                    return True
+                elif symbol_def.tag in ["variable", "variable declaration", 
+                                       "output variable declaration"]:
+                    # Variables are runtime values, not compile-time constants
+                    return False
+        
+        return False
+    
     def _evaluate_range_bound(self, expr, ast_root_node, array_dimensions=None):
         """Evaluate a range bound expression to get its integer value."""
         if expr is None:
             return None
-        elif isinstance(expr, IntLiteral_N):
+        
+        # First validate that the expression is compile-time evaluable
+        self._validate_compile_time_evaluable(expr, "range bound")
+        
+        # Now evaluate the compile-time expression
+        if isinstance(expr, IntLiteral_N):
             return expr.value
         elif isinstance(expr, Identifier_N):
             return self._resolve_symbolic_dimension(expr.name, ast_root_node, array_dimensions)
@@ -789,9 +854,42 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
             right_val = self._evaluate_range_bound(expr.right, ast_root_node, array_dimensions)
             if left_val is not None and right_val is not None:
                 return left_val + right_val
+        elif isinstance(expr, Mul_N):
+            # Handle expressions like "N*2"
+            left_val = self._evaluate_range_bound(expr.left, ast_root_node, array_dimensions)
+            right_val = self._evaluate_range_bound(expr.right, ast_root_node, array_dimensions)
+            if left_val is not None and right_val is not None:
+                return left_val * right_val
+        elif isinstance(expr, Div_N):
+            # Handle expressions like "N/2"
+            left_val = self._evaluate_range_bound(expr.left, ast_root_node, array_dimensions)
+            right_val = self._evaluate_range_bound(expr.right, ast_root_node, array_dimensions)
+            if left_val is not None and right_val is not None and right_val != 0:
+                return left_val // right_val  # Integer division
         
-        # Fallback for complex expressions
-        return 0
+        # If we get here, the validation should have caught it
+        raise GeLBException(
+            f"Failed to evaluate compile-time range bound: {expr}",
+            f"This should have been caught by validation"
+        )
+    
+    def _are_range_bounds_equal(self, bound1, bound2):
+        """Check if two range bounds represent the same value."""
+        # Same object reference
+        if bound1 is bound2:
+            return True
+        
+        # Both are literals with same value
+        if isinstance(bound1, IntLiteral_N) and isinstance(bound2, IntLiteral_N):
+            return bound1.value == bound2.value
+        
+        # Both are identifiers with same name
+        if isinstance(bound1, Identifier_N) and isinstance(bound2, Identifier_N):
+            return bound1.name == bound2.name
+        
+        # For now, assume other expression types are not equal
+        # This could be extended to handle more complex expression equality
+        return False
     
     def _construct_reduced_shape(self, remaining_dimensions, code_range):
         """Create appropriate shape node for reduced array."""
