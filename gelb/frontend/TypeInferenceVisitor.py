@@ -298,6 +298,17 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         
         base_type = array_type.element_dtype
         
+        # Get array dimensions first to check for too many indices
+        original_shape = self._get_shape_if_array(array_type)
+        original_dimensions = self._extract_dimension_sizes(original_shape, ast_root_node)
+        
+        # Check for too many indices before proceeding
+        if len(node.element_ranges.elements) > len(original_dimensions):
+            raise GeLBException(
+                f"Too many indices: array has {len(original_dimensions)} dimensions but {len(node.element_ranges.elements)} indices provided",
+                f"at {node.code_range}"
+            )
+        
         # Count how many ranges select single elements vs ranges
         single_element_count = 0
         range_count = 0
@@ -319,9 +330,9 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
             empty_shape = List_N(node.code_range)
             node.inferred_type = ArrayDataType_N(node.code_range, base_type, empty_shape)
         else:
-            # Otherwise, result maintains the array type for now
-            # TODO: Implement proper shape reduction based on ranges
-            node.inferred_type = array_type
+            # Calculate reduced shape based on range selections
+            reduced_type = self._reduce_array_shape(array_type, node.element_ranges, ast_root_node)
+            node.inferred_type = reduced_type
         
         return node
     
@@ -604,3 +615,195 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
             node.inferred_type = self._create_scalar_array_type(node.code_range, base_type)
         
         return node
+    
+    # Array range selection shape reduction methods
+    
+    def _reduce_array_shape(self, base_array_type, element_ranges, ast_root_node):
+        """Calculate the resulting shape after applying range selections."""
+        if not isinstance(base_array_type, ArrayDataType_N):
+            raise GeLBException(
+                "Cannot reduce shape of non-array type",
+                "This is likely an internal compiler error"
+            )
+        
+        base_element_type = base_array_type.element_dtype
+        original_shape = self._get_shape_if_array(base_array_type)
+        
+        # Get original dimension sizes
+        original_dimensions = self._extract_dimension_sizes(original_shape, ast_root_node)
+        
+        if len(element_ranges.elements) > len(original_dimensions):
+            raise GeLBException(
+                f"Too many indices: array has {len(original_dimensions)} dimensions but {len(element_ranges.elements)} indices provided",
+                f"at {element_ranges.code_range}"
+            )
+        
+        # Calculate resulting dimensions after range selections
+        resulting_dimensions = []
+        
+        for i, range_elem in enumerate(element_ranges.elements):
+            if i >= len(original_dimensions):
+                break  # Safety check
+            
+            dimension_size = original_dimensions[i]
+            range_type, new_size = self._classify_range_selection(range_elem, dimension_size, ast_root_node, original_dimensions)
+            
+            if range_type != "single_element":
+                # Keep this dimension with the new size
+                resulting_dimensions.append(new_size)
+            # For single_element, dimension is removed (not added to resulting_dimensions)
+        
+        # Add any remaining dimensions that weren't selected
+        for i in range(len(element_ranges.elements), len(original_dimensions)):
+            resulting_dimensions.append(original_dimensions[i])
+        
+        # Construct the new array type
+        new_shape = self._construct_reduced_shape(resulting_dimensions, base_array_type.code_range)
+        return ArrayDataType_N(base_array_type.code_range, base_element_type, new_shape)
+    
+    def _extract_dimension_sizes(self, shape, ast_root_node):
+        """Extract dimension sizes from array shape as a list of integers."""
+        if isinstance(shape, List_N) and len(shape.elements) == 0:
+            # 0D array (scalar)
+            return []
+        elif isinstance(shape, List_N) and len(shape.elements) == 1:
+            # 1D array
+            size = self._evaluate_size_expression(shape.elements[0], ast_root_node)
+            return [size]
+        elif isinstance(shape, List_N):
+            # Multi-dimensional array from Array1DLiteral_N.value
+            sizes = []
+            for size_expr in shape.elements:
+                size = self._evaluate_size_expression(size_expr, ast_root_node)
+                sizes.append(size)
+            return sizes
+        else:
+            # Handle legacy cases or single dimension
+            size = self._evaluate_size_expression(shape, ast_root_node)
+            return [size]
+    
+    def _evaluate_size_expression(self, expr, ast_root_node, array_dimensions=None):
+        """Evaluate a size expression to get its integer value."""
+        if isinstance(expr, IntLiteral_N):
+            return expr.value
+        elif isinstance(expr, Identifier_N):
+            # Look up symbolic dimension (Nx, Ny, Nz, or constants)
+            return self._resolve_symbolic_dimension(expr.name, ast_root_node, array_dimensions)
+        else:
+            # For now, return a reasonable default for complex expressions
+            # TODO: Implement full constant expression evaluation
+            return 1  # Placeholder
+    
+    def _resolve_symbolic_dimension(self, identifier_name, ast_root_node, array_dimensions=None):
+        """Resolve symbolic dimension identifiers to their values."""
+        # If we have array dimensions provided and this is Nx/Ny/Nz, use array dimensions first
+        if array_dimensions and identifier_name in ['Nx', 'Ny', 'Nz']:
+            dim_index = {'Nx': 0, 'Ny': 1, 'Nz': 2}[identifier_name]
+            if dim_index < len(array_dimensions):
+                return array_dimensions[dim_index]
+        
+        # Try to look up in current block's symbol table
+        if self.current_block and self.current_block.symbol_defs:
+            symbol_def = self.current_block.symbol_defs.get_symbol_definition(identifier_name)
+            if symbol_def is None and self.current_block.symbol_defs.parent_table:
+                symbol_def = self.current_block.symbol_defs.parent_table.get_symbol_definition(identifier_name)
+            
+            if symbol_def and hasattr(symbol_def, 'value'):
+                if hasattr(symbol_def.value, 'value') and isinstance(symbol_def.value.value, IntLiteral_N):
+                    return symbol_def.value.value.value
+        
+        # For implicit dimensions like Nx, Ny, Nz, try to extract from lattice
+        if identifier_name in ['Nx', 'Ny', 'Nz']:
+            return self._extract_grid_dimension(identifier_name, ast_root_node)
+        
+        # Default fallback for unknown dimensions
+        return 1
+    
+    def _extract_grid_dimension(self, dim_name, ast_root_node):
+        """Extract grid dimensions from lattice definitions."""
+        # Look for lattice instantiations to get grid size
+        if ast_root_node.lattices:
+            for stmt in ast_root_node.lattices.stmts.elements:
+                if isinstance(stmt, LatticeInstaStmt_N):
+                    if hasattr(stmt, 'grid_size') and stmt.grid_size:
+                        # Extract appropriate dimension from grid_size
+                        if isinstance(stmt.grid_size, IntLiteral_N):
+                            return stmt.grid_size.value  # 1D case
+                        elif isinstance(stmt.grid_size, Array1DLiteral_N):
+                            # Multi-dimensional case
+                            if dim_name == 'Nx' and len(stmt.grid_size.value.elements) > 0:
+                                return self._evaluate_size_expression(stmt.grid_size.value.elements[0], ast_root_node)
+                            elif dim_name == 'Ny' and len(stmt.grid_size.value.elements) > 1:
+                                return self._evaluate_size_expression(stmt.grid_size.value.elements[1], ast_root_node)
+                            elif dim_name == 'Nz' and len(stmt.grid_size.value.elements) > 2:
+                                return self._evaluate_size_expression(stmt.grid_size.value.elements[2], ast_root_node)
+        
+        # Fallback to reasonable defaults
+        return {'Nx': 32, 'Ny': 32, 'Nz': 32}.get(dim_name, 1)
+    
+    def _classify_range_selection(self, range_elem, dimension_size, ast_root_node, array_dimensions=None):
+        """Classify range selection type and calculate result size."""
+        if not isinstance(range_elem, Range_N):
+            # Treat non-range as single element
+            return "single_element", 0
+        
+        range_node = range_elem
+        
+        # Evaluate range bounds
+        low_val = self._evaluate_range_bound(range_node.low, ast_root_node, array_dimensions) if range_node.low else 0
+        high_val = self._evaluate_range_bound(range_node.high, ast_root_node, array_dimensions) if range_node.high else dimension_size - 1
+        
+        # Check for single element ranges
+        if low_val == high_val:
+            return "single_element", 0
+        
+        # Check for full dimension ranges
+        if low_val == 0 and high_val == dimension_size - 1:
+            return "full_range", dimension_size
+        
+        # Calculate partial range size
+        if high_val >= low_val:
+            size = high_val - low_val + 1
+            return "partial_range", size
+        else:
+            # Invalid range
+            return "partial_range", 1  # Fallback
+    
+    def _evaluate_range_bound(self, expr, ast_root_node, array_dimensions=None):
+        """Evaluate a range bound expression to get its integer value."""
+        if expr is None:
+            return None
+        elif isinstance(expr, IntLiteral_N):
+            return expr.value
+        elif isinstance(expr, Identifier_N):
+            return self._resolve_symbolic_dimension(expr.name, ast_root_node, array_dimensions)
+        elif isinstance(expr, Sub_N):
+            # Handle expressions like "Nx-1"
+            left_val = self._evaluate_range_bound(expr.left, ast_root_node, array_dimensions)
+            right_val = self._evaluate_range_bound(expr.right, ast_root_node, array_dimensions)
+            if left_val is not None and right_val is not None:
+                return left_val - right_val
+        elif isinstance(expr, Add_N):
+            # Handle expressions like "i+1"
+            left_val = self._evaluate_range_bound(expr.left, ast_root_node, array_dimensions)
+            right_val = self._evaluate_range_bound(expr.right, ast_root_node, array_dimensions)
+            if left_val is not None and right_val is not None:
+                return left_val + right_val
+        
+        # Fallback for complex expressions
+        return 0
+    
+    def _construct_reduced_shape(self, remaining_dimensions, code_range):
+        """Create appropriate shape node for reduced array."""
+        if len(remaining_dimensions) == 0:
+            # Scalar result
+            return List_N(code_range)
+        elif len(remaining_dimensions) == 1:
+            # 1D array
+            return IntLiteral_N(code_range, remaining_dimensions[0])
+        else:
+            # Multi-dimensional array
+            shape_elements = List_N(code_range)
+            for dim_size in remaining_dimensions:
+                shape_elements.append(IntLiteral_N(code_range, dim_size))
+            return Array1DLiteral_N(code_range, shape_elements)
