@@ -106,7 +106,7 @@ All inherit from **UnaryExpr_N** with a ``value`` operand:
 * **Identifier_N** - Variable and constant references
 * **RectSelOfLatticeInDFs_N** - Lattice input selections
 * **RectSelOfLatticeOutDFs_N** - Lattice output selections  
-* **RectSelOfArrayElems_N** - Array element selections
+* **RectSelOfArrayElems_N** - Array element selections with shape reduction
 * **TypePromotionNode_N** - Implicit type conversions (inserted by TypePromotionVisitor)
 * **BroadcastNode_N** - Scalar-to-array broadcasting operations (inserted by TypePromotionVisitor)
 
@@ -183,6 +183,49 @@ Utility Nodes
         target_array_type: ArrayDataType_N("real", IntLiteral_N(5))
         inferred_type: ArrayDataType_N("real", IntLiteral_N(5))
       }
+
+**RectSelOfArrayElems_N**
+  Represents array element selections with automatic shape reduction
+  
+  * ``array_name`` - The identifier for the array being accessed
+  * ``element_ranges`` - List of Range_N nodes specifying indices/ranges
+  * ``inferred_type`` - Result type after shape reduction (added by TypeInferenceVisitor)
+  
+  **Shape Reduction:**
+  The TypeInferenceVisitor calculates the resulting array type based on the selection patterns:
+  
+  * **Single Element Selection**: ``array[2, 3]`` → scalar (0D array)
+  * **Mixed Selection**: ``array[2, :]`` → 1D array 
+  * **Range Selection**: ``array[1:3, 2:5]`` → 2D array with reduced dimensions
+  
+  **AST Preservation:**
+  Critical design principle: Original range information is completely preserved for backend code generation while adding computed type information.
+  
+  **Example:**
+  
+  .. code-block:: gelb
+  
+      array[real, {5, 7}] matrix;
+      slice = matrix[3, 1:4];  // 1D array of size 3
+  
+  **AST Representation:**
+  
+  .. code-block::
+  
+      RectSelOfArrayElems_N {
+        array_name: Identifier_N("matrix")
+        element_ranges: List_N([
+          Range_N(IntLiteral_N(3), IntLiteral_N(3)),    // Single element
+          Range_N(IntLiteral_N(1), IntLiteral_N(4))     // Range selection
+        ])
+        inferred_type: ArrayDataType_N("real", IntLiteral_N(3))  // ← Added by TypeInferenceVisitor
+      }
+  
+  **Backend Benefits:**
+  * Original ranges preserved for optimal code generation
+  * Symbolic expressions like ``Ny-1`` maintained exactly
+  * Type information available for further compilation stages
+  * Error detection for invalid index counts
 
 Code Range Tracking
 ====================

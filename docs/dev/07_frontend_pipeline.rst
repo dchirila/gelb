@@ -362,6 +362,13 @@ Each major step is implemented as a separate function:
         """Add type information to expressions."""
         visitor = TypeInferenceVisitor()
         return visitor.visit(ast, ast)
+        
+    # TypeInferenceVisitor adds 'inferred_type' attributes to:
+    # - All expression nodes (literals, identifiers, binary ops)
+    # - Array and lattice selections with shape reduction
+    # - Array literals with computed shapes
+    # Key feature: Array range selections calculate reduced shapes
+    # while preserving original range information for backends
 
 Adding New Frontend Passes
 ==========================

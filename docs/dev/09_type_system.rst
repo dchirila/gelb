@@ -494,6 +494,177 @@ The type system provides clear error messages:
       Found: 'int' && 'int'
       Hint: Use comparison operators to create boolean expressions
 
+Array Range Selection Shape Reduction
+======================================
+
+The type inference system includes sophisticated shape reduction for array range selections. When an array is accessed with range specifications, the resulting type's shape is calculated based on which dimensions are selected as single elements versus ranges.
+
+Shape Reduction Rules
+---------------------
+
+**1. Single Element Selection:**
+- Removes that dimension from the result shape
+- ``array[2, 3, 4]`` on ``array[real, {10, 20, 30}]`` → ``array[real, ()]`` (scalar)
+
+**2. Range Selection:**
+- Preserves that dimension with the range size
+- ``array[:, 1:3, 5]`` on ``array[real, {10, 20, 30}]`` → ``array[real, {10, 3}]``
+
+**3. Full Range Selection (``:``):**
+- Preserves that dimension with its original size
+- ``array[2, :, :]`` on ``array[real, {10, 20, 30}]`` → ``array[real, {20, 30}]``
+
+Implementation Details
+----------------------
+
+The **TypeInferenceVisitor** implements shape reduction in the ``visitRectSelOfArrayElems_N`` method:
+
+**Step 1: Validate Index Count**
+
+.. code-block:: python
+
+    # Check for too many indices before proceeding
+    if len(node.element_ranges.elements) > len(original_dimensions):
+        raise GeLBException(
+            f"Too many indices: array has {len(original_dimensions)} dimensions but {len(node.element_ranges.elements)} indices provided",
+            f"at {node.code_range}"
+        )
+
+**Step 2: Classify Range Types**
+
+Each range is classified as:
+- **Single Element**: ``[3]`` or ``[3:3]`` → dimension removed
+- **Partial Range**: ``[1:4]`` → dimension size = ``4 - 1 + 1 = 4``
+- **Full Range**: ``[:]`` → dimension size = original size
+- **Open-ended Range**: ``[5:]`` → dimension size = ``original_size - 5``
+
+**Step 3: Calculate Resulting Dimensions**
+
+.. code-block:: python
+
+    for i, range_elem in enumerate(element_ranges.elements):
+        dimension_size = original_dimensions[i]
+        range_type, new_size = self._classify_range_selection(range_elem, dimension_size, ast_root_node, original_dimensions)
+        
+        if range_type != "single_element":
+            # Keep this dimension with the new size
+            resulting_dimensions.append(new_size)
+        # For single_element, dimension is removed
+
+**Step 4: Construct Result Type**
+
+The final array type is constructed with the reduced shape:
+- **0 dimensions** → ``array[element_type, ()]`` (scalar)
+- **1 dimension** → ``array[element_type, size]``
+- **2+ dimensions** → ``array[element_type, {size1, size2, ...}]``
+
+Symbolic Expression Handling
+-----------------------------
+
+The shape reduction system handles symbolic expressions in range bounds:
+
+**Symbolic Dimensions:**
+- ``Nx``, ``Ny``, ``Nz`` resolve to lattice grid dimensions
+- User-defined constants resolve to their values
+- Complex expressions like ``Ny-1`` are evaluated
+
+**Resolution Priority:**
+1. **Array Context**: For expressions in array ranges, ``Nx``/``Ny``/``Nz`` refer to the array's dimensions
+2. **Symbol Table**: Look up user-defined constants
+3. **Lattice Grid**: Extract from lattice instantiation statements
+4. **Fallback**: Default values for undefined symbols
+
+**Example:**
+
+.. code-block:: gelb
+
+    array[real, {Nx, Ny}] matrix;
+    array[real, Ny-1] slice;
+    slice = matrix[3, 1:Ny-1];  // Creates array[real, {Ny-2}]
+
+Range Bound Evaluation
+----------------------
+
+The system evaluates range bounds to determine selection sizes:
+
+.. code-block:: python
+
+    def _evaluate_range_bound(self, expr, ast_root_node, array_dimensions=None):
+        if isinstance(expr, IntLiteral_N):
+            return expr.value
+        elif isinstance(expr, Identifier_N):
+            return self._resolve_symbolic_dimension(expr.name, ast_root_node, array_dimensions)
+        elif isinstance(expr, Sub_N):
+            # Handle expressions like "Nx-1"
+            left_val = self._evaluate_range_bound(expr.left, ast_root_node, array_dimensions)
+            right_val = self._evaluate_range_bound(expr.right, ast_root_node, array_dimensions)
+            return left_val - right_val
+
+AST Structure Preservation
+---------------------------
+
+**Critical Design Principle**: The shape reduction process only adds the ``inferred_type`` attribute to ``RectSelOfArrayElems_N`` nodes. The original range information is completely preserved for backend code generation.
+
+**Original Ranges Maintained:**
+- ``element_ranges`` list contains original ``Range_N`` nodes
+- Symbolic expressions like ``Sub (Identifier Ny) (IntLiteral 1)`` are preserved
+- Range bounds (``low``, ``high``) remain unchanged
+- Open-ended ranges keep ``high = None``
+
+**Backend Benefits:**
+- Can generate optimal indexing code using original expressions
+- Preserves symbolic expressions for target language optimization
+- Maintains exact range specifications for bounds checking
+
+**Example AST Preservation:**
+
+.. code-block::
+
+    // GeLB Code:
+    a[2, 0:2] = b[3, 5:Ny-1];
+    
+    // AST Structure (preserved):
+    LHS: RectSelOfArrayElems
+      element_ranges: [Range(2,2), Range(0,2)]
+      inferred_type: array[real, {3}]    // ← Added by type inference
+    
+    RHS: RectSelOfArrayElems  
+      element_ranges: [Range(3,3), Range(5, Sub(Identifier(Ny), IntLiteral(1)))]
+      inferred_type: array[real, {Ny-6}]  // ← Added by type inference
+
+Error Detection
+---------------
+
+The shape reduction system provides comprehensive error detection:
+
+**1. Too Many Indices:**
+
+.. code-block::
+
+    array[int, {2, 3}] matrix;
+    elem = matrix[0, 1, 2];  // ERROR: Too many indices: array has 2 dimensions but 3 indices provided
+
+**2. Negative Range Sizes:**
+- Handled gracefully with fallback behavior
+- ``array[4:2]`` → size defaults to 1
+
+**3. Out-of-Bounds Access:**
+- Range bounds are validated against array dimensions
+- Symbolic bounds are evaluated where possible
+
+Testing Coverage
+----------------
+
+The shape reduction feature includes comprehensive unit tests:
+
+- **12 test cases** covering all reduction scenarios
+- **Single element selections** (2D → scalar)
+- **Mixed selections** (2D → 1D)
+- **Partial and open-ended ranges**
+- **Multi-dimensional reductions**
+- **Error cases and edge cases**
+- **Symbolic expression evaluation**
+
 GeLBExTypeError Exception
 -------------------------
 
