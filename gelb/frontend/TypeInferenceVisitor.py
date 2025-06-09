@@ -788,9 +788,10 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
                 return True
             else:
                 # Variable is not a compile-time constant
-                raise GeLBException(
+                raise GeLBExTypeError(
+                    expr,
                     f"Expression in {context} must be compile-time evaluable",
-                    f"Found variable '{expr.name}' at {expr.code_range}. Variables are not allowed in range expressions, only constants."
+                    f"Variable '{expr.name}' is not allowed here. Only compile-time constants (literals, const values, or grid dimensions like Nx/Ny/Nz) are permitted in range expressions."
                 )
         elif isinstance(expr, (Add_N, Sub_N, Mul_N, Div_N)):
             # Recursively check operands for arithmetic expressions
@@ -799,9 +800,10 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
             return True
         else:
             # Any other expression type is not allowed
-            raise GeLBException(
+            raise GeLBExTypeError(
+                expr,
                 f"Expression in {context} must be compile-time evaluable",
-                f"Found: {type(expr).__name__} at {expr.code_range}"
+                f"Complex expressions of type {type(expr).__name__} are not allowed in range expressions. Only literals, constants, and simple arithmetic with constants are permitted."
             )
     
     def _is_compile_time_constant(self, identifier_name):

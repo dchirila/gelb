@@ -7,7 +7,7 @@ Tests that array range expressions must be compile-time evaluable.
 
 import pytest
 from gelb.gelb_ast.ASTNodes import *
-from gelb.utils.exceptions import GeLBException
+from gelb.utils.exceptions import GeLBException, GeLBExTypeError
 from gelb.tests.test_utils import (
     get_typed_ast,
     minimal_gelb_program_1d
