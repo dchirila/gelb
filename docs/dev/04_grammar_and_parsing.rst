@@ -163,6 +163,160 @@ The grammar follows a hierarchical structure:
 5. **Literals and Identifiers** - Terminal symbols
 6. **Lexer Rules** - Tokens and keywords
 
+Statement Types
+===============
+
+GeLB supports several types of statements within blocks (initializer, dynamic, gauge):
+
+Declaration Statements
+----------------------
+
+**Variable Declaration:**
+
+.. code-block:: antlr
+
+    variable_declaration_stmt : type=data_type name=identifier SEMICOLON ;
+
+Example:
+
+.. code-block:: gelb
+
+    real x;
+    array[int, 5] data;
+
+**Variable Declaration with Initialization:**
+
+.. code-block:: antlr
+
+    variable_declaration_with_init_stmt : type=data_type assignment=variable_assignment_stmt ;
+
+Variables can be declared and initialized in a single statement:
+
+.. code-block:: gelb
+
+    real value = 3.14;
+    int count = 42;
+    array[real, 3] vec = {1.0, 2.0, 3.0};
+    bool flag = true;
+
+**Constant Definition:**
+
+.. code-block:: antlr
+
+    constant_definition_stmt : CONST type=data_type assignment=variable_assignment_stmt ;
+
+Constants must be initialized when declared:
+
+.. code-block:: gelb
+
+    const real pi = 3.14159;
+    const int N = 64;
+    const array[real, 2] origin = {0.0, 0.0};
+
+Assignment Statements
+---------------------
+
+**Variable Assignment:**
+
+.. code-block:: antlr
+
+    variable_assignment_stmt : lhs=identifier OP_ASSIGN rhs=expr SEMICOLON ;
+
+Simple variable assignment:
+
+.. code-block:: gelb
+
+    x = 42;
+    data = matrix;
+
+**Array Selection Assignment:**
+
+.. code-block:: antlr
+
+    array_selection_assignment_stmt :
+        lhs=rect_sel_of_array_elems OP_ASSIGN rhs=expr SEMICOLON ;
+
+Assign to specific array elements or ranges:
+
+.. code-block:: gelb
+
+    vec[2] = 10;            // Single element
+    matrix[1:3, :] = 0;     // Range selection
+    data[0:N-1] = values;   // Using constants
+
+**Lattice Output Selection Assignment:**
+
+.. code-block:: antlr
+
+    lattice_out_selection_assignment_stmt :
+        lhs=rect_sel_of_lattice_out_dfs OP_ASSIGN rhs=expr SEMICOLON ;
+
+Assign to lattice distribution functions:
+
+.. code-block:: gelb
+
+    f.out[x, y | 0] = density;
+    f.out[x, y | :] = equilibrium_dfs;
+
+Block Statement Rules
+=====================
+
+The ``block_stmt`` rule defines all statement types allowed within blocks:
+
+.. code-block:: antlr
+
+    block_stmt : constant_definition_stmt
+               | variable_declaration_stmt
+               | variable_declaration_with_init_stmt
+               | lattice_out_selection_assignment_stmt
+               | variable_assignment_stmt
+               | array_selection_assignment_stmt
+               ;
+
+Variable Declaration with Initialization Details
+------------------------------------------------
+
+**AST Integration:**
+
+``VariableDeclarationStmt_N`` supports an optional ``initial_value`` field:
+
+.. code-block:: python
+
+    class VariableDeclarationStmt_N(Stmt_N):
+        def __init__(self, code_range, data_type, name, initial_value=None):
+            super().__init__(code_range)
+            self.data_type = data_type
+            self.name = name
+            self.initial_value = initial_value  # Optional initialization
+
+**Visitor Implementation:**
+
+The ``ASTBuilderVisitor`` handles the combined declaration and initialization:
+
+.. code-block:: python
+
+    def visitVariable_declaration_with_init_stmt(self, ctx):
+        assignment = self.visit(ctx.assignment)
+        return VariableDeclarationStmt_N(
+            code_range_from_ctx(ctx),
+            self.visit(ctx.type_),
+            assignment.lhs,  # The identifier from assignment
+            assignment.rhs   # The initial value expression
+        )
+
+**Both Syntaxes Supported:**
+
+.. code-block:: gelb
+
+    // Separate declaration and assignment
+    real x;
+    x = 3.14;
+
+    // Combined declaration with initialization
+    real x = 3.14;
+
+Both syntaxes produce equivalent AST structures and have identical semantic behavior.
+
 Parse Tree to AST Conversion
 ============================
 

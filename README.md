@@ -17,6 +17,7 @@ Features:
 - easy to learn
 - easy to debug (due to many built-in correctness & validation checks)
 - high performance (*almost* for free)
+- compile-time range validation for superior optimization and clearer semantics
 - open-source and extensible
 
 # Requirements

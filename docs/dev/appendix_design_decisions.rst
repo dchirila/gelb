@@ -560,6 +560,129 @@ Legacy Support
 
 **Documentation of Changes**: This appendix serves as the authoritative record of changes and their rationale.
 
+Deviations from PhD Thesis
+===========================
+
+Compile-Time Range Validation
+-----------------------------
+
+**Decision**: Restrict range expressions to compile-time evaluable forms only.
+
+**PhD Thesis Design**: Allowed arbitrary expressions in array ranges, including runtime variables and complex computations.
+
+**Current Implementation**: Range expressions must be:
+- Literals (e.g., ``5``, ``3.14``)
+- Compile-time constants (e.g., ``N``, ``SIZE``)
+- Grid dimensions (e.g., ``Nx``, ``Ny``, ``Nz``)
+- Simple arithmetic combinations of the above
+
+**Rationale for Change**:
+- **Superior optimization**: Enables loop unrolling, memory layout optimizations, and vectorization
+- **Clearer semantics**: Users know exactly what expressions are valid in ranges
+- **Simplified backend**: Eliminates need for runtime range evaluation infrastructure
+- **Better error messages**: Can validate ranges at compile time with precise diagnostics
+
+**Language Advantage**: This restriction is promoted as a key advantage of GeLB over languages that allow arbitrary runtime range expressions, enabling superior compile-time optimization and clearer code semantics.
+
+**Examples**:
+
+.. code-block:: gelb
+
+    // Valid: compile-time evaluable
+    array[real, N] vec1;                    // Global constant
+    nodes[0:5, :] = BULK;                  // Literal bounds
+    f.out[x, y | 0:q-1] = expression;      // Constant arithmetic
+
+    // Invalid: runtime evaluation required
+    // array[real, size] vec2;             // Runtime variable
+    // nodes[start:end, :] = BULK;         // Runtime bounds
+
+Scalar-to-Array Broadcasting
+----------------------------
+
+**Decision**: Automatically promote scalars to arrays when needed through broadcast operations.
+
+**PhD Thesis Design**: Required explicit array literal syntax for all array assignments.
+
+**Current Implementation**: Assignments like ``array_var = scalar_value;`` automatically create broadcast nodes while preserving the original scalar for backend optimization.
+
+**Rationale for Change**:
+- **Improved usability**: Eliminates verbose array literal syntax for simple cases
+- **Backend efficiency**: ``BroadcastNode_N`` preserves scalar values for runtime broadcasting
+- **Consistent type system**: Scalars are treated as 0D arrays uniformly
+
+**Examples**:
+
+.. code-block:: gelb
+
+    // Current syntax (automatic broadcasting)
+    array[int, 3] vec = 1;              // Broadcasts 1 to {1, 1, 1}
+    array[real, {2, 2}] mat = 0.0;      // Broadcasts 0.0 to {{0.0, 0.0}, {0.0, 0.0}}
+
+    // PhD thesis syntax (required explicit literals)
+    // array[int, 3] vec = {1, 1, 1};
+    // array[real, {2, 2}] mat = {{0.0, 0.0}, {0.0, 0.0}};
+
+Variable Declaration with Initialization
+----------------------------------------
+
+**Decision**: Support single-statement variable declaration and initialization.
+
+**PhD Thesis Design**: Required separate declaration and assignment statements.
+
+**Current Implementation**: Both syntaxes are supported:
+- ``type var;`` followed by ``var = value;`` (original)
+- ``type var = value;`` (new single-statement syntax)
+
+**Rationale for Addition**:
+- **Improved readability**: Reduces visual noise and line count
+- **Familiar syntax**: Matches conventions from C, C++, Java, and other languages
+- **Backward compatibility**: Original syntax remains fully supported
+
+**Examples**:
+
+.. code-block:: gelb
+
+    // New syntax (single statement)
+    real value = 3.14;
+    int count = 42;
+    array[real, 3] vec = {1.0, 2.0, 3.0};
+
+    // Original syntax (still supported)
+    real value;
+    value = 3.14;
+
+Array Range Selection Shape Reduction
+-------------------------------------
+
+**Decision**: Implement complete dimensional analysis for array slice operations.
+
+**PhD Thesis Design**: Array selections were conceptual without full shape inference.
+
+**Current Implementation**: Array selections with ranges properly calculate resulting dimensions:
+- Single element selections reduce dimensionality
+- Range selections preserve dimensions with calculated sizes
+- Mixed selections handled correctly
+
+**Rationale for Enhancement**:
+- **Complete type system**: Enables full static analysis of array operations
+- **Backend optimization**: Allows efficient memory layout planning
+- **Better error detection**: Catches dimension mismatches at compile time
+
+**Examples**:
+
+.. code-block:: gelb
+
+    array[int, {5, 3}] matrix;
+    
+    // Shape reductions
+    matrix[2, :]        // Results in array[int, 3] (1D)
+    matrix[:, 1]        // Results in array[int, 5] (1D)
+    matrix[1:3, :]      // Results in array[int, {2, 3}] (2D)
+    matrix[2, 1]        // Results in int (scalar)
+
+**Documentation of Changes**: This appendix serves as the authoritative record of changes and their rationale.
+
 ---
 
 *This document will be updated as new design decisions are made or existing ones are clarified.*

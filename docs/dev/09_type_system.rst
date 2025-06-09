@@ -582,6 +582,74 @@ The shape reduction system handles symbolic expressions in range bounds:
     array[real, Ny-1] slice;
     slice = matrix[3, 1:Ny-1];  // Creates array[real, {Ny-2}]
 
+Compile-Time Range Validation
+-----------------------------
+
+GeLB enforces compile-time evaluable range expressions, enabling superior optimization and clearer semantics.
+
+**Restriction**: Range expressions must be compile-time evaluable:
+
+.. code-block:: gelb
+
+    // Valid: compile-time evaluable
+    array[real, N] vec1;                    // Global constant
+    nodes[0:5, :] = BULK;                  // Literal bounds
+    f.out[x, y | 0:q-1] = expression;      // Constant arithmetic
+    matrix[1:Nx-1, 2:Ny] = data;           // Grid dimensions
+
+    // Invalid: runtime evaluation required
+    // array[real, size] vec2;             // Runtime variable
+    // nodes[start:end, :] = BULK;         // Runtime bounds
+    // matrix[i:j, :] = data;              // Loop variables
+
+**Allowed Range Expressions:**
+
+1. **Literals**: ``5``, ``3.14``, ``0``
+2. **Compile-time constants**: User-defined constants from ``global_constants`` block
+3. **Grid dimensions**: ``Nx``, ``Ny``, ``Nz`` from lattice definitions
+4. **Simple arithmetic**: ``N-1``, ``q+1``, ``Nx/2`` using compile-time values
+
+**Validation Process:**
+
+The **TypeInferenceVisitor** validates range expressions using ``_validate_compile_time_evaluable``:
+
+.. code-block:: python
+
+    def _validate_compile_time_evaluable(self, expr, context="range expression"):
+        """Ensure expression can be evaluated at compile time."""
+        if expr is None:
+            return True  # None is valid (open-ended ranges)
+        elif isinstance(expr, (IntLiteral_N, RealLiteral_N, BoolLiteral_N)):
+            return True  # Literals are always compile-time
+        elif isinstance(expr, Identifier_N):
+            if self._is_compile_time_constant(expr.name):
+                return True
+            else:
+                raise GeLBExTypeError(
+                    expr,
+                    f"Expression in {context} must be compile-time evaluable",
+                    f"Variable '{expr.name}' is not allowed here. Only compile-time constants..."
+                )
+        elif isinstance(expr, (Add_N, Sub_N, Mul_N, Div_N)):
+            # Recursively validate arithmetic expressions
+            self._validate_compile_time_evaluable(expr.left, context)
+            self._validate_compile_time_evaluable(expr.right, context)
+            return True
+        else:
+            raise GeLBExTypeError(
+                expr,
+                f"Expression in {context} must be compile-time evaluable",
+                f"This expression type is not allowed in {context}"
+            )
+
+**Optimization Benefits:**
+
+1. **Loop Unrolling**: Backends can unroll loops with known iteration counts
+2. **Memory Layout**: Optimal memory allocation and access patterns
+3. **Vectorization**: Enable SIMD optimizations with fixed-size operations
+4. **Bounds Checking**: Eliminate runtime bounds checks where possible
+5. **Code Generation**: Generate target-specific optimized indexing code
+
 Range Bound Evaluation
 ----------------------
 

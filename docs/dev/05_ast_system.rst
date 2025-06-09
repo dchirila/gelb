@@ -120,7 +120,7 @@ All inherit from **AssignmentStmt_N** with ``lhs`` and ``rhs`` components:
 * **ArraySelectionAssignmentStmt_N** - Array element assignments
 
 **Declaration Statements:**
-* **VariableDeclarationStmt_N** - Variable declarations
+* **VariableDeclarationStmt_N** - Variable declarations (with optional initialization)
 * **ConstantDefinitionStmt_N** - Constant definitions
 * **LatticeInstaStmt_N** - Lattice instantiations
 
@@ -200,6 +200,58 @@ Utility Nodes
   
   **AST Preservation:**
   Critical design principle: Original range information is completely preserved for backend code generation while adding computed type information.
+
+**TypePromotionNode_N**
+  Represents implicit type conversions inserted by the TypePromotionVisitor
+  
+  * ``expr`` - The original expression being promoted
+  * ``target_type`` - The ArrayDataType_N representing the target type
+  * ``inferred_type`` - Set to target_type during creation
+  
+  **Purpose:**
+  TypePromotionNode_N makes implicit type conversions explicit in the AST, enabling backends to generate appropriate conversion code and providing a clear audit trail of all type promotions that occur during compilation.
+  
+  **Creation:**
+  Created automatically by TypePromotionVisitor when implicit type conversion is needed (e.g., int → real in mixed arithmetic operations, assignments to differently-typed variables).
+  
+  **Example:**
+  
+  .. code-block:: gelb
+  
+      real x;
+      x = 42;  // int literal promoted to real
+  
+  **AST Representation:**
+  
+  .. code-block::
+  
+      TypePromotionNode_N {
+        expr: IntLiteral_N(42)
+        target_type: ArrayDataType_N("real", List_N([]))
+        inferred_type: ArrayDataType_N("real", List_N([]))
+      }
+
+**VariableDeclarationStmt_N**
+  Represents variable declarations with optional initialization
+  
+  * ``data_type`` - The declared type of the variable
+  * ``name`` - The variable identifier
+  * ``initial_value`` - Optional initialization expression
+  
+  **Usage:**
+  Supports both separate and combined declaration/initialization:
+  
+  .. code-block:: gelb
+  
+      // Separate declaration and assignment
+      real x;
+      x = 3.14;
+      
+      // Combined declaration with initialization
+      real x = 3.14;
+  
+  **AST Integration:**
+  When ``initial_value`` is present, the declaration and initialization are processed together by frontend visitors, ensuring proper type inference and validation.
   
   **Example:**
   
