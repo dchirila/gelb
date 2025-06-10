@@ -215,6 +215,57 @@ For binary arithmetic operations, both operands are promoted to a common type:
 2. Else if either operand is ``int`` → promote both to ``int``
 3. Else both are ``bool`` → promote both to ``int``
 
+**Array Arithmetic Operations**
+
+GeLB supports arithmetic operations on arrays with automatic broadcasting and shape compatibility checking:
+
+.. code-block:: gelb
+
+    // Array + Scalar (Broadcasting)
+    f.out[x | :] = f.in[x | :] + 1;        // Broadcasts scalar 1 to array shape
+    
+    // Array * Scalar (Broadcasting)  
+    f.out[x | :] = f.in[x | :] * 0.5;      // Broadcasts scalar 0.5 to array shape
+    
+    // Array + Array (Element-wise, same shape required)
+    f.out[x | :] = f.in[x | :] + g.in[x | :];  // Arrays must have compatible shapes
+
+**Broadcasting Rules:**
+- **Scalar + Array** → Scalar is broadcast to match array shape
+- **Array + Scalar** → Scalar is broadcast to match array shape  
+- **Array + Array** → Arrays must have identical shapes for element-wise operation
+
+**Type Promotion with Arrays:**
+Arrays follow the same type promotion rules as scalars for element types:
+
+.. code-block:: gelb
+
+    // Type promotion with broadcasting
+    array[int, 3] int_array = {1, 2, 3};
+    real scalar = 2.5;
+    array[real, 3] result = int_array + scalar;  // → {3.5, 4.5, 5.5}
+
+**Lattice Selection Arithmetic:**
+Lattice selections (with the ``|`` separator) return arrays and fully support arithmetic operations:
+
+.. code-block:: gelb
+
+    lattices {
+        lattice f(1, 3, int, 32, false);  // 3 distribution functions
+    }
+    
+    dynamic Update {
+        // Lattice selection returns array, arithmetic operations work naturally
+        f.out[x | :] = f.in[x | :] + 1;           // Add 1 to all DFs
+        f.out[x | 0] = f.in[x | 0] * 2;           // Multiply specific DF by 2
+        f.out[x | :] = f.in[x | :] + g.in[x | :]; // Element-wise lattice addition
+    }
+
+**Validation:**
+- Element types must be numeric (``int`` or ``real``) for arithmetic operations
+- Shape compatibility is enforced for array-array operations
+- Broadcasting is handled automatically by the type promotion system
+
 **2. Comparison Operations (<, >, <=, >=, ==, !=)**
 
 For comparison operations, both operands are promoted to a common type before comparison:
@@ -265,14 +316,24 @@ Logical operations do NOT perform type promotion:
     1 && 2         // ERROR: int && int not allowed
     !0             // ERROR: !int not allowed
 
-**2. String Type**
+**2. String Type Restrictions**
 
-Strings are NOT part of the computational type system and cannot be used in expressions:
+Strings are completely isolated from the computational type system and are only allowed in specific metadata contexts:
 
 .. code-block:: gelb
 
-    "hello" + 1    // ERROR: Strings cannot be used in computational expressions
-    int x = "hello";  // ERROR: Strings cannot be used in variable declarations
+    // ✅ ALLOWED: Only in simulation description
+    simulation_description("This is valid");
+    
+    // ❌ FORBIDDEN: All computational uses
+    "hello" + 1              // ERROR: Strings excluded from expressions
+    int x = "hello";         // ERROR: No string scalar type exists
+    array[string, 2] strs;   // ERROR: No string array type exists
+    
+**Grammar Enforcement:**
+- String literals are explicitly excluded from all expression contexts
+- ``array[string, ...]`` declarations are not permitted by the grammar
+- String types cannot be used in variable declarations or computational contexts
 
 **3. Array Types**
 
