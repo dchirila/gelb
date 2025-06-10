@@ -120,6 +120,13 @@ class DivisionByZeroValidator(ASTBaseVisitor, ProgramTraversalMixin):
             self.visit(node.initial_value, ast_root_node)
         return node
     
+    # Broadcast node (added by type promotion)
+    
+    def visitBroadcastNode_N(self, node: BroadcastNode_N, ast_root_node: Program_N):
+        """Check broadcast node's scalar expression."""
+        self.visit(node.scalar_expr, ast_root_node)
+        return node
+    
     # Binary operations (visit children)
     
     def visitAdd_N(self, node: Add_N, ast_root_node: Program_N):

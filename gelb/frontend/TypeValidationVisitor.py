@@ -117,34 +117,15 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
                 f"Arithmetic operations require numeric types (int or real)"
             )
         
-        # Check shape compatibility for arithmetic operations
-        if isinstance(left_type, ArrayDataType_N) and isinstance(right_type, ArrayDataType_N):
-            # Special case: if one operand is a non-scalar array, that's not allowed in basic arithmetic
-            left_is_scalar = self._is_scalar_array(left_type)
-            right_is_scalar = self._is_scalar_array(right_type)
-            
-            if not left_is_scalar:
-                raise GeLBExTypeError(
-                    node.left,
-                    f"Left operand of {op_name} has non-numeric type 'array'",
-                    f"Arithmetic operations require scalar numeric types, not arrays"
-                )
-            
-            if not right_is_scalar:
-                raise GeLBExTypeError(
-                    node.right,
-                    f"Right operand of {op_name} has non-numeric type 'array'",
-                    f"Arithmetic operations require scalar numeric types, not arrays"
-                )
+        # Array arithmetic is allowed - shape compatibility is handled by TypePromotionVisitor
+        # This includes:
+        # - scalar + scalar (both are 0-dimensional arrays)
+        # - array + scalar (broadcasting)
+        # - scalar + array (broadcasting)
+        # - array + array (if shapes are compatible)
         
-        # After promotion, types should match
-        if not self._types_match(left_type, right_type):
-            raise GeLBExTypeError(
-                node,
-                f"Type mismatch in {op_name}: '{left_name}' and '{right_name}'",
-                f"This should not happen after type promotion - internal compiler error"
-            )
-        
+        # Type promotion will handle shape broadcasting and type conversion
+        # We've already validated that both operands have numeric element types
         return True
     
     def _validate_comparison_op(self, left_type, right_type, op_name, node):

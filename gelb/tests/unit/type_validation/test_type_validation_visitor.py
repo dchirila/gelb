@@ -147,24 +147,7 @@ class TestTypeValidationErrors:
         
         assert "Cannot assign" in str(exc_info.value)
     
-    def test_arithmetic_with_non_numeric(self):
-        """Test arithmetic with non-numeric operand fails."""
-        # Since string literals cause syntax errors in most contexts,
-        # test a case that will get through parsing but fail validation
-        # Use array in arithmetic which should fail
-        test_code = minimal_gelb_program_1d(
-            global_constants_content="const int SIZE = 3;",
-            initializer_content='array[int, SIZE] arr; int x; arr[0] = 1; x = arr + 5;'
-        )
-        ast = get_typed_ast(test_code)
-        ast = promote_types(ast)
-        
-        with pytest.raises(GeLBExTypeError) as exc_info:
-            validate_types(ast)
-        
-        assert "non-numeric type" in str(exc_info.value)
-        assert "Arithmetic operations require" in str(exc_info.value)
-    
+
     def test_unary_minus_non_numeric(self):
         """Test unary minus with non-numeric operand fails."""
         test_code = minimal_gelb_program_1d(
