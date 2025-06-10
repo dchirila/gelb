@@ -84,6 +84,68 @@ Type System Tests
     ├── test_array_range_shape_reduction.py         # Array selection shape reduction
     └── test_compile_time_range_validation.py       # Compile-time range validation
 
+Midware Tests
+------------
+
+**Location:** ``gelb/tests/unit/midware/`` and ``gelb/tests/integration/test_midware.py``
+
+**Purpose:** AST optimization and validation after the Frontend stage
+
+**Unit Tests:**
+
+.. code-block::
+
+    gelb/tests/unit/midware/
+    ├── test_midware_pass_through.py                # Core functionality tests  
+    ├── test_constant_folding.py                    # Comprehensive constant folding tests
+    ├── test_constant_folding_simple.py             # Basic constant folding tests
+    ├── test_division_by_zero_validation.py         # 16 division by zero detection tests
+    └── midware_test_utils.py                       # Shared test utilities
+
+**Constant Folding and Propagation Tests:**
+
+* **Expression folding**: ``2 + 3`` → ``5``, ``(10 - 5) / 2`` → ``2.5``
+* **Type preservation**: Maintains ArrayDataType_N on folded literals
+* **Broadcasting integration**: Folding within BroadcastNode_N structures
+* **Mixed type operations**: ``int + real`` promotion and folding
+* **Nested expressions**: Complex arithmetic with multiple operations
+
+**Division by Zero Validation Tests (16 test cases):**
+
+* **Direct literals**: ``1 / 0``, ``1.5 / 0.0``
+* **Constant propagation**: ``const int ZERO = 0; ... 1 / ZERO``
+* **Expression folding**: ``const int ZERO = 5 - 5; ... 1 / ZERO``
+* **Complex expressions**: ``const int ZERO = (3 + 2) - (4 + 1)``
+* **Multiple blocks**: Division errors in global_constants, initializer, dynamic
+* **Valid cases**: Ensures false positives are avoided
+* **Edge cases**: Negative zero, type promotion, very small numbers
+
+**Integration Tests (2 test cases):**
+
+* **Frontend-to-midware pipeline**: Full compilation pipeline validation
+* **Division by zero detection**: Integration testing after constant folding
+
+**Testing Patterns:**
+
+.. code-block:: python
+
+    def test_division_by_zero_validation():
+        """Test division by zero after constant folding."""
+        test_code = minimal_gelb_program_1d(
+            global_constants_content="const int ZERO = 1 - 1;",
+            initializer_content="f.out[x | 0] = 1 / ZERO;"
+        )
+        
+        # Get AST after full frontend + constant folding
+        ast = get_typed_ast(test_code)
+        folded_ast = ConstantFoldingVisitor().visit(ast, ast)
+        
+        # Should detect division by zero
+        with pytest.raises(GeLBExTypeError) as exc_info:
+            DivisionByZeroValidator().visit(folded_ast, folded_ast)
+        
+        assert "Division by zero" in str(exc_info.value.error)
+
 Symbol Resolution Tests
 ----------------------
 

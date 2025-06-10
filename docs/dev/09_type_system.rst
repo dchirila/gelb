@@ -479,20 +479,58 @@ Key Methods
 Error Reporting
 ===============
 
-The type system provides clear error messages:
+The type system provides enhanced error messages using ``GeLBExTypeError`` with source context:
+
+**Type Errors with Source Context:**
 
 .. code-block::
 
-    ERROR: Cannot implicitly convert 'real' to 'int' in assignment
-      int x = 3.14;
-              ^^^^
-      Hint: Explicit casting will be supported in future versions
+         ...
+       6  
+       7  initializer Init {
+       8->    f.out[x | 0] = scalar_var[x];
+                             ~~~~~~~~~~^^                    [Problem] Cannot index scalar 'scalar_var' with 1 indices
+                                                             [Hint] 'scalar_var' is a scalar value and cannot be indexed. Only arrays can be indexed with []
+       9  }
+      10  
+          ...
 
-    ERROR: Logical operator '&&' requires 'bool' operands
-      bool result = x && y;
-                    ^    ^
-      Found: 'int' && 'int'
-      Hint: Use comparison operators to create boolean expressions
+         ...
+       6  
+       7  initializer Init {
+       8->    f.out[x | 0] = undefined_var;
+                             ~~~~~~~~~~~~~^^                 [Problem] You mention undefined_var. However, you did not define it.
+                                                             [Hint] Define undefined_var.
+       9  }
+      10  
+          ...
+
+    Error: Division by zero: cannot divide by zero
+           ...
+       6  
+       7  initializer Init {
+       8->    f.out[x | 0] = 1 / 0;
+                                 ^^                         [Problem] Division by zero: cannot divide by zero
+                                                            [Hint] Remove the division by zero or use a non-zero divisor
+       9  }
+      10  
+          ...
+
+**User-Friendly Terminology:**
+
+GeLB presents user-friendly terminology while maintaining internal consistency:
+
+- **External**: "scalar" (user-friendly term)
+- **Internal**: "0-dimensional array" (implementation detail)
+- **Error Messages**: Use "scalar" to match user mental model
+- **Type System**: Uses ArrayDataType_N universally
+
+**Improved Error Messages:**
+
+* **Source Context**: Shows exact source location with arrows
+* **Clear Descriptions**: "Cannot index scalar" vs technical array dimensions
+* **Actionable Hints**: Specific guidance for fixing the issue
+* **Consistent Terminology**: Uses language concepts familiar to users
 
 Array Range Selection Shape Reduction
 ======================================
@@ -759,10 +797,25 @@ The shape reduction feature includes comprehensive unit tests:
 GeLBExTypeError Exception
 -------------------------
 
-Type errors are reported using ``GeLBExTypeError`` which includes:
-- Source location information
-- Clear error description
-- Helpful hints for resolution
+Type errors are reported using ``GeLBExTypeError`` which provides enhanced error reporting:
+
+- **Source Location**: Exact line and column information from ``code_range``
+- **Visual Context**: Shows source code with arrows pointing to problematic expressions
+- **User-Friendly Messages**: Uses terminology familiar to users ("scalar" vs "0-dimensional array")
+- **Actionable Hints**: Specific guidance for resolving the error
+- **Consistent Interface**: Used throughout Frontend, Midware, and validation stages
+
+**Key Features:**
+
+.. code-block:: python
+
+    raise GeLBExTypeError(
+        node,  # AST node with code_range information
+        "Cannot index scalar 'var_name' with 1 indices",  # Clear error
+        "Only arrays can be indexed with []. Use 'var_name' directly."  # Hint
+    )
+
+This produces user-friendly error messages with source context and actionable guidance.
 
 Type System Integration
 ======================

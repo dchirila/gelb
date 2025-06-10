@@ -125,7 +125,6 @@ class ArrayLiteralProcessingMixin:
             The processed node
         """
         if not node.value.elements:
-            from gelb.utils.exceptions import GeLBExTypeError
             raise GeLBExTypeError(
                 node,
                 "Array literal cannot be empty",

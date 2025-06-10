@@ -2,41 +2,39 @@
 Midware Stage
 ================
 
-The Midware stage (Stage 2) sits between the Frontend and Backend stages in the GeLB compilation pipeline. It is responsible for AST transformations, optimizations, and preparing the AST for code generation.
+The Midware stage (Stage 2) sits between the Frontend and Backend stages in the GeLB compilation pipeline. It is responsible for AST transformations, optimizations, and safety validations on the fully-processed AST from the Frontend.
 
 Current Implementation
 ======================
 
-The Midware implements **optimization and transformation passes** on the validated AST from the Frontend. It currently includes constant folding optimization with a modular design for adding more transformations.
+The Midware implements **modular optimization and validation passes** on the validated AST from the Frontend. Each pass is implemented as an individual function that can be called explicitly from the compiler driver.
 
 Key Components
 --------------
 
-* **process_ast(ast)** - Main entry point that accepts and returns the AST
-* **validate_midware_input(ast)** - Validates the AST is ready for processing  
-* **apply_constant_folding(ast)** - Evaluates constant expressions at compile time
-* **apply_optimizations(ast)** - Applies optimization passes (currently constant folding)
-* **apply_transformations(ast)** - Placeholder for AST transformations
+* **validate_midware_input(ast)** - Validates the AST is ready for processing
+* **fold_constants(ast)** - Evaluates constant expressions at compile time  
+* **validate_division_by_zero(ast)** - Detects division by zero after constant folding
+* **Future functions** - Dead code elimination, common subexpression elimination, etc.
 
-Current Behavior
+Current Pipeline
 ----------------
+
+The midware stage processes AST through these steps:
 
 .. code-block:: python
 
-    def process_ast(ast):
-        """Process the AST through the midware stage."""
-        validate_midware_input(ast)
-        
-        # Apply constant folding optimization
-        ast = apply_constant_folding(ast)
-        
-        # Apply other optimizations
-        ast = apply_optimizations(ast)
-        
-        # Apply transformations for backend compatibility
-        ast = apply_transformations(ast)
-        
-        return ast
+    # In gelbc.py main compilation pipeline:
+    
+    # Stage 2: Midware
+    validate_midware_input(ast)
+    ast = fold_constants(ast) 
+    ast = validate_division_by_zero(ast)
+    
+    # Future midware passes:
+    # ast = eliminate_dead_code(ast)
+    # ast = eliminate_common_subexpressions(ast)
+    # ast = optimize_lattice_access_patterns(ast)
 
 Implemented Optimizations
 =========================
@@ -46,155 +44,112 @@ Constant Folding
 
 **Status**: ✅ **IMPLEMENTED**
 
-Constant folding evaluates constant expressions at compile time, replacing them with their computed literal values. This optimization improves performance and enables better static analysis.
+Constant folding evaluates constant expressions at compile time, replacing them with their computed literal values. It also implements **constant propagation** by replacing constant identifiers with their literal values.
 
 **Supported Operations:**
 
 * **Arithmetic**: ``+``, ``-``, ``*``, ``/``, ``^`` (power)
 * **Comparison**: ``<``, ``>``, ``<=``, ``>=``, ``==``, ``!=``
 * **Logical**: ``&&``, ``||``, ``!``
-* **Unary**: ``-`` (negation)
+* **Unary**: ``-`` (negation), ``!`` (logical not)
 * **Mixed types**: ``int`` + ``real``, with proper type promotion
+* **Constant Propagation**: Replaces constant identifiers with their values
 
 **Examples:**
 
 .. code-block:: gelb
 
-    // Before constant folding:
-    const int A = 2 + 3;           // Expression: Add_N(2, 3)
-    const real B = (10.0 - 5.0) / 2.5;  // Nested expressions
+    // Before constant folding and propagation:
+    const int A = 2 + 3;           // Expression folding
+    const int ZERO = 5 - 5;        // Expression folding
+    f.out[x | 0] = 1 / ZERO;       // Constant propagation
     
-    // After constant folding:
-    const int A = 5;               // Literal: IntLiteral_N(5)
-    const real B = 2.0;            // Literal: RealLiteral_N(2.0)
+    // After constant folding and propagation:
+    const int A = 5;               // Folded to literal
+    const int ZERO = 0;            // Folded to literal  
+    f.out[x | 0] = 1 / 0;          // ZERO propagated to 0
 
-**Broadcasting Support:**
+**Key Features:**
 
-Constant folding fully supports broadcasting operations introduced by the Frontend:
-
-* **BroadcastNode_N**: Scalar expressions within broadcast nodes are folded when possible
-* **Type Promotion Integration**: Folding respects type promotion within broadcast operations
-* **Efficiency Preservation**: Broadcast nodes preserve their scalar values after folding
-
-.. code-block:: gelb
-
-    // Before constant folding:
-    array[real, 5] data;
-    data = 2 + 3;  // BroadcastNode_N with Add_N(2, 3) as scalar
-    
-    // After constant folding:
-    array[real, 5] data;
-    data = 5;      // BroadcastNode_N with IntLiteral_N(5) as scalar
+* **Bottom-up Processing**: Evaluates nested expressions from innermost to outermost
+* **Type Preservation**: Maintains ArrayDataType_N type information on folded literals
+* **Constant Propagation**: Replaces constant identifiers with their literal values
+* **Error Safety**: Gracefully handles arithmetic errors (division by zero preserved for validation)
 
 **Implementation:** ``gelb/midware/ConstantFoldingVisitor.py``
 
-Arithmetic Safety Analysis
+Division by Zero Validation
 ---------------------------
 
 **Status**: ✅ **IMPLEMENTED**
 
-Arithmetic safety analysis detects potential runtime errors (like division by zero) at compile time. This analysis has been moved from the Frontend to the Midware stage for more effective error detection after constant folding.
+Division by zero validation detects compile-time division by zero errors after constant folding and propagation. This validation runs in the Midware stage to catch all compile-time detectable cases.
 
-**Benefits of Midware Placement:**
+**Why Run After Constant Folding:**
 
-* **Enhanced Detection**: Expressions like ``1 / (5-5)`` are detected after folding to ``1 / 0``
-* **Better Error Messages**: Errors are reported on simplified expressions
-* **Logical Separation**: Safety analysis runs after optimizations but before code generation
+* **Enhanced Detection**: Catches ``const int ZERO = 1 - 1; ... 1 / ZERO`` after folding
+* **Complete Coverage**: Detects direct literals, constants, and expression results
+* **Stage Separation**: Maintains clean separation between optimization and validation
 
-**Implementation:** ``gelb/midware/ArithmeticSafetyVisitor.py``
+**Detected Cases:**
 
-The ``ArithmeticSafetyVisitor`` analyzes folded expressions for potential arithmetic errors:
+* **Direct literals**: ``1 / 0``, ``5.0 / 0.0``
+* **Constant propagation**: ``const int ZERO = 0; ... 1 / ZERO``
+* **Expression folding**: ``const int ZERO = 5 - 5; ... 1 / ZERO``
+* **Complex expressions**: ``const int ZERO = (3 + 2) - (4 + 1); ... 1 / ZERO``
+
+**Implementation:** ``gelb/midware/DivisionByZeroValidator.py``
+
+The ``DivisionByZeroValidator`` analyzes the AST after constant folding:
 
 .. code-block:: python
 
-    class ArithmeticSafetyVisitor(ASTBaseVisitor, ProgramTraversalMixin):
-        """Detects arithmetic safety violations in the AST."""
+    class DivisionByZeroValidator(ASTBaseVisitor, ProgramTraversalMixin):
+        """Validates that there are no division by zero operations in the AST."""
         
         def visitDiv_N(self, node: Div_N, ast_root_node: Program_N):
-            """Check for division by zero."""
+            """Check division for zero divisor."""
             # Visit children first
-            node.left = self.visit(node.left, ast_root_node)
-            node.right = self.visit(node.right, ast_root_node)
+            self.visit(node.left, ast_root_node)
+            self.visit(node.right, ast_root_node)
             
-            # Check for literal zero in denominator
-            if (isinstance(node.right, IntLiteral_N) and node.right.value == 0) or \
-               (isinstance(node.right, RealLiteral_N) and node.right.value == 0.0):
-                raise GeLBExArithmeticError(f"Division by zero detected", node.code_range)
+            # Check for literal zero (after constant folding/propagation)
+            divisor = node.right
+            if isinstance(divisor, IntLiteral_N) and divisor.value == 0:
+                raise GeLBExTypeError(
+                    divisor,
+                    "Division by zero: cannot divide by zero",
+                    "Remove the division by zero or use a non-zero divisor"
+                )
             
-            return node
-
-**Testing Impact:**
-
-- Use ``get_midware_ast()`` for testing division by zero errors
-- Use ``get_typed_ast()`` for general frontend testing  
-- Use ``get_promoted_ast()`` for testing type validation errors
-
-The ``ConstantFoldingVisitor`` class uses the visitor pattern to traverse the AST and fold constant expressions:
-
-.. code-block:: python
-
-    class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
-        """Performs constant folding optimizations on the AST."""
-        
-        def visitAdd_N(self, node: Add_N, ast_root_node: Program_N):
-            """Fold addition operations."""
-            return self._handle_arithmetic_binary_op(node, ast_root_node, self._evaluate_add)
-        
-        def visitBroadcastNode_N(self, node: BroadcastNode_N, ast_root_node: Program_N):
-            """Fold expressions within broadcast operations."""
-            # Fold the scalar expression (preserving broadcast structure)
-            node.scalar_expr = self.visit(node.scalar_expr, ast_root_node)
-            return node
-        
-        def _handle_arithmetic_binary_op(self, node, ast_root_node, evaluator):
-            # Visit children first (bottom-up processing)
-            node.left = self.visit(node.left, ast_root_node)
-            node.right = self.visit(node.right, ast_root_node)
-            
-            # Check if both operands are constant literals
-            if self._is_constant_literal(node.left) and self._is_constant_literal(node.right):
-                try:
-                    result_value = evaluator(node.left, node.right)
-                    return self._create_literal_from_value(result_value, node)
-                except (ZeroDivisionError, OverflowError, ValueError):
-                    # Don't fold if evaluation fails - preserve for validation
-                    pass
+            if isinstance(divisor, RealLiteral_N) and divisor.value == 0.0:
+                raise GeLBExTypeError(divisor, ...)
             
             return node
 
-**Key Features:**
+**Error Messages:**
 
-1. **Bottom-up Processing**: Evaluates nested expressions from innermost to outermost
-2. **Type Preservation**: Maintains GeLB type semantics (e.g., ``int / int`` → ``real``)
-3. **ArrayDataType_N Compatibility**: Preserves universal array type system for folded literals
-4. **Error Handling**: Division by zero and overflow errors are caught gracefully
-5. **Boolean Handling**: Preserves GeLB's string-based boolean literals (``'true'``/``'false'``)
+Uses ``GeLBExTypeError`` to provide source context with arrows pointing to the problematic code:
 
-**ArrayDataType_N Type Preservation:**
+.. code-block::
 
-The constant folding pass preserves the universal ArrayDataType_N type system:
-
-.. code-block:: python
-
-    def _preserve_inferred_type(self, new_literal, original_node):
-        """Preserve ArrayDataType_N type on folded literals."""
-        if hasattr(original_node, 'inferred_type'):
-            new_literal.inferred_type = original_node.inferred_type
-        else:
-            self._set_default_array_type(new_literal)
-
-**Typed Literal Creation:**
-
-- ``_create_typed_bool_literal()`` - Creates BoolLiteral_N with ArrayDataType_N("bool", List_N([]))
-- ``_create_typed_int_literal()`` - Creates IntLiteral_N with ArrayDataType_N("int", List_N([]))
-- ``_create_typed_real_literal()`` - Creates RealLiteral_N with ArrayDataType_N("real", List_N([]))
+         ...
+       6  
+       7  initializer Init {
+       8->    f.out[x | 0] = 1 / 0;
+                                 ^^                         [Problem] Division by zero: cannot divide by zero
+                                                            [Hint] Remove the division by zero or use a non-zero divisor
+       9  }
+      10  
+          ...
 
 **Benefits:**
 
 * **Performance**: Eliminates redundant runtime calculations
-* **Static Analysis**: Enables division by zero detection on folded expressions
+* **Static Analysis**: Enables division by zero detection on folded expressions  
 * **Code Size**: Reduces generated code complexity
 * **Error Detection**: Catches arithmetic errors at compile time
+* **Type Safety**: Preserves ArrayDataType_N type information throughout optimization
 
 Architecture and Design
 =======================
@@ -213,7 +168,9 @@ Module Structure
 
     gelb/midware/
     ├── __init__.py
-    └── stage2_midware.py      # Main midware implementation
+    ├── stage2_midware.py           # Main midware functions  
+    ├── ConstantFoldingVisitor.py   # Constant folding and propagation
+    └── DivisionByZeroValidator.py  # Division by zero validation
 
 Integration in Compilation Pipeline
 ===================================
@@ -226,37 +183,50 @@ The Midware integrates into the compilation pipeline in ``gelbc.py``:
     ast = get_ast("gelb_program", source_code)
     ast = build_symbols_tables(ast)
     ast = resolve_all_constants(ast)
+    ast = infer_types(ast)
+    ast = promote_types(ast)
+    ast = validate_types(ast)
     # ... other frontend passes ...
     
-    # Stage 2: Midware (currently pass-through)
-    ast = process_ast(ast)
+    # Stage 2: Midware
+    validate_midware_input(ast)
+    ast = fold_constants(ast)
+    ast = validate_division_by_zero(ast)
     
     # Stage 3: Backend
-    code = generate_code(ast, backend_type)
+    print(ast)  # TODO: actual code generation
 
 Testing Infrastructure
 ======================
 
-The Midware has comprehensive test coverage:
+The Midware has comprehensive test coverage with 16 unit tests and 2 integration tests:
 
 **Unit Tests** (``gelb/tests/unit/midware/``):
-* ``test_midware_pass_through.py`` - Core functionality tests
+* ``test_midware_pass_through.py`` - Core functionality tests  
 * ``test_constant_folding.py`` - Comprehensive constant folding tests
 * ``test_constant_folding_simple.py`` - Basic constant folding tests
+* ``test_division_by_zero_validation.py`` - **16 division by zero detection tests**
 * ``midware_test_utils.py`` - Shared test utilities
+
+**Division by Zero Test Coverage:**
+* Direct literal division (``1 / 0``, ``1.5 / 0.0``)
+* Constant propagation (``const int ZERO = 0; ... 1 / ZERO``)
+* Expression folding (``const int ZERO = 5 - 5; ... 1 / ZERO``)
+* Complex expressions (``const int ZERO = (3 + 2) - (4 + 1)``)
+* Multiple blocks (global_constants, initializer, dynamic)
+* Valid divisions (ensure false positives are avoided)
+* Edge cases (negative zero, type promotion, very small numbers)
 
 **Integration Tests** (``gelb/tests/integration/test_midware.py``):
 * Frontend-to-midware pipeline tests
 * Type information preservation tests
 * Error handling validation
-* Constant folding integration tests
+* **Division by zero detection integration** - 2 additional tests
 
 **Test Utilities:**
-* ``get_midware_ast()`` - Helper for full frontend + midware pipeline testing
-* ``get_promoted_ast()`` - Helper for type inference + promotion only
-* ``get_typed_ast()`` - Helper for full frontend pipeline
-* ``assert_midware_preserves_structure()`` - Validates AST integrity
-* ``assert_constant_folding_preserves_types()`` - Validates ArrayDataType_N preservation
+* ``get_typed_ast()`` - Helper for full frontend pipeline testing
+* ``minimal_gelb_program_1d()`` - Program template for isolated testing
+* Standard exception testing patterns with ``pytest.raises(GeLBExTypeError)``
 
 Future Transformations
 ======================
