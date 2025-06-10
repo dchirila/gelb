@@ -17,9 +17,10 @@ from gelb.frontend.stage1_frontend import (
     infer_types,
     validate_constant_assignments
 )
-from gelb.midware.stage2_midware import validate_midware_input, fold_constants
+from gelb.midware.stage2_midware import validate_midware_input, fold_constants, validate_division_by_zero
 from gelb.gelb_ast.ASTNodes import Program_N
 from gelb.tests.test_utils import minimal_gelb_program_1d
+from gelb.utils.exceptions import GeLBExTypeError
 
 
 class TestMidwareIntegration:
@@ -189,3 +190,59 @@ class TestMidwareIntegration:
             validate_midware_input(invalid_ast)
         
         assert "Expected Program_N, got IntLiteral_N" in str(excinfo.value)
+    
+    def test_division_by_zero_detection_integration(self):
+        """Test that division by zero detection works in the full pipeline."""
+        
+        # Test case: constant that evaluates to zero through folding
+        gelb_code = minimal_gelb_program_1d(
+            global_constants_content="const int ZERO = 3 - 3;",
+            initializer_content="f.out[x | 0] = 1 / ZERO;"
+        )
+        
+        # Run through frontend
+        ast = get_ast("gelb_program", gelb_code)
+        validate_ast_root_is_program(ast)
+        ast = build_symbols_tables(ast)
+        ast = add_implicit_symbols(ast)
+        ast = resolve_all_constants(ast)
+        ast = resolve_ranges(ast) 
+        ast = infer_types(ast)
+        ast = validate_constant_assignments(ast)
+        
+        # Process through midware stages
+        validate_midware_input(ast)
+        folded_ast = fold_constants(ast)  # This should fold ZERO to 0
+        
+        # Division by zero detection should catch the error
+        with pytest.raises(GeLBExTypeError) as excinfo:
+            validate_division_by_zero(folded_ast)
+        
+        assert "Division by zero" in str(excinfo.value.error)
+        assert "cannot divide by zero" in str(excinfo.value.error)
+    
+    def test_division_by_zero_valid_cases_integration(self):
+        """Test that valid divisions pass through the full pipeline."""
+        # Test case: valid division after constant folding
+        gelb_code = minimal_gelb_program_1d(
+            global_constants_content="const int FIVE = 2 + 3;",
+            initializer_content="f.out[x | 0] = 10 / FIVE;"
+        )
+        
+        # Run through frontend
+        ast = get_ast("gelb_program", gelb_code)
+        validate_ast_root_is_program(ast)
+        ast = build_symbols_tables(ast)
+        ast = add_implicit_symbols(ast)
+        ast = resolve_all_constants(ast)
+        ast = resolve_ranges(ast)
+        ast = infer_types(ast)
+        ast = validate_constant_assignments(ast)
+        
+        # Process through midware stages
+        validate_midware_input(ast)
+        folded_ast = fold_constants(ast)  # This should fold FIVE to 5
+        validated_ast = validate_division_by_zero(folded_ast)  # Should not raise error
+        
+        # Verify the AST is returned successfully
+        assert isinstance(validated_ast, Program_N)

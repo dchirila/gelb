@@ -15,6 +15,7 @@ Functions are organized in the order they should be applied:
 
 from gelb.gelb_ast.ASTNodes import Program_N
 from gelb.midware.ConstantFoldingVisitor import ConstantFoldingVisitor
+from gelb.midware.DivisionByZeroValidator import DivisionByZeroValidator
 
 
 def validate_midware_input(ast):
@@ -57,6 +58,29 @@ def fold_constants(ast):
     """
     folder = ConstantFoldingVisitor()
     return folder.visit(ast, ast)
+
+
+def validate_division_by_zero(ast):
+    """
+    Check for division by zero operations in the AST.
+    
+    Must run AFTER constant folding and propagation to catch all
+    compile-time detectable division by zero errors, including:
+    - Direct literals: 1 / 0
+    - Constants: const int ZERO = 0; ... 1 / ZERO
+    - Expressions: const int ZERO = 1 - 1; ... 1 / ZERO
+    
+    Args:
+        ast (Program_N): The AST to validate
+        
+    Returns:
+        Program_N: The validated AST
+        
+    Raises:
+        GeLBExTypeError: If division by zero is detected
+    """
+    validator = DivisionByZeroValidator()
+    return validator.visit(ast, ast)
 
 
 # Future midware stage functions:

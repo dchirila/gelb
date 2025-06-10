@@ -488,7 +488,36 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         return node
     
     def visitIdentifier_N(self, node: Identifier_N, ast_root_node: Program_N):
-        """Identifiers are not folded (would need constant propagation)."""
+        """Replace constant identifiers with their literal values for constant propagation."""
+        # Check if this identifier refers to a constant
+        if hasattr(self, 'current_block') and self.current_block is not None:
+            symbol_table = getattr(self.current_block, 'symbol_defs', None)
+            if symbol_table:
+                symbol_def = symbol_table.get_symbol_definition(node.name)
+                # Try parent table if not found locally
+                if symbol_def is None and hasattr(symbol_table, 'parent_table') and symbol_table.parent_table:
+                    symbol_def = symbol_table.parent_table.get_symbol_definition(node.name)
+                
+                # If it's a constant, return its value
+                if symbol_def and symbol_def.tag in ['constant', 'constant definition']:
+                    const_stmt = symbol_def.value
+                    if hasattr(const_stmt, 'value') and isinstance(const_stmt.value, (IntLiteral_N, RealLiteral_N, BoolLiteral_N)):
+                        # Clone the literal to avoid shared references
+                        # Keep the original identifier's code range for error reporting
+                        if isinstance(const_stmt.value, IntLiteral_N):
+                            new_literal = IntLiteral_N(node.code_range, const_stmt.value.value)
+                            new_literal.inferred_type = const_stmt.value.inferred_type if hasattr(const_stmt.value, 'inferred_type') else None
+                            return new_literal
+                        elif isinstance(const_stmt.value, RealLiteral_N):
+                            new_literal = RealLiteral_N(node.code_range, const_stmt.value.value)
+                            new_literal.inferred_type = const_stmt.value.inferred_type if hasattr(const_stmt.value, 'inferred_type') else None
+                            return new_literal
+                        elif isinstance(const_stmt.value, BoolLiteral_N):
+                            new_literal = BoolLiteral_N(node.code_range, const_stmt.value.value)
+                            new_literal.inferred_type = const_stmt.value.inferred_type if hasattr(const_stmt.value, 'inferred_type') else None
+                            return new_literal
+        
+        # Not a constant or can't be resolved - return as is
         return node
     
     def visitVariableDeclarationStmt_N(self, node: VariableDeclarationStmt_N, ast_root_node: Program_N):

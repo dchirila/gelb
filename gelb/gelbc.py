@@ -28,7 +28,8 @@ from gelb.frontend.stage1_frontend import (
 )
 from gelb.midware.stage2_midware import (
     validate_midware_input,
-    fold_constants
+    fold_constants,
+    validate_division_by_zero
     # Future imports when implemented:
     # eliminate_dead_code,
     # eliminate_common_subexpressions,
@@ -186,6 +187,12 @@ def cli(t, input_file, backend, visualize_ast, ast_output, ast_format, keep_dot,
     # ... fold constant expressions at compile time
     ast = fold_constants(ast)
     capture_ast_if_requested(ast, 'constant_folding')
+    
+    # ... check for division by zero after constant folding
+    # This must run after constant folding/propagation to catch cases like:
+    # - const int ZERO = 0; ... 1 / ZERO (propagation)
+    # - const int ZERO = 1 - 1; ... 1 / ZERO (folding + propagation)
+    ast = validate_division_by_zero(ast)
     
     # ... TODO: Future midware optimizations (not yet implemented)
     # ast = eliminate_dead_code(ast)

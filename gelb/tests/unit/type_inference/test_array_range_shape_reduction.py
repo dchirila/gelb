@@ -289,7 +289,8 @@ class TestArrayRangeErrorCases:
         with pytest.raises(GeLBException) as exc_info:
             get_typed_ast(test_code)
         
-        assert "Too many indices" in str(exc_info.value.error)
+        # Updated to match the new improved error message format
+        assert "Cannot index" in str(exc_info.value.error) and "with 3 indices" in str(exc_info.value.error)
     
     def test_negative_range_size_fallback(self):
         """Test fallback behavior for invalid ranges."""

@@ -20,7 +20,6 @@ from gelb.utils.misc import initialize_reserved_keywords
 initialize_reserved_keywords()
 
 from gelb.frontend.ASTBuilderVisitor import ASTBuilderVisitor
-from gelb.frontend.ASTInitialValidationVisitor import ASTInitialValidationVisitor
 from gelb.frontend.SymbolsTablesBuilderVisitor import SymbolsTablesBuilderVisitor
 from gelb.frontend.ImplicitsRefsClashPreventerVisitor import ImplicitsRefsClashPreventerVisitor
 from gelb.frontend.ImplicitsDefsClashPreventerVisitor import ImplicitsDefsClashPreventerVisitor
@@ -228,6 +227,7 @@ def validate_constant_assignments(ast):
     return ast
 
 
-def validate_ast(ast):
-    ast_visitor = ASTInitialValidationVisitor()
-    ast_visitor.visit(ast, ast)
+# def validate_ast(ast):
+#     ast_visitor = ASTInitialValidationVisitor()
+#     ast_visitor.visit(ast, ast)
+# Note: ASTInitialValidationVisitor removed - validation happens in other stages
