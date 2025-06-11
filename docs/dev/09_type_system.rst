@@ -784,6 +784,172 @@ GeLB presents user-friendly terminology while maintaining internal consistency:
 * **Actionable Hints**: Specific guidance for fixing the issue
 * **Consistent Terminology**: Uses language concepts familiar to users
 
+Assignment Target Validation
+============================
+
+GeLB provides enhanced validation for assignment operations with user-friendly error messages that clearly distinguish between array and scalar types.
+
+Validation Rules
+----------------
+
+**1. Array-to-Scalar Assignment (Invalid):**
+
+Array values cannot be assigned to scalar variables as this would lose dimensional information:
+
+.. code-block:: gelb
+
+    array[real, {2, 2}] matrix;
+    real scalar_var;
+    scalar_var = matrix;  // ERROR: Invalid assignment
+
+**Error Message:**
+
+.. code-block::
+
+    error: Cannot assign array[real, {2, 2}] to scalar 'real'
+         8      initializer Init {
+         9->        scalar_var = matrix;
+                                  ~~~~~~^^                    [Problem] Cannot assign array[real, {2, 2}] to scalar 'real'
+                                                              [Hint] Scalars cannot hold array values. Use array indexing like 'matrix[0, 1]' to get a single element
+        10      }
+
+**2. Scalar-to-Array Assignment (Valid - Broadcasting):**
+
+Scalar values CAN be assigned to array variables through the broadcasting system:
+
+.. code-block:: gelb
+
+    real scalar_val = 3.14;
+    array[real, 5] vector;
+    vector = scalar_val;  // ✅ Valid: Creates BroadcastNode_N
+
+This assignment is handled by the TypePromotionVisitor which creates a BroadcastNode_N that efficiently broadcasts the scalar value to fill the entire array.
+
+**3. Array Element Selection (Valid):**
+
+Individual array elements can be assigned to scalars:
+
+.. code-block:: gelb
+
+    array[real, {2, 2}] matrix;
+    real element;
+    element = matrix[0, 1];  // ✅ Valid: Single element access
+
+User-Friendly Type Descriptions
+-------------------------------
+
+The validation system provides clear, user-friendly type descriptions in error messages:
+
+**Type Description Function:**
+
+.. code-block:: python
+
+    def _get_user_friendly_type_description(self, data_type):
+        """Create user-friendly type description for error messages."""
+        if isinstance(data_type, ArrayDataType_N):
+            # 0D arrays (scalars)
+            if len(data_type.shape.elements) == 0:
+                return f"scalar '{data_type.element_dtype}'"
+            
+            # 1D arrays  
+            elif isinstance(data_type.shape, IntLiteral_N):
+                return f"array[{data_type.element_dtype}, {data_type.shape.value}]"
+            
+            # 2D+ arrays
+            else:
+                shape_str = format_dimensions(data_type.shape)
+                return f"array[{data_type.element_dtype}, {{{shape_str}}}]"
+
+**Examples of Type Descriptions:**
+
+* ``ArrayDataType_N("int", List_N([]))`` → ``"scalar 'int'"``
+* ``ArrayDataType_N("real", IntLiteral_N(5))`` → ``"array[real, 5]"``
+* ``ArrayDataType_N("bool", Array1DLiteral_N([3, 4]))`` → ``"array[bool, {3, 4}]"``
+
+Context-Specific Hints
+----------------------
+
+The system provides specific guidance based on the type mismatch:
+
+**Array-to-Scalar Hints:**
+
+.. code-block::
+
+    [Hint] Scalars cannot hold array values. Use array indexing like 'array[0, 1]' to get a single element
+
+**Scalar-to-Array (Note: This is handled by broadcasting):**
+
+Scalar-to-array assignments are automatically handled by the broadcasting system and do not generate errors.
+
+**Array Shape Mismatch Hints:**
+
+.. code-block::
+
+    [Hint] Arrays must have compatible shapes for assignment
+
+Integration with Broadcasting System
+------------------------------------
+
+Assignment validation works seamlessly with GeLB's broadcasting system:
+
+**1. Type Promotion First:** If needed, scalar types are promoted (int → real)
+**2. Broadcasting Second:** Promoted scalars are wrapped in BroadcastNode_N for array assignment
+**3. Validation Last:** Remaining incompatible assignments are caught with clear error messages
+
+**Example Pipeline:**
+
+.. code-block:: gelb
+
+    array[real, 3] data;
+    int value = 42;
+    data = value;  // int → real promotion → BroadcastNode_N → valid
+
+This becomes:
+
+.. code-block::
+
+    BroadcastNode_N {
+        scalar_expr: TypePromotionNode_N {
+            expr: IntLiteral_N(42)
+            target_type: ArrayDataType_N("real", List_N([]))
+        }
+        target_array_type: ArrayDataType_N("real", IntLiteral_N(3))
+    }
+
+Testing Assignment Validation
+-----------------------------
+
+Comprehensive test coverage ensures assignment validation works correctly:
+
+**Test Categories:**
+
+* **Valid assignments:** Scalar-to-scalar, array element access
+* **Invalid assignments:** Array-to-scalar with clear error messages  
+* **Broadcasting:** Scalar-to-array handled by promotion system
+* **Type promotion:** Integration with promotion and validation pipeline
+* **Error message quality:** User-friendly descriptions and hints
+
+**Example Test Pattern:**
+
+.. code-block:: python
+
+    def test_array_to_scalar_assignment_rejected(self):
+        test_code = minimal_gelb_program_1d(
+            initializer_content=\"\"\"
+                array[real, {2, 2}] matrix;
+                real scalar;
+                scalar = matrix;  // Invalid: array to scalar
+                f.out[x | 0] = 0;
+            \"\"\"
+        )
+        
+        with pytest.raises(GeLBExTypeError) as exc_info:
+            get_fully_validated_ast(test_code)
+        
+        error = exc_info.value
+        assert "Cannot assign array[real, {2, 2}] to scalar 'real'" in str(error.error)
+        assert "Use array indexing" in str(error.hint)
+
 Array Range Selection Shape Reduction
 ======================================
 

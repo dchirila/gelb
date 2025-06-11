@@ -43,6 +43,47 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         else:
             return str(type(data_type).__name__)
     
+    def _get_user_friendly_type_description(self, data_type):
+        """Create user-friendly type description for error messages."""
+        if isinstance(data_type, ArrayDataType_N):
+            element_type = data_type.element_dtype
+            shape = data_type.shape
+            
+            # Check if it's a scalar (0-dimensional array)
+            if isinstance(shape, List_N) and len(shape.elements) == 0:
+                return f"scalar '{element_type}'"
+            
+            # Build shape description
+            if isinstance(shape, List_N):
+                if len(shape.elements) == 0:
+                    # 0D - scalar
+                    return f"scalar '{element_type}'"
+                else:
+                    # Multi-dimensional array from List_N
+                    shape_str = ", ".join(str(elem.value) if hasattr(elem, 'value') else str(elem) 
+                                        for elem in shape.elements)
+                    return f"array[{element_type}, {{{shape_str}}}]"
+            elif isinstance(shape, IntLiteral_N):
+                # 1D array
+                return f"array[{element_type}, {shape.value}]"
+            elif isinstance(shape, Array1DLiteral_N):
+                # 2D+ array
+                shape_elements = []
+                for elem in shape.value.elements:
+                    if hasattr(elem, 'value'):
+                        shape_elements.append(str(elem.value))
+                    else:
+                        shape_elements.append(str(elem))
+                shape_str = ", ".join(shape_elements)
+                return f"array[{element_type}, {{{shape_str}}}]"
+            else:
+                # Unknown shape format, fallback
+                return f"array[{element_type}, ?]"
+        elif isinstance(data_type, str):
+            return f"'{data_type}'"
+        else:
+            return str(type(data_type).__name__)
+    
     def _types_match(self, type1, type2):
         """Check if two types match exactly."""
         # For array types, we need to check both base type and shape
@@ -204,18 +245,52 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         Validate assignment compatibility.
         After promotion, RHS type should match LHS type.
         """
-        lhs_name = self._get_type_name(lhs_type)
-        rhs_name = self._get_type_name(rhs_type)
-        
         # After promotion, types should match
         if not self._types_match(lhs_type, rhs_type):
+            # Use user-friendly type descriptions for error messages
+            lhs_desc = self._get_user_friendly_type_description(lhs_type)
+            rhs_desc = self._get_user_friendly_type_description(rhs_type)
+            
+            # Provide specific hints based on the type mismatch
+            hint = self._generate_assignment_hint(lhs_type, rhs_type)
+            
             raise GeLBExTypeError(
                 node,
-                f"Cannot assign '{rhs_name}' to '{lhs_name}'",
-                f"Assignment requires compatible types"
+                f"Cannot assign {rhs_desc} to {lhs_desc}",
+                hint
             )
         
         return True
+    
+    def _generate_assignment_hint(self, lhs_type, rhs_type):
+        """Generate specific hint based on assignment type mismatch."""
+        lhs_is_scalar = self._is_scalar_type(lhs_type)
+        rhs_is_scalar = self._is_scalar_type(rhs_type)
+        
+        if not lhs_is_scalar and rhs_is_scalar:
+            # NOTE: Scalar to array assignment is actually valid (handled by broadcasting)
+            # This case should not occur after type promotion, but if it does:
+            return "Scalar to array assignment should be handled by type promotion with broadcasting"
+        elif lhs_is_scalar and not rhs_is_scalar:
+            # Trying to assign array to scalar - the main case we're fixing
+            return "Scalars cannot hold array values. Use array indexing like 'array[0, 1]' to get a single element"
+        elif not lhs_is_scalar and not rhs_is_scalar:
+            # Array to array with shape mismatch
+            return "Arrays must have compatible shapes for assignment"
+        else:
+            # Both scalars but different base types (shouldn't happen after promotion)
+            return "Assignment requires compatible types"
+    
+    def _is_scalar_type(self, data_type):
+        """Check if a type represents a scalar (0-dimensional array)."""
+        if isinstance(data_type, ArrayDataType_N):
+            shape = data_type.shape
+            if isinstance(shape, List_N):
+                return len(shape.elements) == 0
+            else:
+                # Non-List_N shapes are for 1D+ arrays
+                return False
+        return True  # Non-ArrayDataType_N are treated as scalars
     
     # Program traversal
     
