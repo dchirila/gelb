@@ -96,7 +96,7 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
     def _validate_arithmetic_op(self, left_type, right_type, op_name, node):
         """
         Validate arithmetic operation compatibility.
-        After promotion, both operands should have the same numeric type.
+        Enforces strict rules for array/scalar operations to prevent mathematically ambiguous operations.
         """
         left_name = self._get_type_name(left_type)
         right_name = self._get_type_name(right_type)
@@ -117,15 +117,43 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
                 f"Arithmetic operations require numeric types (int or real)"
             )
         
-        # Array arithmetic is allowed - shape compatibility is handled by TypePromotionVisitor
-        # This includes:
-        # - scalar + scalar (both are 0-dimensional arrays)
-        # - array + scalar (broadcasting)
-        # - scalar + array (broadcasting)
-        # - array + array (if shapes are compatible)
+        # Check array/scalar operation validity
+        left_is_scalar = self._is_scalar_array(left_type)
+        right_is_scalar = self._is_scalar_array(right_type)
         
-        # Type promotion will handle shape broadcasting and type conversion
-        # We've already validated that both operands have numeric element types
+        # Allow scalar op scalar
+        if left_is_scalar and right_is_scalar:
+            return True
+        
+        # Allow array op scalar for all operations (mathematically clear)
+        if not left_is_scalar and right_is_scalar:
+            return True
+        
+        # Allow scalar op array only for commutative operations
+        if left_is_scalar and not right_is_scalar:
+            if op_name in ['addition', 'multiplication']:
+                return True
+            elif op_name in ['subtraction', 'division']:
+                raise GeLBExTypeError(
+                    node,
+                    f"Cannot perform scalar {op_name} by array: mathematically ambiguous",
+                    f"Consider: array {op_name} scalar for clear element-wise semantics"
+                )
+            elif op_name == 'exponentiation':
+                raise GeLBExTypeError(
+                    node,
+                    f"Cannot perform scalar exponentiation by array: mathematically ambiguous", 
+                    f"Consider: array exponentiation by scalar for element-wise power"
+                )
+        
+        # Reject array op array (not supported)
+        if not left_is_scalar and not right_is_scalar:
+            raise GeLBExTypeError(
+                node,
+                f"Cannot perform array {op_name} by array: operation not supported",
+                f"GeLB does not support element-wise array operations. Use scalar/array operations instead."
+            )
+        
         return True
     
     def _validate_comparison_op(self, left_type, right_type, op_name, node):
