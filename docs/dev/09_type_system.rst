@@ -537,6 +537,114 @@ Key Methods
 ``visitBroadcastNode_N(node, ast_root_node)``
   Validate broadcast operations (always valid, validates scalar expression)
 
+Lattice Parameter Validation
+=============================
+
+Lattice parameter validation ensures that lattice instantiations follow GeLB's structural constraints. This validation occurs in the **ConstantsResolverVisitor** after constants are resolved to their final values.
+
+Validation Rules
+----------------
+
+**1. Dimensionality Constraints:**
+- Must satisfy: ``1 <= d <= 3``
+- GeLB supports only 1D, 2D, and 3D lattices
+
+**2. Distribution Function Constraints:**
+- Must satisfy: ``q > 0``
+- Zero distribution functions are not meaningful for LBM
+
+**3. Grid Size Constraints:**
+- All grid size values must be positive: ``grid_size > 0``
+- Applies to both scalar grid sizes (1D) and array elements (2D/3D)
+
+**4. Shape Consistency Constraints:**
+- For ``d=1``: ``grid_size`` must be scalar, ``periodicity`` must be scalar
+- For ``d=2``: ``grid_size`` must be 2-element array, ``periodicity`` must be 2-element array  
+- For ``d=3``: ``grid_size`` must be 3-element array, ``periodicity`` must be 3-element array
+
+Constant Expression Support
+---------------------------
+
+The validation system handles constants and arithmetic expressions:
+
+**Simple Constants:**
+
+.. code-block:: gelb
+
+    global_constants {
+        const int N = 64;
+        const int D = 2;
+    }
+    
+    lattices {
+        lattice f(D, 9, int, {N, N}, {false, true});  // Valid
+    }
+
+**Arithmetic Expression Constants:**
+
+.. code-block:: gelb
+
+    global_constants {
+        const int BASE = 16;
+        const int SIZE = BASE * 2;     // Evaluates to 32
+        const int BAD = BASE - 20;     // Evaluates to -4 
+    }
+    
+    lattices {
+        lattice f(1, 1, int, SIZE, false);  // Valid: SIZE = 32
+        lattice g(1, 1, int, BAD, false);   // Error: grid size -4 invalid
+    }
+
+**Complex Expression Evaluation:**
+
+The system evaluates:
+- Addition (``+``), Subtraction (``-``), Multiplication (``*``), Division (``/``)
+- Nested expressions: ``(BASE + 10) * 2 - 5``
+- Unary minus: ``-N``, ``-(BASE + 5)``
+
+Validation Examples
+-------------------
+
+**Common Error Cases:**
+
+.. code-block:: gelb
+
+    global_constants {
+        const int D = 5;        // Invalid dimensionality
+        const int Q = 0;        // Invalid distribution functions  
+        const int N = -32;      // Invalid grid size
+    }
+    
+    lattices {
+        lattice f(D, Q, int, N, false);
+        // Errors generated:
+        // - "Lattice dimensionality d=5 is invalid"
+        // - "Number of distribution functions q=0 is invalid" 
+        // - "Grid size -32 is invalid"
+    }
+
+**Shape Mismatch Examples:**
+
+.. code-block:: gelb
+
+    lattices {
+        // Shape mismatch: d=1 but grid_size has 2 elements
+        lattice f(1, 1, int, {32, 64}, false);
+        // Error: "Grid size has 2 elements but d=1"
+        
+        // Periodicity mismatch: grid_size is scalar but periodicity is array
+        lattice g(1, 1, int, 32, {false, true});
+        // Error: "Periodicity has 2 elements but grid_size is scalar"
+    }
+
+**Validation Timing:**
+
+This validation occurs in **ConstantsResolverVisitor** rather than **TypeValidationVisitor** because:
+
+1. **Constants must be resolved first**: ``const int N = -32`` needs to be evaluated before validation
+2. **Expression evaluation required**: ``BASE - 20`` must be computed to ``-4`` before checking positivity
+3. **Shape analysis needs concrete values**: Cannot validate array shapes with unresolved identifiers
+
 Error Reporting
 ===============
 

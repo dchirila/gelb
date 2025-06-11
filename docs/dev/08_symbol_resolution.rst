@@ -360,6 +360,117 @@ Duplicate Prevention
 * User-defined symbols always take precedence over implicit ones
 * No errors for shadowing implicit symbols
 
+Constants in Lattice Parameter Validation
+==========================================
+
+Constants defined in ``global_constants`` are resolved and validated when used in lattice parameters. This validation occurs in the **ConstantsResolverVisitor** after constants are fully resolved.
+
+Hierarchical Constant Access
+----------------------------
+
+The ``lattices`` block can access constants from ``global_constants`` via hierarchical symbol lookup:
+
+.. code-block:: gelb
+
+    global_constants {
+        const int N = 64;
+        const int D = 2;
+        const int Q = 9;
+    }
+    
+    lattices {
+        lattice f(D, Q, int, {N, N}, {false, true});  // All constants resolved
+    }
+
+Constant Expression Evaluation
+------------------------------
+
+The system evaluates arithmetic expressions before validation:
+
+.. code-block:: gelb
+
+    global_constants {
+        const int BASE_SIZE = 32;
+        const int DOUBLE_SIZE = BASE_SIZE * 2;      // Resolves to 64
+        const int INVALID_SIZE = BASE_SIZE - 40;    // Resolves to -8
+    }
+    
+    lattices {
+        lattice f(1, 1, int, DOUBLE_SIZE, false);   // Valid: 64 > 0
+        lattice g(1, 1, int, INVALID_SIZE, false);  // Error: -8 <= 0
+    }
+
+The constant ``INVALID_SIZE`` is resolved to ``-8`` before validation, triggering:
+``Error: Grid size -8 is invalid. Grid size must be positive, got -8``
+
+Complex Expression Support
+---------------------------
+
+The validation system handles complex constant expressions with proper precedence:
+
+.. code-block:: gelb
+
+    global_constants {
+        const int A = 10;
+        const int B = 5;
+        const int COMPLEX = (A + B) * 2 - A;  // Resolves to: (10+5)*2-10 = 20
+    }
+    
+    lattices {
+        lattice f(1, 1, int, COMPLEX, false);  // Valid: COMPLEX = 20
+    }
+
+**Supported Operations:**
+- Addition (``+``), Subtraction (``-``), Multiplication (``*``), Division (``/``)
+- Unary minus (``-EXPR``)
+- Parentheses for precedence override
+
+Validation Error Examples
+-------------------------
+
+When constants evaluate to invalid values, clear error messages are generated:
+
+.. code-block:: gelb
+
+    global_constants {
+        const int BAD_D = 5;        // Invalid dimensionality
+        const int BAD_Q = -2;       // Invalid distribution functions
+        const int BAD_SIZE = -16;   // Invalid grid size
+    }
+    
+    lattices {
+        lattice f(BAD_D, BAD_Q, int, BAD_SIZE, false);
+    }
+
+This generates multiple validation errors:
+- ``Lattice dimensionality d=5 is invalid. Dimensionality must be between 1 and 3 (inclusive), got 5``
+- ``Number of distribution functions q=-2 is invalid. Number of distribution functions must be positive, got -2``
+- ``Grid size -16 is invalid. Grid size must be positive, got -16``
+
+Array Shape Validation
+----------------------
+
+Constants are also used in array shape validation for multi-dimensional lattices:
+
+.. code-block:: gelb
+
+    global_constants {
+        const int Nx = 64;
+        const int Ny = 32;
+        const int D = 2;
+    }
+    
+    lattices {
+        // Valid: d=2 matches 2-element arrays
+        lattice f(D, 9, int, {Nx, Ny}, {false, true});
+        
+        // Error: d=1 but grid_size has 2 elements  
+        lattice g(1, 9, int, {Nx, Ny}, false);
+    }
+
+The shape mismatch error shows resolved values:
+``Grid size has 2 elements but d=1. Grid size must have exactly 1 element to match dimensionality``
+
 Testing
 =======
 

@@ -75,13 +75,36 @@ Constant and Range Resolution Visitors
 
 **ConstantsResolverVisitor**
 
-*Purpose:* Resolves constant expressions to their literal values
+*Purpose:* Resolves constant expressions to their literal values and validates lattice parameters
 
 *Key Features:*
-- Evaluates constant arithmetic at compile time
+- Evaluates constant arithmetic at compile time (``+``, ``-``, ``*``, ``/``)
 - Replaces constant references with resolved values
 - Handles nested constant expressions
-- Enables backend optimizations
+- **Validates lattice parameters after constant resolution:**
+  
+  * Dimensionality: ``1 <= d <= 3``
+  * Distribution functions: ``q > 0``
+  * Grid size positivity: all elements ``> 0``
+  * Shape consistency: ``grid_size`` shape matches dimensionality ``d``
+  * Periodicity consistency: ``periodicity`` shape matches ``grid_size`` shape
+
+- Enables backend optimizations through compile-time evaluation
+
+*Lattice Validation Examples:*
+
+.. code-block:: gelb
+
+    global_constants {
+        const int N = -32;      // Negative constant
+        const int D = 5;        // Invalid dimensionality
+    }
+    
+    lattices {
+        lattice f(D, 1, int, N, false);  // Errors:
+        // - "Lattice dimensionality d=5 is invalid"
+        // - "Grid size -32 is invalid"
+    }
 
 *Dependencies:* Symbol tables with constant definitions
 

@@ -159,6 +159,91 @@ Symbol Resolution Tests
 - Symbol conflict detection
 - Cross-block symbol access
 
+Lattice Parameter Validation Tests
+----------------------------------
+
+**Location:** ``gelb/tests/unit/type_validation/``
+
+**Purpose:** Comprehensive lattice parameter constraint validation
+
+**Key Test Files:**
+- ``test_lattice_parameter_validation.py`` - Basic lattice parameter validation (44 tests)
+- ``test_lattice_shape_validation.py`` - Grid size and periodicity shape validation (34 tests)
+- ``test_lattice_constant_validation.py`` - Constant expression validation (10 tests)
+
+**Test Coverage:**
+
+.. code-block:: python
+
+    # Dimensionality validation (1 <= d <= 3)
+    def test_dimensionality_constraints():
+        invalid_cases = [
+            ("lattice f(0, 1, int, 32, false);", "d=0"),
+            ("lattice f(-1, 1, int, 32, false);", "d=-1"),
+            ("lattice f(4, 1, int, 32, false);", "d=4"),
+        ]
+        
+        for lattice_stmt, expected_error in invalid_cases:
+            test_code = minimal_gelb_program_1d(lattices_content=lattice_stmt)
+            with pytest.raises(GeLBExTypeError) as exc_info:
+                get_typed_ast(test_code)
+            assert expected_error in str(exc_info.value)
+    
+    # Distribution function validation (q > 0)
+    def test_distribution_function_constraints():
+        invalid_cases = [
+            ("lattice f(1, 0, int, 32, false);", "q=0"),
+            ("lattice f(1, -5, int, 32, false);", "q=-5"),
+        ]
+        # Similar testing pattern...
+
+**Constant Expression Testing:**
+
+.. code-block:: python
+
+    def test_constant_expression_validation():
+        """Test validation with arithmetic constant expressions."""
+        test_code = """
+            simulation_description("Test");
+            global_constants {
+                const int BASE = 16;
+                const int NEGATIVE = BASE - 20;  // Evaluates to -4
+            }
+            lattices {
+                lattice f(1, 1, int, NEGATIVE, false);
+            }
+            // ... rest of program
+        """
+        
+        with pytest.raises(GeLBExTypeError) as exc_info:
+            get_typed_ast(test_code)
+        assert "Grid size -4 is invalid" in str(exc_info.value)
+
+**Shape Validation Testing:**
+
+.. code-block:: python
+
+    def test_shape_consistency_validation():
+        """Test grid_size and periodicity shape matching."""
+        shape_mismatches = [
+            # d=1 but grid_size has 2 elements
+            ("lattice f(1, 1, int, {32, 64}, false);", "Grid size has 2 elements but d=1"),
+            # d=2 but periodicity is scalar
+            ("lattice f(2, 9, int, {32, 64}, false);", "Periodicity is scalar but grid_size has 2 elements"),
+        ]
+        
+        for lattice_stmt, expected_error in shape_mismatches:
+            test_code = minimal_gelb_program_2d(lattices_content=lattice_stmt)
+            with pytest.raises(GeLBExTypeError) as exc_info:
+                get_typed_ast(test_code)
+            assert expected_error in str(exc_info.value)
+
+**Testing Strategy:**
+- **Parameterized tests** for systematic coverage of all constraint violations
+- **Expression evaluation tests** to verify arithmetic constant handling
+- **Shape validation tests** for dimensional consistency
+- **Error message quality tests** to ensure clear user feedback
+
 Validation Tests
 ---------------
 
@@ -171,6 +256,7 @@ Validation Tests
 - Range resolution testing
 - AST structure validation
 - Language constraint enforcement
+- **Lattice parameter validation** (dimensions, distribution functions, grid sizes, shape consistency)
 
 Test Utilities and Best Practices
 =================================
