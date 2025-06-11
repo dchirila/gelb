@@ -120,10 +120,14 @@ class TestDimensionalityValidation:
         with pytest.raises(GeLBExTypeError, match=r"Lattice dimensionality d=100 is invalid"):
             get_fully_validated_ast(gelb_code)
     
-    @pytest.mark.parametrize("d_value", [1, 2, 3])
-    def test_d_valid_range(self, d_value):
-        """Test that d=1,2,3 are all valid."""
-        gelb_code = create_lattice_program(f"lattice f({d_value}, 1, int, 32, false);")
+    @pytest.mark.parametrize("d_value,grid_size,periodicity", [
+        (1, "32", "false"),
+        (2, "{32, 64}", "{false, true}"),
+        (3, "{32, 64, 128}", "{false, true, false}")
+    ])
+    def test_d_valid_range(self, d_value, grid_size, periodicity):
+        """Test that d=1,2,3 are all valid with appropriate grid_size/periodicity."""
+        gelb_code = create_lattice_program(f"lattice f({d_value}, 1, int, {grid_size}, {periodicity});")
         
         # Should not raise any exception
         ast = get_fully_validated_ast(gelb_code)
