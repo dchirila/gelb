@@ -3,7 +3,7 @@
 from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
 from gelb.frontend.visitor_mixins import ProgramTraversalMixin
 from gelb.gelb_ast.ASTNodes import *
-from gelb.utils.exceptions import GeLBException
+from gelb.utils.exceptions import GeLBException, GeLBExTypeError
 from gelb.utils.CodeRange import CodeRange
 
 
@@ -155,8 +155,16 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         scalar_type_name = self._get_type_name(scalar_expr.inferred_type)
         target_element_type = target_array_type.element_dtype
         
-        # If scalar needs promotion to match array element type, wrap it first
-        if self._needs_promotion(scalar_type_name, target_element_type):
+        # Check if types are incompatible
+        if scalar_type_name != target_element_type:
+            # Check if promotion is valid
+            if not self._can_promote(scalar_type_name, target_element_type):
+                raise GeLBExTypeError(
+                    scalar_expr,
+                    f"Cannot assign '{scalar_type_name}' to array of '{target_element_type}' - would lose precision",
+                    f"Type promotion only allows: bool → int → real. Consider using an explicit cast when available."
+                )
+            # If promotion is valid, apply it
             scalar_expr = self._create_promotion(scalar_expr, target_element_type)
         
         return BroadcastNode_N(scalar_expr.code_range, scalar_expr, target_array_type)
