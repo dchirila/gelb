@@ -389,7 +389,7 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         if not self._types_match(declared_type, value_type):
             declared_name = self._get_type_name(declared_type)
             value_name = self._get_type_name(value_type)
-            raise GeLBExTypeError(f"Constant '{node.name}' declared as '{declared_name}' but initialized with '{value_name}' at {node.code_range}", f"Constant initialization type must match declared type")
+            raise GeLBExTypeError(node, f"Constant '{node.name}' declared as '{declared_name}' but initialized with '{value_name}'", f"Constant initialization type must match declared type")
         
         return node
     
@@ -537,7 +537,8 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
                         elem_type_name = self._get_type_name(elem.inferred_type)
                         if expected_type and elem_type_name != expected_type:
                             raise GeLBExTypeError(
-                                f"Array element at index {i} has type '{elem_type_name}', expected '{expected_type}' at {elem.code_range}",
+                                elem,
+                                f"Array element at index {i} has type '{elem_type_name}', expected '{expected_type}'",
                                 f"All array elements must have the same type"
                             )
         
@@ -582,7 +583,7 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         return node
     
     def visitLatticeInstaStmt_N(self, node: LatticeInstaStmt_N, ast_root_node: Program_N):
-        """Process expressions in lattice instantiation and validate parameters."""
+        """Process expressions in lattice instantiation."""
         # Visit dimension and q parameters if they are expressions
         if node.d is not None:
             self.visit(node.d, ast_root_node)
@@ -595,140 +596,8 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         if hasattr(node, 'periodicity') and node.periodicity is not None:
             self.visit(node.periodicity, ast_root_node)
         
-        # Validate lattice parameters
-        self._validate_lattice_parameters(node)
+        # Note: Lattice parameter validation is now done in ConstantsResolverVisitor
+        # after constants are resolved
         
         return node
     
-    def _extract_literal_value(self, expr):
-        """
-        Extract integer value from expression if it's a literal or unary minus of literal.
-        Returns None if the expression is not a compile-time constant.
-        """
-        if isinstance(expr, IntLiteral_N):
-            return expr.value
-        elif isinstance(expr, UnaryMinusExpr_N) and isinstance(expr.value, IntLiteral_N):
-            return -expr.value.value
-        else:
-            return None
-    
-    def _validate_lattice_parameters(self, node: LatticeInstaStmt_N):
-        """
-        Validate lattice instantiation parameters according to GeLB constraints:
-        1. 1 <= d <= 3 (dimensionality)
-        2. q > 0 (number of distribution functions)
-        3. each element of grid_size should be > 0
-        4. grid_size shape must match dimensionality d
-        5. periodicity shape must match grid_size shape
-        """
-        # Validate d (dimensionality): 1 <= d <= 3
-        d_value = self._extract_literal_value(node.d)
-        if d_value is not None:
-            if not (1 <= d_value <= 3):
-                raise GeLBExTypeError(
-                    node.d,
-                    f"Lattice dimensionality d={d_value} is invalid",
-                    f"Dimensionality must be between 1 and 3 (inclusive), got {d_value}"
-                )
-        # Note: If d is not a literal, it will be validated after constant resolution
-        
-        # Validate q (distribution functions): q > 0  
-        q_value = self._extract_literal_value(node.q)
-        if q_value is not None:
-            if q_value <= 0:
-                raise GeLBExTypeError(
-                    node.q,
-                    f"Number of distribution functions q={q_value} is invalid",
-                    f"Number of distribution functions must be positive, got {q_value}"
-                )
-        # Note: If q is not a literal, it will be validated after constant resolution
-        
-        # Validate grid_size: each element should be > 0
-        if hasattr(node, 'grid_size') and node.grid_size is not None:
-            self._validate_grid_size_positive(node.grid_size, node)
-            
-            # Validate grid_size shape matches dimensionality d
-            if d_value is not None:
-                self._validate_grid_size_shape(node.grid_size, d_value, node)
-                
-            # Validate periodicity shape matches grid_size shape
-            if hasattr(node, 'periodicity') and node.periodicity is not None:
-                self._validate_periodicity_shape(node.grid_size, node.periodicity, node)
-    
-    def _validate_grid_size_positive(self, grid_size, lattice_node):
-        """Validate that all grid size values are positive."""
-        grid_value = self._extract_literal_value(grid_size)
-        if grid_value is not None:
-            # 1D case: single integer
-            if grid_value <= 0:
-                raise GeLBExTypeError(
-                    grid_size,
-                    f"Grid size {grid_value} is invalid",
-                    f"Grid size must be positive, got {grid_value}"
-                )
-        elif isinstance(grid_size, Array1DLiteral_N):
-            # Multi-D case: array of integers
-            for i, element in enumerate(grid_size.value.elements):
-                element_value = self._extract_literal_value(element)
-                if element_value is not None:
-                    if element_value <= 0:
-                        raise GeLBExTypeError(
-                            element,
-                            f"Grid size element [{i}] = {element_value} is invalid",
-                            f"All grid size elements must be positive, got {element_value}"
-                        )
-        # Note: If grid_size contains expressions, they will be validated after constant resolution
-    
-    def _validate_grid_size_shape(self, grid_size, d_value, lattice_node):
-        """Validate that grid_size shape matches the dimensionality d."""
-        if isinstance(grid_size, IntLiteral_N) or isinstance(grid_size, UnaryMinusExpr_N):
-            # Scalar grid_size is only valid for d=1
-            if d_value != 1:
-                raise GeLBExTypeError(
-                    grid_size,
-                    f"Grid size scalar is invalid for d={d_value}",
-                    f"For d={d_value}, grid_size must be a {d_value}-element array, not a scalar"
-                )
-        elif isinstance(grid_size, Array1DLiteral_N):
-            # Array grid_size: check number of elements matches d
-            num_elements = len(grid_size.value.elements)
-            if num_elements != d_value:
-                raise GeLBExTypeError(
-                    grid_size,
-                    f"Grid size has {num_elements} elements but d={d_value}",
-                    f"Grid size must have exactly {d_value} element{'s' if d_value > 1 else ''} to match dimensionality"
-                )
-        # Note: If grid_size is an identifier, it will be validated after constant resolution
-    
-    def _validate_periodicity_shape(self, grid_size, periodicity, lattice_node):
-        """Validate that periodicity shape matches grid_size shape."""
-        grid_is_scalar = isinstance(grid_size, (IntLiteral_N, UnaryMinusExpr_N))
-        grid_is_array = isinstance(grid_size, Array1DLiteral_N)
-        
-        period_is_scalar = isinstance(periodicity, (BoolLiteral_N, Identifier_N))
-        period_is_array = isinstance(periodicity, Array1DLiteral_N)
-        
-        if grid_is_scalar and period_is_array:
-            raise GeLBExTypeError(
-                periodicity,
-                f"Periodicity is an array but grid_size is scalar",
-                f"Periodicity must be scalar (true/false) to match scalar grid_size"
-            )
-        elif grid_is_array and period_is_scalar:
-            grid_size_len = len(grid_size.value.elements)
-            raise GeLBExTypeError(
-                periodicity,
-                f"Periodicity is scalar but grid_size has {grid_size_len} elements",
-                f"Periodicity must be a {grid_size_len}-element boolean array to match grid_size"
-            )
-        elif grid_is_array and period_is_array:
-            # Both are arrays - check they have same length
-            grid_size_len = len(grid_size.value.elements)
-            period_len = len(periodicity.value.elements)
-            if grid_size_len != period_len:
-                raise GeLBExTypeError(
-                    periodicity,
-                    f"Periodicity has {period_len} elements but grid_size has {grid_size_len}",
-                    f"Periodicity must have exactly {grid_size_len} element{'s' if grid_size_len > 1 else ''} to match grid_size"
-                )
-        # Note: If either is an identifier, validation will happen after constant resolution
