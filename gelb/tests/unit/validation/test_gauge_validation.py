@@ -147,3 +147,107 @@ class TestGaugeValidation:
             validate_gauges(ast)
         
         assert "InvalidGauge" in str(exc_info.value)
+    
+    def test_gauge_with_unassigned_outputs(self):
+        """Test that gauges with unassigned output variables are rejected."""
+        test_code = """
+        simulation_description("Test");
+        lattices {
+            lattice f(1, 1, int, 32, false);
+        }
+        initializer Init {
+            f.out[x | 0] = 0;
+        }
+        dynamic Update {
+            f.out[x | 0] = 1;
+        }
+        gauge UnassignedGauge(out = {int result; real value;}) {
+            int temp;
+            temp = 42;
+        }
+        node_classes {
+            node_class BULK(Init, Update, UnassignedGauge);
+        }
+        geometry {
+            nodes[:] = BULK;
+        }
+        """
+        
+        ast = get_ast("gelb_program", test_code)
+        validate_ast_root_is_program(ast)
+        
+        with pytest.raises(GeLBExTypeError) as exc_info:
+            validate_gauges(ast)
+        
+        assert "UnassignedGauge" in str(exc_info.value)
+        assert "declares output variables" in str(exc_info.value)
+        assert "but never assigns to them" in str(exc_info.value)
+        assert "result" in str(exc_info.value)
+        assert "value" in str(exc_info.value)
+    
+    def test_gauge_with_partially_assigned_outputs(self):
+        """Test that gauges with some unassigned output variables are rejected."""
+        test_code = """
+        simulation_description("Test");
+        lattices {
+            lattice f(1, 1, int, 32, false);
+        }
+        initializer Init {
+            f.out[x | 0] = 0;
+        }
+        dynamic Update {
+            f.out[x | 0] = 1;
+        }
+        gauge PartialGauge(out = {int result; real value;}) {
+            result = 42;
+        }
+        node_classes {
+            node_class BULK(Init, Update, PartialGauge);
+        }
+        geometry {
+            nodes[:] = BULK;
+        }
+        """
+        
+        ast = get_ast("gelb_program", test_code)
+        validate_ast_root_is_program(ast)
+        
+        with pytest.raises(GeLBExTypeError) as exc_info:
+            validate_gauges(ast)
+        
+        assert "PartialGauge" in str(exc_info.value)
+        assert "declares output variable 'value'" in str(exc_info.value)
+        assert "but never assigns to it" in str(exc_info.value)
+        # Should not mention 'result' since it is assigned
+        assert "result" not in str(exc_info.value).split("declares")[1]
+    
+    def test_gauge_with_all_outputs_assigned(self):
+        """Test that gauges with all outputs assigned pass validation."""
+        test_code = """
+        simulation_description("Test");
+        lattices {
+            lattice f(1, 1, int, 32, false);
+        }
+        initializer Init {
+            f.out[x | 0] = 0;
+        }
+        dynamic Update {
+            f.out[x | 0] = 1;
+        }
+        gauge CompleteGauge(out = {int result; real value;}) {
+            result = 42;
+            value = 3.14;
+        }
+        node_classes {
+            node_class BULK(Init, Update, CompleteGauge);
+        }
+        geometry {
+            nodes[:] = BULK;
+        }
+        """
+        
+        ast = get_ast("gelb_program", test_code)
+        validate_ast_root_is_program(ast)
+        
+        # Should not raise any exceptions
+        validate_gauges(ast)
