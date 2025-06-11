@@ -10,14 +10,15 @@ Visitor Execution Order
 The frontend visitors must run in a specific order due to dependencies between passes:
 
 1. **ASTBuilderVisitor** - Convert parse tree to AST
-2. **SymbolsTablesBuilderVisitor** - Build symbol tables
-3. **ImplicitSymbolsAdderVisitor** - Add coordinates (x,y,z) and dimensions (Nx,Ny,Nz)
-4. **ConstantsResolverVisitor** - Resolve constant expressions
-5. **RangeResolverVisitor** - Convert ``:`` to concrete bounds
-6. **TypeInferenceVisitor** - Add type information to expressions
-7. **TypePromotionVisitor** - Insert implicit conversion nodes
-8. **TypeValidationVisitor** - Validate type compatibility
-9. **Various Validation Visitors** - Final semantic checks
+2. **GaugeValidationVisitor** - Validate gauge specifications and output assignments
+3. **SymbolsTablesBuilderVisitor** - Build symbol tables
+4. **ImplicitSymbolsAdderVisitor** - Add coordinates (x,y,z) and dimensions (Nx,Ny,Nz)
+5. **ConstantsResolverVisitor** - Resolve constant expressions
+6. **RangeResolverVisitor** - Convert ``:`` to concrete bounds
+7. **TypeInferenceVisitor** - Add type information to expressions
+8. **TypePromotionVisitor** - Insert implicit conversion nodes
+9. **TypeValidationVisitor** - Validate type compatibility
+10. **Various Validation Visitors** - Final semantic checks
 
 Complete Visitor Catalog
 ========================
@@ -109,6 +110,34 @@ Constant and Range Resolution Visitors
 *Dependencies:* Symbol tables with constant definitions
 
 *Location:* ``gelb/frontend/ConstantsResolverVisitor.py``
+
+*Gauge Validation Examples:*
+
+.. code-block:: gelb
+
+    // Invalid: No output specification
+    gauge InvalidGauge1() {
+        int temp = 42;
+    }
+    // Error: "Gauge 'InvalidGauge1' has no output specification"
+    
+    // Invalid: Empty output specification  
+    gauge InvalidGauge2(out = {}) {
+        int temp = 42;
+    }
+    // Error: "Gauge 'InvalidGauge2' has no output specification"
+    
+    // Invalid: Declared outputs not assigned
+    gauge InvalidGauge3(out = {int result; real value;}) {
+        int temp = 42;  // Only assigns temp, not result or value
+    }
+    // Error: "Gauge 'InvalidGauge3' declares output variables ['result', 'value'] but never assigns to them"
+    
+    // Valid: All outputs assigned
+    gauge ValidGauge(out = {int result; real value;}) {
+        result = 42;
+        value = 3.14;
+    }
 
 **RangeResolverVisitor**
 
@@ -238,6 +267,20 @@ Validation Visitors
 *Dependencies:* Complete symbol resolution
 
 *Location:* ``gelb/frontend/NodeClassesValidationVisitor.py``
+
+**GaugeValidationVisitor**
+
+*Purpose:* Validates gauge block specifications and output assignments
+
+*Key Features:*
+- Ensures gauge blocks have valid output specifications
+- Validates that all declared output variables are assigned within gauge body
+- Provides clear error messages for missing or unassigned outputs
+- Supports both single and multiple output variable validation
+
+*Dependencies:* AST building completed
+
+*Location:* ``gelb/frontend/GaugeValidationVisitor.py``
 
 **GeometryInitialValidationVisitor**
 

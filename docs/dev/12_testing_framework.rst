@@ -244,6 +244,53 @@ Lattice Parameter Validation Tests
 - **Shape validation tests** for dimensional consistency
 - **Error message quality tests** to ensure clear user feedback
 
+Gauge Validation Tests
+----------------------
+
+**Location:** ``gelb/tests/unit/validation/test_gauge_validation.py``
+
+**Purpose:** Comprehensive gauge block specification and output assignment validation
+
+**Test Coverage:**
+
+.. code-block:: python
+
+    # Output specification validation
+    def test_valid_gauge_with_outputs():
+        """Test that valid gauges with outputs pass validation."""
+        # Verifies gauges with proper output declarations work correctly
+    
+    def test_invalid_gauge_no_outputs():
+        """Test that gauges without output specifications are rejected."""
+        # Validates error: "Gauge 'X' has no output specification"
+    
+    def test_invalid_gauge_empty_outputs():
+        """Test that gauges with empty output specifications are rejected."""
+        # Validates error for 'out = {}' cases
+    
+    # Output assignment validation
+    def test_gauge_with_unassigned_outputs():
+        """Test that gauges with unassigned output variables are rejected."""
+        # Validates error: "declares output variables ['x', 'y'] but never assigns to them"
+    
+    def test_gauge_with_partially_assigned_outputs():
+        """Test that gauges with some unassigned output variables are rejected."""
+        # Validates error: "declares output variable 'x' but never assigns to it"
+    
+    def test_gauge_with_all_outputs_assigned():
+        """Test that gauges with all outputs assigned pass validation."""
+        # Verifies complete gauge implementations work correctly
+
+**Key Validation Features:**
+
+- **Missing output specifications**: Detects gauges without ``out = {...}`` declarations
+- **Empty output specifications**: Detects gauges with ``out = {}`` (no variables)
+- **Unassigned output variables**: Ensures all declared outputs are assigned in gauge body
+- **Clear error messages**: Provides specific feedback with variable names and suggestions
+- **Multiple output support**: Handles both single and multiple output variable cases
+
+**Test Results:** 7/7 tests pass, covering all gauge validation scenarios
+
 Validation Tests
 ---------------
 
@@ -257,6 +304,7 @@ Validation Tests
 - AST structure validation
 - Language constraint enforcement
 - **Lattice parameter validation** (dimensions, distribution functions, grid sizes, shape consistency)
+- **Gauge validation** (output specifications, output variable assignments)
 
 Test Utilities and Best Practices
 =================================
