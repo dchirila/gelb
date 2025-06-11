@@ -1123,13 +1123,44 @@ Test Categories
 Test Utilities
 --------------
 
+The type system provides several shared test utilities in ``gelb.tests.test_utils`` to avoid code duplication and ensure consistent testing patterns.
+
+**Available Helper Functions:**
+
 .. code-block:: python
 
-    from gelb.tests.test_utils import get_typed_ast, minimal_gelb_program_1d
+    from gelb.tests.test_utils import (
+        get_typed_ast,              # Type inference only
+        get_fully_validated_ast,    # Complete validation pipeline  
+        minimal_gelb_program_1d     # Program templates
+    )
 
-    def test_type_promotion():
-        ast = get_typed_ast("real x; x = 1 + 2.5;")
-        # ast now has types inferred and promotions applied
+**Pipeline Helper Functions:**
+
+``get_typed_ast(gelb_code)``
+    Runs the frontend pipeline up to type inference:
+    - Parse → Symbol tables → Constants → Ranges → Type inference
+    - Returns AST with ``inferred_type`` attributes on expressions
+
+``get_fully_validated_ast(gelb_code)`` 
+    Runs the complete frontend validation pipeline:
+    - Type inference → Type promotion → Type validation
+    - Returns fully validated AST ready for backend processing
+    - **Use this for all type validation tests**
+
+**Usage Examples:**
+
+.. code-block:: python
+
+    def test_type_inference_only():
+        """Test just type inference without validation."""
+        ast = get_typed_ast("real x = 42;")
+        # Check inferred types but no validation applied
+        
+    def test_full_validation_pipeline():
+        """Test complete type validation including error detection."""
+        with pytest.raises(GeLBExTypeError):
+            get_fully_validated_ast("int x = 3.14;")  # Type demotion error
 
 Common Testing Patterns
 -----------------------
@@ -1155,15 +1186,31 @@ Common Testing Patterns
 .. code-block:: python
 
     def test_invalid_logical_operation():
+        """Use get_fully_validated_ast for simpler error testing."""
         code = minimal_gelb_program_1d(initializer_content="bool b; b = 1 && 2;")
-        ast = get_typed_ast(code)
-        ast = promote_types(ast)
         
         with pytest.raises(GeLBExTypeError) as exc_info:
-            validate_types(ast)
+            get_fully_validated_ast(code)  # Complete pipeline in one call
         
         assert "logical AND" in str(exc_info.value)
         assert "expected 'bool'" in str(exc_info.value)
+        
+    def test_type_demotion_prevention():
+        """Test that type demotion is caught."""
+        test_code = """
+        simulation_description("Test");
+        lattices { lattice f(1, 1, int, 32, false); }
+        initializer Init { f.out[x | 0] = 3.14; }  // real → int (invalid)
+        dynamic Dyn { f.out[x | 0] = 1; }
+        gauge Out(out = {int val;}) { val = f.in[x | 0]; }
+        node_classes { node_class BULK(Init, Dyn, Out); }
+        geometry { nodes[:] = BULK; }
+        """
+        
+        with pytest.raises(GeLBExTypeError) as exc_info:
+            get_fully_validated_ast(test_code)
+        
+        assert "would lose precision" in str(exc_info.value)
 
 **Testing Array Type System:**
 
@@ -1186,6 +1233,65 @@ Common Testing Patterns
         shape = rhs.inferred_type.shape
         assert isinstance(shape, List_N)
         assert len(shape.elements) == 0  # 0D scalar
+
+**Binary Operand Validation Testing:**
+
+.. code-block:: python
+
+    def test_scalar_array_division_rejected():
+        """Test binary operand validation with full pipeline."""
+        test_code = """
+        simulation_description("Test");
+        lattices { lattice f(1, 3, int, 32, false); }
+        initializer Init { f.out[x | :] = 1 / f.in[x | :]; }
+        dynamic Dyn { f.out[x | 0] = 1; }
+        gauge Out(out = {int val;}) { val = f.in[x | 0]; }
+        node_classes { node_class BULK(Init, Dyn, Out); }
+        geometry { nodes[:] = BULK; }
+        """
+        
+        with pytest.raises(GeLBExTypeError) as exc_info:
+            get_fully_validated_ast(test_code)
+        
+        error = exc_info.value
+        assert "Cannot perform scalar division by array" in str(error.error)
+        assert "mathematically ambiguous" in str(error.error)
+
+**Test Function Consolidation**
+
+The ``get_fully_validated_ast`` function was consolidated from 4 duplicate implementations across different test files into a single shared utility. This provides:
+
+- **Consistency**: All validation tests use the same pipeline
+- **Maintainability**: Single point of change for validation logic
+- **Documentation**: Clear understanding of the complete validation process
+- **Efficiency**: Reduces code duplication and maintenance burden
+
+**Best Practices for Type System Testing:**
+
+1. **Use appropriate helper functions**:
+   - ``get_typed_ast()`` for type inference-only tests
+   - ``get_fully_validated_ast()`` for validation tests that expect errors
+   - ``minimal_gelb_program_1d()`` for simple test cases
+
+2. **Import from shared utilities**:
+   
+   .. code-block:: python
+   
+       from gelb.tests.test_utils import (
+           get_typed_ast,
+           get_fully_validated_ast,
+           minimal_gelb_program_1d
+       )
+
+3. **Follow naming conventions**:
+   - Test functions should clearly indicate what they're testing
+   - Use descriptive variable names for complex test code
+   - Include docstrings explaining the test purpose
+
+4. **Error testing patterns**:
+   - Always test both the error type and message content
+   - Verify hint/guidance messages for actionable feedback
+   - Test edge cases and boundary conditions
 
 Extending the Type System
 =========================
