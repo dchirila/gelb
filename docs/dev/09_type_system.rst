@@ -294,6 +294,89 @@ For assignments, the RHS is promoted to the LHS type if compatible:
     int n = 3.14;     // ERROR: Cannot demote real to int
     bool b = 5;       // ERROR: Cannot demote int to bool
 
+Type Demotion Prevention
+------------------------
+
+GeLB strictly enforces the **unidirectional** type promotion hierarchy to prevent precision loss and unexpected behavior. Type "demotion" (conversion in the reverse direction: real → int → bool) is forbidden.
+
+**Prohibited Type Demotions:**
+
+.. code-block:: gelb
+
+    // Scalar assignments
+    real temperature = 98.6;
+    int count = temperature;        // ERROR: real → int (precision loss)
+    
+    int level = 42;
+    bool flag = level;              // ERROR: int → bool (precision loss)
+    
+    real value = 3.14159;
+    bool status = value;            // ERROR: real → bool (precision loss)
+
+**Scalar-to-Array Broadcasting with Demotion:**
+
+.. code-block:: gelb
+
+    // Array assignments with type demotion
+    array[int, 5] integers;
+    real pi = 3.14159;
+    integers = pi;                  // ERROR: real → int array (precision loss)
+    
+    array[bool, 3] flags;
+    int count = 5;
+    flags = count;                  // ERROR: int → bool array (precision loss)
+
+**Lattice Output Assignments:**
+
+.. code-block:: gelb
+
+    lattices {
+        lattice f(1, 1, int, 32, false);  // int lattice
+    }
+    
+    initializer Init {
+        real value = 3.14;
+        f.out[x | 0] = value;       // ERROR: real → int (precision loss)
+    }
+
+**Error Messages:**
+
+Type demotion errors provide clear feedback with source context:
+
+.. code-block::
+
+    error: ...
+      9      real real_value = 3.14;
+     10->    int_array = real_value;
+                         ^^                 [Problem] Cannot assign 'real' to array of 'int' - would lose precision
+                                            [Hint] Type promotion only allows: bool → int → real. Consider using an explicit cast when available.
+     11  }
+
+**Rationale:**
+
+1. **Precision Preservation**: Prevents accidental data loss (3.14 → 3)
+2. **Predictable Behavior**: Clear promotion direction eliminates ambiguity
+3. **Type Safety**: Catches potential bugs at compile time
+4. **Explicit Intent**: Forces developers to use explicit casts for intentional demotions
+
+**Future Support - Explicit Type Casts:**
+
+When intrinsic functions are implemented, explicit casts will enable controlled type demotions:
+
+.. code-block:: gelb
+
+    // Future syntax (not yet implemented)
+    real pi = 3.14159;
+    int truncated = int_cast(pi);       // Explicit: 3.14159 → 3
+    bool is_nonzero = bool_cast(pi);    // Explicit: 3.14159 → true
+
+**Implementation Details:**
+
+Type demotion prevention is enforced in two places:
+
+1. **TypePromotionVisitor**: Validates scalar-to-array broadcasting operations
+2. **TypeValidationVisitor**: Validates direct scalar assignments and lattice assignments
+
 **4. Array Literals**
 
 All elements in an array literal are promoted to a common type:
@@ -1198,3 +1281,132 @@ For Language Users
 * **Understand promotion rules** - Know when conversions happen
 * **Watch for logical operations** - They don't promote automatically
 * **Test boundary conditions** - Mixed-type expressions can be tricky
+
+Required Intrinsic Functions
+=============================
+
+GeLB requires a set of intrinsic (built-in) functions to support operations that cannot be safely performed through automatic type promotion. These functions provide explicit, controlled operations that would otherwise be forbidden by the type system.
+
+Type Conversion Functions
+-------------------------
+
+**Explicit Type Demotion Casts**
+
+To enable controlled precision loss when required by the algorithm:
+
+.. code-block:: gelb
+
+    // int_cast: Explicit real → int conversion
+    int_cast(expr: real) -> int
+    // Truncates fractional part: 3.14159 → 3, -2.8 → -2
+    
+    int truncated = int_cast(3.14159);     // 3
+    int negative = int_cast(-2.8);         // -2
+    
+    // bool_cast: Explicit numeric → bool conversion  
+    bool_cast(expr: int|real) -> bool
+    // Zero → false, non-zero → true
+    
+    bool flag1 = bool_cast(0);             // false
+    bool flag2 = bool_cast(42);            // true
+    bool flag3 = bool_cast(-3.14);         // true
+    bool flag4 = bool_cast(0.0);           // false
+
+**Type-Safe Rounding Functions**
+
+For precise control over real → int conversion:
+
+.. code-block:: gelb
+
+    // round: Round to nearest integer
+    round(expr: real) -> int
+    // Uses "round half to even" (banker's rounding)
+    
+    int rounded1 = round(3.14159);         // 3
+    int rounded2 = round(3.6);             // 4
+    int rounded3 = round(2.5);             // 2 (banker's rounding)
+    int rounded4 = round(3.5);             // 4 (banker's rounding)
+    
+    // floor: Round down to nearest integer
+    floor(expr: real) -> int
+    
+    int floored1 = floor(3.9);             // 3
+    int floored2 = floor(-2.1);            // -3
+    
+    // ceil: Round up to nearest integer  
+    ceil(expr: real) -> int
+    
+    int ceiling1 = ceil(3.1);              // 4
+    int ceiling2 = ceil(-2.9);             // -2
+
+**Array-Aware Type Conversions**
+
+Support type conversion for arrays while preserving shapes:
+
+.. code-block:: gelb
+
+    // Array type conversions preserve shape
+    array[real, 3] reals = {1.1, 2.7, 3.9};
+    array[int, 3] truncated = int_cast(reals);    // {1, 2, 3}
+    array[int, 3] rounded = round(reals);         // {1, 3, 4}
+
+**Usage Examples**
+
+.. code-block:: gelb
+
+    // Example 1: LBM with integer coordinates
+    lattices {
+        lattice f(2, 9, real, {64, 64}, {true, true});
+    }
+    
+    initializer Init {
+        // Convert real lattice indices to integer array indices
+        real x_real = x + 0.5;  // Offset for centering
+        int x_index = round(x_real);
+        
+        // Explicit conversion for algorithm requirements
+        real density = calculate_density();
+        int density_class = int_cast(density * 10.0);  // Explicit truncation
+    }
+
+**Implementation Priority**
+
+1. **High Priority** (Essential for type safety):
+   - ``int_cast()`` - Most common demotion operation
+   - ``bool_cast()`` - Conditional logic requirements
+   
+2. **Medium Priority** (Mathematical operations):
+   - ``round()`` - Common rounding needs
+   - ``floor()`` - Scientific computing algorithms
+   - ``ceil()`` - Boundary calculations
+   
+3. **Future Enhancements**:
+   - Array-aware versions of all functions
+   - Additional mathematical functions (abs, sqrt, etc.)
+   - String conversion functions
+
+**Design Principles**
+
+1. **Explicit Intent**: All type demotions must be explicitly requested
+2. **Predictable Behavior**: Functions have well-defined semantics
+3. **Array Compatibility**: Functions work with GeLB's universal array type system
+4. **Performance**: Intrinsics should enable efficient code generation
+5. **Safety**: Clear error messages for invalid operations
+
+**Integration with Type System**
+
+Intrinsic functions integrate seamlessly with GeLB's type system:
+
+- **Input Validation**: Type checker ensures correct argument types
+- **Output Types**: Return types are statically determined
+- **Array Broadcasting**: Support both scalar and array arguments
+- **Error Reporting**: Clear messages for misuse
+
+**Future Extensions**
+
+The intrinsic function system provides a foundation for:
+
+- Mathematical functions (trigonometric, logarithmic)
+- Array manipulation functions (reshape, transpose)
+- String manipulation functions
+- I/O functions for debugging and output
