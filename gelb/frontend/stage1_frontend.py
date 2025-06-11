@@ -96,9 +96,9 @@ def validate_ast_root_is_program(ast):
     
     if not isinstance(ast, Program_N):
         raise GeLBException(
-            f"AST root must be a Program_N node, but got {type(ast).__name__}",
-            "This is required for proper symbol resolution across scopes. "
-            "Only use 'gelb_program' as the start rule when calling get_ast()."
+            f"Expected Program_N root node, got {type(ast).__name__}",
+            "Use start rule 'gelb_program' for complete compilation. "
+            "For unit tests of individual blocks, skip this validation step."
         )
 
 

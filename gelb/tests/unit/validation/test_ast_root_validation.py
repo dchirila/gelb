@@ -26,5 +26,5 @@ def test_validate_ast_root_is_program_with_invalid_root():
         validate_ast_root_is_program(ast_root)
     
     # Check error message
-    assert "AST root must be a Program_N node" in str(exc_info.value.error)
+    assert "Expected Program_N root node" in str(exc_info.value.error)
     assert "IntLiteral_N" in str(exc_info.value.error)
