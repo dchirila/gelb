@@ -13,7 +13,9 @@ from gelb.frontend.stage1_frontend import (
     resolve_all_constants,
     resolve_ranges,
     add_implicit_symbols,
-    infer_types
+    infer_types,
+    promote_types,
+    validate_types
 )
 from gelb.gelb_ast.ASTNodes import *
 from gelb.utils import config
@@ -86,6 +88,31 @@ def get_resolved_ast(gelb_code):
     ast = add_implicit_symbols(ast)
     ast = resolve_all_constants(ast)
     ast = resolve_ranges(ast)
+    return ast
+
+
+def get_fully_validated_ast(gelb_code):
+    """
+    Helper to get AST with full validation pipeline applied including type validation.
+    
+    This runs the complete frontend pipeline through type validation, which includes:
+    - Type inference
+    - Type promotion 
+    - Type validation (arithmetic operations, assignments, etc.)
+    
+    Args:
+        gelb_code (str): GeLB source code
+        
+    Returns:
+        Program_N: AST with full validation applied
+    """
+    # Set the source code in config to avoid error reporting issues
+    config.GELB_SRC_RAW = gelb_code
+    
+    # Run the full pipeline including type validation
+    ast = get_typed_ast(gelb_code)  # Up to type inference
+    ast = promote_types(ast)        # Apply type promotion
+    validate_types(ast)             # Apply type validation
     return ast
 
 

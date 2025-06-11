@@ -7,19 +7,8 @@ Tests strict validation rules that prevent mathematically ambiguous operations.
 
 import pytest
 from gelb.gelb_ast.ASTNodes import *
-from gelb.tests.test_utils import get_typed_ast, minimal_gelb_program_1d
+from gelb.tests.test_utils import get_typed_ast, minimal_gelb_program_1d, get_fully_validated_ast
 from gelb.utils.exceptions import GeLBExTypeError
-from gelb.frontend.stage1_frontend import promote_types, validate_types
-from gelb.utils import config
-
-
-def get_fully_validated_ast(gelb_code):
-    """Get AST with full frontend pipeline including type validation."""
-    config.GELB_SRC_RAW = gelb_code
-    ast = get_typed_ast(gelb_code)  # Up to type inference
-    ast = promote_types(ast)        # Apply type promotion
-    validate_types(ast)             # Apply type validation
-    return ast
 
 
 class TestBinaryOperandValidation:

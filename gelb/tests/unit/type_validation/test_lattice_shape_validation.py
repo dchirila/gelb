@@ -3,9 +3,7 @@
 import pytest
 from gelb.gelb_ast.ASTNodes import *
 from gelb.utils.exceptions import GeLBExTypeError
-from gelb.tests.test_utils import get_typed_ast
-from gelb.frontend.stage1_frontend import promote_types, validate_types
-from gelb.utils import config
+from gelb.tests.test_utils import get_typed_ast, get_fully_validated_ast
 
 
 def create_lattice_program(lattices_content):
@@ -39,26 +37,6 @@ def create_lattice_program(lattices_content):
         nodes[:] = BULK;
     }}
     """
-
-
-def get_fully_validated_ast(gelb_code):
-    """
-    Helper to get AST with full validation pipeline applied including lattice shape validation.
-    
-    Args:
-        gelb_code (str): GeLB source code
-        
-    Returns:
-        Program_N: AST with full validation applied
-    """
-    # Set the source code in config to avoid error reporting issues
-    config.GELB_SRC_RAW = gelb_code
-    
-    # Run the full pipeline including type validation
-    ast = get_typed_ast(gelb_code)
-    ast = promote_types(ast)
-    ast = validate_types(ast)  # This includes lattice shape validation
-    return ast
 
 
 class TestGridSizeShapeValidation:
