@@ -1410,3 +1410,346 @@ The intrinsic function system provides a foundation for:
 - Array manipulation functions (reshape, transpose)
 - String manipulation functions
 - I/O functions for debugging and output
+
+Binary Operand Validation
+=========================
+
+GeLB enforces strict validation rules for binary operations involving arrays and scalars to prevent mathematically ambiguous expressions and ensure clear, predictable semantics.
+
+Validation Philosophy
+---------------------
+
+**Core Principle**: Mathematical operations should have unambiguous, well-defined semantics that map clearly to efficient backend implementations.
+
+**Problem**: Operations like ``scalar / array`` or ``scalar - array`` are mathematically ambiguous:
+
+.. code-block:: gelb
+
+    // What does this mean?
+    real result = 5.0 / {1.0, 2.0, 3.0};
+    // 5.0 / each element → {5.0, 2.5, 1.67}? (elementwise)
+    // 5.0 / sum → 5.0 / 6.0 = 0.83? (reduction) 
+    // 5.0 / product → 5.0 / 6.0 = 0.83? (reduction)
+    // 5.0 / norm → 5.0 / 3.74 = 1.34? (reduction)
+
+**Solution**: Restrict operations to mathematically unambiguous patterns and provide clear error messages with guidance.
+
+Allowed Operations
+------------------
+
+**1. Scalar-Scalar Operations**
+
+All arithmetic operations are allowed between scalars:
+
+.. code-block:: gelb
+
+    int a = 5;
+    int b = 3;
+    int result1 = a + b;    // ✅ 8
+    int result2 = a - b;    // ✅ 2
+    int result3 = a * b;    // ✅ 15
+    int result4 = a / b;    // ✅ 1 (integer division)
+
+**2. Array-Scalar Operations (Element-wise)**
+
+Arrays can be combined with scalars for element-wise operations:
+
+.. code-block:: gelb
+
+    lattices {
+        lattice f(1, 3, real, 32, false);
+    }
+    
+    initializer Init {
+        // All element-wise operations allowed
+        f.out[x | :] = f.in[x | :] + 1.0;    // ✅ Add 1.0 to each element
+        f.out[x | :] = f.in[x | :] - 2.0;    // ✅ Subtract 2.0 from each element  
+        f.out[x | :] = f.in[x | :] * 3.0;    // ✅ Multiply each element by 3.0
+        f.out[x | :] = f.in[x | :] / 4.0;    // ✅ Divide each element by 4.0
+        f.out[x | :] = f.in[x | :] ^ 2.0;    // ✅ Square each element
+    }
+
+**3. Scalar-Array Commutative Operations**
+
+For commutative operations (addition, multiplication), scalar-array is equivalent to array-scalar:
+
+.. code-block:: gelb
+
+    initializer Init {
+        // Commutative operations work both ways
+        f.out[x | :] = 2.0 + f.in[x | :];    // ✅ Equivalent to f.in[x | :] + 2.0
+        f.out[x | :] = 3.0 * f.in[x | :];    // ✅ Equivalent to f.in[x | :] * 3.0
+    }
+
+Rejected Operations
+-------------------
+
+**1. Scalar-Array Non-Commutative Operations**
+
+Non-commutative operations with scalar on the left are rejected as mathematically ambiguous:
+
+.. code-block:: gelb
+
+    initializer Init {
+        f.out[x | :] = 5.0 - f.in[x | :];    // ❌ ERROR: Ambiguous semantics
+        f.out[x | :] = 1.0 / f.in[x | :];    // ❌ ERROR: Ambiguous semantics  
+        f.out[x | :] = 2.0 ^ f.in[x | :];    // ❌ ERROR: Ambiguous semantics
+    }
+
+**Error Messages:**
+
+.. code-block::
+
+    error: Cannot perform scalar subtraction by array: mathematically ambiguous
+         7      initializer Init {
+         8->        f.out[x | :] = 5.0 - f.in[x | :];
+                                   ~~~~~~~~~~~~~~~~~~^^   [Problem] Cannot perform scalar subtraction by array: mathematically ambiguous
+                                                           [Hint] Consider: array subtraction scalar for clear element-wise semantics
+         9      }
+
+**2. Array-Array Operations**
+
+Currently, array-array operations are not supported as they require complex broadcasting semantics:
+
+.. code-block:: gelb
+
+    lattices {
+        lattice f(1, 3, real, 32, false);
+        lattice g(1, 3, real, 32, false);
+    }
+    
+    initializer Init {
+        // All array-array operations rejected
+        f.out[x | :] = f.in[x | :] + g.in[x | :];    // ❌ ERROR: Not supported
+        f.out[x | :] = f.in[x | :] - g.in[x | :];    // ❌ ERROR: Not supported
+        f.out[x | :] = f.in[x | :] * g.in[x | :];    // ❌ ERROR: Not supported  
+        f.out[x | :] = f.in[x | :] / g.in[x | :];    // ❌ ERROR: Not supported
+    }
+
+**Error Messages:**
+
+.. code-block::
+
+    error: Cannot perform array addition by array: operation not supported
+         8      initializer Init {
+         9->        f.out[x | :] = f.in[x | :] + g.in[x | :];
+                                    ~~~~~~~~~~~~~~~~~~~~~~~~^^   [Problem] Cannot perform array addition by array: operation not supported
+                                                                 [Hint] Use scalar-array operations like: array + scalar
+        10      }
+
+Lattice Selection Integration
+-----------------------------
+
+**Single Element Selections as Scalars**
+
+Single element lattice selections are treated as scalars, not arrays:
+
+.. code-block:: gelb
+
+    lattices {
+        lattice f(1, 1, real, 32, false);  // Single distribution function
+    }
+    
+    initializer Init {
+        // f.in[x | 0] is a scalar (single element)
+        // So scalar / scalar is allowed
+        f.out[x | 0] = 1.0 / f.in[x | 0];   // ✅ Scalar division
+    }
+
+**Full Range Selections as Arrays**
+
+Full range selections return arrays and follow array operation rules:
+
+.. code-block:: gelb
+
+    lattices {
+        lattice f(1, 3, real, 32, false);  // Three distribution functions
+    }
+    
+    initializer Init {
+        // f.in[x | :] is an array of size 3
+        f.out[x | :] = f.in[x | :] + 1.0;   // ✅ Array + scalar
+        f.out[x | :] = 2.0 + f.in[x | :];   // ✅ Scalar + array (commutative)
+        f.out[x | :] = 1.0 / f.in[x | :];   // ❌ ERROR: Scalar / array (ambiguous)
+    }
+
+Type Promotion Integration
+--------------------------
+
+Binary operand validation works seamlessly with type promotion:
+
+.. code-block:: gelb
+
+    lattices {
+        lattice f(1, 3, real, 32, false);
+    }
+    
+    initializer Init {
+        // Type promotion: int → real, then array operation
+        f.out[x | :] = 1 + f.in[x | :];         // ✅ int promoted to real
+        f.out[x | :] = f.in[x | :] * true;      // ✅ bool promoted to real
+        
+        // Type promotion + validation: still rejects ambiguous operations
+        f.out[x | :] = 5 - f.in[x | :];         // ❌ ERROR: Still ambiguous after promotion
+    }
+
+Implementation Details
+----------------------
+
+**Validation Location**: Binary operand validation occurs in ``TypeValidationVisitor._validate_arithmetic_op``
+
+**Validation Logic**:
+
+.. code-block:: python
+
+    def _validate_arithmetic_op(self, left_type, right_type, op_name, node):
+        left_is_scalar = self._is_scalar_array(left_type)
+        right_is_scalar = self._is_scalar_array(right_type)
+        
+        # Allow scalar op array only for commutative operations
+        if left_is_scalar and not right_is_scalar:
+            if op_name in ['addition', 'multiplication']:
+                return True  # Commutative: scalar + array, scalar * array
+            elif op_name in ['subtraction', 'division', 'exponentiation']:
+                raise GeLBExTypeError(
+                    node,
+                    f"Cannot perform scalar {op_name} by array: mathematically ambiguous",
+                    f"Consider: array {op_name} scalar for clear element-wise semantics"
+                )
+        
+        # Reject all array op array operations
+        elif not left_is_scalar and not right_is_scalar:
+            raise GeLBExTypeError(
+                node,
+                f"Cannot perform array {op_name} by array: operation not supported",
+                f"Use scalar-array operations like: array {op_name} scalar"
+            )
+
+**Operation Classification**:
+
+- **Commutative**: addition (``+``), multiplication (``*``)
+- **Non-Commutative**: subtraction (``-``), division (``/``), exponentiation (``^``)
+
+**Error Message Design**:
+
+1. **Clear Problem Description**: Exactly what operation is problematic
+2. **Rationale**: Why it's problematic ("mathematically ambiguous")  
+3. **Actionable Hint**: How to fix it ("Consider: array operation scalar")
+
+Rationale and Benefits
+----------------------
+
+**1. Predictable Semantics**
+
+Clear rules eliminate guesswork about operation meaning:
+
+.. code-block:: gelb
+
+    // Clear: element-wise addition
+    array + scalar  // Each element + scalar
+    
+    // Clear: commutative equivalence  
+    scalar + array  // Same as array + scalar
+    
+    // Ambiguous: rejected
+    scalar / array  // What does this mean?
+
+**2. Backend Optimization**
+
+Restricted operations enable efficient code generation:
+
+- **Array + Scalar**: Simple broadcast implementation
+- **Scalar + Array**: Rewrite as Array + Scalar
+- **Array × Array**: Avoided complexity of shape broadcasting
+
+**3. Error Prevention**
+
+Catches likely programming errors at compile time:
+
+.. code-block:: gelb
+
+    // Likely intended: array - scalar
+    velocity[x | :] = velocity[x | :] - damping;    // ✅ Clear
+    
+    // Likely error: scalar - array  
+    velocity[x | :] = damping - velocity[x | :];    // ❌ Caught at compile time
+
+**4. Future Extensibility**
+
+Clear foundation for adding array-array operations with well-defined broadcasting rules:
+
+.. code-block:: gelb
+
+    // Future: with proper broadcasting semantics
+    result[x | :] = array1[x | :] + array2[x | :];  // Compatible shapes required
+
+Testing Coverage
+----------------
+
+Binary operand validation includes comprehensive test coverage:
+
+**Test Files**:
+- ``test_binary_operand_validation.py`` - Core validation logic
+- ``test_array_scalar_operations.py`` - Extended operation patterns
+
+**Test Categories**:
+
+1. **Allowed Operations**: Verify valid patterns work correctly
+2. **Rejected Operations**: Ensure invalid patterns are caught
+3. **Error Message Quality**: Validate helpful error messages
+4. **Type Integration**: Test with type promotion
+5. **Lattice Integration**: Test with lattice selections
+6. **Edge Cases**: Single elements, mixed types, complex expressions
+
+**Example Test Structure**:
+
+.. code-block:: python
+
+    @pytest.mark.parametrize("expr,op_name", [
+        ("f.in[x | :] + g.in[x | :]", "addition"),
+        ("f.in[x | :] - g.in[x | :]", "subtraction"), 
+        ("f.in[x | :] * g.in[x | :]", "multiplication"),
+        ("f.in[x | :] / g.in[x | :]", "division"),
+    ])
+    def test_all_array_array_operations_rejected(self, expr, op_name):
+        with pytest.raises(GeLBExTypeError) as exc_info:
+            get_fully_validated_ast(test_code)
+        
+        error = exc_info.value
+        assert f"Cannot perform array {op_name} by array" in str(error.error)
+
+Future Extensions
+-----------------
+
+**Array-Array Operations**
+
+Future versions may support array-array operations with broadcasting:
+
+.. code-block:: gelb
+
+    // Future: shape-compatible array operations
+    array[real, 3] + array[real, 3]     // Element-wise, same shape
+    array[real, {2,3}] + array[real, 3]  // Broadcasting: {2,3} + {1,3}
+
+**Advanced Mathematical Operations**
+
+Specialized operations for scientific computing:
+
+.. code-block:: gelb
+
+    // Future: reduction operations
+    real sum = reduce_sum(array);        // Unambiguous reduction
+    real dot = dot_product(array1, array2);  // Explicit dot product
+    
+    // Future: element-wise functions  
+    array[real, 3] squared = square(array);   // Clear element-wise operation
+
+**Validation Configuration**
+
+Allow customization of validation strictness:
+
+.. code-block:: gelb
+
+    // Future: configuration options
+    #pragma gelb strict_arrays on       // Current behavior
+    #pragma gelb allow_ambiguous off    // Reject ambiguous operations
