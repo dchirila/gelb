@@ -454,7 +454,9 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
     # Pass-through for nodes without type checking
     
     def visitLatticesBlock_N(self, node: LatticesBlock_N, ast_root_node: Program_N):
-        """Lattices block doesn't need type validation."""
+        """Visit lattice instantiation statements for parameter validation."""
+        for stmt in node.stmts:
+            self.visit(stmt, ast_root_node)
         return node
     
     def visitNodeClassesBlock_N(self, node: NodeClassesBlock_N, ast_root_node: Program_N):
@@ -580,7 +582,7 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         return node
     
     def visitLatticeInstaStmt_N(self, node: LatticeInstaStmt_N, ast_root_node: Program_N):
-        """Process expressions in lattice instantiation."""
+        """Process expressions in lattice instantiation and validate parameters."""
         # Visit dimension and q parameters if they are expressions
         if node.d is not None:
             self.visit(node.d, ast_root_node)
@@ -593,4 +595,76 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         if hasattr(node, 'periodicity') and node.periodicity is not None:
             self.visit(node.periodicity, ast_root_node)
         
+        # Validate lattice parameters
+        self._validate_lattice_parameters(node)
+        
         return node
+    
+    def _extract_literal_value(self, expr):
+        """
+        Extract integer value from expression if it's a literal or unary minus of literal.
+        Returns None if the expression is not a compile-time constant.
+        """
+        if isinstance(expr, IntLiteral_N):
+            return expr.value
+        elif isinstance(expr, UnaryMinusExpr_N) and isinstance(expr.value, IntLiteral_N):
+            return -expr.value.value
+        else:
+            return None
+    
+    def _validate_lattice_parameters(self, node: LatticeInstaStmt_N):
+        """
+        Validate lattice instantiation parameters according to GeLB constraints:
+        1. 1 <= d <= 3 (dimensionality)
+        2. q > 0 (number of distribution functions)
+        3. each element of grid_size should be > 0
+        """
+        # Validate d (dimensionality): 1 <= d <= 3
+        d_value = self._extract_literal_value(node.d)
+        if d_value is not None:
+            if not (1 <= d_value <= 3):
+                raise GeLBExTypeError(
+                    node.d,
+                    f"Lattice dimensionality d={d_value} is invalid",
+                    f"Dimensionality must be between 1 and 3 (inclusive), got {d_value}"
+                )
+        # Note: If d is not a literal, it will be validated after constant resolution
+        
+        # Validate q (distribution functions): q > 0  
+        q_value = self._extract_literal_value(node.q)
+        if q_value is not None:
+            if q_value <= 0:
+                raise GeLBExTypeError(
+                    node.q,
+                    f"Number of distribution functions q={q_value} is invalid",
+                    f"Number of distribution functions must be positive, got {q_value}"
+                )
+        # Note: If q is not a literal, it will be validated after constant resolution
+        
+        # Validate grid_size: each element should be > 0
+        if hasattr(node, 'grid_size') and node.grid_size is not None:
+            self._validate_grid_size_positive(node.grid_size, node)
+    
+    def _validate_grid_size_positive(self, grid_size, lattice_node):
+        """Validate that all grid size values are positive."""
+        grid_value = self._extract_literal_value(grid_size)
+        if grid_value is not None:
+            # 1D case: single integer
+            if grid_value <= 0:
+                raise GeLBExTypeError(
+                    grid_size,
+                    f"Grid size {grid_value} is invalid",
+                    f"Grid size must be positive, got {grid_value}"
+                )
+        elif isinstance(grid_size, Array1DLiteral_N):
+            # Multi-D case: array of integers
+            for i, element in enumerate(grid_size.value.elements):
+                element_value = self._extract_literal_value(element)
+                if element_value is not None:
+                    if element_value <= 0:
+                        raise GeLBExTypeError(
+                            element,
+                            f"Grid size element [{i}] = {element_value} is invalid",
+                            f"All grid size elements must be positive, got {element_value}"
+                        )
+        # Note: If grid_size contains expressions, they will be validated after constant resolution
