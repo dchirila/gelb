@@ -332,9 +332,16 @@ class ASTBuilderVisitor(GeLBVisitor):
             ctx: GeLBParser.Gauge_blockContext
     ):
         name = self.visit(ctx.identifier())
-        outputs = List_N(code_range_from_ctx(ctx.variable_declaration_stmt()))
-        for output in ctx.variable_declaration_stmt():
-            outputs.append(self.visit(output))
+        
+        # Handle optional output specification
+        if ctx.variable_declaration_stmt():
+            outputs = List_N(code_range_from_ctx(ctx.variable_declaration_stmt()))
+            for output in ctx.variable_declaration_stmt():
+                outputs.append(self.visit(output))
+        else:
+            # No output specification - create empty list for semantic validation
+            outputs = List_N(code_range_from_ctx(ctx))
+        
         stmts = List_N(code_range_from_ctx(ctx.block_stmt()))
         for stmt in ctx.block_stmt():
             stmts.append(self.visit(stmt))

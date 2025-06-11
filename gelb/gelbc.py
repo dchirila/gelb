@@ -11,6 +11,7 @@ from gelb.frontend.stage1_frontend import (
     get_ast,
     validate_ast_root_is_program,
     build_symbols_tables,
+    validate_gauges,
     validate_node_classes,
     initial_validation_geometry,
     enforce_rectangular_array_literals,
@@ -119,6 +120,9 @@ def cli(t, input_file, backend, visualize_ast, ast_output, ast_format, keep_dot,
     
     # ... validate AST root is Program_N for proper symbol resolution
     validate_ast_root_is_program(ast)
+
+    # ... validate gauge blocks have required output specifications
+    validate_gauges(ast)
 
     # ... [validation] prevent clashes of symbol refs with implicits
     # NOTE: it is OK to reference automatic {x, y, z} variables

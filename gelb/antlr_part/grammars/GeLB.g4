@@ -88,10 +88,12 @@ gauge_block :
     GAUGE identifier
     // BEGIN :: Interface //
     PAREN_OPEN                    // (
-    // Gauges only have outputs
-    OUT OP_ASSIGN CURLY_OPEN      // out = {
-    variable_declaration_stmt+    // int x1; array[real64, 3] x2;
-    CURLY_CLOSE PAREN_CLOSE       // })
+    // Gauges always need outputs, but we make them optional in the grammar
+    // so that we can present more user-friendly error messages when missing
+    (OUT OP_ASSIGN CURLY_OPEN      // out = {
+    variable_declaration_stmt*    // int x1; array[real64, 3] x2; (now optional)
+    CURLY_CLOSE)?                 // }) (entire output spec now optional)
+    PAREN_CLOSE                   // )
     // END :: Interface //
     CURLY_OPEN
     block_stmt+  // core statements

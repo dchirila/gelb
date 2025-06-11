@@ -25,6 +25,7 @@ from gelb.frontend.ImplicitsRefsClashPreventerVisitor import ImplicitsRefsClashP
 from gelb.frontend.ImplicitsDefsClashPreventerVisitor import ImplicitsDefsClashPreventerVisitor
 from gelb.frontend.ImplicitSymbolsAdderVisitor import ImplicitSymbolsAdderVisitor
 from gelb.frontend.NodeClassesValidationVisitor import NodeClassesValidationVisitor
+from gelb.frontend.GaugeValidationVisitor import GaugeValidationVisitor
 from gelb.frontend.GeometryInitialValidationVisitor import GeometryInitialValidationVisitor
 from gelb.frontend.ConstantsResolverVisitor import ConstantsResolverVisitor
 from gelb.frontend.LatticeConsistencyValidator import LatticeConsistencyValidator
@@ -119,6 +120,20 @@ def prevent_clashes_of_symbol_defs_with_implicits(ast):
 def add_implicit_symbols(ast):
     ast_visitor = ImplicitSymbolsAdderVisitor()
     return ast_visitor.visit(ast, ast)
+
+
+def validate_gauges(ast):
+    """
+    Validate gauge blocks have required output specifications.
+    
+    Ensures that all gauge blocks have non-empty output specifications.
+    Provides user-friendly error messages for missing or empty outputs.
+    
+    Must run after:
+    - AST building
+    """
+    ast_visitor = GaugeValidationVisitor()
+    ast_visitor.visit(ast, ast)  # nothing to return here
 
 
 def validate_node_classes(ast):
