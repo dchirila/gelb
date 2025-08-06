@@ -924,3 +924,65 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
             for dim_size in remaining_dimensions:
                 shape_elements.append(IntLiteral_N(code_range, dim_size))
             return Array1DLiteral_N(code_range, shape_elements)
+    
+    # Intrinsic function type inference
+    
+    def visitIntrinsicFunctionCall_N(self, node: IntrinsicFunctionCall_N, ast_root_node: Program_N):
+        """
+        Infer type of intrinsic function call.
+        
+        First infers types of all arguments, then looks up the function definition
+        to validate arguments and compute the return type.
+        """
+        from gelb.frontend.intrinsic_functions import get_intrinsic_function
+        
+        # First, infer types of all arguments
+        for arg in node.arguments:
+            self.visit(arg, ast_root_node)
+        
+        # Look up the intrinsic function definition
+        func_def = get_intrinsic_function(node.function_name)
+        if func_def is None:
+            raise GeLBExTypeError(
+                node,
+                f"Unknown intrinsic function '{node.function_name}'",
+                f"Available intrinsic functions: sum, dot_prod"
+            )
+        
+        # Validate argument count
+        arg_count = len(node.arguments.elements)
+        if func_def.min_args == func_def.max_args:
+            # Exact argument count required
+            if arg_count != func_def.min_args:
+                raise GeLBExTypeError(
+                    node,
+                    f"Function '{node.function_name}' expects exactly {func_def.min_args} argument{'s' if func_def.min_args != 1 else ''}, got {arg_count}",
+                    f"Usage: {node.function_name}({'array' if node.function_name == 'sum' else 'array1, array2'})"
+                )
+        else:
+            # Range of argument counts allowed
+            if arg_count < func_def.min_args:
+                raise GeLBExTypeError(
+                    node,
+                    f"Function '{node.function_name}' expects at least {func_def.min_args} arguments, got {arg_count}",
+                    f"Check the function signature for '{node.function_name}'"
+                )
+            if func_def.max_args is not None and arg_count > func_def.max_args:
+                raise GeLBExTypeError(
+                    node,
+                    f"Function '{node.function_name}' expects at most {func_def.max_args} arguments, got {arg_count}",
+                    f"Check the function signature for '{node.function_name}'"
+                )
+        
+        # Validate argument types using the function's type checker
+        func_def.type_checker(node.function_name, node.arguments.elements, node)
+        
+        # Compute and set the return type
+        node.inferred_type = func_def.return_type_computer(
+            node.function_name, 
+            node.arguments.elements, 
+            node, 
+            node.code_range
+        )
+        
+        return node
