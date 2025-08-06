@@ -904,6 +904,35 @@ class ASTBuilderVisitor(GeLBVisitor):
             self.visit(ctx.right)
         )
 
+    # Visit a parse tree produced by GeLBParser#intrinsicFunctionCallExpr.
+    def visitIntrinsicFunctionCallExpr(
+            self,
+            ctx: GeLBParser.IntrinsicFunctionCallExprContext
+    ):
+        # Get the intrinsic function call node
+        func_call_ctx = ctx.intrinsic_function_call()
+        
+        # Extract function name
+        func_name_ctx = func_call_ctx.intrinsic_function_name()
+        if func_name_ctx.SUM():
+            function_name = "sum"
+        elif func_name_ctx.DOT_PROD():
+            function_name = "dot_prod"
+        else:
+            raise GeLBException(f"Unknown intrinsic function at {code_range_from_ctx(func_name_ctx)}")
+        
+        # Extract arguments
+        arguments = List_N(code_range_from_ctx(func_call_ctx))
+        if func_call_ctx.arguments:
+            for arg_ctx in func_call_ctx.arguments:
+                arguments.append(self.visit(arg_ctx))
+        
+        return IntrinsicFunctionCall_N(
+            code_range_from_ctx(ctx),
+            function_name,
+            arguments
+        )
+
     def get_list_of_children_sub_asts(self, ctx):
         list_of_children_sub_asts = List_N(code_range_from_ctx(ctx))
         # Strategy: visit all children nodes (based on the implementation of

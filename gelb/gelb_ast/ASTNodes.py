@@ -719,6 +719,43 @@ class BroadcastNode_N(Expr_N):
         return f"(Broadcast {self.scalar_expr} -> {self.target_array_type})"
 
 
+class IntrinsicFunctionCall_N(Expr_N):
+    """
+    Represents a call to an intrinsic (built-in) function.
+    
+    Intrinsic functions are pure functions with no side effects that provide
+    essential mathematical operations like sum, dot_prod, etc.
+    
+    Examples:
+        sum(array): IntrinsicFunctionCall_N("sum", [array_expr])
+        dot_prod(a, b): IntrinsicFunctionCall_N("dot_prod", [a_expr, b_expr])
+    """
+    def __init__(self, code_range, function_name, arguments):
+        super().__init__(code_range)
+        self.function_name = function_name  # str: function name (e.g., "sum", "dot_prod")
+        self.arguments = arguments          # List_N of Expr_N: function arguments
+    
+    def get_children(self):
+        children = set()
+        if self.arguments is not None:
+            children.add(self.arguments)
+        return children
+    
+    def get_referenced_symbols(self):
+        result = set()
+        if self.arguments is not None:
+            result |= self.arguments.get_referenced_symbols()
+        return result
+    
+    def replace_symbol_references(self, old_symbol_name, new_symbol_name):
+        if self.arguments is not None:
+            self.arguments.replace_symbol_references(old_symbol_name, new_symbol_name)
+    
+    def __str__(self):
+        args_str = ", ".join(str(arg) for arg in self.arguments.elements) if self.arguments else ""
+        return f"(IntrinsicCall {self.function_name}({args_str}))"
+
+
 class Literal_N(Expr_N):
     """
     Base-class for all GeLB literals.
