@@ -277,5 +277,13 @@ expr : PAREN_OPEN expr PAREN_CLOSE                # parensExpr
      // END :: literals //
      | rect_sel_of_lattice_in_dfs  # rectSelOfLatticeInDFsExpr
      | rect_sel_of_array_elems     # rectSelOfArrayElemsExpr
+     | intrinsic_function_call     # intrinsicFunctionCallExpr
      | identifier  # identifierExpr
      ;
+
+intrinsic_function_call : 
+     intrinsic_function_name PAREN_OPEN 
+     (arguments+=expr (COMMA arguments+=expr)*)? 
+     PAREN_CLOSE ;
+
+intrinsic_function_name : SUM | DOT_PROD ;

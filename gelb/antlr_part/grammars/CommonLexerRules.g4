@@ -11,6 +11,8 @@ NODE_CLASSES : 'node_classes' ;
 // GAUGES : 'gauges' ;
 
 // BEGIN: Keywords for intrinsic functions
+SUM : 'sum' ;
+DOT_PROD : 'dot_prod' ;
 // DOT_PRODUCT : 'dot_product' ;
 // VEC_PRODUCT : 'vector_product' ;
 // UP_STREAM_DF : 'up_stream_df' ;
