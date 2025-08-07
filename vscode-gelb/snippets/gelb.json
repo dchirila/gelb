@@ -1,0 +1,135 @@
+{
+  "GeLB Program Template": {
+    "prefix": "gelb-program",
+    "body": [
+      "simulation_description(\"${1:Description}\");",
+      "",
+      "global_constants {",
+      "\tconst int ${2:N} = ${3:32};",
+      "\tconst real ${4:TAU} = ${5:0.6};",
+      "}",
+      "",
+      "lattices {",
+      "\tlattice ${6:f}(d=${7:2}, q=${8:9}, df_type=${9:real});",
+      "}",
+      "",
+      "initializer ${10:Init} {",
+      "\t${6:f}.out[${11:x,y}|:] = ${12:0.0};",
+      "}",
+      "",
+      "dynamic ${13:Update} {",
+      "\t${6:f}.out[${11:x,y}|:] = ${6:f}.in[${11:x,y}|:];",
+      "}",
+      "",
+      "gauge ${14:Output}(out = {${15:real val;}}) {",
+      "\t${16:val} = ${17:0.0};",
+      "}",
+      "",
+      "node_classes {",
+      "\tnode_class ${18:BULK}(${10:Init}, ${13:Update}, ${14:Output});",
+      "}",
+      "",
+      "geometry {",
+      "\tset_grid_size({${2:N}, ${2:N}});",
+      "\tset_grid_periodicity({${19:true}, ${19:true}});",
+      "\tnodes[:,:] = ${18:BULK};",
+      "}",
+      "$0"
+    ],
+    "description": "Create a complete GeLB program template"
+  },
+  "Lattice Declaration": {
+    "prefix": "lattice",
+    "body": [
+      "lattice ${1:name}(d=${2:2}, q=${3:9}, df_type=${4:real});"
+    ],
+    "description": "Declare a new lattice"
+  },
+  "Initializer Block": {
+    "prefix": "initializer",
+    "body": [
+      "initializer ${1:InitName} {",
+      "\t${2:f}.out[${3:x,y}|:] = ${4:expression};",
+      "}",
+      "$0"
+    ],
+    "description": "Create an initializer block"
+  },
+  "Dynamic Block": {
+    "prefix": "dynamic",
+    "body": [
+      "dynamic ${1:UpdateName} {",
+      "\t${2:// Local variables}",
+      "\t${3:f}.out[${4:x,y}|:] = ${3:f}.in[${4:x,y}|:] ${5:+ computation};",
+      "}",
+      "$0"
+    ],
+    "description": "Create a dynamic update block"
+  },
+  "Gauge Block": {
+    "prefix": "gauge",
+    "body": [
+      "gauge ${1:GaugeName}(out = {${2:real rho; real u;}}) {",
+      "\t${3:rho} = ${4:sum(f.in[x,y|:])};",
+      "\t${5:u} = ${6:0.0};",
+      "}",
+      "$0"
+    ],
+    "description": "Create a gauge output block"
+  },
+  "Node Class": {
+    "prefix": "node-class",
+    "body": [
+      "node_class ${1:ClassName}(${2:Init}, ${3:Update}, ${4:Output});"
+    ],
+    "description": "Define a node class"
+  },
+  "Global Constant": {
+    "prefix": "const",
+    "body": [
+      "const ${1:int} ${2:name} = ${3:value};"
+    ],
+    "description": "Declare a global constant"
+  },
+  "Sum Function": {
+    "prefix": "sum",
+    "body": [
+      "sum(${1:array})"
+    ],
+    "description": "Sum all elements of an array"
+  },
+  "Dot Product": {
+    "prefix": "dot",
+    "body": [
+      "dot_prod(${1:array1}, ${2:array2})"
+    ],
+    "description": "Compute dot product of two arrays"
+  },
+  "Geometry Setup": {
+    "prefix": "geometry",
+    "body": [
+      "geometry {",
+      "\tset_grid_size({${1:Nx}, ${2:Ny}});",
+      "\tset_grid_periodicity({${3:false}, ${4:false}});",
+      "\t",
+      "\tnodes[:,:] = ${5:BULK};",
+      "\t$0",
+      "}"
+    ],
+    "description": "Set up simulation geometry"
+  },
+  "2D Lattice Selection": {
+    "prefix": "lat2d",
+    "body": [
+      "${1:f}.${2:out}[${3:x},${4:y}|${5::}]"
+    ],
+    "description": "2D lattice selection"
+  },
+  "3D Lattice Selection": {
+    "prefix": "lat3d",
+    "body": [
+      "${1:f}.${2:out}[${3:x},${4:y},${5:z}|${6::}]"
+    ],
+    "description": "3D lattice selection"
+  }
+}

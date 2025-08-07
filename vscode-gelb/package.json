@@ -1,0 +1,71 @@
+{
+  "name": "gelb-lang",
+  "displayName": "GeLB Language Support",
+  "description": "Syntax highlighting and language support for GeLB (Generic Lattice Boltzmann) files",
+  "version": "0.1.0",
+  "publisher": "gelb-lang",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dchirila/gelb.git"
+  },
+  "license": "MPL-2.0",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets"
+  ],
+  "keywords": [
+    "gelb",
+    "lattice-boltzmann",
+    "lbm",
+    "scientific-computing",
+    "dsl"
+  ],
+  "icon": "images/icon.png",
+  "contributes": {
+    "languages": [
+      {
+        "id": "gelb",
+        "aliases": [
+          "GeLB",
+          "gelb"
+        ],
+        "extensions": [
+          ".gelb"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./images/icon.png",
+          "dark": "./images/icon.png"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "gelb",
+        "scopeName": "source.gelb",
+        "path": "./syntaxes/gelb.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "gelb",
+        "path": "./snippets/gelb.json"
+      }
+    ]
+  },
+  "scripts": {
+    "test": "node ./test/runTests.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.74.0",
+    "@types/mocha": "^10.0.0",
+    "@types/node": "^18.0.0",
+    "mocha": "^10.0.0",
+    "vscode-test": "^1.6.0",
+    "vscode-textmate": "^8.0.0",
+    "vscode-oniguruma": "^1.7.0"
+  }
+}
