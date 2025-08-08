@@ -21,6 +21,7 @@ GeLB is a domain-specific programming language (DSL) and compiler framework for 
 - **Type safety**: Advanced type system with compile-time range validation
 - **Extensible**: Open-source framework with clean architecture
 - **Multiple backends**: Currently supports Fortran, with GPU OpenCL planned
+- **IDE Support**: VSCode extension with syntax highlighting and code snippets
 
 ## Core Concepts
 
@@ -112,6 +113,29 @@ GeLB uses `uv` for Python package management and requires Python 3.12.7+.
 # On Windows:
 .\scripts\cleanup_repo.ps1
 ```
+
+### VSCode Extension
+
+GeLB comes with a VSCode extension for enhanced development experience:
+
+1. **Install the extension**:
+   ```bash
+   # Copy extension to VSCode extensions directory
+   cp -r vscode-gelb ~/.vscode/extensions/gelb-lang-0.1.0
+   
+   # Or on Windows:
+   # xcopy vscode-gelb %USERPROFILE%\.vscode\extensions\gelb-lang-0.1.0\ /E
+   ```
+
+2. **Features**:
+   - Syntax highlighting for all GeLB constructs
+   - Code snippets (type `gelb-program` for a complete template)
+   - Automatic bracket matching and indentation
+   - Support for intrinsic functions (`sum`, `dot_prod`)
+
+3. **Restart VSCode** and open any `.gelb` file to see the extension in action
+
+See [vscode-gelb/README.md](vscode-gelb/README.md) for more details.
 
 ## Example GeLB Program
 
