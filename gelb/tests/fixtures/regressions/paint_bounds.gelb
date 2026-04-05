@@ -1,0 +1,14 @@
+simulation_description("Tutorial paint bounds");
+global_constants { const int N = 16; }
+lattices { lattice f(2, 1, real, {N, N}, {false, false}); }
+initializer Init { f.out[x, y | 0] = 0.5; }
+dynamic Collide { f.out[x, y | 0] = f.in[x, y | 0]; }
+gauge G -> (real v) { v = f.in[x, y | 0]; }
+node_classes {
+    node_class BULK(Init, Collide, G);
+    node_class WALL(Init, G);
+}
+geometry {
+    nodes[:, :] = BULK;
+    nodes[:, 0:N] = WALL;
+}

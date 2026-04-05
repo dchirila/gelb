@@ -1,0 +1,1004 @@
+#!/usr/bin/env bash
+#
+# gelb-run -- Compile and run a GeLB program in one step.
+#
+# Analogous to `go run`, `cargo run`, or `zig run`: translates GeLB source
+# to a target language, compiles it, runs the resulting executable, and
+# cleans up the intermediates automatically.
+#
+# Usage:
+#   gelb-run [options] <file.gelb> [-- program-args...]
+#
+# Options:
+#   -b, --backend NAME      Backend (default: cpu_highway)
+#   -n, --num-timesteps N   Number of simulation time steps (default: 1)
+#   -m, --output-mode MODE  Gauge output: netcdf (default) or stdout
+#                           (stdout currently requires cpu_fortran_serial)
+#   -k, --keep              Keep generated source and binary
+#   -v, --verbose           Print each compilation step
+#   -V, --view              Launch gelb-view after execution (netcdf mode)
+#   -h, --help              Show this help
+#
+# Examples:
+#   ./scripts/gelb-run examples/basic/1d/ex0_int_vec_setto_one.gelb
+#   ./scripts/gelb-run -n 100 -v examples/basic/1d/ex0_int_vec_setto_one.gelb
+#   ./scripts/gelb-run --keep examples/basic/1d/ex0_int_vec_setto_one.gelb
+#   ./scripts/gelb-run -n 10 --view examples/basic/1d/ex30_simple_constants_test.gelb
+#   ./scripts/gelb-run -b cpu_fortran_serial --output-mode stdout examples/basic/1d/ex0_int_vec_setto_one.gelb
+
+set -euo pipefail
+
+# -- Defaults ---------------------------------------------------------
+BACKEND="cpu_highway"
+NUM_TIMESTEPS=1
+WRITE_EVERY=1
+OUTPUT_MODE="netcdf"
+KEEP=false
+VERBOSE=false
+VIEW=false
+FAST_MATH=false
+STRICT_FP=false
+CUDA_BLOCK_SIZE=""
+CUDA_COARSENING=""
+CUDA_LDG=false
+CUDA_STWT=false
+CUDA_TILED=false
+CUDA_GRAPHS=true
+POISON_UNINIT=false
+DEFINE_ARGS=()
+SEED=""
+GELB_FILE=""
+PROG_ARGS=()
+
+# -- Helpers ----------------------------------------------------------
+die()  { echo "gelb-run: error: $*" >&2; exit 1; }
+info() { $VERBOSE && echo "gelb-run: $*" >&2 || true; }
+
+# A strict build passes no value-changing native flag (user manual,
+# Numerical semantics: Build modes).  Appending -ffp-contract=off cannot undo an aggregate flag such
+# as -ffast-math (re-association, flushed subnormals, approximate
+# operations), and silently editing a user's flag string would be its own
+# surprise, so an override that carries one is rejected.  Ordinary
+# optimisation, architecture, include and link flags pass.
+reject_value_changing_flags() {   # $1: the variable's name, $2: its value
+    # Whole tokens that change results on sight: the gcc/clang/gfortran
+    # aggregates and their members, and nvcc's fast-math aggregate.
+    local aggregate='^(-ffast-math|-Ofast|-funsafe-math-optimizations|-fassociative-math|-freciprocal-math|-ffinite-math-only|-fno-signed-zeros|-fno-protect-parens|-ffp-contract=(fast|on)|--?use_fast_math)$'
+    # nvcc's boolean options are spelled ``--opt=value`` or ``--opt value``,
+    # with one or two dashes; only these values change results, so
+    # ``--ftz false`` or ``--prec-div true`` pass.
+    local names='^(ftz|fmad|prec-div|prec-sqrt)$'
+    local bad='^(ftz=true|fmad=true|prec-div=false|prec-sqrt=false)$'
+    local tok bare word words pending="" pending_tok=""
+    # shellcheck disable=SC2086
+    for tok in $2; do
+        if [[ -n "$pending" ]]; then
+            if [[ "$pending=$tok" =~ $bad ]]; then
+                _die_strict_flag "$1" "$pending_tok $tok"
+            fi
+            pending=""; pending_tok=""; continue
+        fi
+        # nvcc forwards host-compiler options as ``-Xcompiler=a,b`` or
+        # ``-Xcompiler a,b``; the members get the direct spelling's
+        # treatment (they reach only the host compiler, but one guard
+        # for both spellings is less surprising than two behaviours).
+        words="${tok#-Xcompiler=}"; words="${words#--compiler-options=}"
+        for word in ${words//,/ }; do
+            if [[ "$word" =~ $aggregate ]]; then _die_strict_flag "$1" "$tok"; fi
+        done
+        bare="${tok#-}"; bare="${bare#-}"
+        if [[ "$bare" =~ $bad ]]; then _die_strict_flag "$1" "$tok"; fi
+        if [[ "$bare" =~ $names ]]; then pending="$bare"; pending_tok="$tok"; fi
+    done
+}
+_die_strict_flag() {   # $1: the variable's name, $2: the offending spelling
+    die "--strict-fp: $1 carries the value-changing flag '$2'; a strict build passes none (user manual, numerical semantics chapter). Drop it from $1, or build without --strict-fp."
+}
+
+# Single source of truth for the unknown-backend error so the
+# early-arg-validation and the late dispatch fallback stay in sync.
+_die_unknown_backend() {
+    die "unknown backend: '$1'.
+Available backends:
+  cpu_fortran_serial  (gfortran)
+  cpu_highway         (g++ + Google Highway, portable SIMD; default)
+  gpu_cuda_cpp        (nvcc; system NetCDF-C)"
+}
+
+# Detect the number of *physical* cores on the host (as opposed to
+# logical, which would include SMT/HyperThreading siblings).  Used
+# by the OpenMP-default block to pick a sensible OMP_NUM_THREADS
+# when the user hasn't set one -- see the long comment there for
+# why physical-only is preferable for LBM workloads.
+#
+# Detection order:
+#   1. Linux sysfs: count unique entries in
+#      ``/sys/devices/system/cpu/cpu*/topology/thread_siblings_list``.
+#      Each unique sibling-list represents one physical core (its
+#      logical-CPU members are grouped together).  Robust across
+#      heterogeneous topologies (Intel P/E cores, EPYC multi-CCD).
+#   2. macOS Apple Silicon: ``sysctl -n hw.perflevel0.physicalcpu``
+#      (P-cores only).  Adding E-cores hurts memory-bound LBM under
+#      a static OpenMP schedule -- the P cluster blocks waiting for
+#      slower E-core threads, and the E cluster shares L2 with P,
+#      adding cache pollution rather than bandwidth.  Verified on
+#      an Apple M4 (2026-05-03): OMP=4 (P-cores)
+#      gives 359.8 MLUPS, OMP=8 drops to 346.7, OMP=10 to 336.9
+#      -- monotone-decreasing past 4.
+#   3. macOS (Intel / older): ``sysctl -n hw.physicalcpu``.
+#   4. Last-resort fallback: ``nproc`` (logical cores) -- better
+#      than nothing on exotic hosts.
+#   5. ``1`` if even ``nproc`` is unavailable.
+detect_physical_cores() {
+    local n=""
+    if [[ -d /sys/devices/system/cpu ]]; then
+        n=$(cat /sys/devices/system/cpu/cpu*/topology/thread_siblings_list \
+            2>/dev/null | sort -u | wc -l)
+        if [[ -n "$n" && "$n" -gt 0 ]]; then
+            echo "$n"
+            return 0
+        fi
+    fi
+    if command -v sysctl >/dev/null 2>&1; then
+        # Apple Silicon: prefer P-cores only.  perflevel0 is the
+        # performance cluster on heterogeneous CPUs (M1/M2/M3/M4).
+        # On Intel Macs ``hw.perflevel0.physicalcpu`` is not exposed;
+        # fall through to ``hw.physicalcpu``.
+        n=$(sysctl -n hw.perflevel0.physicalcpu 2>/dev/null || true)
+        if [[ -n "$n" && "$n" -gt 0 ]]; then
+            echo "$n"
+            return 0
+        fi
+        n=$(sysctl -n hw.physicalcpu 2>/dev/null || true)
+        if [[ -n "$n" && "$n" -gt 0 ]]; then
+            echo "$n"
+            return 0
+        fi
+    fi
+    if command -v nproc >/dev/null 2>&1; then
+        nproc
+        return 0
+    fi
+    echo 1
+}
+
+usage() {
+    cat <<'EOF'
+gelb-run — Compile and run a GeLB program in one step.
+
+Analogous to `go run`, `cargo run`, or `zig run`: translates GeLB source
+to a target language, compiles it, runs the resulting executable, and
+cleans up the intermediates automatically.
+
+Usage:
+  gelb-run [options] <file.gelb> [-- program-args...]
+
+Options:
+  -b, --backend NAME      Backend (default: cpu_highway)
+  -n, --num-timesteps N   Number of simulation time steps (default: 1)
+  -w, --write-every N     Write gauge output every N timesteps (default: 1)
+  -m, --output-mode MODE  Gauge output: netcdf (default) or stdout
+                          (stdout currently requires cpu_fortran_serial)
+  -k, --keep              Keep generated source and binary
+  -v, --verbose           Print each compilation step
+  -V, --view              Launch gelb-view after execution (netcdf mode)
+  -F, --fast-math         Enable aggressive FP optimizations (not bitwise reproducible)
+  --strict-fp             Strict floating point: no fused multiply-add in the
+                          generated code or GeLB's runtime helpers (the math
+                          library's own internals excepted), and no
+                          value-changing native flag, from -F or from the
+                          environment.  gelbc --strict-fp; -ffp-contract=off
+                          on the CPU backends, -fmad=false on nvcc.
+  --cuda-block-size N     CUDA threads/block for gpu_cuda_cpp (overrides
+                          the dim/grid-shape-aware auto-default with a
+                          1D-along-x layout)
+  --cuda-coarsening N     gpu_cuda_cpp thread coarsening factor
+                          (default: 1, no coarsening; data-gathering knob)
+  --cuda-ldg              gpu_cuda_cpp: wrap stencil reads in __ldg()
+                          (read-only L1 cache hint; modest perf effect)
+  --cuda-stwt             gpu_cuda_cpp: use __stwt() write-streaming for
+                          the streaming-step writes (no L1 cache fill)
+  --cuda-tiled            gpu_cuda_cpp: enable PMPP §8.3 shared-memory
+                          tiling for the dyn kernel (current scope:
+                          2D all-periodic, single dense NC/lattice)
+  --no-cuda-graphs        gpu_cuda_cpp: disable the cudaGraph_t capture
+                          + replay of the per-iteration kernel sequence.
+  --poison-uninit         debugging aid (all backends): fill lattice
+                          storage with NaN at startup so reads of
+                          never-written cells surface as NaN in the
+                          output instead of hiding behind benign zeros
+                          Default is ON (since 2026-05-08); pass this
+                          flag to opt out.  Programs using random() or
+                          with no dynamic NC fall back to no-graphs
+                          automatically.
+  -D, --define NAME=VALUE Override a global constant (repeatable)
+  -s, --seed N            Fixed integer seed for the PRNG (reproducible runs)
+  -h, --help              Show this help
+
+Examples:
+  ./scripts/gelb-run examples/basic/1d/ex0_int_vec_setto_one.gelb
+  ./scripts/gelb-run -n 100 -v examples/basic/1d/ex0_int_vec_setto_one.gelb
+  ./scripts/gelb-run --keep examples/basic/1d/ex0_int_vec_setto_one.gelb
+  ./scripts/gelb-run -n 10 --view examples/basic/1d/ex30_simple_constants_test.gelb
+  ./scripts/gelb-run -b cpu_fortran_serial --output-mode stdout examples/basic/1d/ex0_int_vec_setto_one.gelb
+
+Environment variables:
+  GELB_FC           Fortran compiler (default: gfortran)
+  GELB_FFLAGS       Fortran compiler flags (default: '-O3 -march=native
+                    -ffp-contract=off -ffree-line-length-none')
+  GELB_NETCDF_INC   NetCDF-Fortran include flags (auto-detected if unset)
+  GELB_NETCDF_LIB   NetCDF-Fortran linker flags (auto-detected if unset)
+  GELB_NETCDF_C_INC NetCDF-C include flags for the C++ SIMD / CUDA C++
+                    backends (auto-detected via nc-config if unset)
+  GELB_NETCDF_C_LIB NetCDF-C linker flags (auto-detected via nc-config)
+  GELB_NETCDF_C_ROOT NetCDF-C prefix holding include/netcdf.h and lib/;
+                    wins over the two flag strings and survives spaces in
+                    the path (the flag strings are split on whitespace)
+  GELB_CXX          C++ compiler for cpu_highway (default: Homebrew g++-16,
+                    -15, -14 or -13 on macOS, else clang++; g++ on Linux)
+  GELB_CXXFLAGS     C++ flags (default: '-std=c++17 -O3 -march=native
+                    -ffp-contract=off -fno-trapping-math -fno-unroll-loops
+                    -DNDEBUG', with
+                    -mcpu=native on Apple clang); OpenMP flags are appended
+  GELB_OMP_ROOT     OpenMP runtime for Apple clang: a directory holding
+                    include/omp.h and lib/libomp.dylib (default: Homebrew libomp)
+  GELB_PYTHON       Interpreter that can 'import gelb'; when set, gelbc, the
+                    progress bar and gelb-view run through it and uv is unused
+                    (unset and without uv: the checkout's .venv/bin/python)
+EOF
+    exit 0
+}
+
+# -- Parse arguments --------------------------------------------------
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)        usage ;;
+        -b|--backend)     BACKEND="$2"; shift 2 ;;
+        -n|--num-timesteps) NUM_TIMESTEPS="$2"; shift 2 ;;
+        -w|--write-every) WRITE_EVERY="$2"; shift 2 ;;
+        -m|--output-mode) OUTPUT_MODE="$2"; shift 2 ;;
+        -k|--keep)        KEEP=true; shift ;;
+        -v|--verbose)     VERBOSE=true; shift ;;
+        -V|--view)        VIEW=true; shift ;;
+        -F|--fast-math)   FAST_MATH=true; shift ;;
+        --strict-fp)      STRICT_FP=true; shift ;;
+        --cuda-block-size) CUDA_BLOCK_SIZE="$2"; shift 2 ;;
+        --cuda-coarsening) CUDA_COARSENING="$2"; shift 2 ;;
+        --cuda-ldg)       CUDA_LDG=true; shift ;;
+        --cuda-stwt)      CUDA_STWT=true; shift ;;
+        --cuda-tiled)     CUDA_TILED=true; shift ;;
+        --cuda-graphs)    CUDA_GRAPHS=true; shift ;;
+        --no-cuda-graphs) CUDA_GRAPHS=false; shift ;;
+        --poison-uninit)  POISON_UNINIT=true; shift ;;
+        -D|--define)      DEFINE_ARGS+=(-D "$2"); shift 2 ;;
+        -s|--seed)        SEED="$2"; shift 2 ;;
+        --)              shift; PROG_ARGS=("$@"); break ;;
+        -*)              die "unknown option: $1" ;;
+        *)
+            [[ -z "$GELB_FILE" ]] || die "multiple input files not supported"
+            GELB_FILE="$1"; shift ;;
+    esac
+done
+
+# A strict build fuses nothing and passes no value-changing flag, so it
+# cannot be combined with fast math (user manual, Numerical semantics: Build modes).
+if $STRICT_FP && $FAST_MATH; then
+    die "--strict-fp and -F/--fast-math exclude each other: a strict build fuses nothing and passes no value-changing flags."
+fi
+
+# Validate backend up front, before the input-file check.  Without
+# this, fat-fingering ``-b`` so the next argv (a flag or a file
+# path) gets consumed as the backend name leads to the misleading
+# "no input file" error rather than a clear "unknown backend".
+# Concrete example: ``./scripts/gelb-run -b ./examples/foo.gelb``
+# where the user forgot to type the backend name and the path went
+# to ``-b`` -- surface the real problem here.
+case "$BACKEND" in
+    cpu_fortran_serial|cpu_highway|gpu_cuda_cpp) ;;
+    *) _die_unknown_backend "$BACKEND" ;;
+esac
+
+if [[ "$OUTPUT_MODE" == "stdout" && "$BACKEND" != "cpu_fortran_serial" ]]; then
+    die "--output-mode stdout is currently implemented only for cpu_fortran_serial.
+Use -b cpu_fortran_serial, or keep --output-mode netcdf with backend $BACKEND."
+fi
+
+[[ -n "$GELB_FILE" ]] || die "no input file (try --help)"
+[[ -f "$GELB_FILE" ]] || die "file not found: $GELB_FILE"
+
+# -- uv detection ----------------------------------------------------
+#
+# gelb-run shells out to `uv run gelbc ...` to translate the .gelb file
+# (see Step 1 below). On a freshly-bootstrapped system uv is installed
+# at ~/.local/bin/uv (newer installer) or ~/.cargo/bin/uv (older), but
+# neither is guaranteed to be on PATH in non-interactive shells. Detect
+# uv early -- including the standard install locations -- so the user gets
+# an actionable error instead of a cryptic "uv: command not found" much
+# later in the pipeline.
+ensure_uv_on_path() {
+    if command -v uv >/dev/null 2>&1; then
+        return 0
+    fi
+    for dir in "$HOME/.local/bin" "$HOME/.cargo/bin"; do
+        if [ -x "$dir/uv" ]; then
+            export PATH="$dir:$PATH"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# The checkout this script belongs to, when it is one: uv runs its
+# project, and without uv its .venv serves as GELB_PYTHON.
+UV_PROJECT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# GELB_PYTHON names an interpreter that can ``import gelb`` (a venv's
+# python, or the bundled one in the relocatable macOS package).  When
+# it is set, gelbc, the progress monitor and gelb-view are launched
+# through it with ``python -m`` and uv is not needed at all.
+if [[ -n "${GELB_PYTHON:-}" ]]; then
+    [[ -x "$GELB_PYTHON" ]] || die "GELB_PYTHON=$GELB_PYTHON is not an executable"
+    info "Python: $GELB_PYTHON (GELB_PYTHON)"
+elif ! ensure_uv_on_path; then
+    # Without uv, a checkout whose .venv was made another way
+    # (python -m venv .venv && .venv/bin/pip install -e .) still has
+    # the interpreter to run everything through.
+    if [[ -f "$UV_PROJECT_DIR/pyproject.toml" && -x "$UV_PROJECT_DIR/.venv/bin/python" ]]; then
+        GELB_PYTHON="$UV_PROJECT_DIR/.venv/bin/python"
+        info "Python: $GELB_PYTHON (the checkout's .venv; uv not found)"
+    else
+        die "uv not found on PATH (and not in ~/.local/bin or ~/.cargo/bin),
+and this checkout has no .venv/bin/python.
+gelb-run uses 'uv run gelbc' to translate .gelb files. Install uv by
+running the bootstrap script:
+  ./scripts/gelb_bootstrap.sh
+or install uv directly: https://docs.astral.sh/uv/getting-started/installation/
+(or set GELB_PYTHON to an interpreter that can 'import gelb')."
+    fi
+fi
+
+# uv looks for the project upwards from the working directory, which is
+# wherever the output should land (the VS Code Run view's output
+# folder, say) and need not be inside the checkout.  Name the checkout
+# this script belongs to instead; ``--project`` keeps the working
+# directory, so relative paths on the command line still resolve.
+UV_RUN=(env VIRTUAL_ENV= uv run)
+if [[ -f "$UV_PROJECT_DIR/pyproject.toml" ]]; then
+    UV_RUN+=(--project "$UV_PROJECT_DIR")
+fi
+
+# -- NetCDF library detection ----------------------------------------
+detect_netcdf() {
+    NETCDF_INC="${GELB_NETCDF_INC:-}"
+    NETCDF_LIB="${GELB_NETCDF_LIB:-}"
+
+    # Already set by user
+    if [[ -n "$NETCDF_INC" && -n "$NETCDF_LIB" ]]; then
+        return 0
+    fi
+
+    # Try nf-config (NetCDF Fortran) + nc-config (NetCDF C) together
+    # Both are needed: Fortran wrapper links against the C library
+    if command -v nf-config >/dev/null 2>&1; then
+        [[ -z "$NETCDF_INC" ]] && NETCDF_INC="$(nf-config --fflags 2>/dev/null || true)"
+        [[ -z "$NETCDF_LIB" ]] && NETCDF_LIB="$(nf-config --flibs 2>/dev/null || true)"
+        # nf-config --flibs may reference -lnetcdf without its -L path;
+        # pull in the C library path from nc-config if available
+        if [[ -n "$NETCDF_LIB" ]] && command -v nc-config >/dev/null 2>&1; then
+            local c_libs
+            c_libs="$(nc-config --libs 2>/dev/null || true)"
+            # Prepend the C library -L path if not already present
+            if [[ -n "$c_libs" ]]; then
+                local c_ldir
+                c_ldir="$(echo "$c_libs" | grep -o '\-L[^ ]*' | head -1)"
+                if [[ -n "$c_ldir" ]] && [[ "$NETCDF_LIB" != *"$c_ldir"* ]]; then
+                    NETCDF_LIB="$c_ldir $NETCDF_LIB"
+                fi
+            fi
+        fi
+    fi
+
+    # Fallback: try nc-config only + netcdff
+    if [[ -z "$NETCDF_LIB" ]] && command -v nc-config >/dev/null 2>&1; then
+        local inc_dir
+        inc_dir="$(nc-config --includedir 2>/dev/null || true)"
+        [[ -n "$inc_dir" && -z "$NETCDF_INC" ]] && NETCDF_INC="-I${inc_dir}"
+        [[ -z "$NETCDF_LIB" ]] && NETCDF_LIB="$(nc-config --libs 2>/dev/null || true) -lnetcdff"
+    fi
+
+    # Fallback: Homebrew on macOS
+    if [[ -z "$NETCDF_LIB" && -d /opt/homebrew/include ]]; then
+        NETCDF_INC="-I/opt/homebrew/include"
+        NETCDF_LIB="-L/opt/homebrew/lib -lnetcdff -lnetcdf"
+    fi
+
+    if [[ -z "$NETCDF_LIB" ]]; then
+        die "NetCDF Fortran library not found. Install libnetcdff-dev (or netcdf-fortran via Homebrew), or set GELB_NETCDF_INC / GELB_NETCDF_LIB"
+    fi
+
+    info "NetCDF: INC=$NETCDF_INC  LIB=$NETCDF_LIB"
+}
+
+# The flag strings (environment variables, nc-config output) are
+# whitespace-separated by contract; split them once into arrays so that
+# compile_src can pass every argument quoted.
+_netcdf_c_split() {
+    # shellcheck disable=SC2206
+    NETCDF_C_INC_ARGS=($NETCDF_C_INC)
+    # shellcheck disable=SC2206
+    NETCDF_C_LIB_ARGS=($NETCDF_C_LIB)
+}
+
+detect_netcdf_c() {
+    NETCDF_C_INC="${GELB_NETCDF_C_INC:-}"
+    NETCDF_C_LIB="${GELB_NETCDF_C_LIB:-}"
+
+    # GELB_NETCDF_C_ROOT: a prefix with include/netcdf.h and lib/.  The
+    # flags are built as arrays here, so the prefix may contain spaces;
+    # the relocatable macOS bundle points it at its own root.
+    if [[ -n "${GELB_NETCDF_C_ROOT:-}" ]]; then
+        [[ -f "$GELB_NETCDF_C_ROOT/include/netcdf.h" ]] \
+            || die "GELB_NETCDF_C_ROOT=$GELB_NETCDF_C_ROOT must contain include/netcdf.h"
+        NETCDF_C_INC_ARGS=(-I"$GELB_NETCDF_C_ROOT/include")
+        NETCDF_C_LIB_ARGS=(-L"$GELB_NETCDF_C_ROOT/lib" -lnetcdf -Wl,-rpath,"$GELB_NETCDF_C_ROOT/lib")
+        NETCDF_C_INC="${NETCDF_C_INC_ARGS[*]}"
+        NETCDF_C_LIB="${NETCDF_C_LIB_ARGS[*]}"
+        info "NetCDF-C: ROOT=$GELB_NETCDF_C_ROOT"
+        return 0
+    fi
+
+    if [[ -n "$NETCDF_C_INC" && -n "$NETCDF_C_LIB" ]]; then
+        _netcdf_c_split
+        return 0
+    fi
+
+    if ! command -v nc-config >/dev/null 2>&1; then
+        die "NetCDF-C development files not found: nc-config is not on PATH.
+Install the NetCDF-C development package
+  (Ubuntu/Debian: sudo apt install libnetcdf-dev)
+  (Fedora/RHEL:   sudo dnf install netcdf-devel)
+  (macOS/Homebrew: brew install netcdf)
+or set GELB_NETCDF_C_INC and GELB_NETCDF_C_LIB explicitly."
+    fi
+
+    [[ -z "$NETCDF_C_INC" ]] && NETCDF_C_INC="$(nc-config --cflags 2>/dev/null || true)"
+    [[ -z "$NETCDF_C_LIB" ]] && NETCDF_C_LIB="$(nc-config --libs 2>/dev/null || true)"
+
+    if [[ -z "$NETCDF_C_LIB" ]]; then
+        die "nc-config was found, but did not report NetCDF-C linker flags.
+Set GELB_NETCDF_C_INC and GELB_NETCDF_C_LIB explicitly, or reinstall the
+NetCDF-C development package."
+    fi
+
+    # nc-config --libs returns "-L<dir> -lnetcdf" but no rpath; without it
+    # the executable can fail at runtime unless LD_LIBRARY_PATH is set.
+    if [[ "$NETCDF_C_LIB" != *"-Wl,-rpath,"* ]]; then
+        local c_ldir
+        c_ldir="$(printf '%s\n' "$NETCDF_C_LIB" | grep -o -- '-L[^ ]*' | head -1 | sed 's/^-L//')"
+        if [[ -n "$c_ldir" ]]; then
+            NETCDF_C_LIB="${NETCDF_C_LIB} -Wl,-rpath,${c_ldir}"
+        fi
+    fi
+    : "${NETCDF_C_INC:=}"
+    _netcdf_c_split
+    info "NetCDF-C: INC=$NETCDF_C_INC  LIB=$NETCDF_C_LIB"
+}
+
+check_cxx_openmp() {
+    # A directory rather than two files: BSD mktemp (macOS) only
+    # substitutes trailing X's, so a ``.XXXXXX.cpp`` template comes
+    # back unchanged and is shared between concurrent runs.
+    local tmp_dir tmp_src tmp_exe
+    tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/gelb-openmp-check.XXXXXX")"
+    tmp_src="$tmp_dir/check.cpp"
+    tmp_exe="$tmp_dir/check"
+    printf '#include <omp.h>\nint main(){return omp_get_max_threads() < 1;}\n' > "$tmp_src"
+    # Same argument set as compile_src: CXX_ARGS already carries the
+    # OpenMP compile flags, and OMP_LDFLAGS supplies -lomp on Apple clang.
+    if ! "$CXX" "${CXX_ARGS[@]}" -o "$tmp_exe" "$tmp_src" \
+            ${OMP_LDFLAGS[@]+"${OMP_LDFLAGS[@]}"} >/dev/null 2>&1; then
+        rm -rf "$tmp_dir"
+        die "$CXX is present but cannot compile a minimal OpenMP program.
+The cpu_highway backend needs C++17 plus OpenMP support.
+Install GCC/G++ with OpenMP support
+  (Ubuntu/Debian: sudo apt install build-essential libomp-dev)
+  (Fedora/RHEL:   sudo dnf install gcc-c++ libgomp)
+  (macOS/Homebrew: brew install gcc, or brew install libomp for Apple clang)
+or set GELB_CXX / GELB_CXXFLAGS / GELB_OMP_ROOT to a working configuration."
+    fi
+    rm -rf "$tmp_dir"
+}
+
+# -- Backend configuration --------------------------------------------
+#
+# Each backend defines:
+#   EXT            generated source extension
+#   compile_src()  function that compiles $GEN_SRC -> $EXECUTABLE
+#
+# Adding a new backend = adding a new case + compile function.
+
+case "$BACKEND" in
+    cpu_fortran_serial)
+        EXT=".f90"
+        FC="${GELB_FC:-gfortran}"
+        # ``-fno-range-check`` lets an overflowing constant expression
+        # (``1.0e308 * 10.0``) compile to an infinity, as the user manual
+        # requires (Numerical semantics: Special values) and the other
+        # backends do, instead of a gfortran error.
+        # ``-ffree-line-length-none`` lifts the gfortran 132-char free-form
+        # line limit.  Generated Fortran sometimes emits long string
+        # literals (e.g. ``simulation_description("...")`` with non-ASCII
+        # punctuation) that exceed the limit and otherwise fail compile
+        # with ``-Werror=line-truncation`` (default in many distros).
+        # -ffp-contract=off in the default build: the native compiler
+        # must not fuse on its own (user manual, Numerical semantics: Build modes).
+        FFLAGS="${GELB_FFLAGS:--O3 -march=native -ffp-contract=off -fno-range-check -ffree-line-length-none}"
+        if $FAST_MATH; then
+            FFLAGS="$FFLAGS -ffast-math"
+        fi
+        if $STRICT_FP; then
+            # Strict is strict: an override may not carry a value-changing
+            # flag, and the contraction flag is appended whatever it says.
+            reject_value_changing_flags GELB_FFLAGS "$FFLAGS"
+            FFLAGS="$FFLAGS -ffp-contract=off"
+        fi
+        command -v "$FC" >/dev/null 2>&1 || die "$FC not found"
+
+        if [[ "$OUTPUT_MODE" == "netcdf" ]]; then
+            detect_netcdf
+            compile_src() {
+                info "Compiling with $FC $FFLAGS $NETCDF_INC ..."
+                $FC $FFLAGS $NETCDF_INC -o "$EXECUTABLE" "$GEN_SRC" $NETCDF_LIB
+            }
+        else
+            compile_src() {
+                info "Compiling with $FC $FFLAGS ..."
+                $FC $FFLAGS -o "$EXECUTABLE" "$GEN_SRC"
+            }
+        fi
+        ;;
+    cpu_highway)
+        EXT=".cpp"
+        # Compiler choice.  On macOS the default ``g++`` resolves to
+        # apple-clang, so prefer Homebrew GCC (``g++-16`` -> ``g++-13``)
+        # when present and fall back to ``clang++`` otherwise: Apple
+        # clang has the OpenMP front end but ships no runtime, so the
+        # clang branch below supplies one (Homebrew libomp or
+        # GELB_OMP_ROOT).  Linux behaviour unchanged: ``g++`` is the
+        # default and GELB_CXX overrides everywhere.
+        if [[ -n "${GELB_CXX:-}" ]]; then
+            CXX="$GELB_CXX"
+        elif [[ "$(uname -s)" == "Darwin" ]]; then
+            CXX="clang++"
+            for cand in g++-16 g++-15 g++-14 g++-13; do
+                if command -v "$cand" >/dev/null 2>&1; then
+                    CXX="$cand"
+                    break
+                fi
+            done
+        else
+            CXX="g++"
+        fi
+        command -v "$CXX" >/dev/null 2>&1 || die "$CXX not found (need a C++17 compiler with OpenMP support).
+Install GCC/G++ with OpenMP support, or set GELB_CXX to a compatible compiler."
+        CXX_IS_CLANG=false
+        if [[ "$("$CXX" --version 2>/dev/null | head -1)" =~ [Cc]lang ]]; then
+            CXX_IS_CLANG=true
+        fi
+        # macOS-26-SDK compatibility for Homebrew GCC.  The macOS 26
+        # SDK introduces ``xnu_static_assert_struct_size(...)`` macros
+        # in ``<mach/message.h>`` which expand to a C++ ``static_assert``
+        # construct that GCC's preprocessor parses as a function call,
+        # producing "expected constructor, destructor, or type
+        # conversion" errors when any C++ source includes a system
+        # header that pulls in mach (e.g. ``<cstdio>`` does).  Falls
+        # back to the macOS 15 SDK when present.  Apple-clang doesn't
+        # need this (it ships its own matching SDK).  Only applies
+        # when the user hasn't already pinned SDKROOT and the chosen
+        # compiler is not clang.
+        if [[ "$(uname -s)" == "Darwin" && -z "${SDKROOT:-}" ]] && ! $CXX_IS_CLANG; then
+            if [[ -d /Library/Developer/CommandLineTools/SDKs/MacOSX15.sdk ]]; then
+                export SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX15.sdk
+                info "SDKROOT=$SDKROOT (Homebrew GCC + macOS-26 SDK workaround)"
+            fi
+        fi
+        # OpenMP flags.  cpu_highway is always built with OpenMP; the
+        # backend's emitted ``#pragma omp parallel for`` directives are
+        # essential for matching cpu_fortran_serial's correctness vs
+        # production perf.  GCC (and clang on Linux) take ``-fopenmp``
+        # and link their own runtime.  Apple clang disables that driver
+        # flag: the working spelling is ``-Xclang -fopenmp`` at compile
+        # time plus ``-lomp`` at link time, against a libomp that is not
+        # part of Xcode -- GELB_OMP_ROOT (include/omp.h + lib/libomp.dylib)
+        # when set, else Homebrew's libomp.  The same two variables feed
+        # check_cxx_openmp and compile_src.
+        OMP_CXXFLAGS=(-fopenmp)
+        OMP_LDFLAGS=()
+        ARCH_FLAG="-march=native"
+        if [[ "$(uname -s)" == "Darwin" ]] && $CXX_IS_CLANG; then
+            OMP_ROOT=""
+            if [[ -n "${GELB_OMP_ROOT:-}" ]]; then
+                [[ -f "$GELB_OMP_ROOT/include/omp.h" && -f "$GELB_OMP_ROOT/lib/libomp.dylib" ]] \
+                    || die "GELB_OMP_ROOT=$GELB_OMP_ROOT must contain include/omp.h and lib/libomp.dylib"
+                OMP_ROOT="$GELB_OMP_ROOT"
+            else
+                for cand in "$(brew --prefix libomp 2>/dev/null || true)" \
+                            /opt/homebrew/opt/libomp /usr/local/opt/libomp; do
+                    if [[ -n "$cand" && -f "$cand/include/omp.h" && -f "$cand/lib/libomp.dylib" ]]; then
+                        OMP_ROOT="$cand"
+                        break
+                    fi
+                done
+            fi
+            [[ -n "$OMP_ROOT" ]] || die "Apple clang needs the OpenMP runtime: brew install libomp, or set GELB_OMP_ROOT"
+            OMP_CXXFLAGS=(-Xclang -fopenmp -I"$OMP_ROOT/include")
+            OMP_LDFLAGS=(-L"$OMP_ROOT/lib" -lomp -Wl,-rpath,"$OMP_ROOT/lib")
+            info "OpenMP runtime: $OMP_ROOT"
+            # Older Apple clang rejects ``-march=native`` on arm64;
+            # ``-mcpu=native`` is the spelling that selects the host
+            # core (and its NEON features) there.
+            if [[ "$(uname -m)" == "arm64" ]]; then
+                ARCH_FLAG="-mcpu=native"
+            fi
+        fi
+        # ``-fno-unroll-loops`` because gcc's default cost model auto-
+        # unrolls our generated SIMD body 3x, which TRIPLES the peak
+        # live-Vec8d count (9 gIn + 9 geq + 10+ constants per direction
+        # * 3 = ~80 live values) and overflows AVX-512's 32 zmm
+        # registers, causing spills.  Empirically -fno-unroll-loops is
+        # +1-4% on LDC-2D N=128/512 and neutral on TGV-2D.  Users can
+        # override via GELB_CXXFLAGS (the OpenMP flags are appended
+        # either way).  The flag string is split on whitespace by
+        # contract; everything derived from a path is kept in arrays so
+        # a checkout or bundle whose path contains spaces still builds.
+        # -ffp-contract=off in the default build: the native compiler
+        # must not fuse on its own (Numerical semantics: Build modes); the one
+        # fusion GeLB decides lives in the runtime header.
+        CXXFLAGS="${GELB_CXXFLAGS:--std=c++17 -O3 $ARCH_FLAG -ffp-contract=off -fno-trapping-math -fno-unroll-loops -DNDEBUG}"
+        if $FAST_MATH; then
+            CXXFLAGS="$CXXFLAGS -ffast-math"
+        fi
+        if $STRICT_FP; then
+            # Strict is strict: an override may not carry a value-changing
+            # flag, and the contraction flag is appended whatever it says.
+            reject_value_changing_flags GELB_CXXFLAGS "$CXXFLAGS"
+            CXXFLAGS="$CXXFLAGS -ffp-contract=off"
+        fi
+        # shellcheck disable=SC2206
+        CXX_ARGS=($CXXFLAGS "${OMP_CXXFLAGS[@]}")
+        check_cxx_openmp
+
+        # SIMD library + runtime header -- cpu_highway uses Highway
+        # (third_party/highway) + cpu_highway_runtime.hpp (which lives
+        # under gelb/backends/, hence a single -I covers it).
+        SCRIPT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        REPO_ROOT="$(cd -P "$SCRIPT_DIR/.." && pwd)"
+        GELB_SIMD_INC=(-I"$REPO_ROOT/third_party/highway" -I"$REPO_ROOT/gelb/backends")
+        # Highway's vectorised PRNG (``hwy/contrib/random/``) and
+        # the aligned-allocator it depends on are NOT header-only:
+        # the symbols ``hwy::AllocateAlignedBytes``,
+        # ``hwy::FreeAlignedBytes``, ``hwy::VectorBytes`` and
+        # ``hwy::Abort`` live in four small support .cc files
+        # under ``hwy/``.  Compile them inline alongside the
+        # generated source so users don't need a pre-built
+        # ``libhwy``.  Negligible compile-time cost (~1s combined
+        # at -O3).  Programs that don't use ``random()`` still
+        # link the symbols (cheap; the linker drops the unused
+        # PRNG state).
+        GELB_HWY_SUPPORT=(
+            "$REPO_ROOT/third_party/highway/hwy/aligned_allocator.cc"
+            "$REPO_ROOT/third_party/highway/hwy/per_target.cc"
+            "$REPO_ROOT/third_party/highway/hwy/targets.cc"
+            "$REPO_ROOT/third_party/highway/hwy/abort.cc")
+        if [[ ! -f "$REPO_ROOT/third_party/highway/hwy/highway.h" ]]; then
+            die "Highway not found at $REPO_ROOT/third_party/highway/.
+Run: git submodule update --init --recursive"
+        fi
+        if [[ ! -f "$REPO_ROOT/gelb/backends/cpu_highway_runtime.hpp" ]]; then
+            die "cpu_highway runtime header not found at $REPO_ROOT/gelb/backends/cpu_highway_runtime.hpp.
+Run gelb-run from a complete source checkout, or reinstall GeLB with package data included."
+        fi
+        if [[ ! -f "$REPO_ROOT/gelb/backends/cpp_runtime_common.hpp" ]]; then
+            die "common C++ runtime header not found at $REPO_ROOT/gelb/backends/cpp_runtime_common.hpp.
+Run gelb-run from a complete source checkout, or reinstall GeLB with package data included."
+        fi
+
+        if [[ "$OUTPUT_MODE" == "netcdf" ]]; then
+            detect_netcdf_c
+            compile_src() {
+                info "Compiling with $CXX ${CXX_ARGS[*]} ${GELB_SIMD_INC[*]} ${NETCDF_C_INC_ARGS[*]-} ..."
+                "$CXX" "${CXX_ARGS[@]}" "${GELB_SIMD_INC[@]}" \
+                    ${NETCDF_C_INC_ARGS[@]+"${NETCDF_C_INC_ARGS[@]}"} \
+                    -o "$EXECUTABLE" "$GEN_SRC" \
+                    "${GELB_HWY_SUPPORT[@]}" \
+                    ${NETCDF_C_LIB_ARGS[@]+"${NETCDF_C_LIB_ARGS[@]}"} \
+                    ${OMP_LDFLAGS[@]+"${OMP_LDFLAGS[@]}"}
+            }
+        else
+            compile_src() {
+                info "Compiling with $CXX ${CXX_ARGS[*]} ${GELB_SIMD_INC[*]} ..."
+                "$CXX" "${CXX_ARGS[@]}" "${GELB_SIMD_INC[@]}" \
+                    -o "$EXECUTABLE" "$GEN_SRC" \
+                    "${GELB_HWY_SUPPORT[@]}" \
+                    ${OMP_LDFLAGS[@]+"${OMP_LDFLAGS[@]}"}
+            }
+        fi
+        ;;
+    gpu_cuda_cpp)
+        EXT=".cu"
+        # CUDA C++ backend: nvcc + NetCDF-C (same NetCDF-C as
+        # cpu_highway).  Default arch is sm_89 (Ada Lovelace);
+        # override via GELB_NVCC_ARCH for other GPUs.
+        NVCC="${GELB_NVCC:-nvcc}"
+        NVCC_ARCH="${GELB_NVCC_ARCH:--arch=sm_89}"
+        # ``-diag-suppress=177`` silences "variable declared but never
+        # referenced" -- the parent's emit declares all global
+        # constants in main()-scope, but we move them to file scope
+        # for kernel access; some end up unreferenced if the SIMD
+        # path that used them was disabled.
+        NVCC_FLAGS="${GELB_NVCC_FLAGS:--O3 $NVCC_ARCH -std=c++17 --expt-relaxed-constexpr -DNDEBUG -diag-suppress=177}"
+        if $FAST_MATH; then
+            # ``--use_fast_math`` enables -ffast-math equivalent
+            # (denormals-are-zero, no-precise-sqrt, etc.) on the
+            # device side.  Caller opts in via ``-F``.
+            NVCC_FLAGS="$NVCC_FLAGS --use_fast_math"
+        fi
+        if $STRICT_FP; then
+            # A default CUDA build keeps nvcc's fusion (user manual,
+            # Numerical semantics: Build modes); a strict one does not, and tolerates no fast-math,
+            # flush-to-zero or approximate-division/sqrt flag either.
+            reject_value_changing_flags GELB_NVCC_FLAGS "$NVCC_FLAGS"
+            NVCC_FLAGS="$NVCC_FLAGS -fmad=false"
+        fi
+        if ! command -v "$NVCC" >/dev/null 2>&1; then
+            die "$NVCC not found (need CUDA toolkit on PATH).
+Tip: install via the system package manager
+  (Ubuntu: sudo apt install nvidia-cuda-toolkit)
+  (Fedora/RHEL: sudo dnf install cuda-toolkit)
+or download from https://developer.nvidia.com/cuda-downloads
+Then re-run.  Override the binary via GELB_NVCC."
+        fi
+
+        SCRIPT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        REPO_ROOT="$(cd -P "$SCRIPT_DIR/.." && pwd)"
+        # Runtime header lives under gelb/backends/.
+        GELB_RT_INC="-I$REPO_ROOT/gelb/backends"
+        if [[ ! -f "$REPO_ROOT/gelb/backends/gpu_cuda_cpp_runtime.cuh" ]]; then
+            die "gpu_cuda_cpp runtime header not found at $REPO_ROOT/gelb/backends/gpu_cuda_cpp_runtime.cuh.
+Run gelb-run from a complete source checkout, or reinstall GeLB with package data included."
+        fi
+        if [[ ! -f "$REPO_ROOT/gelb/backends/cpp_runtime_common.hpp" ]]; then
+            die "common C++ runtime header not found at $REPO_ROOT/gelb/backends/cpp_runtime_common.hpp.
+Run gelb-run from a complete source checkout, or reinstall GeLB with package data included."
+        fi
+
+        if [[ "$OUTPUT_MODE" == "netcdf" ]]; then
+            detect_netcdf_c
+            # nvcc rejects ``-Wl,X`` directly; re-form any ``-Wl,-rpath,DIR``
+            # tokens that nc-config injected into the linker string into
+            # nvcc's native ``-Xlinker -rpath -Xlinker DIR`` pairs.
+            # Other ``-Wl,...`` forms are similarly translated.
+            NETCDF_C_LIB="$(printf '%s' "$NETCDF_C_LIB" | sed -E 's|-Wl,-rpath,([^ ]+)|-Xlinker -rpath -Xlinker \1|g; s|-Wl,([^ ]+)|-Xlinker \1|g')"
+            compile_src() {
+                info "Compiling with $NVCC $NVCC_FLAGS $GELB_RT_INC $NETCDF_C_INC ..."
+                $NVCC $NVCC_FLAGS $GELB_RT_INC $NETCDF_C_INC \
+                    -o "$EXECUTABLE" "$GEN_SRC" $NETCDF_C_LIB
+            }
+        else
+            compile_src() {
+                info "Compiling with $NVCC $NVCC_FLAGS $GELB_RT_INC ..."
+                $NVCC $NVCC_FLAGS $GELB_RT_INC -o "$EXECUTABLE" "$GEN_SRC"
+            }
+        fi
+        ;;
+    *)
+        # Defence-in-depth: the up-front validation right after arg
+        # parsing should already have caught this.  If a future case
+        # is added without updating the early validator, this branch
+        # surfaces it cleanly rather than silently falling through.
+        _die_unknown_backend "$BACKEND"
+        ;;
+esac
+
+# -- Working directory ------------------------------------------------
+BASENAME=$(basename "${GELB_FILE%.gelb}")
+NC_FILE="${BASENAME}.nc"
+
+if $KEEP; then
+    WORK_DIR="."
+else
+    WORK_DIR=$(mktemp -d)
+    # Clean up intermediates (source + binary), but keep .nc output
+    trap 'rm -rf "$WORK_DIR"' EXIT
+fi
+
+GEN_SRC="$WORK_DIR/${BASENAME}${EXT}"
+EXECUTABLE="$WORK_DIR/${BASENAME}"
+
+# -- Step 1: GeLB -> target source -----------------------------------
+info "Translating $GELB_FILE → $GEN_SRC ..."
+# Unset VIRTUAL_ENV to suppress uv's env-mismatch warning, and run
+# gelbc directly (no pipe) so that ANSI colors are preserved and
+# non-zero exit codes propagate immediately.
+GELBC_EXTRA_ARGS=()
+if [[ -n "$SEED" ]]; then
+    GELBC_EXTRA_ARGS+=(--seed "$SEED")
+fi
+if [[ -n "$CUDA_BLOCK_SIZE" ]]; then
+    GELBC_EXTRA_ARGS+=(--cuda-block-size "$CUDA_BLOCK_SIZE")
+fi
+if [[ -n "$CUDA_COARSENING" ]]; then
+    GELBC_EXTRA_ARGS+=(--cuda-coarsening "$CUDA_COARSENING")
+fi
+if $CUDA_LDG; then
+    GELBC_EXTRA_ARGS+=(--cuda-ldg)
+fi
+if $CUDA_STWT; then
+    GELBC_EXTRA_ARGS+=(--cuda-stwt)
+fi
+if $CUDA_TILED; then
+    GELBC_EXTRA_ARGS+=(--cuda-tiled)
+fi
+if $CUDA_GRAPHS; then
+    GELBC_EXTRA_ARGS+=(--cuda-graphs)
+else
+    GELBC_EXTRA_ARGS+=(--no-cuda-graphs)
+fi
+if $POISON_UNINIT; then
+    GELBC_EXTRA_ARGS+=(--poison-uninit)
+fi
+if $STRICT_FP; then
+    GELBC_EXTRA_ARGS+=(--strict-fp)
+fi
+# Forward extra gelbc flags via the ``GELBC_EXTRA`` env var
+# (space-separated).  Useful for ad-hoc benchmarks that want to toggle
+# the slice-DF expansion (``GELBC_EXTRA="--no-slice-simplify"``).
+if [[ -n "${GELBC_EXTRA:-}" ]]; then
+    # shellcheck disable=SC2206
+    GELBC_EXTRA_ARGS+=(${GELBC_EXTRA})
+fi
+
+if [[ -n "${GELB_PYTHON:-}" ]]; then
+    GELBC_CMD=("$GELB_PYTHON" -m gelb.gelbc)
+else
+    GELBC_CMD=("${UV_RUN[@]}" gelbc)
+fi
+"${GELBC_CMD[@]}" "$GELB_FILE" \
+    --backend "$BACKEND" \
+    --num-timesteps "$NUM_TIMESTEPS" \
+    --write-every "$WRITE_EVERY" \
+    --output-mode "$OUTPUT_MODE" \
+    "${GELBC_EXTRA_ARGS[@]+"${GELBC_EXTRA_ARGS[@]}"}" \
+    "${DEFINE_ARGS[@]+"${DEFINE_ARGS[@]}"}" \
+    -o "$GEN_SRC"
+
+# -- Step 2: Compile target source -----------------------------------
+compile_src
+
+# -- Step 3: Run -----------------------------------------------------
+info "Running $EXECUTABLE ..."
+
+# OpenMP runtime defaults -- only meaningful for cpu_highway, which
+# is the only backend that emits OMP code.  cpu_fortran_serial is
+# strictly single-threaded; gpu_cuda_cpp runs on the GPU.
+if [[ "$BACKEND" == "cpu_highway" ]]; then
+    # Default thread *count*: physical cores only (skip SMT siblings).
+    # libgomp's own default is the logical-CPU count (= physical *
+    # SMT-multiplier), which is wrong for LBM: SMT siblings share
+    # one L1/L2 cache, so for memory-/cache-bound kernels stacking
+    # two workers per core is at best a wash (issue-port slack
+    # buys nothing because the bottleneck is cache bandwidth, not
+    # the integer pipeline) and often a net loss (the two siblings
+    # thrash each other's lines).
+    #
+    # Users who *want* SMT (or who are doing per-thread scaling
+    # experiments) set OMP_NUM_THREADS explicitly -- we only fill
+    # in the default.  In particular, ``OMP_NUM_THREADS=1`` gives a
+    # single-threaded baseline for perf comparisons (the binary
+    # still has the OMP runtime linked, but the parallel for runs
+    # on one thread).
+    if [[ -z "${OMP_NUM_THREADS:-}" ]]; then
+        export OMP_NUM_THREADS="$(detect_physical_cores)"
+        info "OMP_NUM_THREADS=$OMP_NUM_THREADS (auto-detected physical cores)"
+    fi
+
+    # Default thread *placement*: pin each OpenMP worker to one
+    # physical core.  Without this, the kernel may co-schedule
+    # pairs of threads on the SMT siblings of one core (using two
+    # logical CPUs but only one set of L1/L2 caches), and free
+    # migration across CCDs/NUMA nodes thrashes per-thread cache
+    # locality.  Worth +25-50% on LDC-2D / TGV-2D N=512 OMP=16 on
+    # an AMD Ryzen 9 7945HX test host (2026-05-02).
+    # Not on macOS, which has no thread-affinity API: LLVM's libomp
+    # ignores the two variables there, and GCC's libgomp, given
+    # OMP_PLACES, prints "Affinity not supported on this
+    # configuration" on every run.
+    # Users who set OMP_PROC_BIND or OMP_PLACES explicitly keep their
+    # choice.
+    if [[ "$(uname -s)" != "Darwin" ]]; then
+        export OMP_PROC_BIND="${OMP_PROC_BIND:-close}"
+        export OMP_PLACES="${OMP_PLACES:-cores}"
+    fi
+fi
+
+# For NetCDF mode with multiple timesteps, show a progress bar
+if [[ "$OUTPUT_MODE" == "netcdf" && "$NUM_TIMESTEPS" -gt 1 ]]; then
+    TOTAL_RECORDS=$(( (NUM_TIMESTEPS / WRITE_EVERY) + 1 ))
+
+    # Clear any leftover .nc file from a prior run. The Fortran
+    # backend calls nf90_create(NF90_CLOBBER) which truncates on
+    # open, but truncation happens a few ms after the simulation
+    # starts -- long enough for the progress monitor to catch a
+    # first poll against the *old* file and briefly report 100%
+    # before the record count resets to 0 on the next poll.
+    # Pre-clearing removes that phantom entirely.
+    rm -f "$NC_FILE"
+
+    # Buffer the simulation's stdout (MLUPS report, banners) into
+    # a temp file for the duration of the progress bar. If we let
+    # the simulation write directly to the terminal, the MLUPS
+    # report can land *between* the monitor's last in-place frame
+    # (no trailing newline) and the final `\n`-terminated frame,
+    # breaking the `\r`-based in-place overwrite and producing a
+    # double bar on screen. Cating the buffered output after the
+    # monitor exits preserves every line but keeps it clean.
+    # stderr stays live so real errors surface immediately.
+    SIM_STDOUT_BUF="$(mktemp -t gelb-run-stdout.XXXXXX)"
+    # One EXIT trap for both temporaries: a second `trap ... EXIT` replaces
+    # the first, which left every work directory behind in $TMPDIR.
+    trap 'rm -f "$SIM_STDOUT_BUF"; $KEEP || rm -rf "$WORK_DIR"' EXIT
+
+    # Launch simulation in background (stdout -> buffer file).
+    "$EXECUTABLE" "${PROG_ARGS[@]+"${PROG_ARGS[@]}"}" > "$SIM_STDOUT_BUF" &
+    SIM_PID=$!
+    # A background job of a script ignores SIGINT, so Ctrl-C would stop
+    # the progress bar and leave the simulation running on its own. Pass
+    # the interrupt on as SIGTERM, which the job does not ignore (the
+    # `|| true` keep set -e from exiting inside the trap with wait's 143).
+    trap 'kill -TERM "$SIM_PID" 2>/dev/null || true; wait "$SIM_PID" 2>/dev/null || true; exit 130' INT
+    trap 'kill -TERM "$SIM_PID" 2>/dev/null || true; wait "$SIM_PID" 2>/dev/null || true; exit 143' TERM
+
+    # Pick the cheapest way to launch the progress monitor. `uv run
+    # python` spends ~0.5-1 s on dependency resolution before the
+    # first poll -- long enough that for short simulations the bar
+    # would snap straight from 0 % to 100 %. If `.venv/bin/python`
+    # from the project root is available, invoke it directly to
+    # skip that overhead. Fall back to `uv run` so machines without
+    # an activated .venv still work. GELB_PYTHON, when set, wins over
+    # both.
+    REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+    VENV_PY="$REPO_ROOT/.venv/bin/python"
+    if [[ -n "${GELB_PYTHON:-}" ]]; then
+        "$GELB_PYTHON" -m gelb.visualization.progress_monitor \
+            "$NC_FILE" "$TOTAL_RECORDS" "$SIM_PID" || true
+    elif [[ -x "$VENV_PY" ]]; then
+        "$VENV_PY" -m gelb.visualization.progress_monitor \
+            "$NC_FILE" "$TOTAL_RECORDS" "$SIM_PID" || true
+    else
+        "${UV_RUN[@]}" python -m gelb.visualization.progress_monitor \
+            "$NC_FILE" "$TOTAL_RECORDS" "$SIM_PID" || true
+    fi
+
+    # Wait for simulation to finish and capture exit code, then
+    # replay the buffered stdout below the progress bar.
+    wait "$SIM_PID"
+    cat "$SIM_STDOUT_BUF"
+else
+    "$EXECUTABLE" "${PROG_ARGS[@]+"${PROG_ARGS[@]}"}"
+fi
+
+# -- Step 4: Visualize (optional) ------------------------------------
+if $VIEW; then
+    if [[ "$OUTPUT_MODE" != "netcdf" ]]; then
+        info "Skipping visualization (--view requires netcdf output mode)"
+    elif [[ -f "$NC_FILE" ]]; then
+        info "Launching visualization ..."
+        if [[ -n "${GELB_PYTHON:-}" ]]; then
+            "$GELB_PYTHON" -m gelb.visualization.gelb_view "$NC_FILE"
+        else
+            "${UV_RUN[@]}" gelb-view "$NC_FILE"
+        fi
+    else
+        info "No NetCDF output found at $NC_FILE, skipping visualization"
+    fi
+fi

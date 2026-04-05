@@ -5,6 +5,12 @@ Symbol table test utilities.
 This module provides utilities specific to symbol table validation and testing.
 """
 
+from gelb.frontend.implicit_symbols import (
+    COORDINATE_SYMBOL_NAMES,
+    DIMENSION_CONSTANT_NAMES,
+)
+
+
 def assert_symbol_not_allowed_error(test_string, rule):
     """
     Helper to test that implicit symbols are properly rejected in blocks where they shouldn't be allowed.
@@ -25,12 +31,17 @@ def assert_symbol_not_allowed_error(test_string, rule):
 
 def get_coordinate_symbols():
     """Return list of coordinate symbol names for testing."""
-    return ["x", "y", "z"]
+    return list(COORDINATE_SYMBOL_NAMES)
+
+
+def get_timestep_symbol():
+    """Return list containing the implicit timestep symbol name."""
+    return ["t"]
 
 
 def get_dimension_symbols():
     """Return list of dimension symbol names for testing."""
-    return ["Nx", "Ny", "Nz"]
+    return list(DIMENSION_CONSTANT_NAMES)
 
 
 def get_symbol_table_error_test_data():
@@ -104,7 +115,7 @@ def get_symbol_table_error_test_data():
          initializer SetDFsToConstant {
            const real64 PI = 3.141592653589793;
            const real32 PI = 3.14159265;
-           const real16 PI = 3.141;
+           const real PI = 3.141;
            f.out[x, y, z | :] = PI;
          }
          """, "f"),
@@ -148,7 +159,7 @@ def get_symbol_table_error_test_data():
          dynamic SetDFsToConstant {
            const real64 PI = 3.141592653589793;
            const real32 PI = 3.14159265;
-           const real16 PI = 3.141;
+           const real PI = 3.141;
            f.out[x, y, z | :] = PI;
          }
          """, "f"),
@@ -180,17 +191,17 @@ def get_symbol_table_error_test_data():
         # Gauge block tests
         ("gauge_block", "symbol_exists", GeLBExSymbolExists,
          """
-         gauge PiTimesCurrentState(out = {int state;}) {
+         gauge PiTimesCurrentState -> (int state) {
            const real64 PI = 3.141592653589793;
            const real32 PI = 3.14159265;
-           const real16 PI = 3.141;
+           const real PI = 3.141;
            state = PI*f.in[x | 0];
          }
          """, "f"),
         
         ("gauge_block", "symbol_unknown", GeLBExSymbolUnknown,
          """
-         gauge PiTimesCurrentState(out = {int state;}) {
+         gauge PiTimesCurrentState -> (int state) {
            state = PI *f.in[x | 0];
          }
          """, "f"),
@@ -260,7 +271,7 @@ def get_symbol_table_valid_test_data():
         # Gauge block - valid cases
         ("gauge_block",
          """
-         gauge gauge_fun1(out = {real rho;}) {
+         gauge gauge_fun1 -> (real rho) {
            rho = f.in[x | 0];
          }
          """, "f",

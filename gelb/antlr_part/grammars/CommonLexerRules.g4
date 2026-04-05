@@ -13,11 +13,25 @@ NODE_CLASSES : 'node_classes' ;
 // BEGIN: Keywords for intrinsic functions
 SUM : 'sum' ;
 DOT_PROD : 'dot_prod' ;
-// DOT_PRODUCT : 'dot_product' ;
-// VEC_PRODUCT : 'vector_product' ;
-// UP_STREAM_DF : 'up_stream_df' ;
-// DOWN_STREAM_DF : 'down_stream_df' ;
-// OPPOSITE_DF : 'opposite_df' ;
+SIN : 'sin' ;
+COS : 'cos' ;
+SQRT : 'sqrt' ;
+RANDOM : 'random' ;
+EXP : 'exp' ;
+ABS : 'abs' ;
+LOG : 'log' ;
+TAN : 'tan' ;
+TANH : 'tanh' ;
+MIN : 'min' ;
+MAX : 'max' ;
+MOD : 'mod' ;
+ATAN2 : 'atan2' ;
+UPSTREAM_DFS : 'upstream_dfs' ;
+BOUNCE_BACK_DFS : 'bounce_back_dfs' ;
+MATMUL : 'matmul' ;
+TRANSPOSE : 'transpose' ;
+INVERSE : 'inverse' ;
+DETERMINANT : 'determinant' ;
 // END: Keywords for intrinsic functions
 
 // BEGIN: Keywords for data-types
@@ -49,15 +63,29 @@ IN : 'in' ;
 
 DYNAMIC : 'dynamic' ;
 GAUGE : 'gauge' ;
+FUNCTION : 'function' ;
 
 NODE_CLASS : 'node_class' ;
+MASKED : 'masked' ;
 GEOMETRY : 'geometry' ;
-SET_GRID_SIZE : 'set_grid_size' ;
-SET_GRID_PERIODICITY : 'set_grid_periodicity' ;
 NODES : 'nodes' ;
+BORDER : 'border' ;
+WHERE : 'where' ;
+// Reserved for later language stages (moving geometry).
+// None of these is an implemented feature; reserving them keeps v1
+// programs from using them as identifiers.
+ENTER : 'enter' ;
+LEAVE : 'leave' ;
+REDUCE : 'reduce' ;
+REDUCTION : 'reduction' ;
+UPDATE : 'update' ;
+GLOBAL_VARIABLES : 'global_variables' ;
+TRANSITION : 'transition' ;
+ZONE : 'zone' ;
 //                     END: Keywords                     //
 
 //                     BEGIN: Operators                     //
+ARROW : '->' ;
 OP_ASSIGN : '=' ;
 OP_ADD : '+' ;
 OP_SUB : '-' ;
@@ -90,7 +118,7 @@ CURLY_CLOSE : '}' ;
 // MISC Symbols
 COLON: ':';
 SEMICOLON : ';' ;
-VERT : '|' ;
+VERT : '|' ;  // Reserved: separates spatial coords from DF range in lattice access (see LANGUAGE_DESIGN.md)
 COMMA : ',' ;
 DOT : '.' ;
 //                     END: Punctuation                     //

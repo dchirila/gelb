@@ -21,15 +21,23 @@ initialize_reserved_keywords()
 
 from gelb.frontend.ASTBuilderVisitor import ASTBuilderVisitor
 from gelb.frontend.SymbolsTablesBuilderVisitor import SymbolsTablesBuilderVisitor
+from gelb.frontend.implicit_symbols import (
+    lattice_statements,
+    validate_grid_size_rank,
+)
 from gelb.frontend.ImplicitsRefsClashPreventerVisitor import ImplicitsRefsClashPreventerVisitor
 from gelb.frontend.ImplicitsDefsClashPreventerVisitor import ImplicitsDefsClashPreventerVisitor
 from gelb.frontend.ImplicitSymbolsAdderVisitor import ImplicitSymbolsAdderVisitor
 from gelb.frontend.NodeClassesValidationVisitor import NodeClassesValidationVisitor
 from gelb.frontend.GaugeValidationVisitor import GaugeValidationVisitor
+from gelb.frontend.LatticeAccessContextValidator import LatticeAccessContextValidator
 from gelb.frontend.GeometryInitialValidationVisitor import GeometryInitialValidationVisitor
+from gelb.frontend.GeometryDependencyValidator import validate_geometry_dependencies
 from gelb.frontend.ConstantsResolverVisitor import ConstantsResolverVisitor
+from gelb.frontend.GlobalConstantsInitializerValidator import (
+    validate_global_constant_initializers as _validate_global_constant_initializers,
+)
 from gelb.frontend.LatticeConsistencyValidator import LatticeConsistencyValidator
-from gelb.frontend.RectangularArraysEnforcerVisitor import RectangularArraysEnforcerVisitor
 from gelb.frontend.RangeResolverVisitor import RangeResolverVisitor
 from gelb.frontend.TypeInferenceVisitor import TypeInferenceVisitor
 from gelb.frontend.TypePromotionVisitor import TypePromotionVisitor
@@ -103,6 +111,15 @@ def validate_ast_root_is_program(ast):
 
 
 def build_symbols_tables(ast, symbol_to_ignore_for_testing=None):
+    # The rank of every lattice's grid_size must match its d before any
+    # pass derives the dimensionality -- and with it the coordinate
+    # symbols -- from that shape.  Checked here, at the declaration, the
+    # mismatch is reported where it is; left to later passes it surfaced
+    # as an unknown symbol ``y`` at the first use site.
+    lattices = getattr(ast, "lattices", None)
+    if lattices is not None:
+        for lattice_stmt in lattice_statements(lattices):
+            validate_grid_size_rank(lattice_stmt, ast)
     ast_visitor = SymbolsTablesBuilderVisitor(symbol_to_ignore_for_testing)
     return ast_visitor.visit(ast, ast)
 
@@ -117,18 +134,124 @@ def prevent_clashes_of_symbol_defs_with_implicits(ast):
     ast_visitor.visit(ast, ast)  # nothing to return here
 
 
+def detect_function_recursion(ast):
+    """
+    Detect cyclic call dependencies among user-defined functions.
+
+    Builds a call graph from Program_N.functions and uses DFS to find
+    cycles.  Raises GeLBExFunctionRecursion if any cycle is found.
+    """
+    from gelb.gelb_ast.ASTNodes import (
+        FunctionBlock_N, UserFunctionCall_N, Node_N, List_N
+    )
+    from gelb.utils.exceptions import GeLBExFunctionRecursion
+
+    if not hasattr(ast, 'functions') or ast.functions is None:
+        return
+
+    functions = ast.functions
+    if isinstance(functions, List_N):
+        functions = functions.elements
+    if not functions:
+        return
+
+    # Collect the set of user-defined function names
+    func_names = {f.name.name for f in functions}
+
+    # --- build call graph: caller -> [(callee_name, call_node), ...] ---
+
+    def _collect_calls(node):
+        """Recursively collect UserFunctionCall_N nodes from an AST subtree."""
+        results = []
+        if isinstance(node, UserFunctionCall_N):
+            results.append(node)
+        if isinstance(node, Node_N):
+            for child in node.get_children():
+                if child is not None:
+                    results.extend(_collect_calls(child))
+        return results
+
+    graph = {}      # caller_name -> set of callee names
+    call_nodes = {} # (caller, callee) -> UserFunctionCall_N (for error reporting)
+
+    for func in functions:
+        fname = func.name.name
+        calls = _collect_calls(func.stmts)
+        callees = set()
+        for call in calls:
+            callee = call.function_name.name
+            if callee in func_names:
+                callees.add(callee)
+                call_nodes[(fname, callee)] = call
+        graph[fname] = callees
+
+    # --- DFS cycle detection (3-color algorithm) ---
+    #
+    # Each function starts as WHITE (not yet visited).  When DFS enters
+    # a function it becomes GRAY (currently being explored -- still on the
+    # recursion stack).  When DFS finishes all of a function's callees it
+    # becomes BLACK (fully explored, no cycles through it).
+    #
+    # A cycle exists iff DFS encounters a GRAY node: that node is an
+    # ancestor on the current path, so there is a back-edge forming a loop.
+
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = {name: WHITE for name in graph}
+    path = []  # current DFS path (stack of function names)
+
+    def _dfs(node):
+        color[node] = GRAY
+        path.append(node)
+        for callee in graph.get(node, ()):
+            if color.get(callee) == GRAY:
+                # Found a cycle -- extract it from the path
+                cycle_start = path.index(callee)
+                cycle = path[cycle_start:] + [callee]
+                offending_call = call_nodes[(node, callee)]
+                raise GeLBExFunctionRecursion(offending_call, cycle)
+            if color.get(callee) == WHITE:
+                _dfs(callee)
+        path.pop()
+        color[node] = BLACK
+
+    for name in graph:
+        if color[name] == WHITE:
+            _dfs(name)
+
+
 def add_implicit_symbols(ast):
     ast_visitor = ImplicitSymbolsAdderVisitor()
     return ast_visitor.visit(ast, ast)
 
 
-def validate_gauges(ast):
+def validate_fixed_geometry(ast):
+    """The geometry may depend only on coordinates and constants (v1)."""
+    validate_geometry_dependencies(ast)  # nothing to return here
+
+
+def validate_lattice_access_context(ast):
     """
-    Validate gauge blocks have required output specifications.
-    
-    Ensures that all gauge blocks have non-empty output specifications.
-    Provides user-friendly error messages for missing or empty outputs.
-    
+    Validate that lattice selections appear in appropriate block contexts.
+
+    Rules:
+      - f.out[...] only in initializer and dynamic blocks
+      - f.in[...]  only in dynamic and gauge blocks
+      - No lattice selections in global_constants
+
+    Must run after:
+    - AST building
+    """
+    validator = LatticeAccessContextValidator()
+    validator.validate(ast)
+
+
+def validate_block_signatures(ast):
+    """
+    Validate function and gauge blocks have required named results.
+
+    Ensures that all functions and gauges have non-empty result
+    specifications and provides user-friendly diagnostics when they do not.
+
     Must run after:
     - AST building
     """
@@ -152,6 +275,19 @@ def initial_validation_geometry(ast):
     ast_visitor.visit(ast, ast)  # nothing to return here
 
 
+def validate_global_constant_initializers(ast):
+    """
+    Reject a call a global constant's initializer may not make:
+    ``random()`` or a user function.
+
+    Must run after:
+    - Symbol tables are built
+    Must run before:
+    - Constants are resolved (the call would be copied into every use)
+    """
+    _validate_global_constant_initializers(ast)
+
+
 def resolve_all_constants(ast):
     ast_visitor = ConstantsResolverVisitor()
     return ast_visitor.visit(ast, ast)
@@ -160,19 +296,14 @@ def resolve_all_constants(ast):
 def resolve_ranges(ast):
     """
     Replace None bounds in Range_N nodes with concrete values:
-    - None lower bound → 0
-    - None upper bound → Nx-1, Ny-1, or Nz-1 (based on dimension)
+    - None lower bound -> 0
+    - None upper bound -> Nx-1, Ny-1, or Nz-1 (based on dimension)
     
     Must run after symbol tables are built.
     """
     ast_visitor = RangeResolverVisitor()
     ast_visitor.visit(ast, ast)
     return ast
-
-
-def enforce_rectangular_array_literals(ast):
-    ast_visitor = RectangularArraysEnforcerVisitor()
-    ast_visitor.visit(ast, ast)  # nothing to return here
 
 
 def infer_types(ast):
@@ -199,7 +330,7 @@ def promote_types(ast):
     Inserts TypePromotionNode_N wherever implicit type conversion
     is needed, making promotions explicit in the AST.
     
-    Type promotion hierarchy: bool → int → real
+    Type promotion hierarchy: bool -> int -> real
     
     Must run after:
     - Type inference

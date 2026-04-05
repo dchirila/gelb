@@ -7,6 +7,10 @@ used throughout the test suite.
 """
 
 import pytest
+from gelb.frontend.implicit_symbols import (
+    COORDINATE_SYMBOL_NAMES,
+    DIMENSION_CONSTANT_NAMES,
+)
 from gelb.frontend.stage1_frontend import (
     get_ast,
     build_symbols_tables,
@@ -169,7 +173,7 @@ def minimal_gelb_program_1d(
     dynamic Dyn {{
         {dyn_stmt}
     }}
-    gauge Out(out = {{int val;}}) {{
+    gauge Out -> (int val) {{
         {gauge_stmt}
     }}
     node_classes {{
@@ -237,7 +241,7 @@ def minimal_gelb_program_2d(
     dynamic Dyn {{
         {dyn_stmt}
     }}
-    gauge Out(out = {{int val;}}) {{
+    gauge Out -> (int val) {{
         {gauge_stmt}
     }}
     node_classes {{
@@ -305,7 +309,7 @@ def minimal_gelb_program_3d(
     dynamic Dyn {{
         {dyn_stmt}
     }}
-    gauge Out(out = {{int val;}}) {{
+    gauge Out -> (int val) {{
         {gauge_stmt}
     }}
     node_classes {{
@@ -383,17 +387,17 @@ def get_scalar_cst_test_data():
 
 def get_implicit_symbols():
     """Return list of implicit symbols for testing."""
-    return ["x", "y", "z", "Nx", "Ny", "Nz"]
+    return list(COORDINATE_SYMBOL_NAMES + DIMENSION_CONSTANT_NAMES)
 
 
 def get_coordinate_symbols():
     """Return list of coordinate symbols (x, y, z)."""
-    return ["x", "y", "z"]
+    return list(COORDINATE_SYMBOL_NAMES)
 
 
 def get_dimension_symbols():
     """Return list of dimension symbols (Nx, Ny, Nz)."""
-    return ["Nx", "Ny", "Nz"]
+    return list(DIMENSION_CONSTANT_NAMES)
 
 
 def get_array_literal_parse_test_data():
@@ -533,7 +537,7 @@ def get_symbol_table_error_test_data():
         dynamic SetDFsToConstant {
           const real64 PI = 3.141592653589793;
           const real32 PI = 3.14159265;
-          const real16 PI = 3.141;
+          const real PI = 3.141;
           f.out[x, y, z | :] = PI;
         }
         """, "f"),
@@ -564,7 +568,7 @@ def get_symbol_table_error_test_data():
         initializer SetDFsToConstant {
           const real64 PI = 3.141592653589793;
           const real32 PI = 3.14159265;
-          const real16 PI = 3.141;
+          const real PI = 3.141;
           f.out[x, y, z | :] = PI;
         }
         """, "f"),
@@ -600,16 +604,16 @@ def get_symbol_table_error_test_data():
         
         # Gauge block tests
         ("gauge_block", "symbol_exists", GeLBExSymbolExists, """
-        gauge PiTimesCurrentState(out = {int state;}) {
+        gauge PiTimesCurrentState -> (int state) {
           const real64 PI = 3.141592653589793;
           const real32 PI = 3.14159265;
-          const real16 PI = 3.141;
+          const real PI = 3.141;
           state = PI*f.in[x | 0];
         }
         """, "f"),
         
         ("gauge_block", "symbol_unknown", GeLBExSymbolUnknown, """
-        gauge PiTimesCurrentState(out = {int state;}) {
+        gauge PiTimesCurrentState -> (int state) {
           state = PI *f.in[x | 0];
         }
         """, "f"),
@@ -661,7 +665,7 @@ def get_symbol_table_valid_test_data():
         
         # Gauge block valid test
         ("gauge_block", """
-        gauge PiTimesCurrentState(out = {int state;}) {
+        gauge PiTimesCurrentState -> (int state) {
           const real64 PI = 3.141592653589793;
           state = f.in[x | 0];
         }
@@ -796,7 +800,6 @@ def get_data_type_test_data():
         ("scalar", "data_type", "int", "(ArrayDataType int (List ))"),
         ("scalar", "data_type", "real64", "(ArrayDataType real64 (List ))"),
         ("scalar", "data_type", "real32", "(ArrayDataType real32 (List ))"),
-        ("scalar", "data_type", "real16", "(ArrayDataType real16 (List ))"),
         ("scalar", "data_type", "real", "(ArrayDataType real (List ))"),
         
         # Scalar data types for "scalar_data_type" rule (same expected output)
@@ -808,7 +811,6 @@ def get_data_type_test_data():
         ("scalar", "scalar_data_type", "int", "(ArrayDataType int (List ))"),
         ("scalar", "scalar_data_type", "real64", "(ArrayDataType real64 (List ))"),
         ("scalar", "scalar_data_type", "real32", "(ArrayDataType real32 (List ))"),
-        ("scalar", "scalar_data_type", "real16", "(ArrayDataType real16 (List ))"),
         ("scalar", "scalar_data_type", "real", "(ArrayDataType real (List ))"),
         
         # Array data types for "data_type" rule (element_dtype is now a string)
@@ -1041,7 +1043,7 @@ def create_block_template(block_type, content):
         "lattices": f"lattices {{ {content} }}",
         "initializer": f"initializer Init {{ {content} }}",
         "dynamic": f"dynamic Dyn {{ {content} }}",
-        "gauge": f"gauge Out(out = {{int val;}}) {{ {content} }}",
+        "gauge": f"gauge Out -> (int val) {{ {content} }}",
         "node_classes": f"node_classes {{ {content} }}",
         "geometry": f"geometry {{ {content} }}"
     }

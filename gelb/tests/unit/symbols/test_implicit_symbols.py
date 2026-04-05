@@ -5,6 +5,7 @@ from gelb.frontend.stage1_frontend import (
     get_ast, build_symbols_tables, add_implicit_symbols
 )
 from gelb.tests.test_utils import get_resolved_ast
+from gelb.utils.exceptions import GeLBExSymbolUnknown
 
 
 def test_1d_implicit_symbols():
@@ -27,7 +28,7 @@ dynamic Update {
     f.out[x | 0] = 1;
 }
 
-gauge Output(out = {int val;}) {
+gauge Output -> (int val) {
     val = f.in[x | 0];
 }
 
@@ -84,7 +85,7 @@ dynamic Update {
     f.out[x,y | :] = f.in[x,y | :];
 }
 
-gauge Output(out = {real val;}) {
+gauge Output -> (real val) {
     val = f.in[x,y | 0];
 }
 
@@ -137,7 +138,7 @@ dynamic Update {
     f.out[x,y,z | :] = f.in[x,y,z | :];
 }
 
-gauge Output(out = {real val;}) {
+gauge Output -> (real val) {
     val = f.in[x,y,z | 0];
 }
 
@@ -192,7 +193,7 @@ dynamic Update {
     f.out[x | :] = f.in[x | :] + 1;
 }
 
-gauge Output(out = {int val;}) {
+gauge Output -> (int val) {
     val = f.in[x | 0];
 }
 
@@ -233,7 +234,7 @@ dynamic Update {
     f.out[x | 0] = 1;
 }
 
-gauge Output(out = {int val;}) {
+gauge Output -> (int val) {
     val = f.in[x | 0];
 }
 
@@ -286,7 +287,7 @@ dynamic Update {
     f.out[x | 0] = 1;
 }
 
-gauge Output(out = {int val;}) {
+gauge Output -> (int val) {
     val = f.in[x | 0];
 }
 
@@ -310,6 +311,96 @@ geometry {
     assert ast.initializers[0].symbol_defs.contains("x"), "initializer should have x"
     assert ast.dynamics[0].symbol_defs.contains("x"), "dynamic should have x"
     assert ast.gauges[0].symbol_defs.contains("x"), "gauge should have x"
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        """simulation_description("active Nx in 1D geometry");
+lattices { lattice f(1, 1, int, 8, true); }
+initializer Init { f.out[x | 0] = Nx; }
+dynamic Dyn { f.out[x | 0] = f.in[x | 0]; }
+gauge Out -> (int val) { val = f.in[x | 0]; }
+node_classes { node_class BULK(Init, Dyn, Out); }
+geometry { nodes[0:Nx] = BULK; }
+""",
+        """simulation_description("active Ny in 2D geometry");
+lattices { lattice f(2, 1, int, {8, 8}, {true, true}); }
+initializer Init { f.out[x, y | 0] = Ny; }
+dynamic Dyn { f.out[x, y | 0] = f.in[x, y | 0]; }
+gauge Out -> (int val) { val = f.in[x, y | 0]; }
+node_classes { node_class BULK(Init, Dyn, Out); }
+geometry { nodes[:, 0:Ny] = BULK; }
+""",
+        """simulation_description("active Nz in 3D geometry");
+lattices { lattice f(3, 1, int, {8, 8, 8}, {true, true, true}); }
+initializer Init { f.out[x, y, z | 0] = Nz; }
+dynamic Dyn { f.out[x, y, z | 0] = f.in[x, y, z | 0]; }
+gauge Out -> (int val) { val = f.in[x, y, z | 0]; }
+node_classes { node_class BULK(Init, Dyn, Out); }
+geometry { nodes[:, :, 0:Nz] = BULK; }
+""",
+    ],
+)
+def test_active_implicit_symbols_are_allowed_before_injection(code):
+    ast = get_ast("gelb_program", code)
+    build_symbols_tables(ast)
+
+
+@pytest.mark.parametrize(
+    "symbol, code",
+    [
+        (
+            "y",
+            """simulation_description("inactive y in 1D");
+lattices { lattice f(1, 1, int, 8, true); }
+initializer Init { f.out[x | 0] = y; }
+dynamic Dyn { f.out[x | 0] = f.in[x | 0]; }
+gauge Out -> (int val) { val = f.in[x | 0]; }
+node_classes { node_class BULK(Init, Dyn, Out); }
+geometry { nodes[:] = BULK; }
+""",
+        ),
+        (
+            "Ny",
+            """simulation_description("inactive Ny in 1D geometry");
+lattices { lattice f(1, 1, int, 8, true); }
+initializer Init { f.out[x | 0] = 0; }
+dynamic Dyn { f.out[x | 0] = f.in[x | 0]; }
+gauge Out -> (int val) { val = f.in[x | 0]; }
+node_classes { node_class BULK(Init, Dyn, Out); }
+geometry { nodes[0:Ny] = BULK; }
+""",
+        ),
+        (
+            "z",
+            """simulation_description("inactive z in 2D");
+lattices { lattice f(2, 1, int, {8, 8}, {true, true}); }
+initializer Init { f.out[x, y | 0] = z; }
+dynamic Dyn { f.out[x, y | 0] = f.in[x, y | 0]; }
+gauge Out -> (int val) { val = f.in[x, y | 0]; }
+node_classes { node_class BULK(Init, Dyn, Out); }
+geometry { nodes[:, :] = BULK; }
+""",
+        ),
+        (
+            "Nz",
+            """simulation_description("inactive Nz in 2D geometry");
+lattices { lattice f(2, 1, int, {8, 8}, {true, true}); }
+initializer Init { f.out[x, y | 0] = 0; }
+dynamic Dyn { f.out[x, y | 0] = f.in[x, y | 0]; }
+gauge Out -> (int val) { val = f.in[x, y | 0]; }
+node_classes { node_class BULK(Init, Dyn, Out); }
+geometry { nodes[:, 0:Nz] = BULK; }
+""",
+        ),
+    ],
+)
+def test_inactive_implicit_symbols_are_not_allowed_before_injection(symbol, code):
+    ast = get_ast("gelb_program", code)
+    with pytest.raises(GeLBExSymbolUnknown) as excinfo:
+        build_symbols_tables(ast)
+    assert symbol in str(excinfo.value)
 
 
 # ==============================================================================
@@ -336,7 +427,7 @@ dynamic Update {
     f.out[x | 0] = 1;
 }
 
-gauge Output(out = {int val;}) {
+gauge Output -> (int val) {
     val = f.in[x | 0];
 }
 
@@ -394,7 +485,7 @@ dynamic Update {
     f.out[x,y | :] = f.in[x,y | :];
 }
 
-gauge Output(out = {real val;}) {
+gauge Output -> (real val) {
     val = f.in[x,y | 0];
 }
 
@@ -446,7 +537,7 @@ dynamic Update {
     f.out[x,y,z | :] = f.in[x,y,z | :];
 }
 
-gauge Output(out = {real val;}) {
+gauge Output -> (real val) {
     val = f.in[x,y,z | 0];
 }
 
@@ -501,7 +592,7 @@ dynamic Update {
     f.out[x | :] = f.in[x | :] + 1;
 }
 
-gauge Output(out = {int val;}) {
+gauge Output -> (int val) {
     val = f.in[x | 0];
 }
 
@@ -545,7 +636,7 @@ dynamic Update {
     f.out[x | 0] = 1;
 }
 
-gauge Output(out = {int val;}) {
+gauge Output -> (int val) {
     val = f.in[x | 0];
 }
 
@@ -579,6 +670,78 @@ geometry {
     assert ast.initializers[0].symbol_defs.contains("x"), "x should be added to initializer"
 
 
+def _program_with_t_usage(dim):
+    if dim == 1:
+        return """simulation_description("test t in 1D");
+lattices { lattice f(1, 1, int, 8, true); }
+initializer Init { f.out[x | 0] = t; }
+dynamic Dyn { f.out[x | 0] = f.in[x | 0] + t; }
+gauge Out -> (int step, int val) { step = t; val = f.in[x | 0]; }
+node_classes { node_class BULK(Init, Dyn, Out); }
+geometry { nodes[:] = BULK; }
+"""
+    if dim == 2:
+        return """simulation_description("test t in 2D");
+lattices { lattice f(2, 1, int, {8, 8}, {true, true}); }
+initializer Init { f.out[x, y | 0] = t; }
+dynamic Dyn { f.out[x, y | 0] = f.in[x, y | 0] + t; }
+gauge Out -> (int step) { step = t; }
+node_classes { node_class BULK(Init, Dyn, Out); }
+geometry { nodes[:, :] = BULK; }
+"""
+    return """simulation_description("test t in 3D");
+lattices { lattice f(3, 1, int, {4, 4, 4}, {true, true, true}); }
+initializer Init { f.out[x, y, z | 0] = t; }
+dynamic Dyn { f.out[x, y, z | 0] = f.in[x, y, z | 0] + t; }
+gauge Out -> (int step) { step = t; }
+node_classes { node_class BULK(Init, Dyn, Out); }
+geometry { nodes[:, :, :] = BULK; }
+"""
+
+
+@pytest.mark.parametrize("dim", [1, 2, 3])
+def test_implicit_t_symbol_injected(dim):
+    """`t` is added to every initializer/dynamic/gauge block, any dimensionality."""
+    ast = get_ast("gelb_program", _program_with_t_usage(dim))
+    ast = build_symbols_tables(ast)
+    ast = add_implicit_symbols(ast)
+
+    for block in [ast.initializers[0], ast.dynamics[0], ast.gauges[0]]:
+        assert block.symbol_defs.contains_local("t"), \
+            f"t should be in {block.__class__.__name__}"
+        sdef = block.symbol_defs.get_symbol_definition("t")
+        assert sdef.tag == "implicit timestep variable"
+
+
+def test_implicit_t_not_injected_into_lattices_or_node_classes():
+    """`t` must not leak into lattices, node_classes, or geometry."""
+    ast = get_ast("gelb_program", _program_with_t_usage(1))
+    ast = build_symbols_tables(ast)
+    ast = add_implicit_symbols(ast)
+
+    assert not ast.lattices.symbol_defs.contains_local("t")
+    assert not ast.node_classes.symbol_defs.contains_local("t")
+
+
+def test_implicit_t_has_int_type_after_inference():
+    """`t` should type-infer as scalar int."""
+    from gelb.gelb_ast.ASTNodes import ArrayDataType_N
+    ast = get_resolved_ast(_program_with_t_usage(1))
+    from gelb.frontend.stage1_frontend import infer_types
+    ast = infer_types(ast)
+
+    gauge = ast.gauges[0]
+    found_t = False
+    for stmt in gauge.stmts:
+        if hasattr(stmt, 'lhs') and hasattr(stmt.lhs, 'name') and stmt.lhs.name == 'step':
+            rhs = stmt.rhs
+            assert rhs.inferred_type is not None
+            assert str(rhs.inferred_type.element_dtype) in ('int', 'int64')
+            found_t = True
+            break
+    assert found_t, "did not find step = t assignment in the gauge block"
+
+
 def test_new_syntax_blocks_without_lattice_coordinates():
     """Test that blocks that don't need lattice coordinates don't get them with new syntax."""
     test_string = """simulation_description("Test blocks without coordinates - new syntax");
@@ -599,7 +762,7 @@ dynamic Update {
     f.out[x | 0] = 1;
 }
 
-gauge Output(out = {int val;}) {
+gauge Output -> (int val) {
     val = f.in[x | 0];
 }
 

@@ -1,0 +1,87 @@
+// 1D heat diffusion with Dirichlet BCs (LBM-BGK, D1Q3)
+// Reference: LBM_2017.pdf, pages 31-42
+//
+// D1Q3 lattice: c = {0, +1, -1}, w = {4/6, 1/6, 1/6}
+// Equilibrium (diffusion): feq_i = w_i * T
+// Collision (BGK): f_i* = (1-omega)*f_i + omega*feq_i
+// Streaming (pull): f_i(x, t+1) = f_i*(x - c_i, t)
+//
+// Boundary conditions: fixed temperature (equilibrium scheme)
+//   Left wall  (x=0):      T = T_left  = 1.0
+//   Right wall (x=GRID-1): T = T_right = 0.0
+//
+// Diffusivity (Krueger et al. 2017, Sec. 4.3 / Sec. 8.4.1):
+//   alpha = c_s^2 * (tau - 1/2) = (1/3)*(0.75 - 0.5) ~= 0.0833
+// With tau=0.75 this gives omega = 1/tau ~= 1.333.
+// Expected steady state: a static wall cell imposes its temperature
+// 1 - tau cells from its own centre, towards the bulk, so the bulk
+// cells settle on the line from T = 1 at x = 1 - tau to T = 0 at
+// x = GRID - 2 + tau (0.25 and 30.75 here), not on 1 - x/(GRID-1).
+// heat_diffusion_1d_antibounceback.gelb puts the walls half-way
+// between cells instead, for any tau.
+
+simulation_description("1D heat diffusion with Dirichlet BCs (D1Q3)");
+
+global_constants {
+    const int GRID = 32;
+    // D1Q3 weights
+    const array[real, 3] W = {4.0/6.0, 1.0/6.0, 1.0/6.0};
+    const array[real, 3] EX = {0.0, 1.0, -1.0};
+    // Relaxation: alpha = c_s^2 * (tau - 0.5) = (1/3)(0.25) ~= 0.0833;
+    // tau = 0.75, omega = 1/tau ~= 1.333.
+    const real tau = 0.75;
+    const real omega = 1.0 / tau;
+
+    // Boundary temperatures
+    const real T_left = 1.0;
+    const real T_right = 0.0;
+}
+
+lattices {
+    lattice f(1, 3, real, GRID, false);   // non-periodic
+}
+
+function DiffusionEq(real T) -> (array[real, 3] feq) {
+    feq = W * T;
+}
+
+// Bulk: initialize to equilibrium at T = T_left (uniform hot start)
+initializer InitBulk {
+    f.out[x | :] = DiffusionEq(T_left);
+}
+
+// Left wall: initialize to T_left equilibrium
+initializer InitLeft {
+    f.out[x | :] = DiffusionEq(T_left);
+}
+
+// Right wall: initialize to T_right equilibrium
+initializer InitRight {
+    f.out[x | :] = DiffusionEq(T_right);
+}
+
+
+// Bulk: collision + streaming (pull scheme)
+dynamic CollideAndStream {
+    array[real, 3] fIn = upstream_dfs(f, x, EX);
+    real T = sum(fIn);
+    array[real, 3] feq = DiffusionEq(T);
+    f.out[x | :] = (1.0 - omega) * fIn + omega * feq;
+}
+
+// Output temperature (shared by all node classes)
+gauge Temperature -> (real temperature) {
+    temperature = sum(f.in[x | :]);
+}
+
+node_classes {
+    node_class BULK(InitBulk, CollideAndStream, Temperature);
+    node_class LEFT_WALL(InitLeft, Temperature);
+    node_class RIGHT_WALL(InitRight, Temperature);
+}
+
+geometry {
+    nodes[:] = BULK;
+    nodes[0] = LEFT_WALL;
+    nodes[GRID - 1] = RIGHT_WALL;
+}

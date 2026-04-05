@@ -1,0 +1,26 @@
+// Both SOLID columns become WALL: x=0 sees FLUID at x=9 across the
+// periodic seam. Resolve with validate_continuity=False to isolate border;
+// the separate continuity validator rejects the unlike seam classes.
+simulation_description("border crosses the periodic seam");
+    global_constants { const int CX = 5; const int CY = 5; const int R = 3;
+                        const array[real, 3] W3 = {0.5, 0.25, 0.25};
+                         }
+    lattices { lattice f(2, 1, int, {10, 10}, {true, false}); }
+
+    initializer InitA { f.out[x, y | 0] = 0; }
+    initializer InitB { f.out[x, y | 0] = 1; }
+    dynamic DynA { f.out[x, y | 0] = f.in[x, y | 0]; }
+    dynamic DynB { f.out[x, y | 0] = f.in[x, y | 0]; }
+    gauge OutA -> (int val) { val = f.in[x, y | 0]; }
+    gauge OutB -> (int val) { val = f.in[x, y | 0]; }
+
+    node_classes {
+        node_class FLUID(InitA, DynA, OutA);
+        node_class WALL(InitB, DynB, OutB);
+        node_class SOLID() masked;
+    }
+    geometry {
+        nodes[:, :] = FLUID;
+        nodes[where x <= 1] = SOLID;
+        border(SOLID) = WALL;
+    }

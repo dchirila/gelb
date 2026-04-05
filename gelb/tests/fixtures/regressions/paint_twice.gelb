@@ -1,0 +1,8 @@
+simulation_description("Tutorial probe");
+global_constants { const int N = 8; }
+lattices { lattice f(1, 1, real, N, false); }
+initializer I { f.out[x | 0] = real(x); }
+dynamic D { f.out[x | 0] = f.in[x | 0]; }
+gauge G -> (real v) { v = f.in[x | 0]; }
+node_classes { node_class B(I, D, G); }
+geometry { nodes[0:2 * x] = B; }

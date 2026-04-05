@@ -123,11 +123,11 @@ class TestMidwareWithComplexPrograms:
             g.out[x | 0] = TAU;
         }
         
-        gauge Output1(out = {int state;}) {
+        gauge Output1 -> (int state) {
             state = f.in[x | 0];
         }
         
-        gauge Output2(out = {real value;}) {
+        gauge Output2 -> (real value) {
             value = g.in[x | 0];
         }
         
@@ -173,7 +173,7 @@ class TestMidwareWithComplexPrograms:
             f.out[x | 0] = f.in[x | 0] + 1.0;
         }
         
-        gauge Output(out = {real result;}) {
+        gauge Output -> (real result) {
             result = f.in[x | 0] / PI;
         }
         

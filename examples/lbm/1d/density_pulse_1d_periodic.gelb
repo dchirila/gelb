@@ -1,0 +1,86 @@
+// 1D density pulse advection with periodic BCs (LBM-BGK, D1Q3)
+//
+// D1Q3 lattice: c = {0, +1, -1}, w = {2/3, 1/6, 1/6}, cs^2 = 1/3
+//
+// Equilibrium: feq_i = w_i * rho * (1 + 3*c_i*u + 4.5*(c_i*u)^2 - 1.5*u^2)
+// Collision (BGK): f_i* = f_i - omega * (f_i - feq_i)
+// Streaming (pull): f_i(x, t+1) = f_i*(x - c_i, t)
+//
+// Initial condition: rectangular density pulse (rho=1.5 for 24<=x<=40,
+//   rho=1.0 elsewhere) with uniform velocity u0=0.1
+// Expected behavior: pulse advects rightward at u0 and diffuses
+//
+// Ma note (Krueger et al. 2017, Sec. 7.2.1).  With u0=0.1 the Mach number
+// is Ma = u0 * $\sqrt{3}$ ~= 0.173, above the Ma << 0.1 guideline; combined
+// with a 50% density perturbation (rho in [1.0, 1.5]) this makes the
+// example explicitly compressible.  Quantitative decay rates deviate
+// from the incompressible advection-diffusion solution at the few-%
+// level, but the qualitative "pulse advects and diffuses" behavior
+// the example demonstrates is unaffected.  For a stricter Ma budget,
+// drop u0 to 0.03 (Ma ~= 0.05) -- note that the advection timescale
+// will dilate by ~3x, so bump --num-timesteps accordingly.
+
+simulation_description("1D density pulse advection (LBM-BGK, D1Q3)");
+
+global_constants {
+    const int GRID = 64;
+    
+    // Physical parameters
+    const real tau = 0.8;           // Relaxation time
+    const real omega = 1.0 / tau;   // Relaxation rate
+
+    // D1Q3 lattice weights
+    const array[real, 3] W = {2.0/3.0, 1.0/6.0, 1.0/6.0};
+    
+    const array[real, 3] EX = {0.0, 1.0, -1.0};
+    
+    // Background state
+    const real rho0 = 1.0;
+    const real u0 = 0.1;           // Advection velocity
+}
+
+lattices {
+    lattice f(1, 3, real, GRID, true);
+}
+
+function Eq1D(real rho, real u) -> (array[real, 3] feq) {
+    real usq = u^2;
+    array[real, 3] eu = EX * u;
+    feq = W * rho * (1.0 + 3.0*eu + 4.5*eu*eu - 1.5*usq);
+}
+
+// Initialize: equilibrium with density pulse
+// Rectangular pulse: rho = 1.5 for 24 <= x <= 40, rho = 1.0 elsewhere
+initializer InitPulse {
+    real drho = 0.5 * (x >= 24) * (x <= 40);
+    real rho = rho0 + drho;
+
+    f.out[x | :] = Eq1D(rho, u0);
+}
+
+// Combined collision + streaming (pull scheme)
+dynamic CollideAndStream {
+    // Stream: pull from upstream neighbors
+    array[real, 3] fIn = upstream_dfs(f, x, EX);
+    
+    // Macroscopic quantities
+    real rho = sum(fIn);
+    real u = dot_prod(EX, fIn) / rho;
+
+    // BGK collision
+    f.out[x | :] = fIn - omega * (fIn - Eq1D(rho, u));
+}
+
+gauge Hydrodynamics -> (real density, real velocity) {
+    array[real, 3] fIn = f.in[x | :];
+    density = sum(fIn);
+    velocity = dot_prod(EX, fIn) / density;
+}
+
+node_classes {
+    node_class BULK(InitPulse, CollideAndStream, Hydrodynamics);
+}
+
+geometry {
+    nodes[:] = BULK;
+}

@@ -12,7 +12,7 @@ dynamic IncrementDFs { //
   f.out[x | 0] = f.in[x | 0] + 1;
 }
 
-gauge CurrentState(out = {int state;}) { //
+gauge CurrentState -> (int state) { //
   state = f.in[x | 0];
 }
 

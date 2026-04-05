@@ -1,5 +1,10 @@
 # Bootstrap script for GeLB development environment
-# Removes existing venv, creates a new one, and installs requirements using uv
+# Removes existing venv, creates a new one, and installs requirements using uv.
+#
+# Checks system prerequisites (Python >= 3.10, git) and fails fast with
+# actionable hints when anything is missing. Java is NOT required at
+# bootstrap time -- it's only needed by .\scripts\regenerate_antlr.ps1
+# (and only when the ANTLR4 generated_code/ files are missing or out of date).
 
 $ErrorActionPreference = "Stop"
 
@@ -11,17 +16,93 @@ $rootDir = Split-Path -Parent $PSScriptRoot
 # Define venv path
 $venvPath = Join-Path $rootDir ".venv"
 
-# Check if uv is installed
-try {
-    uv --version | Out-Null
+# --- Prerequisite checks ---
+#
+# git is a hard requirement (the project itself is a git repo). Python
+# >= 3.10 is also hard (matches `requires-python` in pyproject.toml).
+# A C/Fortran toolchain is NOT checked here on Windows because the GeLB
+# CPU backend on Windows typically uses MinGW/MSYS2 or WSL -- which path
+# the user takes is up to them, and we don't want to second-guess it.
+function Test-Prereqs {
+    $missingHard = @()
+
+    # Hard: git
+    try { $null = Get-Command git -ErrorAction Stop }
+    catch { $missingHard += "git" }
+
+    # Hard: python >= 3.10
+    $pythonCmd = $null
+    foreach ($candidate in @("python3", "python", "py")) {
+        try {
+            $null = Get-Command $candidate -ErrorAction Stop
+            $pythonCmd = $candidate
+            break
+        } catch { }
+    }
+    if (-not $pythonCmd) {
+        $missingHard += "python (>= 3.10)"
+    } else {
+        try {
+            $pyver = & $pythonCmd -c "import sys; print('{}.{}'.format(*sys.version_info[:2]))" 2>$null
+            $parts = $pyver -split '\.'
+            $pymaj = [int]$parts[0]
+            $pymin = [int]$parts[1]
+            if ($pymaj -lt 3 -or ($pymaj -eq 3 -and $pymin -lt 10)) {
+                $missingHard += "python >= 3.10 (found $pyver)"
+            }
+        } catch {
+            $missingHard += "python (version check failed)"
+        }
+    }
+
+    if ($missingHard.Count -gt 0) {
+        Write-Host ""
+        $list = ($missingHard | ForEach-Object { "  - $_" }) -join "`n"
+        Write-Error "The following required tools are missing:`n$list`n`nInstall them and re-run this script. On Windows you can use winget:`n  winget install --id Git.Git`n  winget install --id Python.Python.3.12"
+        exit 1
+    }
 }
-catch {
-    Write-Host "uv is not installed. Installing uv..."
-    # Install uv using the official installer
+
+Test-Prereqs
+
+# --- uv detection / install ---
+#
+# uv ships as a single static binary on Windows; the official installer
+# drops it into $env:LOCALAPPDATA\Programs\uv (newer) or $env:USERPROFILE\
+# .cargo\bin (older). We check both before falling back to the installer.
+function Test-UvOnPath {
+    try {
+        $null = Get-Command uv -ErrorAction Stop
+        return $true
+    } catch {
+        $candidates = @(
+            (Join-Path $env:LOCALAPPDATA "Programs\uv\uv.exe"),
+            (Join-Path $env:USERPROFILE ".cargo\bin\uv.exe"),
+            (Join-Path $env:USERPROFILE ".local\bin\uv.exe")
+        )
+        foreach ($candidate in $candidates) {
+            if (Test-Path $candidate) {
+                $env:Path = (Split-Path $candidate -Parent) + ";" + $env:Path
+                return $true
+            }
+        }
+        return $false
+    }
+}
+
+if (-not (Test-UvOnPath)) {
+    Write-Host "uv is not installed. Installing uv via the official installer..."
     irm https://astral.sh/uv/install.ps1 | iex
-    # Refresh PATH
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+    # Refresh PATH from the registry so newly installed binaries are visible.
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
+                [System.Environment]::GetEnvironmentVariable("Path", "User")
+    if (-not (Test-UvOnPath)) {
+        Write-Error "uv was installed but isn't on PATH. Restart your terminal and re-run."
+        exit 1
+    }
 }
+
+Write-Host "uv: $(uv --version) at $((Get-Command uv).Source)"
 
 # Remove existing venv if it exists
 if (Test-Path $venvPath) {

@@ -4,6 +4,17 @@ from abc import ABC, abstractmethod
 from gelb.gelb_ast import SymbolReference
 
 
+_AST_METADATA_FIELD_NAMES = frozenset({
+    'inferred_type',
+    'symbol_tag',
+    'function_block',
+    'is_full_df_range',
+    'collinearity_rewrites',
+    'slice_df_expansions',
+    'cse_temps_emitted',
+})
+
+
 class Node_N(ABC):
     """
     Base class (for all GeLB AST Node-types)
@@ -19,6 +30,7 @@ class Node_N(ABC):
         return [
             field for field in dir(self) if not (
                     field.startswith('_') or
+                    field in _AST_METADATA_FIELD_NAMES or
                     field.startswith('code_range') or
                     field.startswith('get_children') or
                     field.startswith('iterate_over_ast_fields') or
@@ -123,7 +135,7 @@ class Program_N(Node_N):
         self.initializers = None
         self.dynamics = None
         self.gauges = None
-        # self.functions = None
+        self.functions = None
         self.node_classes = None
         self.geometry = None
         # symbol_defs table (built after AST construction)
@@ -140,6 +152,8 @@ class Program_N(Node_N):
         result += f" {str(self.initializers)}"
         result += f" {str(self.dynamics)}"
         result += f" {str(self.gauges)}"
+        if self.functions is not None:
+            result += f" {str(self.functions)}"
         result += f" {str(self.node_classes)}"
         result += f" {str(self.geometry)}"
         result += ")"
@@ -223,8 +237,6 @@ class LatticesBlock_N(Block_N):
 class LatticeInstaStmt_N(Node_N):
     """
     Represents a lattice-instantiation statement.
-
-    TODO (validation): only allow inside LatticesBlock_N
     """
     def __init__(self, code_range, name, d, q, df_type, grid_size, periodicity):
         super().__init__(code_range)
@@ -254,25 +266,32 @@ class NodeClassesBlock_N(Block_N):
 class NodeClassInstaStmt_N(Node_N):
     """
     Represents a node-class-instantiation statement.
-
-    TODO (validation): only allow inside NodeClassesBlock_N
-    TODO (GeLB-v1): allow multiple {initializers, dynamics, gauges}
     """
-    def __init__(self, code_range, name, initializer, dynamic, gauge):
+    def __init__(self, code_range, name, initializer, dynamic, gauge,
+                 masked=False):
         super().__init__(code_range)
         self.name = name
         self.initializer = initializer
         self.dynamic = dynamic
         self.gauge = gauge
+        self.masked = masked
+
+    def get_children(self):
+        return [c for c in (self.name, self.initializer, self.dynamic,
+                            self.gauge) if c is not None]
 
     def __str__(self):
-        return (
-            f"(NodeClassInstaStmt"
-            f" {self.name}"
-            f" {self.initializer}"
-            f" {self.dynamic}"
-            f" {self.gauge})"
-        )
+        parts = [f"(NodeClassInstaStmt {self.name}"]
+        if self.initializer is not None:
+            parts.append(f" {self.initializer}")
+        if self.dynamic is not None:
+            parts.append(f" {self.dynamic}")
+        if self.gauge is not None:
+            parts.append(f" {self.gauge}")
+        if self.masked:
+            parts.append(" masked")
+        parts.append(")")
+        return "".join(parts)
 
 
 class InitializerBlock_N(Block_N):
@@ -323,6 +342,27 @@ class GaugeBlock_N(Block_N):
             f" {' '.join(f'{e}' for e in self.outputs)}"
             f" {' '.join(f'{e}' for e in self.stmts)})"
         )
+
+
+class FunctionBlock_N(Block_N):
+    """
+    Represents a user-defined function block.
+
+    Functions in GeLB cannot have side effects -- they cannot write to or
+    read from lattices, only compute values from their inputs and return
+    values via their outputs.
+    """
+    def __init__(self, code_range, name, inputs, outputs, stmts):
+        super().__init__(code_range, stmts)
+        self.name = name         # Identifier_N
+        self.inputs = inputs     # List_N of VariableDeclarationStmt_N
+        self.outputs = outputs   # List_N of VariableDeclarationStmt_N
+
+    def __str__(self):
+        in_str = ' '.join(str(e) for e in self.inputs)
+        out_str = ' '.join(str(e) for e in self.outputs)
+        body_str = ' '.join(str(e) for e in self.stmts)
+        return f"(Function {self.name} (in {in_str}) (out {out_str}) {body_str})"
 
 
 class GeometryBlock_N(Block_N):
@@ -661,8 +701,8 @@ class TypePromotionNode_N(Expr_N):
     which helps with code generation and debugging.
     
     Examples:
-        int → real: TypePromotionNode_N(IntLiteral_N(5), ArrayDataType_N("real", List_N()))
-        bool → int: TypePromotionNode_N(BoolLiteral_N(true), ArrayDataType_N("int", List_N()))
+        int -> real: TypePromotionNode_N(IntLiteral_N(5), ArrayDataType_N("real", List_N()))
+        bool -> int: TypePromotionNode_N(BoolLiteral_N(true), ArrayDataType_N("int", List_N()))
     """
     def __init__(self, code_range, expr, target_type):
         super().__init__(code_range)
@@ -754,6 +794,60 @@ class IntrinsicFunctionCall_N(Expr_N):
     def __str__(self):
         args_str = ", ".join(str(arg) for arg in self.arguments.elements) if self.arguments else ""
         return f"(IntrinsicCall {self.function_name}({args_str}))"
+
+
+class UserFunctionCall_N(Expr_N):
+    """
+    Represents a call to a user-defined function.
+    """
+    def __init__(self, code_range, function_name, arguments):
+        super().__init__(code_range)
+        self.function_name = function_name  # Identifier_N
+        self.arguments = arguments          # List_N of Expr_N
+
+    def get_children(self):
+        children = set()
+        if self.arguments is not None:
+            children.add(self.arguments)
+        return children
+
+    def get_referenced_symbols(self):
+        result = set()
+        if self.arguments is not None:
+            result |= self.arguments.get_referenced_symbols()
+        return result
+
+    def replace_symbol_references(self, old_symbol_name, new_symbol_name):
+        if self.arguments is not None:
+            self.arguments.replace_symbol_references(old_symbol_name, new_symbol_name)
+
+    def __str__(self):
+        args_str = ", ".join(str(arg) for arg in self.arguments.elements) if self.arguments else ""
+        return f"(UserFunctionCall {self.function_name}({args_str}))"
+
+
+class DestructuringAssignmentStmt_N(Stmt_N):
+    """
+    Represents a destructuring assignment statement.
+
+    Example: {rho, U, V} = DFsToRhoUV(fIn);
+    """
+    def __init__(self, code_range, targets, rhs):
+        super().__init__(code_range)
+        self.targets = targets  # List_N of Identifier_N
+        self.rhs = rhs          # Expr_N (typically UserFunctionCall_N)
+
+    def get_referenced_symbols(self):
+        result = set()
+        for target in self.targets:
+            result |= target.get_referenced_symbols()
+        if self.rhs is not None:
+            result |= self.rhs.get_referenced_symbols()
+        return result
+
+    def __str__(self):
+        targets_str = ", ".join(str(t) for t in self.targets)
+        return f"(DestructuringAssignment {{{targets_str}}} = {self.rhs})"
 
 
 class Literal_N(Expr_N):
@@ -882,15 +976,6 @@ class Array4DLiteral_N(ArrayLiteral_N):
         )
 
 
-# class FunctionCall_N(Node_N):
-#     """
-#     Represents a call of an intrinsic / user-defined function.
-#     """
-#     def __init__(self, code_range, args_list):
-#         super().__init__(code_range)
-#         self.args_list = args_list  # TODO: make this a =List_N= !
-
-
 class ConstantDefinitionStmt_N(Stmt_N):
     """
     Represents a constant-definition statement.
@@ -958,6 +1043,51 @@ class PaintNodesStmt_N(AssignmentStmt_N):
             f"(PaintNodesStmt"
             f" {self.lhs}"
             f" {self.rhs})"
+        )
+
+
+class BorderStmt_N(Stmt_N):
+    """
+    Represents a border statement (@GeometryBlock).
+
+    ``border(source) = target;`` repaints the boundary cells of
+    *source* (those adjacent to a cell of a different node class)
+    as *target*.
+    """
+    def __init__(self, code_range, source, target):
+        super().__init__(code_range)
+        self.source = source  # Identifier_N -- node class to erode
+        self.target = target  # Identifier_N -- node class for boundary
+
+    def __str__(self):
+        return (
+            f"(BorderStmt"
+            f" {self.source}"
+            f" {self.target})"
+        )
+
+
+class ConditionalPaintStmt_N(Stmt_N):
+    """
+    Represents a predicate paint statement.
+
+    ``nodes[where InCircle(x, y, CX, CY, R)] = SOLID;`` evaluates the
+    boolean ``predicate`` at compile time for every grid cell, with the
+    implicit coordinates (``x``; ``x, y``; or ``x, y, z``, by rank) bound
+    to that cell, and paints the cells where it holds.
+    """
+    def __init__(self, code_range, predicate, node_class):
+        super().__init__(code_range)
+        self.predicate = predicate          # Expr_N, scalar bool
+        self.node_class = node_class        # Identifier_N
+
+    def get_children_names(self):
+        return ['predicate', 'node_class']
+
+    def __str__(self):
+        return (
+            f"(ConditionalPaintStmt where {self.predicate}"
+            f" {self.node_class})"
         )
 
 

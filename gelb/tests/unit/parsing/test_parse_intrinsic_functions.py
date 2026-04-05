@@ -110,3 +110,74 @@ class TestParseIntrinsicFunctions:
             "(intrinsic_function_call (intrinsic_function_name sum) ( (expr (identifier x)) ))",
             "intrinsic_function_call"
         )
+
+    def test_parse_random_function_no_args(self):
+        """Test parsing random() with no arguments."""
+        assert_cst_equals(
+            "random()",
+            "(expr (intrinsic_function_call (intrinsic_function_name random) ( )))",
+            "expr"
+        )
+
+    def test_parse_random_in_expression(self):
+        """Test parsing random() used in a binary expression."""
+        assert_cst_equals(
+            "random() * 2",
+            "(expr (expr (intrinsic_function_call (intrinsic_function_name random) ( ))) * (expr 2))",
+            "expr"
+        )
+
+    @pytest.mark.parametrize("func_name", ["exp", "abs", "log", "tan", "tanh"])
+    def test_parse_scalar_math_function(self, func_name):
+        """Test parsing single-arg scalar math functions."""
+        assert_cst_equals(
+            f"{func_name}(x)",
+            f"(expr (intrinsic_function_call (intrinsic_function_name {func_name}) ( (expr (identifier x)) )))",
+            "expr"
+        )
+
+    @pytest.mark.parametrize("func_name", ["exp", "abs", "log", "tan", "tanh"])
+    def test_parse_scalar_math_function_in_expression(self, func_name):
+        """Test parsing scalar math functions used in binary expressions."""
+        assert_cst_equals(
+            f"{func_name}(x) + 1",
+            f"(expr (expr (intrinsic_function_call (intrinsic_function_name {func_name}) ( (expr (identifier x)) ))) + (expr 1))",
+            "expr"
+        )
+
+    @pytest.mark.parametrize("func_name", ["min", "max", "mod", "atan2"])
+    def test_parse_two_arg_function(self, func_name):
+        """Test parsing two-argument intrinsic functions."""
+        assert_cst_equals(
+            f"{func_name}(x, y)",
+            f"(expr (intrinsic_function_call (intrinsic_function_name {func_name}) ( (expr (identifier x)) , (expr (identifier y)) )))",
+            "expr"
+        )
+
+    def test_parse_upstream_dfs_2d(self):
+        """Test parsing upstream_dfs(f, x, y, {EX, EY})."""
+        assert_cst_equals(
+            "upstream_dfs(f, x, y, {EX, EY})",
+            "(expr (intrinsic_function_call (intrinsic_function_name upstream_dfs) ( "
+            "(expr (identifier f)) , (expr (identifier x)) , (expr (identifier y)) , "
+            "(expr (array_literal_1d { (expr (identifier EX)) , (expr (identifier EY)) })) )))",
+            "expr"
+        )
+
+    def test_parse_upstream_dfs_1d(self):
+        """Test parsing upstream_dfs(f, x, EX) -- 1D form (no braces)."""
+        assert_cst_equals(
+            "upstream_dfs(f, x, EX)",
+            "(expr (intrinsic_function_call (intrinsic_function_name upstream_dfs) ( "
+            "(expr (identifier f)) , (expr (identifier x)) , (expr (identifier EX)) )))",
+            "expr"
+        )
+
+    @pytest.mark.parametrize("func_name", ["inverse", "determinant"])
+    def test_parse_compile_time_matrix_function(self, func_name):
+        """Test parsing inverse(M) and determinant(M)."""
+        assert_cst_equals(
+            f"{func_name}(M)",
+            f"(expr (intrinsic_function_call (intrinsic_function_name {func_name}) ( (expr (identifier M)) )))",
+            "expr"
+        )

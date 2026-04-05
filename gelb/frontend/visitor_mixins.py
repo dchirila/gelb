@@ -198,6 +198,14 @@ class ProgramTraversalMixin:
                 self.visit(node.lattices, ast_root_node)
             self._after_block_visit(node.lattices, 'lattices')
         
+        # Process function blocks (before other blocks so they can be referenced)
+        if node.functions is not None:
+            for function in node.functions:
+                self._before_block_visit(function, 'function')
+                if hasattr(self, 'visitFunctionBlock_N'):
+                    self.visit(function, ast_root_node)
+                self._after_block_visit(function, 'function')
+
         # Process initializer blocks
         if node.initializers is not None:
             for initializer in node.initializers:
@@ -235,6 +243,18 @@ class ProgramTraversalMixin:
             if hasattr(self, 'visitGeometryBlock_N'):
                 self.visit(node.geometry, ast_root_node)
             self._after_block_visit(node.geometry, 'geometry')
+
+    def _visit_block_stmts(self, node, ast_root_node: Program_N):
+        """Visit every statement in a block that has ``stmts``."""
+        for stmt in node.stmts:
+            self.visit(stmt, ast_root_node)
+        return node
+
+    def _rewrite_block_stmts(self, node, ast_root_node: Program_N):
+        """Replace each statement in a block with its visited result."""
+        for i, stmt in enumerate(node.stmts):
+            node.stmts[i] = self.visit(stmt, ast_root_node)
+        return node
     
     def _before_block_visit(self, block_node, block_type):
         """

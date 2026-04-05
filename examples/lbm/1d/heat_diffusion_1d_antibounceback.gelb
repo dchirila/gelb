@@ -1,0 +1,104 @@
+// 1D heat diffusion with anti-bounce-back walls (LBM-BGK, D1Q3)
+//
+// The physics of heat_diffusion_1d_dirichlet.gelb: a bar held at
+// T = T_left on the left and T = T_right on the right, starting hot.
+// That program holds two static wall cells at equilibrium, which
+// imposes the wall temperature 1 - tau cells from each wall cell, so
+// the wall position depends on tau.  Here the walls sit half-way
+// between the end cells and the (absent) cells beyond them, at
+// x = -1/2 and x = GRID - 1/2, for any tau.
+//
+// D1Q3 lattice: c = {0, +1, -1}, w = {4/6, 1/6, 1/6}
+// Equilibrium (diffusion): feq_i = w_i * T
+// Collision (BGK): f_i* = (1-omega)*f_i + omega*feq_i
+// Streaming (pull): f_i(x, t+1) = f_i*(x - c_i, t)
+//
+// Boundary conditions: anti-bounce-back (Krueger et al. 2017,
+// Sec. 8.5.2.1, eq. 8.54).  At an end cell x_b, the DF that would stream
+// in from outside the grid is replaced by the end cell's own
+// post-collision DF that left towards the wall, with its sign flipped,
+// plus twice its equilibrium at the wall temperature:
+//   f_1(0, t+1)      = -f_2*(0, t)      + 2 w_1 T_left
+//   f_2(GRID-1, t+1) = -f_1*(GRID-1, t) + 2 w_2 T_right
+// The end cells are ordinary fluid cells otherwise: same collision,
+// and they report their temperature like every other cell.
+//
+// Diffusivity (Krueger et al. 2017, Sec. 8.3.4):
+//   alpha = c_s^2 * (tau - 1/2) = (1/3)*(0.75 - 0.5) ~= 0.0833
+// Expected steady state: T(x) = T_left + (T_right - T_left)*(x + 0.5)/GRID,
+// reproduced to round-off: the rule is exact for a linear profile.
+
+simulation_description("1D heat diffusion with anti-bounce-back walls (D1Q3)");
+
+global_constants {
+    const int GRID = 32;
+    // D1Q3 weights
+    const array[real, 3] W = {4.0/6.0, 1.0/6.0, 1.0/6.0};
+    const array[real, 3] EX = {0.0, 1.0, -1.0};
+    // Relaxation: alpha = c_s^2 * (tau - 0.5) = (1/3)(0.25) ~= 0.0833;
+    // tau = 0.75, omega = 1/tau ~= 1.333.
+    const real tau = 0.75;
+    const real omega = 1.0 / tau;
+
+    // Wall temperatures
+    const real T_left = 1.0;
+    const real T_right = 0.0;
+}
+
+lattices {
+    lattice f(1, 3, real, GRID, false);   // non-periodic
+}
+
+function DiffusionEq(real T) -> (array[real, 3] feq) {
+    feq = W * T;
+}
+
+// BGK collision of the streamed-in DFs
+function Collide(array[real, 3] fIn) -> (array[real, 3] fOut) {
+    fOut = (1.0 - omega) * fIn + omega * DiffusionEq(sum(fIn));
+}
+
+// Every cell starts at equilibrium at T = T_left (uniform hot start)
+initializer InitHot {
+    f.out[x | :] = DiffusionEq(T_left);
+}
+
+// Bulk: collision + streaming (pull scheme)
+dynamic CollideAndStream {
+    f.out[x | :] = Collide(upstream_dfs(f, x, EX));
+}
+
+// Left end cell (x = 0): DF 1 would stream in from x = -1, outside
+// the grid.  Anti-bounce-back: this cell's own DF 2 from the previous
+// step (post-collision, heading for the wall), negated, plus 2 w_1 T_left.
+dynamic AntiBounceBackLeft {
+    array[real, 3] fIn = {f.in[x | 0],
+                          -f.in[x | 2] + 2.0 * W[1] * T_left,
+                          f.in[x + 1 | 2]};
+    f.out[x | :] = Collide(fIn);
+}
+
+// Right end cell (x = GRID - 1): the mirror image for DF 2.
+dynamic AntiBounceBackRight {
+    array[real, 3] fIn = {f.in[x | 0],
+                          f.in[x - 1 | 1],
+                          -f.in[x | 1] + 2.0 * W[2] * T_right};
+    f.out[x | :] = Collide(fIn);
+}
+
+// Output temperature (shared by all node classes)
+gauge Temperature -> (real temperature) {
+    temperature = sum(f.in[x | :]);
+}
+
+node_classes {
+    node_class BULK(InitHot, CollideAndStream, Temperature);
+    node_class LEFT_END(InitHot, AntiBounceBackLeft, Temperature);
+    node_class RIGHT_END(InitHot, AntiBounceBackRight, Temperature);
+}
+
+geometry {
+    nodes[:] = BULK;
+    nodes[0] = LEFT_END;
+    nodes[GRID - 1] = RIGHT_END;
+}

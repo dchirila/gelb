@@ -4,7 +4,7 @@ GeLB - GEneric Lattice Boltzmann
 A domain-specific language for Lattice Boltzmann (LB/LBM) simulations.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.9.0"
 
 from . import utils
 from . import frontend

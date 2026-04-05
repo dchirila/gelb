@@ -12,8 +12,7 @@ import CommonLexerRules;
        e.g. that the number of occurrences of each block-type is valid.
        
  NOTE: This grammar uses ANTLR4 labels (= and +=) to make the generated parser
-       more readable and the visitor code cleaner. For an explanation of ANTLR4
-       labels, see docs/gelb_developer_manual.rst section "ANTLR4 Labels".
+       more readable and the visitor code cleaner.
        
        IMPORTANT ANTLR4 Label Gotchas:
        1. Labels that conflict with Python keywords get an underscore suffix
@@ -28,7 +27,7 @@ gelb_program : // Valid # of occurrences (as interval)
     | initializer_block                // [1, oo)
 	| dynamic_block                    // [1, oo)
 	| gauge_block                      // [1, oo)
-	//| function_block                   // [0, oo)
+	| function_block                   // [0, oo)
 	| node_classes_block               // [1, 1]
 	| geometry_block                   // [1, 1]
 	)*
@@ -63,7 +62,6 @@ lattice_insta_stmt :                   // Example:
  	COMMA periodicity=expr               //   periodicity=false
  	PAREN_CLOSE SEMICOLON ;              // );
 
-// TODO
 block_stmt : constant_definition_stmt
            | variable_declaration_stmt
            | variable_declaration_with_init_stmt
@@ -71,8 +69,15 @@ block_stmt : constant_definition_stmt
            | lattice_out_selection_assignment_stmt
            | variable_assignment_stmt
            | array_selection_assignment_stmt
+           | destructuring_assignment_stmt
            // END :: assignment stmts //
            ;
+
+destructuring_assignment_stmt :
+    CURLY_OPEN
+    targets+=identifier (COMMA targets+=identifier)*
+    CURLY_CLOSE
+    OP_ASSIGN rhs=expr SEMICOLON ;
 
 initializer_block :
     INITIALIZER identifier CURLY_OPEN
@@ -85,40 +90,91 @@ dynamic_block :
     CURLY_CLOSE ;
 
 gauge_block :
-    GAUGE identifier
-    // BEGIN :: Interface //
-    PAREN_OPEN                    // (
-    // Gauges always need outputs, but we make them optional in the grammar
-    // so that we can present more user-friendly error messages when missing
-    (OUT OP_ASSIGN CURLY_OPEN      // out = {
-    variable_declaration_stmt*    // int x1; array[real64, 3] x2; (now optional)
-    CURLY_CLOSE)?                 // }) (entire output spec now optional)
-    PAREN_CLOSE                   // )
-    // END :: Interface //
+    GAUGE name=identifier
+    // The entire result clause is optional so semantic validation can
+    // provide a useful diagnostic for a bare gauge.
+    (ARROW PAREN_OPEN
+        (results+=param_decl (COMMA results+=param_decl)*)?
+        PAREN_CLOSE)?
     CURLY_OPEN
     block_stmt+  // core statements
+    CURLY_CLOSE ;
+
+function_block :
+    FUNCTION name=identifier
+    PAREN_OPEN
+        (params+=param_decl (COMMA params+=param_decl)*)?
+    PAREN_CLOSE
+    ARROW
+    PAREN_OPEN
+        (results+=param_decl (COMMA results+=param_decl)*)?
+    PAREN_CLOSE
+    CURLY_OPEN
+    block_stmt+
     CURLY_CLOSE ;
 
 node_classes_block : NODE_CLASSES CURLY_OPEN  // node_classes {
     node_class_insta_stmt+  // node_class BULK(SetDFsToZero, IncrementDFs, CurrentState)
     CURLY_CLOSE ;                             // }
 
-node_class_insta_stmt : NODE_CLASS
-    identifier PAREN_OPEN  // name of the NodeClass
-    identifier             // Initializer
-    COMMA identifier       // Dynamic
-    COMMA identifier       // Gauge
-    PAREN_CLOSE SEMICOLON ;
+// node_class instantiation statement.
+//
+// A node class always names an initializer.  Whether it has a dynamic
+// (collision/streaming step) or a gauge (output) is what makes the
+// shape of this rule non-trivial.
+//
+// UNMASKED node classes (active cells with output):
+//   * 3 args: init + dynamic + gauge       -- typical fluid cell
+//   * 2 args: init + gauge  (no dynamic)   -- static cell with output
+//
+// MASKED node classes (cells skipped at runtime, NaN-filled in output):
+//   * 2 args: init + dynamic + 'masked'    -- bounce-back wall, etc.
+//   * 1 arg : init + 'masked'              -- static masked cell
+//   * 0 args: 'masked'                     -- pure-solid marker
+//
+// IMPORTANT: masked node classes CANNOT have a gauge.  This is enforced
+// at the grammar level (not by a separate validator) -- there is no
+// 3-identifier alternative followed by MASKED.  The rationale is that
+// masked cells are skipped during the gauge sweep and the corresponding
+// output positions are NaN-filled, so a per-cell gauge would never run.
+node_class_insta_stmt
+    : NODE_CLASS identifier PAREN_OPEN            // unmasked: 2-3 args
+      identifier COMMA identifier (COMMA identifier)?
+      PAREN_CLOSE SEMICOLON
+    | NODE_CLASS identifier PAREN_OPEN            // masked: 1-2 args
+      identifier (COMMA identifier)?
+      PAREN_CLOSE MASKED SEMICOLON
+    | NODE_CLASS identifier PAREN_OPEN            // masked: 0 args
+      PAREN_CLOSE MASKED SEMICOLON
+    ;
 
 geometry_block : GEOMETRY CURLY_OPEN
-    paint_nodes_stmt+
+    geometry_stmt+
     CURLY_CLOSE ;
 
+geometry_stmt : paint_nodes_stmt
+             | conditional_paint_stmt
+             | border_stmt ;
 
 paint_nodes_stmt : NODES BRACKET_OPEN  // nodes[
     coords_range (COMMA coords_range)*
     BRACKET_CLOSE OP_ASSIGN           // ] =
     identifier SEMICOLON ;            // BULK ;
+
+// Predicate paint: every cell for which the boolean expression holds is
+// painted.  The expression sees the implicit coordinates (x; x, y; or
+// x, y, z, by rank), constants and pure user functions, and is evaluated
+// at compile time.  `where` keeps it distinct from a point paint
+// `nodes[x0, y0] = C;`.
+conditional_paint_stmt : NODES BRACKET_OPEN WHERE  // nodes[where
+    predicate=expr                                //   InCircle(x, y, CX, CY, R)
+    BRACKET_CLOSE OP_ASSIGN                       // ] =
+    node_class=identifier SEMICOLON ;             // SOLID ;
+
+border_stmt : BORDER PAREN_OPEN       // border(
+    source=identifier                 //   SOLID
+    PAREN_CLOSE OP_ASSIGN             // ) =
+    target=identifier SEMICOLON ;     // WALL ;
 
 lattice_out_selection_assignment_stmt :
     lhs=rect_sel_of_lattice_out_dfs
@@ -164,6 +220,10 @@ constant_definition_stmt : CONST type=data_type assignment=variable_assignment_s
 
 // NOTE: Label 'type' becomes 'type_' in Python due to keyword conflict
 variable_declaration_stmt : type=data_type name=identifier SEMICOLON ;
+
+// Function parameters and named results omit the statement terminator.
+// NOTE: Label 'type' becomes 'type_' in Python due to keyword conflict.
+param_decl : type=data_type name=identifier ;
 
 variable_declaration_with_init_stmt : type=data_type assignment=variable_assignment_stmt ;
 
@@ -232,10 +292,6 @@ array_selection_assignment_stmt :
 
 identifier : ID ;
 
-/* TODO:
-   - allow expressions involving built-in functions
-   - allow expressions involving user-defined functions
- */
 /* OPERATOR PRECEDENCE (highest to lowest):
    1. Parentheses, literals, identifiers, array/lattice selections
    2. Power (^) - right associative
@@ -278,6 +334,7 @@ expr : PAREN_OPEN expr PAREN_CLOSE                # parensExpr
      | rect_sel_of_lattice_in_dfs  # rectSelOfLatticeInDFsExpr
      | rect_sel_of_array_elems     # rectSelOfArrayElemsExpr
      | intrinsic_function_call     # intrinsicFunctionCallExpr
+     | user_function_call          # userFunctionCallExpr
      | identifier  # identifierExpr
      ;
 
@@ -286,4 +343,9 @@ intrinsic_function_call :
      (arguments+=expr (COMMA arguments+=expr)*)? 
      PAREN_CLOSE ;
 
-intrinsic_function_name : SUM | DOT_PROD ;
+intrinsic_function_name : SUM | DOT_PROD | SIN | COS | SQRT | RANDOM | EXP | ABS | LOG | TAN | TANH | MIN | MAX | MOD | ATAN2 | UPSTREAM_DFS | BOUNCE_BACK_DFS | MATMUL | TRANSPOSE | INVERSE | DETERMINANT | INT | INT8 | INT16 | INT32 | INT64 | REAL | REAL16 | REAL32 | REAL64 ;
+
+user_function_call :
+    function_name=identifier PAREN_OPEN
+    (arguments+=expr (COMMA arguments+=expr)*)?
+    PAREN_CLOSE ;

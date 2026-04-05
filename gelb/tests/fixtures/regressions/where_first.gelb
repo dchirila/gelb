@@ -1,0 +1,7 @@
+simulation_description("Geometry probe");
+lattices { lattice f(2, 1, real, {8,8}, {false,false}); }
+initializer I { f.out[x,y | 0] = 1.0; }
+dynamic D { f.out[x,y | 0] = f.in[x,y | 0]; }
+gauge G -> (real v) { v = f.in[x,y | 0]; }
+node_classes { node_class B(I,D,G); node_class M() masked; }
+geometry { nodes[where x < 3] = M; nodes[:,:] = B; }

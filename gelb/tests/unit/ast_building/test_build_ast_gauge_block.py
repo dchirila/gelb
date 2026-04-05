@@ -7,7 +7,7 @@ from gelb.frontend.stage1_frontend import ASTBuilderVisitor, get_ast
 def test_simple():
     # Arrange
     test_string = """
-    gauge CurrentState(out = {int state;}) { //
+    gauge CurrentState -> (int state) { //
       state = g.in[x | 0];
     }
     """

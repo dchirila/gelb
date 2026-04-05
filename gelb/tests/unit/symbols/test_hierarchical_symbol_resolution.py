@@ -146,7 +146,7 @@ dynamic Update {
   f.out[x,y | :] = f.in[x,y | :];
 }
 
-gauge Output(out = {real val;}) {
+gauge Output -> (real val) {
   val = f.in[x,y | 0];
 }
 
@@ -194,7 +194,7 @@ dynamic Update {
   f.out[x,y | :] = f.in[x,y | :];
 }
 
-gauge Output(out = {real val;}) {
+gauge Output -> (real val) {
   val = f.in[x,y | 0];
 }
 
@@ -235,7 +235,7 @@ dynamic Update {
   f.out[x | :] = f.in[x | :] + 1;
 }
 
-gauge Output(out = {int val;}) {
+gauge Output -> (int val) {
   val = f.in[x | 0];
 }
 
@@ -299,7 +299,7 @@ dynamic Update {
   f.out[x | :] = f.in[x | :] + 1;
 }
 
-gauge Output(out = {int val;}) {
+gauge Output -> (int val) {
   val = f.in[x | 0];
 }
 

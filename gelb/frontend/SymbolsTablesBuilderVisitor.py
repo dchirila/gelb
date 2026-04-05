@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 
 from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
+from gelb.frontend.implicit_symbols import (
+    dimensionality_from_program,
+    implicit_symbols_for_block,
+)
 from gelb.frontend.visitor_mixins import SymbolTableUtilityMixin
 from gelb.gelb_ast.ASTNodes import *
 from gelb.frontend.SymbolsTable import SymbolsTable
@@ -39,11 +43,13 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor, SymbolTableUtilityMixin):
             # check that all referenced symbols were actually defined
             for sref in node.get_referenced_symbols():
                 if not node.symbol_defs.contains(sref.name):
+                    unresolved_symbols_to_allow = set(self.implicit_symbols)
                     if (
                             isinstance(node, InitializerBlock_N) or
                             isinstance(node, DynamicBlock_N) or
                             isinstance(node, GaugeBlock_N) or
-                            isinstance(node, GeometryBlock_N)
+                            isinstance(node, GeometryBlock_N) or
+                            isinstance(node, FunctionBlock_N)
                     ):
                         lattice_names = []
                         if (
@@ -55,15 +61,16 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor, SymbolTableUtilityMixin):
                             lattice_names = [
                                 lat_def.name for lat_def in lattice_sdefs
                             ]
-                        self.implicit_symbols += [
-                            # TODO un-define y, z, NY, Nz, depending on
-                            #  dimensionality (inferred from ast_root)
-                            "x", "y", "z", "Nx", "Ny", "Nz"
-                        ]
+                        dimensionality = dimensionality_from_program(ast_root)
+                        unresolved_symbols_to_allow.update(
+                            implicit_symbols_for_block(node, dimensionality)
+                        )
                         # Add block name only if it has a name attribute
                         if hasattr(node, 'name') and node.name is not None:
-                            self.implicit_symbols.append(str(node.name.name))
-                        self.implicit_symbols += lattice_names
+                            unresolved_symbols_to_allow.add(
+                                str(node.name.name)
+                            )
+                        unresolved_symbols_to_allow.update(lattice_names)
                         
                         # For geometry block, also need to check global symbol table for node classes
                         if isinstance(node, GeometryBlock_N) and ast_root is not None:
@@ -71,7 +78,7 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor, SymbolTableUtilityMixin):
                             if ast_root.symbol_defs and ast_root.symbol_defs.contains(sref.name):
                                 continue  # Symbol found in global scope, skip the error
 
-                    if sref.name not in self.implicit_symbols:
+                    if sref.name not in unresolved_symbols_to_allow:
                         raise GeLBExSymbolUnknown(sref)
                 else:
                     # OK, symbol *is* in the symbols table (but is it
@@ -136,6 +143,21 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor, SymbolTableUtilityMixin):
                 self._promote_lattices_to_program(node.lattices, node)
 
             # BEGIN :: build global (program-wide) symbol_defs table #
+            # ... add function-names to the program's global symbol_defs table
+            # (before other blocks so functions can be called from them)
+            if node.functions is not None:
+                for index, function in enumerate(node.functions):
+                    node.symbol_defs.append(
+                        SymbolDefinition(
+                            name=function.name.name,
+                            tag="function",
+                            value=function
+                        )
+                    )
+                    node.functions[index] = self.visit(
+                        node.functions[index], ast_root_node
+                    )
+
             # ... add initializer-names to the program's global symbol_defs
             # table
             if node.initializers is not None:
@@ -347,6 +369,57 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor, SymbolTableUtilityMixin):
                         value=var_decl
                     )
                 )
+            self.check_for_undef_or_ref_before_def_symbols(node, ast_root_node)
+            self.check_for_recursively_defined_symbols(node, ast_root_node)
+        return node
+
+    def visitFunctionBlock_N(
+            self,
+            node: FunctionBlock_N,
+            ast_root_node: Program_N
+    ):
+        if node.symbol_defs is None:
+            node.symbol_defs = SymbolsTable(parent_table=ast_root_node.symbol_defs)
+
+            # Register input parameters
+            for param in node.inputs:
+                node.symbol_defs.append(
+                    SymbolDefinition(
+                        name=param.name.name,
+                        tag="input parameter",
+                        value=param
+                    )
+                )
+
+            # Register output parameters
+            for param in node.outputs:
+                node.symbol_defs.append(
+                    SymbolDefinition(
+                        name=param.name.name,
+                        tag="output parameter",
+                        value=param
+                    )
+                )
+
+            # Register local variables and constants from body
+            for stmt in node.stmts:
+                if isinstance(stmt, ConstantDefinitionStmt_N):
+                    node.symbol_defs.append(
+                        SymbolDefinition(
+                            name=stmt.name.name,
+                            tag="constant definition",
+                            value=stmt
+                        )
+                    )
+                elif isinstance(stmt, VariableDeclarationStmt_N):
+                    node.symbol_defs.append(
+                        SymbolDefinition(
+                            name=stmt.name.name,
+                            tag="variable declaration",
+                            value=stmt
+                        )
+                    )
+
             self.check_for_undef_or_ref_before_def_symbols(node, ast_root_node)
             self.check_for_recursively_defined_symbols(node, ast_root_node)
         return node
