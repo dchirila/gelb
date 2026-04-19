@@ -140,3 +140,23 @@ class TestIntrinsicFunctionTypeInference:
         assert isinstance(final_sum, IntrinsicFunctionCall_N)
         assert final_sum.function_name == "sum"
         assert final_sum.inferred_type.element_dtype == "real"
+
+    def test_random_function_type_inference(self):
+        """Test that random() infers scalar real return type."""
+        test_string = minimal_gelb_program_1d(
+            dynamic_content='real r = random();'
+        )
+
+        ast_root = get_typed_ast(test_string)
+
+        dynamic_block = ast_root.dynamics.elements[0]
+        var_decl = dynamic_block.stmts.elements[0]
+        random_call = var_decl.initial_value
+
+        assert isinstance(random_call, IntrinsicFunctionCall_N)
+        assert random_call.function_name == "random"
+
+        return_type = random_call.inferred_type
+        assert isinstance(return_type, ArrayDataType_N)
+        assert return_type.element_dtype == "real"
+        assert len(return_type.shape.elements) == 0  # Scalar

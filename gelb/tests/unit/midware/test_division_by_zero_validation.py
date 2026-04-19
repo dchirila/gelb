@@ -2,6 +2,7 @@
 
 import pytest
 from gelb.tests.test_utils import get_typed_ast, minimal_gelb_program_1d
+from gelb.frontend.stage1_frontend import promote_types
 from gelb.midware.ConstantFoldingVisitor import ConstantFoldingVisitor
 from gelb.midware.DivisionByZeroValidator import DivisionByZeroValidator
 from gelb.utils.exceptions import GeLBExTypeError
@@ -25,7 +26,7 @@ class TestDivisionByZeroValidation:
             DivisionByZeroValidator().visit(folded_ast, folded_ast)
         
         assert "Division by zero" in str(exc_info.value.error)
-        assert "cannot divide by zero" in str(exc_info.value.error)
+        assert "divisor is" in str(exc_info.value.error)
     
     def test_real_literal_division_by_zero(self):
         """Test detection of real literal division by zero."""
@@ -42,7 +43,7 @@ class TestDivisionByZeroValidation:
             DivisionByZeroValidator().visit(folded_ast, folded_ast)
         
         assert "Division by zero" in str(exc_info.value.error)
-        assert "cannot divide by zero" in str(exc_info.value.error)
+        assert "divisor is" in str(exc_info.value.error)
     
     def test_constant_propagation_division_by_zero(self):
         """Test detection of division by constant that is zero."""
@@ -289,13 +290,58 @@ class TestDivisionByZeroValidationEdgeCases:
             """,
             initializer_content="f.out[x | 0] = 1 / ZERO;"
         )
-        
+
         # Get typed AST and fold constants
         ast = get_typed_ast(test_code)
         folded_ast = ConstantFoldingVisitor().visit(ast, ast)
-        
+
         # Division by zero validation should raise error
         with pytest.raises(GeLBExTypeError) as exc_info:
             DivisionByZeroValidator().visit(folded_ast, folded_ast)
-        
+
         assert "Division by zero" in str(exc_info.value.error)
+
+
+class TestDivisionByZeroBoolPromotion:
+    """Test detection of division by bool false (promoted to 0)."""
+
+    def _get_promoted_and_folded_ast(self, gelb_code):
+        """Run pipeline through type promotion + constant folding."""
+        ast = get_typed_ast(gelb_code)
+        ast = promote_types(ast)
+        ast = ConstantFoldingVisitor().visit(ast, ast)
+        return ast
+
+    def test_const_bool_false_division(self):
+        """const bool DIVISOR = false; x / DIVISOR -> detected as div by zero."""
+        code = minimal_gelb_program_1d(
+            global_constants_content="const bool DIVISOR = false;",
+            initializer_content="f.out[x | 0] = 1 / DIVISOR;"
+        )
+        ast = self._get_promoted_and_folded_ast(code)
+        with pytest.raises(GeLBExTypeError) as exc_info:
+            DivisionByZeroValidator().visit(ast, ast)
+        assert "Division by zero" in str(exc_info.value.error)
+        assert "false" in str(exc_info.value.error)
+
+    def test_const_bool_expr_folded_to_false(self):
+        """const bool DIVISOR = (1 > 2); folds to false -> detected."""
+        code = minimal_gelb_program_1d(
+            global_constants_content="const bool DIVISOR = 1 > 2;",
+            initializer_content="f.out[x | 0] = 1 / DIVISOR;"
+        )
+        ast = self._get_promoted_and_folded_ast(code)
+        with pytest.raises(GeLBExTypeError) as exc_info:
+            DivisionByZeroValidator().visit(ast, ast)
+        assert "Division by zero" in str(exc_info.value.error)
+
+    def test_const_bool_true_division_allowed(self):
+        """const bool DIVISOR = true; x / DIVISOR -> true promotes to 1, allowed."""
+        code = minimal_gelb_program_1d(
+            global_constants_content="const bool DIVISOR = true;",
+            initializer_content="f.out[x | 0] = 1 / DIVISOR;"
+        )
+        ast = self._get_promoted_and_folded_ast(code)
+        # Should NOT raise
+        result = DivisionByZeroValidator().visit(ast, ast)
+        assert result is not None

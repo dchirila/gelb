@@ -37,7 +37,7 @@ class TestConstantFoldingArrayTypeCompatibility:
             f.out[x | 0] = 1;
         }
         
-        gauge TestGauge(out = {real rho;}) {
+        gauge TestGauge -> (real rho) {
             rho = f.in[x | 0];
         }
         
@@ -110,7 +110,7 @@ class TestConstantFoldingArrayTypeCompatibility:
             f.out[x | 0] = 1;
         }
         
-        gauge TestGauge(out = {real rho;}) {
+        gauge TestGauge -> (real rho) {
             rho = f.in[x | 0];
         }
         
@@ -162,7 +162,7 @@ class TestConstantFoldingArrayTypeCompatibility:
             f.out[x | 0] = 1;
         }
         
-        gauge TestGauge(out = {real rho;}) {
+        gauge TestGauge -> (real rho) {
             rho = f.in[x | 0];
         }
         
@@ -202,6 +202,141 @@ class TestConstantFoldingArrayTypeCompatibility:
         assert len(neg_real.inferred_type.shape.elements) == 0
 
 
+class TestArrayElementwiseArithmeticFolding:
+    """Test element-wise arithmetic folding on Array1DLiteral_N
+    constants -- needed for examples like
+    ``const array[real, 9] EX_EX = EX * EX;`` (Smagorinsky LES).
+    Without these folds, backends that consume the array as a literal
+    initialiser (cpu_highway in particular) crashed with
+    ``unexpected 1-D array constant initialiser (Mul_N)``."""
+
+    @staticmethod
+    def _fold(source):
+        ast = get_typed_ast(source)
+        return ConstantFoldingVisitor().visit(ast, ast)
+
+    @staticmethod
+    def _const_value(folded_ast, name):
+        for stmt in folded_ast.global_constants.stmts.elements:
+            if hasattr(stmt, 'name') and stmt.name.name == name:
+                return stmt.value
+        raise AssertionError(f"constant '{name}' not found")
+
+    def _wrap(self, globals_block):
+        return f"""
+        simulation_description("Test array elementwise folding");
+        global_constants {{
+{globals_block}
+        }}
+        lattices {{ lattice f(1, 3, real, 16, true); }}
+        initializer Init {{ f.out[x | 0] = 0; }}
+        dynamic Step {{ f.out[x | 0] = f.in[x | 0]; }}
+        gauge G -> (real rho) {{ rho = f.in[x | 0]; }}
+        node_classes {{ node_class BULK(Init, Step, G); }}
+        geometry {{ nodes[:] = BULK; }}
+        """
+
+    def test_array_times_array_folds_elementwise(self):
+        src = self._wrap(
+            "            const array[real, 4] A = {1.0, 2.0, 3.0, 4.0};\n"
+            "            const array[real, 4] B = {5.0, 6.0, 7.0, 8.0};\n"
+            "            const array[real, 4] C = A * B;"
+        )
+        folded = self._fold(src)
+        c = self._const_value(folded, "C")
+        assert isinstance(c, Array1DLiteral_N), \
+            f"expected fold to Array1DLiteral_N, got {type(c).__name__}"
+        values = [e.value for e in c.value.elements]
+        assert values == [5.0, 12.0, 21.0, 32.0]
+
+    def test_array_plus_array_folds(self):
+        src = self._wrap(
+            "            const array[real, 3] A = {1.0, 2.0, 3.0};\n"
+            "            const array[real, 3] B = {10.0, 20.0, 30.0};\n"
+            "            const array[real, 3] S = A + B;"
+        )
+        folded = self._fold(src)
+        s = self._const_value(folded, "S")
+        assert isinstance(s, Array1DLiteral_N)
+        assert [e.value for e in s.value.elements] == [11.0, 22.0, 33.0]
+
+    def test_array_minus_array_folds(self):
+        src = self._wrap(
+            "            const array[real, 3] A = {10.0, 20.0, 30.0};\n"
+            "            const array[real, 3] B = {1.0, 2.0, 3.0};\n"
+            "            const array[real, 3] D = A - B;"
+        )
+        folded = self._fold(src)
+        d = self._const_value(folded, "D")
+        assert isinstance(d, Array1DLiteral_N)
+        assert [e.value for e in d.value.elements] == [9.0, 18.0, 27.0]
+
+    def test_scalar_times_array_broadcasts(self):
+        src = self._wrap(
+            "            const array[real, 4] A = {1.0, 2.0, 3.0, 4.0};\n"
+            "            const array[real, 4] B = 2.0 * A;"
+        )
+        folded = self._fold(src)
+        b = self._const_value(folded, "B")
+        assert isinstance(b, Array1DLiteral_N)
+        assert [e.value for e in b.value.elements] == [2.0, 4.0, 6.0, 8.0]
+
+    def test_array_times_scalar_broadcasts(self):
+        src = self._wrap(
+            "            const array[real, 4] A = {1.0, 2.0, 3.0, 4.0};\n"
+            "            const array[real, 4] B = A * 0.5;"
+        )
+        folded = self._fold(src)
+        b = self._const_value(folded, "B")
+        assert isinstance(b, Array1DLiteral_N)
+        assert [e.value for e in b.value.elements] == [0.5, 1.0, 1.5, 2.0]
+
+    def test_smagorinsky_pattern_ex_ex(self):
+        """The exact pattern from
+        ``examples/lbm/2d/lid_driven_cavity_2d_bgk_smagorinsky.gelb``:
+        D2Q9 EX*EX -> element-wise square of the velocity-vector."""
+        src = self._wrap(
+            "            const array[real, 9] EX = "
+            "{0.0, 1.0, 0.0, -1.0, 0.0, 1.0, -1.0, -1.0, 1.0};\n"
+            "            const array[real, 9] EX_EX = EX * EX;"
+        )
+        folded = self._fold(src)
+        ex_ex = self._const_value(folded, "EX_EX")
+        assert isinstance(ex_ex, Array1DLiteral_N)
+        assert [e.value for e in ex_ex.value.elements] == \
+            [0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0]
+
+    def test_folded_array_preserves_inferred_type(self):
+        """Downstream passes (e.g. the cpu_highway backend's array-
+        const emitter) require the folded literal to carry an
+        ``ArrayDataType_N`` of the right element kind."""
+        src = self._wrap(
+            "            const array[real, 3] A = {1.0, 2.0, 3.0};\n"
+            "            const array[real, 3] B = A * 2.0;"
+        )
+        folded = self._fold(src)
+        b = self._const_value(folded, "B")
+        assert hasattr(b, 'inferred_type')
+        assert isinstance(b.inferred_type, ArrayDataType_N)
+        assert b.inferred_type.element_dtype == "real"
+
+    def test_div_and_pow_intentionally_not_folded(self):
+        """Element-wise array division and exponentiation are
+        deliberately NOT folded (to avoid integer-vs-real semantic
+        traps for div, and because pow over arrays isn't an idiom).
+        These should pass through as raw ``Div_N`` / ``Pow_N``
+        nodes -- a backend that hits them is responsible for emit."""
+        src = self._wrap(
+            "            const array[real, 3] A = {2.0, 4.0, 8.0};\n"
+            "            const array[real, 3] B = {1.0, 2.0, 4.0};\n"
+            "            const array[real, 3] Q = A / B;"
+        )
+        folded = self._fold(src)
+        q = self._const_value(folded, "Q")
+        # Should NOT fold to an Array1DLiteral_N -- passes through as Div_N
+        assert not isinstance(q, Array1DLiteral_N)
+
+
 class TestConstantFoldingArrayTypeIntegration:
     """Test integration of constant folding with the array type system."""
     
@@ -228,7 +363,7 @@ class TestConstantFoldingArrayTypeIntegration:
             f.out[x | 0] = 1;
         }
         
-        gauge TestGauge(out = {real rho;}) {
+        gauge TestGauge -> (real rho) {
             rho = f.in[x | 0];
         }
         

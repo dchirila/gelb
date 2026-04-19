@@ -4,6 +4,13 @@ import click
 from colorama import Fore
 
 from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
+from gelb.frontend.implicit_symbols import (
+    DIMENSION_CONSTANT_NAMES,
+    RUNTIME_IMPLICIT_SYMBOL_NAMES,
+    TIMESTEP_SYMBOL_NAME,
+    allows_predicate_coordinates,
+    allows_runtime_coordinates,
+)
 from gelb.gelb_ast.ASTNodes import *
 from gelb.utils.exceptions import (
     GeLBExSymbolNotAllowedHere
@@ -21,16 +28,41 @@ class ImplicitsRefsClashPreventerVisitor(ASTBaseVisitor):
     def check_ref_for_clashes(self, ref, node):
         name = ref.name
 
-        if name in ["x", "y", "z"]:
-            if not (isinstance(node, InitializerBlock_N) or
-                    isinstance(node, DynamicBlock_N) or
-                    isinstance(node, GaugeBlock_N)):
-                error = (
-                    f"You are using the implicit variable"
-                    f" {click.style(name, underline=True) + Fore.RED}"
-                    f" (representing the {name}-coordinate of a lattice node)"
-                    f" in a block where it does not make sense."
-                )
+        if name in RUNTIME_IMPLICIT_SYMBOL_NAMES:
+            if allows_predicate_coordinates(node):
+                if name == TIMESTEP_SYMBOL_NAME:
+                    # The geometry is fixed for the whole run in this
+                    # version; say so, instead of "unknown symbol".
+                    raise GeLBExSymbolNotAllowedHere(
+                        ref,
+                        f"The geometry block refers to the time step"
+                        f" {click.style(name, underline=True) + Fore.RED},"
+                        f" but time-dependent geometry is not supported"
+                        f" in this version of GeLB.",
+                        "In this version the geometry is fixed for the"
+                        " whole run: a paint predicate may use only the"
+                        " coordinates (x, y, z), constants and pure"
+                        " functions of them.",
+                    )
+                # Coordinates are predicate inputs here.  Their misuse in
+                # a range or point paint is reported, with the right
+                # message, by GeometryDependencyValidator.
+                return
+            if not allows_runtime_coordinates(node):
+                if name == TIMESTEP_SYMBOL_NAME:
+                    error = (
+                        f"You are using the implicit variable"
+                        f" {click.style(name, underline=True) + Fore.RED}"
+                        f" (representing the current outer-loop iteration"
+                        f" index) in a block where it does not make sense."
+                    )
+                else:
+                    error = (
+                        f"You are using the implicit variable"
+                        f" {click.style(name, underline=True) + Fore.RED}"
+                        f" (representing the {name}-coordinate of a lattice"
+                        f" node) in a block where it does not make sense."
+                    )
                 hint = (
                     f"{click.style(name, underline=True) + Fore.GREEN}"
                     f" may be used *only* inside initializers, dynamics &"
@@ -79,7 +111,7 @@ class ImplicitsRefsClashPreventerVisitor(ASTBaseVisitor):
                             )
                     # NOTE: other parts of the code ensure that we don't try
                     # to define a variable called "x".
-        elif name in ["Nx", "Ny", "Nz"]:
+        elif name in DIMENSION_CONSTANT_NAMES:
             # Nx, Ny, Nz are implicit dimension constants that are added later in the pipeline.
             # At this point in compilation (before add_implicit_symbols), they don't exist yet,
             # so references to them should be invalid except in specific contexts.
@@ -204,6 +236,9 @@ class ImplicitsRefsClashPreventerVisitor(ASTBaseVisitor):
             ast_root_node: Program_N
     ):
         # Geometry block no longer has grid_size and grid_periodicity
-        # These are now part of lattice instantiation statements
+        # These are now part of lattice instantiation statements.
+        # The block, not the statement, decides what is allowed: the
+        # coordinates are legal inside `where` predicates here.
         for stmt in node.stmts:
-            self.check_node_symbol_refs(stmt)
+            for sref in stmt.get_referenced_symbols():
+                self.check_ref_for_clashes(sref, node)

@@ -24,12 +24,14 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         Define what operations are valid on what types.
         Returns a dict mapping operation categories to allowed types.
         """
+        _numeric = {'int', 'int8', 'int16', 'int32', 'int64',
+                    'real', 'real16', 'real32', 'real64'}
         return {
-            'arithmetic': {'int', 'real'},  # Only numeric types
-            'comparison': {'int', 'real', 'bool', 'string'},  # All types can be compared
-            'logical': {'bool'},  # Only bool
-            'unary_minus': {'int', 'real'},  # Only numeric
-            'logical_not': {'bool'},  # Only bool
+            'arithmetic': _numeric,
+            'comparison': _numeric | {'bool', 'string'},
+            'logical': {'bool'},
+            'unary_minus': _numeric,
+            'logical_not': {'bool'},
         }
     
     def _get_type_name(self, data_type):
@@ -42,6 +44,16 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
             return data_type
         else:
             return str(type(data_type).__name__)
+
+    def _require_inferred_type(self, typed_node, error_node):
+        """Return ``typed_node.inferred_type`` or raise the standard guard."""
+        if (not hasattr(typed_node, 'inferred_type')
+                or typed_node.inferred_type is None):
+            raise GeLBExTypeError(
+                error_node.code_range,
+                "Type validation requires type inference to run first",
+                "Internal compiler error")
+        return typed_node.inferred_type
     
     def _get_user_friendly_type_description(self, data_type):
         """Create user-friendly type description for error messages."""
@@ -84,44 +96,91 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         else:
             return str(type(data_type).__name__)
     
+    _REAL_FAMILY = {'real', 'real16', 'real32', 'real64'}
+
     def _types_match(self, type1, type2):
-        """Check if two types match exactly."""
+        """Check if two types match (exact or same-family real precision)."""
         # For array types, we need to check both base type and shape
         if isinstance(type1, ArrayDataType_N) and isinstance(type2, ArrayDataType_N):
-            # Check base types match
+            # Check base types match (allow same-family real conversions)
             if type1.element_dtype != type2.element_dtype:
-                return False
+                if not (type1.element_dtype in self._REAL_FAMILY
+                        and type2.element_dtype in self._REAL_FAMILY):
+                    return False
             # Check shape compatibility
             return self._shapes_match(type1.shape, type2.shape)
         else:
             # Fallback to name comparison
             name1 = self._get_type_name(type1)
             name2 = self._get_type_name(type2)
-            return name1 == name2
+            if name1 == name2:
+                return True
+            return (name1 in self._REAL_FAMILY
+                    and name2 in self._REAL_FAMILY)
     
     def _shapes_match(self, shape1, shape2):
-        """Check if two shapes match exactly."""
-        # Handle List_N shapes (0D and 2D+)
-        if isinstance(shape1, List_N) and isinstance(shape2, List_N):
-            if len(shape1.elements) != len(shape2.elements):
-                return False
-            # For now, assume shapes match if they have the same number of dimensions
-            # A more sophisticated implementation would check dimension values
-            return True
-        
-        # Handle 1D shapes (IntLiteral_N or Identifier_N)
-        elif isinstance(shape1, (IntLiteral_N, Identifier_N)) and isinstance(shape2, (IntLiteral_N, Identifier_N)):
-            # Both are 1D arrays - for now assume they match
-            # A more sophisticated implementation would check dimension values
-            return True
-        
-        # Handle Array1DLiteral_N shapes (2D+)
-        elif isinstance(shape1, Array1DLiteral_N) and isinstance(shape2, Array1DLiteral_N):
-            return self._shapes_match(shape1.value, shape2.value)
-        
-        # Different shape types - no match
-        else:
+        """Check if two shapes match.
+
+        Shape representations in the AST:
+        - Scalar (0D): List_N with 0 elements
+        - 1D array:    IntLiteral_N(size) [normalized] or List_N([IntLiteral_N(size)]) [denormalized]
+        - 2D+ array:   Array1DLiteral_N or List_N with multiple elements
+
+        Normalized and denormalized forms of the same 1D shape must compare as equal.
+        """
+        # Normalize both shapes to a canonical form for comparison
+        ndims1, sizes1 = self._extract_shape_dims(shape1)
+        ndims2, sizes2 = self._extract_shape_dims(shape2)
+
+        if ndims1 != ndims2:
             return False
+        # Sizes are compared where both are known integers; a symbolic
+        # size (identifier, expression) is accepted against anything.
+        for s1, s2 in zip(sizes1, sizes2):
+            if (isinstance(s1, IntLiteral_N) and isinstance(s2, IntLiteral_N)
+                    and s1.value != s2.value):
+                return False
+        return True
+
+    def _shape_text(self, data_type):
+        """``[3]``, ``[2, 2]`` or ``scalar`` for error messages."""
+        if not isinstance(data_type, ArrayDataType_N):
+            return "scalar"
+        ndims, sizes = self._extract_shape_dims(data_type.shape)
+        if ndims == 0:
+            return "scalar"
+        return "[" + ", ".join(
+            str(s.value) if isinstance(s, IntLiteral_N) else "?"
+            for s in sizes) + "]"
+
+    def _same_base_type(self, type1, type2):
+        """True when only the shapes can differ between two array types."""
+        if not (isinstance(type1, ArrayDataType_N)
+                and isinstance(type2, ArrayDataType_N)):
+            return False
+        if type1.element_dtype == type2.element_dtype:
+            return True
+        return (type1.element_dtype in self._REAL_FAMILY
+                and type2.element_dtype in self._REAL_FAMILY)
+
+    @staticmethod
+    def _extract_shape_dims(shape):
+        """Extract dimensionality info from a shape node.
+
+        Returns (ndims, sizes_list_or_none).
+        """
+        if isinstance(shape, List_N):
+            return (len(shape.elements), shape.elements)
+        elif isinstance(shape, IntLiteral_N):
+            # Normalized 1D: IntLiteral_N(size) -> 1 dimension
+            return (1, [shape])
+        elif isinstance(shape, Identifier_N):
+            # Symbolic 1D size
+            return (1, [shape])
+        elif isinstance(shape, Array1DLiteral_N):
+            return (len(shape.value.elements), shape.value.elements)
+        else:
+            return (0, [])
     
     def _is_scalar_array(self, array_type):
         """Check if an ArrayDataType_N represents a scalar (0-dimensional)."""
@@ -170,37 +229,37 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         if not left_is_scalar and right_is_scalar:
             return True
         
-        # Allow scalar op array only for commutative operations
+        # Allow scalar op array for all operations (element-wise broadcast)
         if left_is_scalar and not right_is_scalar:
-            if op_name in ['addition', 'multiplication']:
-                return True
-            elif op_name in ['subtraction', 'division']:
-                raise GeLBExTypeError(
-                    node,
-                    f"Cannot perform scalar {op_name} by array: mathematically ambiguous",
-                    f"Consider: array {op_name} scalar for clear element-wise semantics"
-                )
-            elif op_name == 'exponentiation':
-                raise GeLBExTypeError(
-                    node,
-                    f"Cannot perform scalar exponentiation by array: mathematically ambiguous", 
-                    f"Consider: array exponentiation by scalar for element-wise power"
-                )
+            return True
         
-        # Reject array op array (not supported)
+        # Allow array op array when shapes are compatible (element-wise)
         if not left_is_scalar and not right_is_scalar:
-            raise GeLBExTypeError(
-                node,
-                f"Cannot perform array {op_name} by array: operation not supported",
-                f"GeLB does not support element-wise array operations. Use scalar/array operations instead."
-            )
+            if not self._shapes_match(left_type.shape, right_type.shape):
+                raise GeLBExTypeError(
+                    node,
+                    f"Cannot perform array {op_name} by array: incompatible shapes",
+                    f"Element-wise array operations require arrays of the same shape"
+                )
+            return True
         
         return True
     
+    # The ordering comparisons, by the name the visits pass.  Booleans
+    # have no order in GeLB: ``a < b`` on two bools type-checked and
+    # reached gfortran, which has no ``<`` on logicals; it is a type
+    # error here, on every backend (user manual, Numerical semantics:
+    # Types and promotion).
+    _ORDERING_OPS = {
+        "less-than": "<", "greater-than": ">",
+        "less-equal": "<=", "greater-equal": ">=",
+    }
+
     def _validate_comparison_op(self, left_type, right_type, op_name, node):
         """
         Validate comparison operation compatibility.
-        After promotion, both operands should have the same type.
+        After promotion, both operands should have the same type; an
+        ordering comparison needs a numeric type.
         """
         left_name = self._get_type_name(left_type)
         right_name = self._get_type_name(right_type)
@@ -211,6 +270,15 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
                 node,
                 f"Type mismatch in {op_name}: '{left_name}' and '{right_name}'",
                 f"Comparison requires operands of the same type"
+            )
+
+        symbol = self._ORDERING_OPS.get(op_name)
+        if symbol is not None and 'bool' in (left_name, right_name):
+            raise GeLBExTypeError(
+                node,
+                f"Boolean values have no order: '{symbol}' on bool operands",
+                "Booleans compare with == and != only.  To order them as "
+                "0 and 1, convert first: int(a) < int(b)."
             )
         
         return True
@@ -311,117 +379,99 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
     
     def visitAdd_N(self, node: Add_N, ast_root_node: Program_N):
         """Validate addition operation."""
-        self._validate_arithmetic_operation(node, ast_root_node, "addition")
+        self._validate_binary_operation(
+            node, ast_root_node, "addition", self._validate_arithmetic_op)
         return node
     
     def visitSub_N(self, node: Sub_N, ast_root_node: Program_N):
         """Validate subtraction operation."""
-        self._validate_arithmetic_operation(node, ast_root_node, "subtraction")
+        self._validate_binary_operation(
+            node, ast_root_node, "subtraction", self._validate_arithmetic_op)
         return node
     
     def visitMul_N(self, node: Mul_N, ast_root_node: Program_N):
         """Validate multiplication operation."""
-        self._validate_arithmetic_operation(node, ast_root_node, "multiplication")
+        self._validate_binary_operation(
+            node, ast_root_node, "multiplication",
+            self._validate_arithmetic_op)
         return node
     
     def visitDiv_N(self, node: Div_N, ast_root_node: Program_N):
         """Validate division operation."""
-        self._validate_arithmetic_operation(node, ast_root_node, "division")
+        self._validate_binary_operation(
+            node, ast_root_node, "division", self._validate_arithmetic_op)
         return node
     
     def visitPow_N(self, node: Pow_N, ast_root_node: Program_N):
         """Validate exponentiation operation."""
-        self._validate_arithmetic_operation(node, ast_root_node, "exponentiation")
+        self._validate_binary_operation(
+            node, ast_root_node, "exponentiation",
+            self._validate_arithmetic_op)
         return node
-    
-    def _validate_arithmetic_operation(self, node, ast_root_node, op_name):
-        """Helper to validate arithmetic binary operations."""
-        # Visit children first
-        self.visit(node.left, ast_root_node)
-        self.visit(node.right, ast_root_node)
-        
-        # Validate types
-        if not hasattr(node.left, 'inferred_type') or not hasattr(node.right, 'inferred_type'):
-            raise GeLBExTypeError(node.code_range, f"Type validation requires type inference to run first", "Internal compiler error")
-        
-        left_type = node.left.inferred_type
-        right_type = node.right.inferred_type
-        
-        self._validate_arithmetic_op(left_type, right_type, op_name, node)
     
     # Comparison operations
     
     def visitLess_N(self, node: Less_N, ast_root_node: Program_N):
         """Validate less-than comparison."""
-        self._validate_comparison_operation(node, ast_root_node, "less-than")
+        self._validate_binary_operation(
+            node, ast_root_node, "less-than", self._validate_comparison_op)
         return node
     
     def visitGreater_N(self, node: Greater_N, ast_root_node: Program_N):
         """Validate greater-than comparison."""
-        self._validate_comparison_operation(node, ast_root_node, "greater-than")
+        self._validate_binary_operation(
+            node, ast_root_node, "greater-than", self._validate_comparison_op)
         return node
     
     def visitLessEqual_N(self, node: LessEqual_N, ast_root_node: Program_N):
         """Validate less-equal comparison."""
-        self._validate_comparison_operation(node, ast_root_node, "less-equal")
+        self._validate_binary_operation(
+            node, ast_root_node, "less-equal", self._validate_comparison_op)
         return node
     
     def visitGreaterEqual_N(self, node: GreaterEqual_N, ast_root_node: Program_N):
         """Validate greater-equal comparison."""
-        self._validate_comparison_operation(node, ast_root_node, "greater-equal")
+        self._validate_binary_operation(
+            node, ast_root_node, "greater-equal",
+            self._validate_comparison_op)
         return node
     
     def visitEqual_N(self, node: Equal_N, ast_root_node: Program_N):
         """Validate equality comparison."""
-        self._validate_comparison_operation(node, ast_root_node, "equality")
+        self._validate_binary_operation(
+            node, ast_root_node, "equality", self._validate_comparison_op)
         return node
     
     def visitNotEqual_N(self, node: NotEqual_N, ast_root_node: Program_N):
         """Validate not-equal comparison."""
-        self._validate_comparison_operation(node, ast_root_node, "not-equal")
+        self._validate_binary_operation(
+            node, ast_root_node, "not-equal", self._validate_comparison_op)
         return node
-    
-    def _validate_comparison_operation(self, node, ast_root_node, op_name):
-        """Helper to validate comparison operations."""
-        # Visit children first
-        self.visit(node.left, ast_root_node)
-        self.visit(node.right, ast_root_node)
-        
-        # Validate types
-        if not hasattr(node.left, 'inferred_type') or not hasattr(node.right, 'inferred_type'):
-            raise GeLBExTypeError(node.code_range, f"Type validation requires type inference to run first", "Internal compiler error")
-        
-        left_type = node.left.inferred_type
-        right_type = node.right.inferred_type
-        
-        self._validate_comparison_op(left_type, right_type, op_name, node)
     
     # Logical operations
     
     def visitAnd_N(self, node: And_N, ast_root_node: Program_N):
         """Validate logical AND operation."""
-        self._validate_logical_operation(node, ast_root_node, "logical AND")
+        self._validate_binary_operation(
+            node, ast_root_node, "logical AND", self._validate_logical_op)
         return node
     
     def visitOr_N(self, node: Or_N, ast_root_node: Program_N):
         """Validate logical OR operation."""
-        self._validate_logical_operation(node, ast_root_node, "logical OR")
+        self._validate_binary_operation(
+            node, ast_root_node, "logical OR", self._validate_logical_op)
         return node
     
-    def _validate_logical_operation(self, node, ast_root_node, op_name):
-        """Helper to validate logical operations."""
+    def _validate_binary_operation(self, node, ast_root_node, op_name, validator):
+        """Visit and validate a binary operation using ``validator``."""
         # Visit children first
         self.visit(node.left, ast_root_node)
         self.visit(node.right, ast_root_node)
         
-        # Validate types
-        if not hasattr(node.left, 'inferred_type') or not hasattr(node.right, 'inferred_type'):
-            raise GeLBExTypeError(node.code_range, f"Type validation requires type inference to run first", "Internal compiler error")
+        left_type = self._require_inferred_type(node.left, node)
+        right_type = self._require_inferred_type(node.right, node)
         
-        left_type = node.left.inferred_type
-        right_type = node.right.inferred_type
-        
-        self._validate_logical_op(left_type, right_type, op_name, node)
+        validator(left_type, right_type, op_name, node)
     
     # Unary operations
     
@@ -430,11 +480,7 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         # Visit child first
         self.visit(node.value, ast_root_node)
         
-        # Validate type
-        if not hasattr(node.value, 'inferred_type'):
-            raise GeLBExTypeError(node.code_range, f"Type validation requires type inference to run first", "Internal compiler error")
-        
-        expr_type = node.value.inferred_type
+        expr_type = self._require_inferred_type(node.value, node)
         expr_name = self._get_type_name(expr_type)
         
         allowed_types = self.validation_rules['logical_not']
@@ -452,11 +498,7 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         # Visit child first
         self.visit(node.value, ast_root_node)
         
-        # Validate type
-        if not hasattr(node.value, 'inferred_type'):
-            raise GeLBExTypeError(node.code_range, f"Type validation requires type inference to run first", "Internal compiler error")
-        
-        expr_type = node.value.inferred_type
+        expr_type = self._require_inferred_type(node.value, node)
         expr_name = self._get_type_name(expr_type)
         
         allowed_types = self.validation_rules['unary_minus']
@@ -481,15 +523,21 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         # Visit the value expression
         self.visit(node.value, ast_root_node)
         
-        # Validate type compatibility
-        if not hasattr(node.value, 'inferred_type'):
-            raise GeLBExTypeError(node.code_range, f"Type validation requires type inference to run first", "Internal compiler error")
-        
-        value_type = node.value.inferred_type
+        value_type = self._require_inferred_type(node.value, node)
         declared_type = node.data_type
         
         # After promotion, types should match
         if not self._types_match(declared_type, value_type):
+            name = getattr(node.name, "name", node.name)
+            if self._same_base_type(declared_type, value_type):
+                raise GeLBExTypeError(
+                    node,
+                    f"Constant '{name}' is declared with shape "
+                    f"{self._shape_text(declared_type)} but initialized with "
+                    f"shape {self._shape_text(value_type)}",
+                    "The initializer must have exactly the declared number "
+                    "of elements in every dimension"
+                )
             declared_name = self._get_type_name(declared_type)
             value_name = self._get_type_name(value_type)
             raise GeLBExTypeError(node, f"Constant '{node.name}' declared as '{declared_name}' but initialized with '{value_name}'", f"Constant initialization type must match declared type")
@@ -512,12 +560,8 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         self.visit(node.lhs, ast_root_node)
         self.visit(node.rhs, ast_root_node)
         
-        # Validate types
-        if not hasattr(node.lhs, 'inferred_type') or not hasattr(node.rhs, 'inferred_type'):
-            raise GeLBExTypeError(node.code_range, f"Type validation requires type inference to run first", "Internal compiler error")
-        
-        lhs_type = node.lhs.inferred_type
-        rhs_type = node.rhs.inferred_type
+        lhs_type = self._require_inferred_type(node.lhs, node)
+        rhs_type = self._require_inferred_type(node.rhs, node)
         
         # Compare the full types (including shapes)
         self._validate_assignment(lhs_type, rhs_type, node)
@@ -526,41 +570,29 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
     
     def visitGlobalConstantsBlock_N(self, node: GlobalConstantsBlock_N, ast_root_node: Program_N):
         """Process statements in global constants block."""
-        for stmt in node.stmts:
-            self.visit(stmt, ast_root_node)
-        return node
+        return self._visit_block_stmts(node, ast_root_node)
     
     def visitInitializerBlock_N(self, node: InitializerBlock_N, ast_root_node: Program_N):
         """Process statements in initializer block."""
-        for stmt in node.stmts:
-            self.visit(stmt, ast_root_node)
-        return node
+        return self._visit_block_stmts(node, ast_root_node)
     
     def visitDynamicBlock_N(self, node: DynamicBlock_N, ast_root_node: Program_N):
         """Process statements in dynamic block."""
-        for stmt in node.stmts:
-            self.visit(stmt, ast_root_node)
-        return node
+        return self._visit_block_stmts(node, ast_root_node)
     
     def visitGaugeBlock_N(self, node: GaugeBlock_N, ast_root_node: Program_N):
         """Process statements in gauge block."""
-        for stmt in node.stmts:
-            self.visit(stmt, ast_root_node)
-        return node
+        return self._visit_block_stmts(node, ast_root_node)
     
     def visitGeometryBlock_N(self, node: GeometryBlock_N, ast_root_node: Program_N):
         """Process statements in geometry block."""
-        for stmt in node.stmts:
-            self.visit(stmt, ast_root_node)
-        return node
+        return self._visit_block_stmts(node, ast_root_node)
     
     # Pass-through for nodes without type checking
     
     def visitLatticesBlock_N(self, node: LatticesBlock_N, ast_root_node: Program_N):
         """Visit lattice instantiation statements for parameter validation."""
-        for stmt in node.stmts:
-            self.visit(stmt, ast_root_node)
-        return node
+        return self._visit_block_stmts(node, ast_root_node)
     
     def visitNodeClassesBlock_N(self, node: NodeClassesBlock_N, ast_root_node: Program_N):
         """Node classes block doesn't need type validation."""
@@ -646,15 +678,143 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
                             )
         
         return node
-    
+
+    # Intrinsic function calls
+
+    def visitIntrinsicFunctionCall_N(self, node, ast_root_node: Program_N):
+        """Validate sub-expressions within intrinsic function arguments."""
+        for arg in node.arguments.elements:
+            self.visit(arg, ast_root_node)
+        return node
+
+    def visitUserFunctionCall_N(self, node, ast_root_node: Program_N):
+        """Validate sub-expressions within user function call arguments."""
+        for arg in node.arguments.elements:
+            self.visit(arg, ast_root_node)
+        return node
+
+    def visitDestructuringAssignmentStmt_N(self, node, ast_root_node: Program_N):
+        """Validate types in destructuring assignment.
+
+        Two RHS shapes are accepted:
+
+        1. ``UserFunctionCall_N`` -- multi-output function call.  The
+           function must have N output parameters where N == number of
+           targets.  (The grammar lets the user write
+           ``{a, b} = SingleOutputFunc(x);`` which is invalid; this
+           check catches it.)
+
+        2. Any other expression -- must have a 1D-array inferred type
+           whose statically-known length matches the number of targets.
+           This covers array literals, array variables, lattice
+           selections, etc.
+
+        For both shapes, the result element type must be uniform --
+        every target shares the same type as the array element type.
+        Mixed-type destructuring (e.g. ``{int_a, real_b} = {1, 2.5};``)
+        is out of scope for v1; users can apply explicit casts on the
+        RHS array elements if needed.
+        """
+        self.visit(node.rhs, ast_root_node)
+
+        n_targets = len(node.targets)
+        rhs = node.rhs
+
+        if isinstance(rhs, UserFunctionCall_N):
+            # The function block was attached during type inference for
+            # multi-output calls.  Single-output calls have inferred_type
+            # set instead -- those don't make sense in a destructuring
+            # context.
+            func_block = getattr(rhs, 'function_block', None)
+            if func_block is None:
+                raise GeLBExTypeError(
+                    node,
+                    f"Destructuring assignment requires a multi-output "
+                    f"function call, but '{rhs.function_name.name}' "
+                    f"returns a single value",
+                    "Use a regular assignment instead, or call a "
+                    "function with multiple output parameters."
+                )
+            n_outputs = len(func_block.outputs.elements)
+            if n_outputs != n_targets:
+                raise GeLBExTypeError(
+                    node,
+                    f"Destructuring expects {n_outputs} target"
+                    f"{'' if n_outputs == 1 else 's'} (one per output of "
+                    f"'{rhs.function_name.name}'), got {n_targets}",
+                    "The number of LHS targets must match the number "
+                    "of function outputs."
+                )
+            return node
+
+        # Non-function-call RHS: must be a 1D array of statically-known
+        # length matching the number of targets.
+        rhs_type = getattr(rhs, 'inferred_type', None)
+        if rhs_type is None or not isinstance(rhs_type, ArrayDataType_N):
+            raise GeLBExTypeError(
+                node,
+                "Destructuring RHS must be a multi-output function "
+                "call or a 1D array expression",
+                "Got an expression with no array type."
+            )
+
+        # Extract the static length of the RHS array.
+        shape = rhs_type.shape
+        rhs_length = None
+        if isinstance(shape, IntLiteral_N):
+            rhs_length = shape.value
+        elif (isinstance(shape, List_N)
+                and len(shape.elements) == 1
+                and isinstance(shape.elements[0], IntLiteral_N)):
+            rhs_length = shape.elements[0].value
+        elif isinstance(shape, List_N) and len(shape.elements) == 0:
+            # Scalar -- not destructurable
+            raise GeLBExTypeError(
+                node,
+                "Cannot destructure a scalar value",
+                "Destructuring requires a 1D array RHS."
+            )
+        else:
+            # Multi-dimensional array, or non-static shape
+            n_dims = (len(shape.elements)
+                      if isinstance(shape, List_N) else 'unknown')
+            raise GeLBExTypeError(
+                node,
+                f"Destructuring RHS must be a 1D array; got an array "
+                f"with {n_dims} dimensions",
+                "Multi-dimensional destructuring is not supported in v1."
+            )
+
+        if rhs_length != n_targets:
+            raise GeLBExTypeError(
+                node,
+                f"Destructuring expects {rhs_length} target"
+                f"{'' if rhs_length == 1 else 's'} to match the RHS "
+                f"array length, got {n_targets}",
+                "The number of LHS targets must match the RHS array length."
+            )
+
+        return node
+
+    def visitFunctionBlock_N(self, node, ast_root_node: Program_N):
+        """Validate types within function body."""
+        return self._visit_block_stmts(node, ast_root_node)
+
     # Other nodes
-    
+
     def visitPaintNodesStmt_N(self, node: PaintNodesStmt_N, ast_root_node: Program_N):
         """Paint statements don't involve type checking."""
         if node.lhs is not None:
             self.visit(node.lhs, ast_root_node)
         return node
-    
+
+    def visitBorderStmt_N(self, node, ast_root_node):
+        return node  # No expressions to validate
+
+    def visitConditionalPaintStmt_N(self, node, ast_root_node):
+        self.visit(node.predicate, ast_root_node)
+        return node
+
     def visitRange_N(self, node: Range_N, ast_root_node: Program_N):
         """Process range bounds."""
         if node.low is not None:
@@ -682,7 +842,36 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         return node
     
     def visitVariableDeclarationStmt_N(self, node: VariableDeclarationStmt_N, ast_root_node: Program_N):
-        """Variable declarations don't need type validation."""
+        """A declaration without an initial value needs no validation; with
+        one, the value must have the declared type (a scalar may initialise
+        an array by broadcasting)."""
+        initial = getattr(node, "initial_value", None)
+        if initial is None:
+            return node
+        self.visit(initial, ast_root_node)
+        value_type = self._require_inferred_type(initial, node)
+        declared_type = node.data_type
+        if (self._is_scalar_type(value_type)
+                and not self._is_scalar_type(declared_type)):
+            return node
+        if not self._types_match(declared_type, value_type):
+            name = getattr(node.name, "name", node.name)
+            if self._same_base_type(declared_type, value_type):
+                raise GeLBExTypeError(
+                    node,
+                    f"Variable '{name}' is declared with shape "
+                    f"{self._shape_text(declared_type)} but initialized with "
+                    f"shape {self._shape_text(value_type)}",
+                    "The initializer must have exactly the declared number "
+                    "of elements in every dimension"
+                )
+            raise GeLBExTypeError(
+                node,
+                f"Variable '{name}' declared as "
+                f"'{self._get_type_name(declared_type)}' but initialized with "
+                f"'{self._get_type_name(value_type)}'",
+                "Initialization type must match declared type"
+            )
         return node
     
     def visitLatticeInstaStmt_N(self, node: LatticeInstaStmt_N, ast_root_node: Program_N):

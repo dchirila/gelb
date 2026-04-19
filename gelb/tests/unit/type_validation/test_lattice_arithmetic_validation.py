@@ -34,7 +34,7 @@ dynamic Update {
     f.out[x | :] = f.in[x | :] + 1;  // Should work now!
 }
 
-gauge Output(out = {int val;}) {
+gauge Output -> (int val) {
     val = f.in[x | 0];
 }
 
@@ -79,7 +79,7 @@ dynamic Update {
     f.out[x | :] = f.in[x | :] + g.in[x | :];  // Same shape arrays
 }
 
-gauge Output(out = {int val;}) {
+gauge Output -> (int val) {
     val = f.in[x | 0];
 }
 
@@ -116,7 +116,7 @@ dynamic Update {
     f.out[x | :] = f.in[x | :] / 2.0;    // Division
 }
 
-gauge Output(out = {real val;}) {
+gauge Output -> (real val) {
     val = f.in[x | 0];
 }
 
@@ -150,7 +150,7 @@ dynamic Update {
     f.out[x | :] = f.in[x | :];
 }
 
-gauge Output(out = {array[bool, 3] mask;}) {
+gauge Output -> (array[bool, 3] mask) {
     mask = f.in[x | :] > 0;  // Array comparison
 }
 
@@ -189,7 +189,7 @@ dynamic Update {
     f.out[x | :] = f.in[x | :] + (1.0 - f.in[x | :]) / TAU;
 }
 
-gauge Output(out = {real val;}) {
+gauge Output -> (real val) {
     val = f.in[x | 0];
 }
 

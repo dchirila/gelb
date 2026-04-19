@@ -23,7 +23,7 @@ initializer Init {{
 dynamic Dyn {{
     {dynamic_content or "f.out[x|0] = f.in[x|0];"}
 }}
-gauge Out(out = {{real val;}}) {{
+gauge Out -> (real val) {{
     val = f.in[x|0];
 }}
 node_classes {{
@@ -48,7 +48,7 @@ initializer Init {{
 dynamic Dyn {{
     {dynamic_content or "f.out[x,y|0] = f.in[x,y|0];"}
 }}
-gauge Out(out = {{real val;}}) {{
+gauge Out -> (real val) {{
     val = f.in[x,y|0];
 }}
 node_classes {{
@@ -121,33 +121,33 @@ class TestLatticeSelectionShapeInference:
         assert isinstance(inferred_type, ArrayDataType_N)
         assert inferred_type.element_dtype == "real"
         
-        # Should be 1D array (vector of DFs)
+        # Should be 1D array (vector of DFs) with shape = [q] = [3]
         assert len(inferred_type.shape.elements) == 1
         shape_element = inferred_type.shape.elements[0]
-        assert isinstance(shape_element, Identifier_N)
-        assert shape_element.name == "q"
-    
+        assert isinstance(shape_element, IntLiteral_N)
+        assert shape_element.value == 3
+
     def test_full_df_selection_2d_infers_vector_shape(self):
         """Full DF selection f.in[x,y|:] should infer 1D array shape."""
         gelb_code = real_lattice_program_2d(
             initializer_content="f.out[x,y|:] = f.in[x,y|:];"
         )
         ast = get_typed_ast(gelb_code)
-        
+
         # Get the lattice IN selection
         initializer = ast.initializers.elements[0]
         assignment = initializer.stmts.elements[0]
         lattice_in_sel = assignment.rhs
-        
+
         inferred_type = lattice_in_sel.inferred_type
         assert isinstance(inferred_type, ArrayDataType_N)
         assert inferred_type.element_dtype == "real"
-        
-        # Should be 1D array (vector of DFs)
+
+        # Should be 1D array (vector of DFs) with shape = [q] = [9]
         assert len(inferred_type.shape.elements) == 1
         shape_element = inferred_type.shape.elements[0]
-        assert isinstance(shape_element, Identifier_N)
-        assert shape_element.name == "q"
+        assert isinstance(shape_element, IntLiteral_N)
+        assert shape_element.value == 9
     
     def test_single_df_selection_infers_scalar_shape(self):
         """Single DF selection f.in[x|0] should infer 0D array (scalar)."""
@@ -190,20 +190,18 @@ class TestLatticeSelectionOperations:
         
         # Result should be vector (1D array) since lattice[x|:] * scalar
         shape = mul_expr.inferred_type.shape
-        if isinstance(shape, Identifier_N):
-            # Shape is 'q' identifier - represents 1D array of size q
-            assert shape.name == "q"
+        if isinstance(shape, IntLiteral_N):
+            assert shape.value == 3
         else:
-            # Should be List_N with 1 element for 1D array
             assert len(shape.elements) == 1
         assert mul_expr.inferred_type.element_dtype == "real"
-        
+
         # Left operand (lattice selection) should be vector
         lattice_sel = mul_expr.left
         assert isinstance(lattice_sel.inferred_type, ArrayDataType_N)
         lattice_shape = lattice_sel.inferred_type.shape
-        if isinstance(lattice_shape, Identifier_N):
-            assert lattice_shape.name == "q"
+        if isinstance(lattice_shape, IntLiteral_N):
+            assert lattice_shape.value == 3
         else:
             assert len(lattice_shape.elements) == 1
         
@@ -230,33 +228,19 @@ class TestLatticeSelectionOperations:
         
         # Result should be vector (1D array)
         shape = add_expr.inferred_type.shape
-        if isinstance(shape, Identifier_N):
-            # Shape is 'q' identifier - represents 1D array of size q
-            assert shape.name == "q"
+        if isinstance(shape, IntLiteral_N):
+            assert shape.value == 3
         else:
-            # Should be List_N with 1 element for 1D array
             assert len(shape.elements) == 1
         assert add_expr.inferred_type.element_dtype == "real"
-        
+
         # Both operands should be vectors
         left_sel = add_expr.left
         right_sel = add_expr.right
         assert isinstance(left_sel.inferred_type, ArrayDataType_N)
         assert isinstance(right_sel.inferred_type, ArrayDataType_N)
-        
-        # Check left operand shape
-        left_shape = left_sel.inferred_type.shape
-        if isinstance(left_shape, Identifier_N):
-            assert left_shape.name == "q"
-        else:
-            assert len(left_shape.elements) == 1
-            
-        # Check right operand shape
-        right_shape = right_sel.inferred_type.shape
-        if isinstance(right_shape, Identifier_N):
-            assert right_shape.name == "q"
-        else:
-            assert len(right_shape.elements) == 1
+        assert len(left_sel.inferred_type.shape.elements) == 1
+        assert len(right_sel.inferred_type.shape.elements) == 1
 
 
 class TestLatticeSelectionConsistency:
@@ -339,19 +323,17 @@ class TestLatticeSelectionIntegrationWithTypeSystem:
         # Result should promote to real and maintain vector shape
         assert add_expr.inferred_type.element_dtype == "real"
         shape = add_expr.inferred_type.shape
-        if isinstance(shape, Identifier_N):
-            # Shape is 'q' identifier - represents 1D array of size q
-            assert shape.name == "q"
+        if isinstance(shape, IntLiteral_N):
+            assert shape.value == 3
         else:
-            # Should be List_N with 1 element for 1D array
             assert len(shape.elements) == 1
-        
+
         # Left operand (lattice) is real vector
         lattice_sel = add_expr.left
         assert lattice_sel.inferred_type.element_dtype == "real"
         lattice_shape = lattice_sel.inferred_type.shape
-        if isinstance(lattice_shape, Identifier_N):
-            assert lattice_shape.name == "q"
+        if isinstance(lattice_shape, IntLiteral_N):
+            assert lattice_shape.value == 3
         else:
             assert len(lattice_shape.elements) == 1
         

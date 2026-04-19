@@ -24,7 +24,7 @@ class TestLatticeConstantValidation:
             
             initializer Init { f.out[x | 0] = 0; }
             dynamic Dyn { f.out[x | 0] = 1; }
-            gauge Out(out = {int val;}) { val = f.in[x | 0]; }
+            gauge Out -> (int val) { val = f.in[x | 0]; }
             node_classes { node_class BULK(Init, Dyn, Out); }
             geometry { nodes[:] = BULK; }
         """
@@ -51,7 +51,7 @@ class TestLatticeConstantValidation:
             
             initializer Init { f.out[x | 0] = 0; }
             dynamic Dyn { f.out[x | 0] = 1; }
-            gauge Out(out = {int val;}) { val = f.in[x | 0]; }
+            gauge Out -> (int val) { val = f.in[x | 0]; }
             node_classes { node_class BULK(Init, Dyn, Out); }
             geometry { nodes[:] = BULK; }
         """
@@ -78,7 +78,7 @@ class TestLatticeConstantValidation:
             
             initializer Init { f.out[x | 0] = 0; }
             dynamic Dyn { f.out[x | 0] = 1; }
-            gauge Out(out = {int val;}) { val = f.in[x | 0]; }
+            gauge Out -> (int val) { val = f.in[x | 0]; }
             node_classes { node_class BULK(Init, Dyn, Out); }
             geometry { nodes[:] = BULK; }
         """
@@ -105,7 +105,7 @@ class TestLatticeConstantValidation:
             
             initializer Init { f.out[x | 0] = 0; }
             dynamic Dyn { f.out[x | 0] = 1; }
-            gauge Out(out = {int val;}) { val = f.in[x | 0]; }
+            gauge Out -> (int val) { val = f.in[x | 0]; }
             node_classes { node_class BULK(Init, Dyn, Out); }
             geometry { nodes[:] = BULK; }
         """
@@ -130,7 +130,7 @@ class TestLatticeConstantValidation:
             
             initializer Init { f.out[x | 0] = 0; }
             dynamic Dyn { f.out[x | 0] = 1; }
-            gauge Out(out = {int val;}) { val = f.in[x | 0]; }
+            gauge Out -> (int val) { val = f.in[x | 0]; }
             node_classes { node_class BULK(Init, Dyn, Out); }
             geometry { nodes[:] = BULK; }
         """
@@ -157,7 +157,7 @@ class TestLatticeConstantValidation:
             
             initializer Init { f.out[x, y | 0] = 0; }
             dynamic Dyn { f.out[x, y | 0] = 1; }
-            gauge Out(out = {int val;}) { val = f.in[x, y | 0]; }
+            gauge Out -> (int val) { val = f.in[x, y | 0]; }
             node_classes { node_class BULK(Init, Dyn, Out); }
             geometry { nodes[:, :] = BULK; }
         """
@@ -182,7 +182,7 @@ class TestLatticeConstantValidation:
             
             initializer Init { f.out[x | 0] = 0; }
             dynamic Dyn { f.out[x | 0] = 1; }
-            gauge Out(out = {int val;}) { val = f.in[x | 0]; }
+            gauge Out -> (int val) { val = f.in[x | 0]; }
             node_classes { node_class BULK(Init, Dyn, Out); }
             geometry { nodes[:] = BULK; }
         """
@@ -209,7 +209,7 @@ class TestLatticeConstantValidation:
             
             initializer Init { f.out[x | 0] = 0; }
             dynamic Dyn { f.out[x | 0] = 1; }
-            gauge Out(out = {int val;}) { val = f.in[x | 0]; }
+            gauge Out -> (int val) { val = f.in[x | 0]; }
             node_classes { node_class BULK(Init, Dyn, Out); }
             geometry { nodes[:] = BULK; }
         """
@@ -240,7 +240,7 @@ class TestConstantValidationTiming:
             
             initializer Init { f.out[x | 0] = 0; }
             dynamic Dyn { f.out[x | 0] = 1; }
-            gauge Out(out = {int val;}) { val = f.in[x | 0]; }
+            gauge Out -> (int val) { val = f.in[x | 0]; }
             node_classes { node_class BULK(Init, Dyn, Out); }
             geometry { nodes[:] = BULK; }
         """
@@ -267,7 +267,7 @@ class TestConstantValidationTiming:
             
             initializer Init { f.out[x | 0] = 0; }
             dynamic Dyn { f.out[x | 0] = 1; }
-            gauge Out(out = {int val;}) { val = f.in[x | 0]; }
+            gauge Out -> (int val) { val = f.in[x | 0]; }
             node_classes { node_class BULK(Init, Dyn, Out); }
             geometry { nodes[:] = BULK; }
         """

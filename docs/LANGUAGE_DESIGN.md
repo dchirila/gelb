@@ -4,6 +4,23 @@ This document captures important design decisions made during the development of
 
 Many of these decisions represent changes from the original GeLB specification in the PhD thesis. For historical context and rationale, see the relevant sections below.
 
+## Guiding Principle: Familiarity Without Baggage
+
+Many GeLB users will arrive from other LBM frameworks (lbmpy, Palabos,
+OpenLB, waLBerla). GeLB should not surprise them: they should be able to
+keep the same — or only slightly adjusted — mental model, presented as a
+simpler language in which that mental model aligns directly with an
+explicit view of the algorithms, with no complex class hierarchies to
+reason about. At the same time, users genuinely new to LBM must never
+need to learn the mechanics of *other* frameworks to understand GeLB:
+framework-specific machinery does not leak into the language.
+
+In practice this means: when a semantic question arises (e.g. "what do
+masked solid cells' distribution functions hold?"), GeLB adopts the
+explicit, documented version of what users of the major frameworks
+already expect — rather than inventing novel semantics or leaving
+behavior implicit in implementation details.
+
 ## Block Structure and Scope
 
 ### Constants in the lattices block
@@ -27,13 +44,13 @@ global_constants {
 }
 
 lattices {
-    lattice f(d=D, q=9, df_type=real64);  // Can use global constant D
+    lattice f(D, 9, real64, {64, 64}, {true, true});  // Can use global constant D
 }
 
 // Incorrect: Would cause a parser error
 lattices {
     const real D = 2.0;  // NOT ALLOWED - constants cannot be defined here
-    lattice f(d=D, q=9, df_type=real64);
+    lattice f(D, 9, real64, {64, 64}, {true, true});
 }
 ```
 
@@ -56,6 +73,61 @@ const array[real, {3, 3}] identity = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
 // Old syntax from PhD thesis (would conflict with < operator)
 // const array<real, {3, 3}> identity = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
 ```
+
+### Element type and shape are coupled
+
+**Decision**: `array[T, shape]` couples the element type `T` and the
+`shape` into a single nominal type — there are no generics, no shape
+polymorphism, and no separation between "an array of T" and "an array
+of shape S".
+
+**Rationale**: GeLB's role is to compile to high-performance Fortran
+where every array has a fixed element kind and a fixed shape known at
+compile time. Generic / shape-polymorphic types would require runtime
+dispatch or template-style monomorphization, neither of which fits
+GeLB's "transparent translation to Fortran" model.
+
+**Practical limitation**: A function cannot be written generically over
+shape — each shape needs its own function. For LBM use cases this is
+not a limitation in practice, since the Q-value of a velocity set is
+always known at compile time.
+
+### Array shapes must be compile-time-foldable
+
+**Decision**: The `shape` argument of `array[T, shape]` must be a
+compile-time-foldable expression. The compiler accepts:
+
+- An integer literal (`9`, `27`)
+- An array literal of integer literals (`{3, 3}`, `{2, 3, 4}`)
+- A reference to a global `const` declared with an integer expression
+- An arithmetic expression composed of any of the above
+
+```gelb
+const int Q = 9;
+const int N = 64;
+
+// All valid: shape is compile-time-foldable
+const array[real, 9]      EX = {0.0, 1.0, ...};
+const array[real, Q]      EY = {0.0, 0.0, ...};
+const array[real, {Q, Q}] M  = {{...}};
+const array[real, Q + 1]  big = {...};
+
+// NOT valid: shape uses a runtime variable
+function MakeArray(int n) -> (array[real, n] arr) { ... }
+//                                        ^
+// 'n' is a runtime parameter, not a compile-time constant.
+```
+
+**Rationale**: Generated Fortran arrays have fixed extents declared at
+compile time. Allowing a runtime shape would require either dynamic
+allocation (out of scope for GeLB v1) or template-style monomorphization
+(also out of scope).
+
+**How it works internally**: Constant folding runs before type
+inference, so by the time array shapes are checked, every valid shape
+expression has been collapsed to an `IntLiteral_N` or
+`Array1DLiteral_N` of int literals. Anything that hasn't been collapsed
+is rejected with a type error.
 
 ## String Literals
 
@@ -122,8 +194,60 @@ w = -(a + b);    // Unary minus applied to expression
 - Will be added in future versions to complement existing assignment types
 
 **Current assignment types**:
-- `variable_assignment_stmt` - for scalar variables
-- `lattice_out_selection_assignment_stmt` - for lattice output selections
+- `variable_assignment_stmt` — scalar variables
+- `lattice_out_selection_assignment_stmt` — lattice output selections
+- `destructuring_assignment_stmt` — multi-target assignment from a function call or 1D array (see below)
+
+### Destructuring assignment
+
+**Decision**: The `{a, b, c} = expr;` syntax binds multiple targets in
+a single statement. The RHS may be either:
+
+1. **A multi-output user function call**, where the number of
+   outputs matches the number of targets:
+
+   ```gelb
+   function Macro(array[real, 9] fIn) -> (real rho, real ux, real uy) {
+       rho = sum(fIn);
+       ux  = dot_prod(EX, fIn) / rho;
+       uy  = dot_prod(EY, fIn) / rho;
+   }
+
+   {rho, ux, uy} = Macro(f.in[x, y | :]);
+   ```
+
+2. **Any 1D-array expression** whose statically-known length matches
+   the number of targets — array literals, global constants of array
+   type, lattice DF slices, etc.:
+
+   ```gelb
+   const array[real, 3] EX = {1.0, 2.0, 3.0};
+
+   real a;
+   real b;
+   real c;
+   {a, b, c} = EX;            // a = 1.0, b = 2.0, c = 3.0
+   {a, b, c} = {7.0, 8.0, 9.0};
+   ```
+
+**Rules**:
+- The RHS array length must be a **compile-time constant**, and must
+  match the number of targets exactly. A mismatch is a frontend type
+  error.
+- All targets must share the same scalar type as the array elements.
+  Mixed-type destructuring (e.g. `{int_a, real_b} = {1, 2.5}`) is not
+  supported in v1; use explicit casts on the RHS elements
+  (`{a, b} = {1.0, real(2)}`) if needed.
+- Only **1D arrays** can be destructured. 2D-and-higher destructuring
+  is out of scope for v1.
+
+**Implementation note**: For function-call destructuring, the inliner
+expands the function body inline with the targets bound directly. For
+array-literal destructuring, each target gets the corresponding
+element as a constant. For non-literal array RHS (variable, slice,
+expression), the backend uses Fortran's `associate` construct to bind
+the result to a temporary alias once and read element-wise from it,
+avoiding repeated evaluation of the expression.
 
 ## File and Program Naming
 
@@ -166,16 +290,147 @@ w = -(a + b);    // Unary minus applied to expression
 
 ## Geometry and Node Selection
 
-### Rectangular selections only
+### Rectangular selections and predicate paints
 
-**Decision**: In the `geometry` block, only rectangular node-selections are allowed using the `nodes` statement.
+**Decision**: In the `geometry` block a cell is painted either by a
+rectangular selection with constant, inclusive bounds,
+`nodes[lo:hi, ...] = CLASS;` (a single cell is `nodes[x0, y0] = CLASS;`),
+or by a *predicate paint*, `nodes[where condition] = CLASS;`, whose
+`bool` condition is evaluated once per cell at compile time with the
+implicit coordinates (`x`; `x, y`; `x, y, z`, by rank) bound to that
+cell. The condition may use constants, dimension constants, the scalar
+math intrinsics, numeric conversions and pure single-output user
+functions; it may not read a lattice, the time step `t` or `random()`.
+The coordinates are available only inside a `where` condition.
+
+Ordinary and predicate paints execute in their mutual source order and
+a later paint wins whatever its kind. Every backend that materializes
+the class map at run time replays the resolved paints in that order
+(`ResolvedGeometry.paint_ops`), so validators and generated code agree
+on one map.
 
 **Rationale**:
-- The `node` statement is not needed (it's just a special case of `nodes`)
-- The `read_geometry_from_file` statement needs more testing
-- Keeps the initial implementation simpler
+- `where` keeps the predicate distinct from a point paint in every
+  dimensionality, and the expression form is the one that can later
+  take `t`, lattice values and global variables without new syntax.
+  The pre-release placeholder form
+  `nodes[F(:, :, ...)]` had nowhere to put them and was removed before
+  the initial release.
+- In this version the geometry is fixed for the whole run.
 
-**Note**: `nodes` is equivalent to `node_range` from the thesis.
+**Reserved words**: `enter`, `leave`, `reduce`, `reduction`, `update`,
+`global_variables`, `transition` and `zone` are reserved for later
+language stages and cannot be used as identifiers; none of them is an
+implemented feature.
+
+**Note**: `nodes` is equivalent to `node_range` from the thesis. The
+`read_geometry_from_file` statement still needs more testing.
+
+### Border repainting
+
+**Decision**: The `border()` geometry statement repaints boundary cells
+of one node class as another.
+
+**Syntax**: `border(SOURCE) = TARGET;` — after all paints, repaints the
+cells of SOURCE that have at least one in-domain axis-aligned neighbor
+(the `2*d` face neighbors: ±1 in any dimension; diagonals are not
+inspected and periodic seams are not crossed) of a different class as
+TARGET. Interior cells remain as SOURCE: the rule repaints the source's
+inner boundary, not an outer ring. Border rules execute in their own
+source order, even when written between paints; each reads one
+snapshot of the map and applies its replacements simultaneously, and a
+later rule sees the previous rule's result. In this version a border
+is applied once, when the geometry is resolved.
+
+**Rationale**:
+- Eliminates manual ±1 offset arithmetic for obstacle boundaries
+- Reduces the common 3-class pattern (FLUID + WALL + SOLID with two
+  rectangular selections) to a single paint + border statement
+- Less error-prone than hand-computed boundary/interior regions
+
+**Example**:
+```gelb
+// Before: fragile manual offset calculation
+nodes[OX - R:OX + R, OY - R:OY + R] = WALL;
+nodes[OX - R + 1:OX + R - 1, OY - R + 1:OY + R - 1] = SOLID;
+
+// After: paint region + automatic border detection
+nodes[OX - R:OX + R, OY - R:OY + R] = SOLID;
+border(SOLID) = WALL;
+```
+
+### Masked node classes
+
+**Decision**: A node class can be marked `masked` to indicate that its
+cells are skipped at runtime and NaN-filled in the gauge output.
+
+**Syntax**: The `masked` keyword appears after the closing parenthesis
+of `node_class`. Three forms are allowed:
+
+```gelb
+node_class SOLID() masked;                    // pure-solid marker
+node_class STATIC_SOLID(Init) masked;         // init only
+node_class WALL(Init, BounceBack) masked;     // init + dynamic
+```
+
+**Constraint (enforced by the grammar)**: Masked node classes **cannot
+have a gauge**. There is no 3-argument masked variant. Attempting to
+write `node_class WALL(Init, Dyn, Gauge) masked;` is a parse error.
+
+**Rationale**:
+- Masked cells are skipped during the gauge sweep at runtime
+- The output positions for masked cells are NaN-filled (via
+  `ieee_value(0.0d0, ieee_quiet_nan)`)
+- A per-cell gauge on masked cells would never run, so the syntax
+  would be misleading
+
+**Use cases**:
+- Solid obstacles (interior cells where no LBM update is needed)
+- Cells outside the simulation domain in non-rectangular regions
+
+The combination with `border()` is particularly useful: paint the
+entire obstacle as `SOLID() masked;`, then `border(SOLID) = WALL;`
+automatically extracts the wall layer that runs bounce-back.
+
+### Masked cells hold zero distribution functions (language guarantee)
+
+**Decision**: The DFs of every masked-NC cell are explicitly zeroed
+(in both ping-pong buffers, in every lattice) before the initializers
+run. A masked node class *with* an initializer (e.g.
+`STATIC_SOLID(Init) masked`) can still overwrite the zeros — the
+zero-init runs first.
+
+**Rationale**: a masked cell's neighbours may legitimately read its
+DFs — the canonical case is a bounce-back `WALL` ring around a masked
+`SOLID` obstacle gathering populations via `bounce_back_dfs`. Zero
+populations contribute zero mass, so the read is harmless **iff** the
+values are zero. This is the *full-way bounce-back* convention familiar
+from other frameworks (Palabos explicitly zeroes populations in its
+`Cell` constructor; OpenLB documents per-material initialization as
+part of setup), made explicit in GeLB's generated code rather than
+inherited from how the host happens to fill fresh memory. Each backend
+emits the zeroing visibly: loop nests over the masked regions
+(`cpu_fortran_serial`, `cpu_highway`) or a one-time
+`gelb_masked_zero_init` kernel (`gpu_cuda_cpp`).
+
+**Compiler enforcement**: the cross-NC coverage validator checks, at
+compile time, that every DF a node class reads from a *neighbour* cell
+is actually written by the neighbour's node class — with masked
+neighbours exempt precisely because of the zero guarantee above. A
+gauge reading a lattice its own node class never writes is likewise a
+compile error. No population is ever read undefined.
+
+**Related invariant — ghost cells**: halo (ghost) cells on *periodic*
+axes are rewritten by the halo update before every timestep; ghost
+cells on *non-periodic* axes are **never read** by generated code
+(wall-adjacent reads clamp at the read site instead). Neither is
+covered by the zero guarantee — and deliberately so: under
+`gelbc --poison-uninit` (which fills lattice allocations with NaN to
+detect reads of undefined cells) the non-periodic ghost layers stay
+poisoned, so any future emission bug that reads them is caught
+immediately. With the masked-cell guarantee in place, a program whose
+output differs between a normal run and a `--poison-uninit` run is
+reading genuinely undefined memory — a compiler bug worth reporting.
 
 ### Multiple initializers per node-class
 
@@ -185,13 +440,11 @@ w = -(a + b);    // Unary minus applied to expression
 - Avoids imposing unnecessary constraints on users
 - More flexible than the thesis version (which allowed only one)
 
-### Lattice size and periodicity location (Major revision from current implementation)
+### Lattice size and periodicity location
 
 **Original Design Decision (PhD thesis)**: Size and periodicity were to be specified in the `geometry` block using `set_grid_size` and `set_grid_periodicity` statements.
 
-**Current Implementation (temporary)**: Following the PhD thesis approach with `set_grid_size` and `set_grid_periodicity` in the geometry block.
-
-**Final Design Decision (to be implemented)**: Size and periodicity will be specified during lattice instantiation (in `lattices` block), not in `geometry` block.
+**Current Implementation**: Size and periodicity are specified during lattice instantiation (in `lattices` block), not in `geometry` block.
 
 **New Syntax**:
 ```gelb
@@ -227,20 +480,269 @@ geometry {
 - **Consistency**: Aligns with the principle that each block has a single, well-defined purpose
 
 **Migration notes**:
-- This is a breaking change from the current implementation
-- All existing GeLB programs will need to be updated
+- This is a breaking change from the older PhD-thesis syntax
+- Programs that still use `set_grid_size` or `set_grid_periodicity` should move
+  those values into the `lattice` declaration
 - The compiler will need significant refactoring (grammar, AST, visitors)
 - For GeLB v1, all lattices must have identical grid_size and periodicity
 
+## Lattice Access Separator (`|`)
+
+### The `|` in `f.out[x, y | :]`
+
+**Decision**: Use `|` (vertical bar) to separate spatial indices from the
+distribution function (DF) range in lattice access expressions.
+
+**Rationale**: In kinetic theory, the distribution function `f(x, v)` lives
+in **phase space** — position × velocity. The `|` literally separates the
+spatial coordinates (left) from the velocity/DF dimension (right), mirroring
+the mathematical notation where position and velocity are distinct index
+groups. For LBM practitioners, this mapping is natural.
+
+**Examples**:
+```gelb
+f.out[x, y | :]     // All DFs at site (x, y)
+f.in[x, y | 0]      // Single DF (index 0) at site (x, y)
+f.out[x, y | 1:3]   // DF slice (indices 1 through 3)
+```
+
+**Reserved status**: `|` is permanently reserved for this purpose. It will
+**not** be reused for bitwise operators or union types. GeLB does not need
+bitwise operators — it is a domain-specific language for numerical simulation,
+not a systems programming language.
+
+## Lattice Read/Write Semantics (`f.in` / `f.out`)
+
+### The two-timestep illusion is a language guarantee
+
+**Decision**: GeLB guarantees, as a **language-level contract**, that
+inside any single `dynamic` block:
+
+- `f.in[...]` always reads from the **previous timestep's** lattice
+  state (the "old" data, frozen for the duration of the timestep).
+- `f.out[...]` always writes to the **next timestep's** lattice state
+  (the "new" data, not yet visible to anyone).
+- These two timesteps are **distinct, non-overlapping** logical
+  snapshots of the lattice. A read from `f.in[...]` cannot observe a
+  write from `f.out[...]` made earlier in the same timestep —
+  *anywhere* on the grid, by any worker, in any order.
+
+This is true regardless of:
+- The order in which cells are processed within a timestep
+- Whether cells are processed sequentially, in parallel (OpenMP),
+  on a GPU, or in any other order a future backend may choose
+- Whether the user reads neighboring cells (`f.in[x-1, y | 3]`) or
+  the local cell (`f.in[x, y | :]`)
+
+**Why this matters**: LBM streaming reads from neighbors, and any
+shared-memory parallel implementation that overwrote `f.in` cells
+in-place would corrupt those reads. The classical implementation
+technique is **ping-pong (double-buffer) lattices**: keep two copies
+of the lattice and swap their roles each timestep. GeLB's reference
+backends use exactly this technique.
+
+But the **user should not have to know this**. GeLB exposes the clean
+abstraction "previous timestep / next timestep" as part of the
+language contract, just like a modern CPU exposes the illusion of
+sequential execution while internally reordering instructions,
+predicting branches, and speculating across barriers. The user writes
+code against the simple model; the backend may use any technique it
+likes (ping-pong buffers today, esoteric-twist or AA-pattern in-place
+streaming tomorrow) as long as the contract is preserved.
+
+**Concrete consequences**:
+- Pull-streaming dynamics that read from neighbors are safe by
+  construction:
+  ```gelb
+  dynamic Stream {
+      // Read from 9 different neighbors; all reads see the
+      // previous timestep, none can race against this site's write.
+      array[real, 9] fIn = upstream_dfs(f, x, y, {EX, EY});
+      f.out[x, y | :] = collide(fIn);
+  }
+  ```
+- The compiler is free to parallelize a `dynamic` block across cells
+  with no synchronization, because no cell's `f.out` write can affect
+  any other cell's `f.in` read within the same timestep.
+- The same source compiles unchanged for serial CPU, OpenMP,
+  CUDA, and any future SIMD/MPI/heterogeneous backend.
+
+**For GeLB developers (not part of the user contract)**: The current
+backends implement this guarantee with a ping-pong (double-lattice)
+buffer scheme. Each lattice array has a trailing `0:1` dimension that
+selects "old" vs "new"; the indices are swapped at the end of each
+timestep. Future backends are free to drop the second copy in favor of
+in-place techniques like the **esoteric twist** or the **AA pattern**,
+which exploit knowledge of the streaming stencil to overwrite cells
+safely without a second buffer. From the user's perspective, the only
+observable difference will be performance — never correctness.
+
+## Lattice Operations vs Math Intrinsics
+
+GeLB's intrinsic functions fall into two categories that look the
+same syntactically but have different semantics.
+
+### Math intrinsics (the usual kind)
+
+These are stateless mathematical functions that take expression
+arguments and return a value:
+
+```gelb
+real s = sin(x);
+real d = sqrt(a*a + b*b);
+real m = mod(i, n);
+array[real, 3] s = sum(matrix);
+```
+
+They include `sin`, `cos`, `tan`, `tanh`, `sqrt`, `exp`, `log`, `abs`,
+`min`, `max`, `mod`, `atan2`, `sum`, `dot_prod`, `random`, `matmul`,
+`transpose`, `inverse`, `determinant`. The compiler treats them
+exactly like regular function calls.
+
+### Lattice operations (`upstream_dfs`, `bounce_back_dfs`)
+
+`upstream_dfs(lat, x, y, {EX, EY})` and `bounce_back_dfs(lat, x, y,
+{EX, EY})` *look* like intrinsic calls but have **special semantics**:
+
+- The first argument is **a lattice name**, not an expression. The
+  compiler binds it as a lattice reference, not as a value to evaluate.
+- The middle arguments are the **current cell coordinates** (the
+  implicit `x`, `y`, `z` variables). They are *not* evaluated as
+  general expressions; the compiler reads them positionally.
+- The last argument is the **velocity set** as compile-time integer
+  arrays (e.g. `{EX, EY}` where `EX` and `EY` are global constants).
+  The compiler reads the constant values to compute streaming
+  offsets at code-generation time.
+
+The result is an `array[real, q]` constructed by gathering the right
+distribution functions from neighboring cells:
+
+- `upstream_dfs` performs **pull streaming**: for DF index `i`, it
+  reads `f.in[x - EX[i], y - EY[i] | i]` (with periodic wrapping).
+- `bounce_back_dfs` performs **bounce-back**: for DF index `i`, it
+  reads `f.in[x + EX[i], y + EY[i] | opp(i)]`, the population of the
+  neighbour in direction `i` that points back at this cell, where
+  `opp(i)` is the index whose velocity is the negation of velocity
+  `i`. The fluid neighbour pulls it on the next step as its slot `i`
+  (full-way bounce-back, the wall midway between the nodes). A link
+  leaving a non-periodic grid gives the cell's own
+  `f.in[x, y | opp(i)]`, which nothing streams.
+
+These are *the* canonical LBM streaming operations, baked into the
+language because expressing them with manual per-DF reads would be
+tedious and stencil-extraction would have to recover the pattern.
+
+```gelb
+dynamic Stream {
+    // Pull-stream all 9 DFs from upstream neighbors in one operation:
+    array[real, 9] fIn = upstream_dfs(f, x, y, {EX, EY});
+    f.out[x, y | :] = collide(fIn);
+}
+
+dynamic BounceBack {
+    // Send every arriving population back along its link
+    // (full-way bounce-back wall):
+    f.out[x, y | :] = bounce_back_dfs(f, x, y, {EX, EY});
+}
+```
+
+**Why expose these as intrinsics rather than letting users write them
+manually?** The compiler reads the velocity set at code-generation
+time, computes per-DF offsets and the opposite-DF mapping, and emits
+straight-line Fortran array constructors. A hand-written equivalent
+would force the user to repeat the velocity set as numeric literals
+in every dynamic block, and the compiler's stencil analysis would
+have to reverse-engineer the pattern.
+
+### Type-cast intrinsics (`int(x)`, `real(x)`, ...)
+
+GeLB exposes nine type-cast intrinsics, one per scalar type:
+
+- **Integer**: `int(x)`, `int8(x)`, `int16(x)`, `int32(x)`, `int64(x)`
+- **Floating-point**: `real(x)`, `real16(x)`, `real32(x)`, `real64(x)`
+
+Each accepts any numeric or boolean argument and returns the converted
+value (preserving the argument's shape — casts work element-wise on
+arrays). Casts let users opt into **lossy downcasts** that the
+implicit-promotion system rejects:
+
+```gelb
+const real PI = 3.14;
+const int  N  = int(PI);        // 3 — explicit truncation, accepted
+// const int  N  = PI;          // ERROR: implicit real → int rejected
+
+real density = 1.0;
+int8 count   = int8(density);   // narrow to 1-byte int
+
+bool flag = true;
+int  value = int(flag);         // 1
+```
+
+**Truncation rule**: `real → int` casts truncate toward zero
+(matching Fortran's `int()` intrinsic and C's `(int)` cast):
+
+| Input  | `int(x)` |
+|--------|----------|
+| `3.7`  | `3`      |
+| `-3.7` | `-3`     |
+| `0.99` | `0`      |
+
+**Bool conversion**: `true → 1`, `false → 0` for both `int()` and
+`real()` casts.
+
+**Compile-time evaluation**: Casts on constant arguments are folded
+during the constant-folding pass, so `const int N = int(3.14);` is
+equivalent to `const int N = 3;` in the generated code.
+
+**Implementation note**: The cast intrinsics share their backend
+emission with the implicit type-promotion mechanism (via the internal
+`_emit_cast` helper). Adding a new scalar type to GeLB therefore only
+requires extending the cast helper once — the corresponding intrinsic
+will work automatically.
+
 ## Syntax Conventions
 
-### Parentheses for specifications
+### Function parameters and named results
 
-**Decision**: `gauge` out-specs and `function` in/out-specs use parentheses instead of square brackets.
+**Decision**: A function signature consists of a comma-separated
+parameter list followed by an arrow and a parenthesized list of named
+results:
+
+```gelb
+function Macro(array[real, 9] fIn)
+        -> (real rho, real ux, real uy) { ... }
+```
+
+The parameter list is always present, including for a zero-input
+function. Result parentheses are required even for one result. A gauge
+cannot take parameters, so it starts directly with its named-result
+clause:
+
+```gelb
+function Noise() -> (real value) { ... }
+gauge Hydro -> (real rho, real ux, real uy) { ... }
+```
+
+Each parameter and result repeats its type and entries are separated by
+commas, with no trailing comma. Functions and gauges must declare at
+least one result. Result names are semantic: function and gauge bodies
+assign to them, and multi-result function calls bind them positionally
+through destructuring assignment.
 
 **Rationale**:
-- Brings syntax closer to other programming languages
-- More familiar to programmers
+
+- The signature resembles familiar parameter and return-type syntax
+  without implying a `return` control-flow statement, which GeLB does
+  not have.
+- `->` makes the input/result boundary immediately visible while
+  preserving named multi-result functions.
+- Parentheses mean parameter or result lists; braces remain reserved for
+  blocks, aggregate literals, and destructuring.
+- The words `in` and `out` remain dedicated to lattice-buffer selectors
+  such as `f.in[...]` and `f.out[...]`.
+- The AST stores parameters and named results as ordered declaration
+  lists, keeping type analysis and code generation independent of
+  signature formatting.
 
 ### Const keyword syntax
 

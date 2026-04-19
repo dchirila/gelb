@@ -30,7 +30,7 @@ class TestConstantFoldingIntegration:
             f.out[x | 0] = 2 * 3;
         }
         
-        gauge TestGauge(out = {real rho;}) {
+        gauge TestGauge -> (real rho) {
             rho = f.in[x | 0];
         }
         
@@ -81,7 +81,7 @@ class TestConstantFoldingIntegration:
             f.out[x | 0] = 5 - 5;
         }
         
-        gauge TestGauge(out = {real rho;}) {
+        gauge TestGauge -> (real rho) {
             rho = f.in[x | 0];
         }
         
@@ -130,7 +130,7 @@ class TestConstantFoldingIntegration:
             f.out[x | 0] = 1;
         }
         
-        gauge TestGauge(out = {real rho;}) {
+        gauge TestGauge -> (real rho) {
             rho = f.in[x | 0];
         }
         
@@ -175,7 +175,7 @@ class TestConstantFoldingIntegration:
             f.out[x | 0] = 1;
         }
         
-        gauge TestGauge(out = {real rho;}) {
+        gauge TestGauge -> (real rho) {
             rho = f.in[x | 0];
         }
         
@@ -220,7 +220,7 @@ class TestConstantFoldingIntegration:
             f.out[x | 0] = 1;
         }
         
-        gauge TestGauge(out = {real rho;}) {
+        gauge TestGauge -> (real rho) {
             rho = f.in[x | 0];
         }
         

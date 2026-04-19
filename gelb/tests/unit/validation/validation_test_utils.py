@@ -106,7 +106,7 @@ def get_implicit_symbols_test_data():
         
         ("gauge_xyz_allowed", "gauge",
          """
-         gauge gauge_fun1(out = {real rho;}) {
+         gauge gauge_fun1 -> (real rho) {
            rho = f.in[x, y, z | 0];
          }
          """, True),

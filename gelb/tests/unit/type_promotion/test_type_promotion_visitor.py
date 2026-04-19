@@ -7,7 +7,10 @@ Tests implicit type promotions in various contexts.
 
 import pytest
 from gelb.gelb_ast.ASTNodes import *
-from gelb.tests.test_utils import get_typed_ast, minimal_gelb_program_1d, minimal_gelb_program_2d
+from gelb.tests.test_utils import (
+    get_typed_ast, get_fully_validated_ast,
+    minimal_gelb_program_1d, minimal_gelb_program_2d,
+)
 from gelb.frontend.stage1_frontend import promote_types
 
 
@@ -312,3 +315,53 @@ class TestTypePromotionInExpressions:
         
         # Check the target type
         assert broadcast.target_array_type.element_dtype == "real"
+
+
+class TestTypePromotionNodePassThrough:
+    """Test that TypePromotionVisitor handles pre-existing promotion/broadcast nodes.
+
+    When constant folding or other passes run before type promotion,
+    they may insert TypePromotionNode_N or BroadcastNode_N nodes into
+    the AST. The TypePromotionVisitor must traverse these without error.
+    """
+
+    def test_sqrt_in_global_constant(self):
+        """sqrt() in global_constants produces a folded+promoted node
+        that TypePromotionVisitor must handle."""
+        code = minimal_gelb_program_1d(
+            global_constants_content="const real S = sqrt(3.0);",
+            initializer_content="f.out[x | 0] = 0;",
+        )
+        ast = get_fully_validated_ast(code)
+        assert ast is not None
+
+    def test_derived_constant_with_sqrt(self):
+        """Derived constants using sqrt (common in LBM parameter setup)."""
+        code = minimal_gelb_program_1d(
+            global_constants_content=(
+                "const real NU = 0.1;\n"
+                "const real TAU = 0.5 + 3.0 * NU;\n"
+                "const real S = sqrt(TAU);"
+            ),
+            initializer_content="f.out[x | 0] = 0;",
+        )
+        ast = get_fully_validated_ast(code)
+        assert ast is not None
+
+    def test_broadcast_scalar_times_array(self):
+        """Scalar * array produces BroadcastNode_N that must be traversed."""
+        code = minimal_gelb_program_1d(
+            global_constants_content="const array[real, 3] V = {1.0, 2.0, 3.0};",
+            initializer_content="array[real, 3] R = 2.0 * V;\nf.out[x | 0] = 0;",
+        )
+        ast = get_fully_validated_ast(code)
+        assert ast is not None
+
+    def test_int_broadcast_to_real_array(self):
+        """int * real_array triggers both promotion and broadcast."""
+        code = minimal_gelb_program_1d(
+            global_constants_content="const array[real, 3] V = {1.0, 2.0, 3.0};",
+            initializer_content="array[real, 3] R = 2 * V;\nf.out[x | 0] = 0;",
+        )
+        ast = get_fully_validated_ast(code)
+        assert ast is not None

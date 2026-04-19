@@ -121,6 +121,311 @@ class TestCompileTimeRangeValidation:
         assert isinstance(matrix_selection.inferred_type.shape, IntLiteral_N)
         assert matrix_selection.inferred_type.shape.value == 4  # N/2:N/2+3 = 4:7 = 4 elements
 
+    def test_local_constant_ranges_allowed(self):
+        """Test that local constant expressions in ranges are allowed."""
+        test_code = minimal_gelb_program_1d(
+            initializer_content="""
+                const int BASE = 2;
+                const int WIDTH = BASE + 3;
+                array[int, 8] vec;
+                array[int, 4] slice;
+                slice = vec[BASE:WIDTH];
+            """
+        )
+
+        ast = get_typed_ast(test_code)
+
+        init_block = ast.initializers[0]
+        assignment = init_block.stmts.elements[4]  # slice = vec[BASE:WIDTH]
+
+        vec_selection = assignment.rhs
+        assert isinstance(vec_selection.inferred_type, ArrayDataType_N)
+        assert vec_selection.inferred_type.element_dtype == "int"
+        assert isinstance(vec_selection.inferred_type.shape, IntLiteral_N)
+        assert vec_selection.inferred_type.shape.value == 4  # 2:5
+
+
+class TestCompileTimeShapeEvaluation:
+    """Test compile-time evaluation of array shape expressions."""
+
+    def test_arithmetic_shape_expression_allowed(self):
+        """Array shapes may use compile-time arithmetic expressions."""
+        test_code = minimal_gelb_program_1d(
+            global_constants_content="const int N = 4;",
+            initializer_content="""
+                array[int, N*2+1] vec;
+                array[int, 9] copy;
+                copy = vec[:];
+            """
+        )
+
+        ast = get_typed_ast(test_code)
+
+        init_block = ast.initializers[0]
+        assignment = init_block.stmts.elements[2]  # copy = vec[:]
+
+        vec_selection = assignment.rhs
+        assert isinstance(vec_selection.inferred_type, ArrayDataType_N)
+        assert vec_selection.inferred_type.element_dtype == "int"
+        assert isinstance(vec_selection.inferred_type.shape, IntLiteral_N)
+        assert vec_selection.inferred_type.shape.value == 9
+
+    def test_local_constant_shape_expression_allowed(self):
+        """Local constants may define array shapes."""
+        test_code = minimal_gelb_program_1d(
+            initializer_content="""
+                const int BASE = 5;
+                const int WIDTH = BASE + 2;
+                array[int, WIDTH] vec;
+                array[int, 7] copy;
+                copy = vec[:];
+            """
+        )
+
+        ast = get_typed_ast(test_code)
+
+        init_block = ast.initializers[0]
+        assignment = init_block.stmts.elements[4]  # copy = vec[:]
+
+        vec_selection = assignment.rhs
+        assert isinstance(vec_selection.inferred_type, ArrayDataType_N)
+        assert vec_selection.inferred_type.element_dtype == "int"
+        assert isinstance(vec_selection.inferred_type.shape, IntLiteral_N)
+        assert vec_selection.inferred_type.shape.value == 7
+
+    def test_grid_dimension_shape_expression_allowed(self):
+        """Implicit grid dimensions may define array shapes."""
+        test_code = minimal_gelb_program_1d(
+            initializer_content="""
+                array[int, Nx/2] vec;
+                array[int, 16] copy;
+                copy = vec[:];
+            """
+        )
+
+        ast = get_typed_ast(test_code)
+
+        init_block = ast.initializers[0]
+        assignment = init_block.stmts.elements[2]  # copy = vec[:]
+
+        vec_selection = assignment.rhs
+        assert isinstance(vec_selection.inferred_type, ArrayDataType_N)
+        assert vec_selection.inferred_type.element_dtype == "int"
+        assert isinstance(vec_selection.inferred_type.shape, IntLiteral_N)
+        assert vec_selection.inferred_type.shape.value == 16
+
+    def test_grid_dimension_from_expression_lattice_size_allowed(self):
+        """Implicit grid dimensions may come from expression lattice sizes."""
+        test_code = """
+            simulation_description("Test expression lattice size");
+            global_constants {
+                const int N = 16;
+            }
+            lattices {
+                lattice f(1, 1, int, N*2, false);
+            }
+            initializer Init {
+                array[int, Nx/2] vec;
+                array[int, 16] copy;
+                copy = vec[:];
+            }
+            dynamic Dyn {
+                f.out[x | 0] = f.in[x | 0];
+            }
+            gauge Out -> (int val) {
+                val = f.in[x | 0];
+            }
+            node_classes {
+                node_class BULK(Init, Dyn, Out);
+            }
+            geometry {
+                nodes[:] = BULK;
+            }
+        """
+
+        ast = get_typed_ast(test_code)
+
+        init_block = ast.initializers[0]
+        assignment = init_block.stmts.elements[2]  # copy = vec[:]
+
+        vec_selection = assignment.rhs
+        assert isinstance(vec_selection.inferred_type, ArrayDataType_N)
+        assert vec_selection.inferred_type.element_dtype == "int"
+        assert isinstance(vec_selection.inferred_type.shape, IntLiteral_N)
+        assert vec_selection.inferred_type.shape.value == 16
+
+    def test_unused_compile_time_shape_expression_allowed(self):
+        """Declaration-time shape validation allows constant expressions."""
+        test_code = minimal_gelb_program_1d(
+            global_constants_content="const int N = 4;",
+            initializer_content="""
+                array[int, N*2+1] vec;
+            """
+        )
+
+        get_typed_ast(test_code)
+
+    def test_unused_grid_dimension_shape_expression_allowed(self):
+        """Declaration-time shape validation allows grid dimensions."""
+        test_code = minimal_gelb_program_1d(
+            initializer_content="""
+                array[int, Nx/2] vec;
+            """
+        )
+
+        get_typed_ast(test_code)
+
+    def test_runtime_variable_shape_expression_rejected(self):
+        """Array shapes must not silently fall back for runtime values."""
+        test_code = minimal_gelb_program_1d(
+            initializer_content="""
+                int n;
+                array[int, n] vec;
+                array[int, 1] copy;
+                copy = vec[:];
+            """
+        )
+
+        with pytest.raises(GeLBExTypeError) as exc_info:
+            get_typed_ast(test_code)
+
+        assert "must be compile-time evaluable" in str(exc_info.value.error)
+
+    def test_unused_runtime_variable_shape_expression_rejected(self):
+        """Array shape errors are reported at declaration, not first use."""
+        test_code = minimal_gelb_program_1d(
+            initializer_content="""
+                int n;
+                array[int, n] vec;
+            """
+        )
+
+        with pytest.raises(GeLBExTypeError) as exc_info:
+            get_typed_ast(test_code)
+
+        assert "must be compile-time evaluable" in str(exc_info.value.error)
+
+    def test_unused_runtime_variable_2d_shape_expression_rejected(self):
+        """Multi-dimensional declarations validate every shape component."""
+        test_code = minimal_gelb_program_1d(
+            initializer_content="""
+                int n;
+                array[int, {4, n}] matrix;
+            """
+        )
+
+        with pytest.raises(GeLBExTypeError) as exc_info:
+            get_typed_ast(test_code)
+
+        assert "must be compile-time evaluable" in str(exc_info.value.error)
+
+    def test_unused_runtime_constant_shape_expression_rejected(self):
+        """Constant array declarations validate shapes before value use."""
+        test_code = minimal_gelb_program_1d(
+            initializer_content="""
+                int n;
+                const array[int, n] vec = {1, 2};
+            """
+        )
+
+        with pytest.raises(GeLBExTypeError) as exc_info:
+            get_typed_ast(test_code)
+
+        assert "must be compile-time evaluable" in str(exc_info.value.error)
+
+    def test_gauge_output_shape_expression_rejected(self):
+        """Gauge output declarations validate array shapes."""
+        test_code = """
+            simulation_description("Test gauge output shape");
+            lattices {
+                lattice f(1, 1, int, 32, false);
+            }
+            initializer Init {
+                f.out[x | 0] = 0;
+            }
+            dynamic Dyn {
+                f.out[x | 0] = f.in[x | 0];
+            }
+            gauge Out -> (array[int, 1/0] values) {
+                values = f.in[x | :];
+            }
+            node_classes {
+                node_class BULK(Init, Dyn, Out);
+            }
+            geometry {
+                nodes[:] = BULK;
+            }
+        """
+
+        with pytest.raises(GeLBExTypeError) as exc_info:
+            get_typed_ast(test_code)
+
+        assert "must be compile-time evaluable" in str(exc_info.value.error)
+
+    def test_function_input_shape_expression_rejected(self):
+        """Function input declarations validate array shapes."""
+        test_code = """
+            simulation_description("Test function input shape");
+            lattices {
+                lattice f(1, 1, int, 32, false);
+            }
+            function BadIn(array[int, 1/0] values) -> (int result) {
+                result = 0;
+            }
+            initializer Init {
+                f.out[x | 0] = 0;
+            }
+            dynamic Dyn {
+                f.out[x | 0] = f.in[x | 0];
+            }
+            gauge Out -> (int val) {
+                val = f.in[x | 0];
+            }
+            node_classes {
+                node_class BULK(Init, Dyn, Out);
+            }
+            geometry {
+                nodes[:] = BULK;
+            }
+        """
+
+        with pytest.raises(GeLBExTypeError) as exc_info:
+            get_typed_ast(test_code)
+
+        assert "must be compile-time evaluable" in str(exc_info.value.error)
+
+    def test_function_output_shape_expression_rejected(self):
+        """Function output declarations validate array shapes."""
+        test_code = """
+            simulation_description("Test function output shape");
+            lattices {
+                lattice f(1, 1, int, 32, false);
+            }
+            function BadOut(int value) -> (array[int, 1/0] result) {
+                result = {1, 2};
+            }
+            initializer Init {
+                f.out[x | 0] = 0;
+            }
+            dynamic Dyn {
+                f.out[x | 0] = f.in[x | 0];
+            }
+            gauge Out -> (int val) {
+                val = f.in[x | 0];
+            }
+            node_classes {
+                node_class BULK(Init, Dyn, Out);
+            }
+            geometry {
+                nodes[:] = BULK;
+            }
+        """
+
+        with pytest.raises(GeLBExTypeError) as exc_info:
+            get_typed_ast(test_code)
+
+        assert "must be compile-time evaluable" in str(exc_info.value.error)
+
 
 class TestCompileTimeRangeRestrictions:
     """Test that runtime expressions in ranges are properly rejected."""

@@ -32,7 +32,7 @@ def test_resolve_all_elements_range_in_paint_nodes_1d():
         f.out[x | 0] = 1;
     }
     
-    gauge Output(out = {int value;}) {
+    gauge Output -> (int value) {
         value = f.in[x | 0];
     }
     
@@ -85,7 +85,7 @@ def test_resolve_all_elements_range_in_paint_nodes_2d():
         f.out[x, y | :] = 1;
     }
     
-    gauge Output(out = {real value;}) {
+    gauge Output -> (real value) {
         value = f.in[x, y | 0];
     }
     
@@ -143,7 +143,7 @@ def test_resolve_low_bound_range():
         f.out[x | 0] = 1;
     }
     
-    gauge Output(out = {int value;}) {
+    gauge Output -> (int value) {
         value = f.in[x | 0];
     }
     
@@ -195,7 +195,7 @@ def test_resolve_high_bound_range():
         f.out[x | 0] = 1;
     }
     
-    gauge Output(out = {int value;}) {
+    gauge Output -> (int value) {
         value = f.in[x | 0];
     }
     
@@ -247,7 +247,7 @@ def test_resolve_range_in_lattice_out_selection():
         f.out[x, y | :] = 1;
     }
     
-    gauge Output(out = {real value;}) {
+    gauge Output -> (real value) {
         value = f.in[x, y | 0];
     }
     
@@ -271,13 +271,13 @@ def test_resolve_range_in_lattice_out_selection():
     lattice_out_stmt = ast.initializers[0].stmts[0]
     dfs_range = lattice_out_stmt.lhs.element_ranges[-1]
     
-    # Assert - DFs range should use 'q'
+    # Assert - DFs range should be 0 to q-1 (= 8 for q=9)
     assert isinstance(dfs_range, Range_N)
     assert isinstance(dfs_range.low, IntLiteral_N)
     assert dfs_range.low.value == 0
-    assert isinstance(dfs_range.high, Sub_N)
-    assert isinstance(dfs_range.high.left, Identifier_N)
-    assert dfs_range.high.left.name == 'q'
+    assert isinstance(dfs_range.high, IntLiteral_N)
+    assert dfs_range.high.value == 8
+    assert dfs_range.is_full_df_range is True
 
 
 def test_resolve_range_in_lattice_in_selection():
@@ -298,7 +298,7 @@ def test_resolve_range_in_lattice_in_selection():
         f.out[x, y | :] = f.in[x, y | :];
     }
     
-    gauge Output(out = {real value;}) {
+    gauge Output -> (real value) {
         value = f.in[x, y | 0];
     }
     
@@ -324,12 +324,13 @@ def test_resolve_range_in_lattice_in_selection():
     lattice_in = lattice_out_stmt.rhs
     dfs_range = lattice_in.element_ranges[-1]
     
-    # Assert
+    # Assert - DFs range should be 0 to q-1 (= 8 for q=9)
     assert isinstance(dfs_range, Range_N)
     assert isinstance(dfs_range.low, IntLiteral_N)
     assert dfs_range.low.value == 0
-    assert isinstance(dfs_range.high, Sub_N)
-    assert dfs_range.high.left.name == 'q'
+    assert isinstance(dfs_range.high, IntLiteral_N)
+    assert dfs_range.high.value == 8
+    assert dfs_range.is_full_df_range is True
 
 
 def test_no_modification_of_explicit_ranges():
@@ -350,7 +351,7 @@ def test_no_modification_of_explicit_ranges():
         f.out[x | 0] = 1;
     }
     
-    gauge Output(out = {int value;}) {
+    gauge Output -> (int value) {
         value = f.in[x | 0];
     }
     
@@ -400,7 +401,7 @@ def test_complete_program_with_ranges():
         f.out[x | :] = f.in[x | :] + 1;
     }
     
-    gauge Output(out = {real value;}) {
+    gauge Output -> (real value) {
         value = f.in[x | 0];
     }
     
@@ -428,13 +429,14 @@ def test_complete_program_with_ranges():
     assert isinstance(geometry_range.high, Sub_N)
     assert geometry_range.high.left.name == 'Nx'
     
-    # Check initializer DFs range
+    # Check initializer DFs range -- should be 0 to q-1 (= 2 for q=3)
     init_stmt = ast.initializers[0].stmts[0]
     init_dfs_range = init_stmt.lhs.element_ranges[-1]
     assert isinstance(init_dfs_range.low, IntLiteral_N)
     assert init_dfs_range.low.value == 0
-    assert isinstance(init_dfs_range.high, Sub_N)
-    assert init_dfs_range.high.left.name == 'q'
+    assert isinstance(init_dfs_range.high, IntLiteral_N)
+    assert init_dfs_range.high.value == 2
+    assert init_dfs_range.is_full_df_range is True
 
 
 def test_ast_unchanged_str():
@@ -455,7 +457,7 @@ def test_ast_unchanged_str():
         f.out[x | 0] = 1;
     }
     
-    gauge Output(out = {int value;}) {
+    gauge Output -> (int value) {
         value = f.in[x | 0];
     }
     

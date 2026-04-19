@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 
 from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
-from gelb.frontend.visitor_mixins import SymbolTableUtilityMixin
+from gelb.frontend.visitor_mixins import (
+    ProgramTraversalMixin,
+    SymbolTableUtilityMixin,
+)
 from gelb.utils.exceptions import GeLBExConstantAssignment
 
 
-class ConstantAssignmentValidationVisitor(ASTBaseVisitor, SymbolTableUtilityMixin):
+class ConstantAssignmentValidationVisitor(
+    ASTBaseVisitor,
+    SymbolTableUtilityMixin,
+    ProgramTraversalMixin,
+):
     """
     Validates that constants are not assigned to in variable assignment statements.
     
@@ -20,8 +27,8 @@ class ConstantAssignmentValidationVisitor(ASTBaseVisitor, SymbolTableUtilityMixi
             if block:
                 self.visit(block, ast_root_node)
         
-        # Visit all initializers, dynamics, and gauges
-        for block_list in [node.initializers, node.dynamics, node.gauges]:
+        # Visit all initializers, dynamics, gauges, and functions
+        for block_list in [node.initializers, node.dynamics, node.gauges, node.functions]:
             if block_list:
                 for block in block_list:
                     if block:
@@ -31,44 +38,53 @@ class ConstantAssignmentValidationVisitor(ASTBaseVisitor, SymbolTableUtilityMixi
 
     def visitGlobalConstantsBlock_N(self, node, ast_root_node):
         """Visit all statements in global constants block."""
-        for stmt in node.stmts:
-            self.visit(stmt, ast_root_node)
-        return node
+        return self._visit_block_stmts(node, ast_root_node)
 
     def visitLatticesBlock_N(self, node, ast_root_node):
         """Visit all statements in lattices block."""
-        for stmt in node.stmts:
-            self.visit(stmt, ast_root_node)
-        return node
+        return self._visit_block_stmts(node, ast_root_node)
 
     def visitNodeClassesBlock_N(self, node, ast_root_node):
         """Visit all statements in node classes block."""
-        for stmt in node.stmts:
-            self.visit(stmt, ast_root_node)
-        return node
+        return self._visit_block_stmts(node, ast_root_node)
 
     def visitGeometryBlock_N(self, node, ast_root_node):
         """Visit all statements in geometry block."""
-        for stmt in node.stmts:
-            self.visit(stmt, ast_root_node)
-        return node
+        return self._visit_block_stmts(node, ast_root_node)
 
     def visitInitializerBlock_N(self, node, ast_root_node):
         """Visit all statements in initializer block."""
-        for stmt in node.stmts:
-            self.visit(stmt, ast_root_node)
-        return node
+        return self._visit_block_stmts(node, ast_root_node)
 
     def visitDynamicBlock_N(self, node, ast_root_node):
         """Visit all statements in dynamic block."""
-        for stmt in node.stmts:
-            self.visit(stmt, ast_root_node)
-        return node
+        return self._visit_block_stmts(node, ast_root_node)
 
     def visitGaugeBlock_N(self, node, ast_root_node):
         """Visit all statements in gauge block."""
-        for stmt in node.stmts:
-            self.visit(stmt, ast_root_node)
+        return self._visit_block_stmts(node, ast_root_node)
+
+    def visitFunctionBlock_N(self, node, ast_root_node):
+        """Visit all statements in function block."""
+        return self._visit_block_stmts(node, ast_root_node)
+
+    def visitUserFunctionCall_N(self, node, ast_root_node):
+        """Visit user function call arguments."""
+        for arg in node.arguments.elements:
+            self.visit(arg, ast_root_node)
+        return node
+
+    def visitDestructuringAssignmentStmt_N(self, node, ast_root_node):
+        """Visit destructuring assignment (validate targets are not constants)."""
+        for target in node.targets:
+            if hasattr(target, 'name'):
+                symbol_name = str(target.name)
+                symbol_def = self._find_symbol_definition(symbol_name, ast_root_node)
+                if symbol_def:
+                    if (symbol_def.tag == "constant definition" or
+                        symbol_def.tag == "implicit dimension constant"):
+                        raise GeLBExConstantAssignment(target, symbol_def)
+        self.visit(node.rhs, ast_root_node)
         return node
 
     def visitVariableAssignmentStmt_N(self, node, ast_root_node):
@@ -186,6 +202,14 @@ class ConstantAssignmentValidationVisitor(ASTBaseVisitor, SymbolTableUtilityMixi
 
     def visitPaintNodesStmt_N(self, node, ast_root_node):
         """Visit paint nodes statement (no validation needed)."""
+        return node
+
+    def visitBorderStmt_N(self, node, ast_root_node):
+        """Visit border statement (no validation needed)."""
+        return node
+
+    def visitConditionalPaintStmt_N(self, node, ast_root_node):
+        """Visit conditional paint statement (no validation needed)."""
         return node
 
     def visitNodeClassInstaStmt_N(self, node, ast_root_node):
@@ -342,18 +366,25 @@ class ConstantAssignmentValidationVisitor(ASTBaseVisitor, SymbolTableUtilityMixi
     # Unary operations
     def visitNotExpr_N(self, node, ast_root_node):
         """Visit logical NOT expression."""
-        self.visit(node.expr, ast_root_node)
+        self.visit(node.value, ast_root_node)
         return node
 
     def visitUnaryMinusExpr_N(self, node, ast_root_node):
         """Visit unary minus expression."""
-        self.visit(node.expr, ast_root_node)
+        self.visit(node.value, ast_root_node)
         return node
 
     # Type promotion nodes
     def visitTypePromotionNode_N(self, node, ast_root_node):
         """Visit type promotion node."""
         self.visit(node.expr, ast_root_node)
+        return node
+
+    # Intrinsic function calls
+    def visitIntrinsicFunctionCall_N(self, node, ast_root_node):
+        """Visit intrinsic function arguments (no validation needed)."""
+        for arg in node.arguments.elements:
+            self.visit(arg, ast_root_node)
         return node
 
     # Array literals - might appear in RHS

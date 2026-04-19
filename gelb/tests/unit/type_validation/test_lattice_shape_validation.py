@@ -27,7 +27,7 @@ def create_lattice_program(lattices_content):
     dynamic Dyn {{
         f.out[x | 0] = 1;
     }}
-    gauge Out(out = {{int val;}}) {{
+    gauge Out -> (int val) {{
         val = f.in[x | 0];
     }}
     node_classes {{
@@ -204,12 +204,20 @@ class TestCombinedShapeValidation:
         ast = get_fully_validated_ast(gelb_code)
         assert ast is not None
     
-    def test_negative_grid_size_checked_before_shape(self):
-        """Test that negative grid_size is caught before shape mismatch."""
+    def test_shape_mismatch_reported_before_element_sign(self):
+        """The rank of grid_size is validated at the declaration, before
+        the element values are known, so a wrong rank wins over a negative
+        element."""
         # d=2 but grid_size has 3 elements (shape mismatch) and one is negative
         gelb_code = create_lattice_program("lattice f(2, 9, int, {32, -64, 128}, {false, true, false});")
-        
-        # Should catch negative value first
+
+        with pytest.raises(GeLBExTypeError, match=r"Grid size has 3 elements but d=2"):
+            get_fully_validated_ast(gelb_code)
+
+    def test_negative_element_reported_when_rank_matches(self):
+        """With the rank right, a negative element is still reported."""
+        gelb_code = create_lattice_program("lattice f(2, 9, int, {32, -64}, {false, true});")
+
         with pytest.raises(GeLBExTypeError, match=r"Grid size element \[1\] = -64 is invalid"):
             get_fully_validated_ast(gelb_code)
 

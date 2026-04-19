@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
 from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
+from gelb.frontend.implicit_symbols import DIMENSION_CONSTANT_NAMES
 from gelb.frontend.visitor_mixins import BinaryOperationMixin, ArrayLiteralProcessingMixin, ProgramTraversalMixin
 from gelb.gelb_ast.ASTNodes import *
+from gelb.frontend.type_rules import arithmetic_result_type
+from gelb.midware.ast_eval import collect_lattice_info, eval_const_expr
 from gelb.utils.exceptions import *
-from gelb.utils.CodeRange import CodeRange
 
 
 class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralProcessingMixin, ProgramTraversalMixin):
@@ -27,6 +29,7 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         super().__init__()
         # Track current block context for symbol lookup
         self.current_block = None
+        self._lattice_info = None
     
     # Helper method to create scalar array types
     def _create_scalar_array_type(self, code_range, element_dtype):
@@ -42,6 +45,7 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
     
     def visitProgram_N(self, node: Program_N, ast_root_node: Program_N):
         """Visit all blocks in the program to infer types."""
+        self._lattice_info = collect_lattice_info(node)
         # Use the mixin for standard traversal
         self.traverse_program_blocks(node, ast_root_node)
         return node
@@ -53,15 +57,15 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
     def _before_block_visit(self, block_node, block_type):
         """Set current block context before visiting."""
         self.current_block = block_node
-    
+
     def visitGlobalConstantsBlock_N(self, node: GlobalConstantsBlock_N, ast_root_node: Program_N):
         """Process constant definitions to infer types of their values."""
-        for stmt in node.stmts:
-            self.visit(stmt, ast_root_node)
-        return node
+        return self._visit_block_stmts(node, ast_root_node)
     
     def visitConstantDefinitionStmt_N(self, node: ConstantDefinitionStmt_N, ast_root_node: Program_N):
         """Infer type of the constant's value expression."""
+        self._validate_declared_data_type_shape(node.data_type, ast_root_node)
+
         # First infer the type of the value expression
         self.visit(node.value, ast_root_node)
         
@@ -71,6 +75,8 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
     
     def visitVariableDeclarationStmt_N(self, node: VariableDeclarationStmt_N, ast_root_node: Program_N):
         """Variable declarations may have initial value expressions to infer."""
+        self._validate_declared_data_type_shape(node.data_type, ast_root_node)
+
         if node.initial_value:
             # Infer type of the initial value expression
             self.visit(node.initial_value, ast_root_node)
@@ -136,72 +142,93 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
     
     # Identifier type inference
     
+    # Symbol tag classification for type inference.
+    #
+    # Each symbol in the symbol table has a "tag" string describing its origin.
+    # Instead of a long if/elif chain comparing against individual tags, we group
+    # tags that share the same type-inference behavior into frozensets for O(1)
+    # membership testing.
+    #
+    # _DECLARED_VALUE_TAGS: symbols whose type comes from their declaration's
+    #   data_type attribute (e.g. ConstantDefinitionStmt_N.data_type,
+    #   VariableDeclarationStmt_N.data_type). Covers user-defined constants,
+    #   variables, and gauge output variables.
+    _DECLARED_VALUE_TAGS = frozenset({
+        "constant", "constant definition",
+        "variable", "variable declaration",
+        "output variable declaration",
+        "input parameter", "output parameter",
+    })
+    #
+    # _IMPLICIT_INT_TAGS: compiler-injected symbols that are always scalar int.
+    #   Covers spatial coordinates (x, y, z), the iteration counter (t), and
+    #   grid dimension constants (Nx, Ny, Nz).
+    _IMPLICIT_INT_TAGS = frozenset({
+        "implicit constant", "implicit dimension constant",
+        "implicit variable", "implicit lattice coordinate",
+        "implicit timestep variable",
+    })
+    #
+    # _LATTICE_TAGS: lattice instances. These cannot be used as values directly;
+    #   the user must use a selection like f.in[x|0] or f.out[x|0].
+    _LATTICE_TAGS = frozenset({"lattice", "lattice instance"})
+
     def visitIdentifier_N(self, node: Identifier_N, ast_root_node: Program_N):
         """Look up identifier type from symbol table."""
-        if self.current_block is None or self.current_block.symbol_defs is None:
-            raise GeLBException(
-                f"Cannot infer type of identifier '{node.name}' - no symbol table available",
-                "This is likely an internal compiler error"
-            )
-        
-        # Look up symbol definition
-        symbol_def = self.current_block.symbol_defs.get_symbol_definition(node.name)
-        if symbol_def is None:
-            # Try the parent symbol table (for global constants like Nx)
-            parent_table = self.current_block.symbol_defs.parent_table
-            if parent_table:
-                symbol_def = parent_table.get_symbol_definition(node.name)
-            
-            if symbol_def is None:
-                raise GeLBExTypeError(
-                    node,
-                    f"Identifier '{node.name}' is not defined",
-                    f"You need to declare '{node.name}' before using it, or check if it's spelled correctly"
-                )
-        
-        # Get type from symbol definition based on tag
-        if symbol_def.tag == "constant" or symbol_def.tag == "constant definition":
-            # For constants, value is ConstantDefinitionStmt_N
-            data_type = symbol_def.value.data_type
-            # All data types are now ArrayDataType_N (scalars are 0D arrays)
-            node.inferred_type = data_type
-        elif symbol_def.tag == "variable" or symbol_def.tag == "variable declaration":
-            # For variables, value is VariableDeclarationStmt_N
-            data_type = symbol_def.value.data_type
-            # All data types are now ArrayDataType_N (scalars are 0D arrays)
-            node.inferred_type = data_type
-        elif symbol_def.tag == "lattice" or symbol_def.tag == "lattice instance":
-            # For lattices, value is LatticeInstaStmt_N
-            # A lattice reference itself doesn't have a type, only selections do
+        symbol_def = self._lookup_symbol(node)
+        # Stash the symbol tag on the node so later passes (backends) can
+        # distinguish e.g. an implicit timestep symbol from a user-declared
+        # scalar of the same name without re-doing the symbol table walk.
+        node.symbol_tag = symbol_def.tag
+
+        if symbol_def.tag in self._DECLARED_VALUE_TAGS:
+            # Type comes from the symbol's declaration node (data_type attribute)
+            node.inferred_type = symbol_def.value.data_type
+        elif symbol_def.tag in self._IMPLICIT_INT_TAGS:
+            # Compiler-injected symbols (x, y, z, Nx, Ny, Nz) are always scalar int
+            node.inferred_type = self._create_scalar_array_type(node.code_range, "int")
+        elif symbol_def.tag in self._LATTICE_TAGS:
+            # Lattice references can't be used as values -- must use f.in/f.out selections
             raise GeLBExTypeError(
                 node,
                 f"Cannot use lattice '{node.name}' directly as a value",
                 f"Lattices must be accessed through selections like '{node.name}.in[x,y|:]' or '{node.name}.out[x,y|:]'"
             )
-        elif symbol_def.tag == "output variable declaration":
-            # For gauge outputs, value is VariableDeclarationStmt_N
-            data_type = symbol_def.value.data_type
-            # All data types are now ArrayDataType_N (scalars are 0D arrays)
-            node.inferred_type = data_type
-        elif symbol_def.tag == "implicit constant" or symbol_def.tag == "implicit dimension constant":
-            # For implicit constants like Nx, Ny, Nz
-            node.inferred_type = self._create_scalar_array_type(node.code_range, "int")
-        elif symbol_def.tag == "implicit variable" or symbol_def.tag == "implicit lattice coordinate":
-            # For implicit variables like x, y, z
-            node.inferred_type = self._create_scalar_array_type(node.code_range, "int")
         else:
-            # Handle any remaining cases
-            if node.name in ['x', 'y', 'z']:
-                node.inferred_type = self._create_scalar_array_type(node.code_range, "int")
-            elif node.name in ['Nx', 'Ny', 'Nz']:
-                node.inferred_type = self._create_scalar_array_type(node.code_range, "int")
-            else:
-                raise GeLBExTypeError(
-                    node,
-                    f"Symbol '{node.name}' has unrecognized type '{symbol_def.tag}'",
-                    "This appears to be an internal compiler error. Please report this issue."
-                )
+            raise GeLBExTypeError(
+                node,
+                f"Symbol '{node.name}' has unrecognized type '{symbol_def.tag}'",
+                "This appears to be an internal compiler error. Please report this issue."
+            )
         return node
+
+    def _lookup_symbol(self, node):
+        """Look up a symbol definition with hierarchical (child -> parent) search.
+
+        Searches the current block's symbol table first, then falls back to the
+        parent table (which holds global constants like Nx, Ny, Nz).
+        Raises GeLBException if no symbol table is available, or GeLBExTypeError
+        if the identifier is not found in any reachable scope.
+        """
+        if self.current_block is None or self.current_block.symbol_defs is None:
+            raise GeLBException(
+                f"Cannot infer type of identifier '{node.name}' - no symbol table available",
+                "This is likely an internal compiler error"
+            )
+
+        symbol_def = self.current_block.symbol_defs.get_symbol_definition(node.name)
+        if symbol_def is None:
+            parent_table = self.current_block.symbol_defs.parent_table
+            if parent_table:
+                symbol_def = parent_table.get_symbol_definition(node.name)
+
+        if symbol_def is None:
+            raise GeLBExTypeError(
+                node,
+                f"Identifier '{node.name}' is not defined",
+                f"You need to declare '{node.name}' before using it, or check if it's spelled correctly"
+            )
+        return symbol_def
     
     # Binary operation type inference - handled by mixin
     
@@ -211,8 +238,31 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         """Handle binary operations for the mixin."""
         return self._infer_binary_op_type(node, ast_root_node, operation_type)
     
+    def _check_rectangular(self, node, dimensions):
+        """Every nested literal at the same depth must have the same number
+        of entries; the first one that differs is reported at its own
+        location.  The shape below is taken from the first entry at each
+        depth, which is only meaningful once this holds."""
+        level = [node]
+        for depth in range(dimensions):
+            expected = len(level[0].value.elements)
+            for literal in level:
+                n = len(literal.value.elements)
+                if n != expected:
+                    raise GeLBExTypeError(
+                        literal,
+                        f"Array literal is not rectangular: a nested literal "
+                        f"has {n} elements where {expected} were expected",
+                        "Every row of a multi-dimensional array literal must "
+                        "have the same number of elements"
+                    )
+            if depth < dimensions - 1:
+                level = [e for literal in level
+                         for e in literal.value.elements]
+
     def _handle_array_literal_dimensions(self, node, ast_root_node, dimensions):
         """Handle dimension-specific array literal processing."""
+        self._check_rectangular(node, dimensions)
         # Get base type from first element (after recursive processing)
         first_element = node.value.elements[0]
         # Navigate to the deepest element based on dimensions
@@ -248,6 +298,15 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         node.inferred_type = self._create_scalar_array_type(node.code_range, "bool")
         return node
     
+    def visitTypePromotionNode_N(self, node: TypePromotionNode_N, ast_root_node: Program_N):
+        """A promotion inserted before this pass: the constant resolver
+        substitutes an array constant as a copy of its value promoted to
+        the declared array type, so its width is kept.  Its type is its
+        target."""
+        self.visit(node.expr, ast_root_node)
+        node.inferred_type = node.target_type
+        return node
+
     def visitUnaryMinusExpr_N(self, node: UnaryMinusExpr_N, ast_root_node: Program_N):
         """Unary minus preserves the operand type."""
         self.visit(node.value, ast_root_node)
@@ -346,9 +405,13 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
             # Validate that all single element expressions are compile-time evaluable
             for r in node.element_ranges.elements:
                 if isinstance(r, Range_N):
-                    self._validate_compile_time_evaluable(r.low, "array index")
+                    self._evaluate_compile_time_int(
+                        r.low, ast_root_node, "array index",
+                        original_dimensions)
                     if r.high != r.low:  # Only validate high if it's different from low
-                        self._validate_compile_time_evaluable(r.high, "array index")
+                        self._evaluate_compile_time_int(
+                            r.high, ast_root_node, "array index",
+                            original_dimensions)
             
             empty_shape = List_N(node.code_range)
             node.inferred_type = ArrayDataType_N(node.code_range, base_type, empty_shape)
@@ -363,31 +426,21 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
     
     def visitInitializerBlock_N(self, node: InitializerBlock_N, ast_root_node: Program_N):
         """Process statements in initializer block."""
-        for stmt in node.stmts:
-            self.visit(stmt, ast_root_node)
-        return node
-    
+        return self._visit_block_stmts(node, ast_root_node)
+
     def visitDynamicBlock_N(self, node: DynamicBlock_N, ast_root_node: Program_N):
         """Process statements in dynamic block."""
-        for stmt in node.stmts:
-            self.visit(stmt, ast_root_node)
-        return node
-    
+        return self._visit_block_stmts(node, ast_root_node)
+
     def visitGaugeBlock_N(self, node: GaugeBlock_N, ast_root_node: Program_N):
         """Process statements in gauge block."""
-        for stmt in node.stmts:
-            self.visit(stmt, ast_root_node)
-        return node
-    
+        for output_decl in node.outputs:
+            self.visit(output_decl, ast_root_node)
+        return self._visit_block_stmts(node, ast_root_node)
+
     def visitGeometryBlock_N(self, node: GeometryBlock_N, ast_root_node: Program_N):
         """Process statements in geometry block."""
-        # Geometry block no longer has grid_size and grid_periodicity
-        # These are now part of lattice instantiation statements
-        
-        # Process paint statements
-        for stmt in node.stmts:
-            self.visit(stmt, ast_root_node)
-        return node
+        return self._visit_block_stmts(node, ast_root_node)
     
     def visitPaintNodesStmt_N(self, node: PaintNodesStmt_N, ast_root_node: Program_N):
         """Process expressions in paint statement ranges."""
@@ -396,12 +449,37 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
             self.visit(node.lhs, ast_root_node)
         # The RHS is a node class name, not an expression that needs type inference
         return node
-    
+
+    def visitBorderStmt_N(self, node, ast_root_node):
+        return node  # No expressions to infer
+
+    def visitConditionalPaintStmt_N(self, node, ast_root_node):
+        """A ``where`` predicate is an ordinary expression that must be a
+        scalar bool; it is evaluated per cell when the geometry is resolved."""
+        self.visit(node.predicate, ast_root_node)
+        inferred = getattr(node.predicate, 'inferred_type', None)
+        if (not self._is_scalar_array(inferred)
+                or str(inferred.element_dtype) != 'bool'):
+            if isinstance(inferred, ArrayDataType_N):
+                got = (f"a {inferred.element_dtype} "
+                       + ("scalar" if self._is_scalar_array(inferred)
+                          else "array"))
+            else:
+                got = "an expression of unknown type"
+            raise GeLBExTypeError(
+                node.predicate,
+                f"The predicate of a 'where' paint must be a scalar bool,"
+                f" but this is {got}",
+                "Write a comparison or a logical expression over the"
+                " coordinates and constants, or call a function that"
+                " returns bool, e.g."
+                " nodes[where InCircle(x, y, CX, CY, R)] = SOLID;",
+            )
+        return node
+
     def visitLatticesBlock_N(self, node: LatticesBlock_N, ast_root_node: Program_N):
         """Process lattice instantiation statements."""
-        for stmt in node.stmts:
-            self.visit(stmt, ast_root_node)
-        return node
+        return self._visit_block_stmts(node, ast_root_node)
     
     def visitLatticeInstaStmt_N(self, node: LatticeInstaStmt_N, ast_root_node: Program_N):
         """Process expressions in lattice instantiation."""
@@ -450,107 +528,115 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
     
     
     def _get_shape_if_array(self, expr_type):
-        """Get shape of array type as List_N, or empty list for scalars."""
-        if isinstance(expr_type, ArrayDataType_N):
-            shape = expr_type.shape
-            # Normalize shape to List_N format
-            if isinstance(shape, List_N):
-                return shape
-            elif isinstance(shape, (IntLiteral_N, Identifier_N)):
-                # 1D array with single dimension
-                result = List_N(expr_type.code_range)
-                result.elements = [shape]
-                return result
-            elif isinstance(shape, Array1DLiteral_N):
-                # 2D+ array with Array1DLiteral_N shape
-                return shape.value  # Return the List_N inside the Array1DLiteral_N
-            else:
-                # Unknown shape format, treat as empty
-                return List_N(expr_type.code_range)
-        else:
-            # This shouldn't happen after our changes, but handle legacy code
+        """Normalize an ArrayDataType_N's shape to List_N format.
+
+        The AST uses three representations for array shapes:
+          - List_N          -> 0D (scalar, empty) or already normalized
+          - scalar expression -> 1D (single dimension value)
+          - Array1DLiteral_N -> 2D+ (wraps a List_N of per-dim sizes)
+
+        This method converts all three to a uniform List_N of dimension sizes,
+        making shape comparisons and broadcasting straightforward.
+        See _denormalize_shape() for the inverse operation.
+        """
+        if not isinstance(expr_type, ArrayDataType_N):
             return List_N(expr_type.code_range if hasattr(expr_type, 'code_range') else None)
-    
+
+        shape = expr_type.shape
+        if isinstance(shape, List_N):
+            return shape
+        elif isinstance(shape, Array1DLiteral_N):
+            return shape.value
+        elif shape is not None:
+            result = List_N(expr_type.code_range)
+            result.elements = [shape]
+            return result
+        else:
+            return List_N(expr_type.code_range)
+
     def _denormalize_shape(self, normalized_shape, code_range):
-        """Convert normalized List_N shape back to the appropriate format."""
+        """Convert a normalized List_N shape back to the AST's native format.
+
+        Inverse of _get_shape_if_array():
+          - 0 dims -> empty List_N (scalar)
+          - 1 dim  -> bare IntLiteral_N / Identifier_N
+          - 2+ dims -> Array1DLiteral_N wrapping the List_N
+        """
         if not isinstance(normalized_shape, List_N):
             return normalized_shape
-        
+
         num_dims = len(normalized_shape.elements)
-        
         if num_dims == 0:
-            # 0D (scalar) - return empty List_N
             return List_N(code_range)
         elif num_dims == 1:
-            # 1D array - return the single IntLiteral_N directly
             return normalized_shape.elements[0]
         else:
-            # 2D+ array - return Array1DLiteral_N
             return Array1DLiteral_N(code_range, normalized_shape)
     
     def _infer_binary_op_type(self, node, ast_root_node, op_category):
         """Infer type of binary operation based on operand types."""
-        # First infer types of operands
         self.visit(node.left, ast_root_node)
         self.visit(node.right, ast_root_node)
-        
+
+        if op_category == "arithmetic":
+            self._infer_arithmetic_type(node)
+        elif op_category == "comparison":
+            self._infer_comparison_type(node)
+        elif op_category == "logical":
+            self._infer_logical_type(node)
+
+        return node
+
+    def _infer_arithmetic_type(self, node):
+        """Infer type of arithmetic operation with broadcasting."""
         left_type = node.left.inferred_type
         right_type = node.right.inferred_type
-        
-        if op_category == "arithmetic":
-            # Arithmetic operations preserve types (with promotion rules)
-            # For now, implement simple rules:
-            # - If either operand is real, result is real
-            # - Otherwise, result is int
-            left_base = self._get_base_scalar_type(left_type)
-            right_base = self._get_base_scalar_type(right_type)
-            
-            if left_base == "real" or right_base == "real":
-                result_type = "real"
-            else:
-                result_type = "int"
-            
-            # For arithmetic ops, result shape follows broadcasting rules
-            # Implement basic broadcasting: larger shape wins, or scalar broadcasts to array
-            left_shape = self._get_shape_if_array(left_type)
-            right_shape = self._get_shape_if_array(right_type)
-            
-            # Basic broadcasting rule: if one operand is scalar (0D), result takes shape of other operand
-            # If both are arrays, they must have compatible shapes (for now, require identical shapes)
-            left_dims = len(left_shape.elements)
-            right_dims = len(right_shape.elements)
-            
-            if left_dims == 0 and right_dims == 0:
-                # Both scalars -> scalar result
-                result_shape = List_N(node.code_range)
-            elif left_dims == 0:
-                # Left is scalar, right is array -> result has right's shape
-                result_shape = right_shape
-            elif right_dims == 0:
-                # Right is scalar, left is array -> result has left's shape  
-                result_shape = left_shape
-            else:
-                # Both are arrays - for now, require identical shapes
-                # TODO: Implement full broadcasting rules
-                if left_dims == right_dims:
-                    result_shape = left_shape  # Assume shapes are compatible
-                else:
-                    # For now, default to scalar if shapes are incompatible
-                    result_shape = List_N(node.code_range)
-            
-            # Convert normalized List_N shape back to proper format
-            final_shape = self._denormalize_shape(result_shape, node.code_range)
-            node.inferred_type = ArrayDataType_N(node.code_range, result_type, final_shape)
-        
-        elif op_category == "comparison":
-            # Comparison operations always return array[bool, ()]
-            node.inferred_type = self._create_scalar_array_type(node.code_range, "bool")
-        
-        elif op_category == "logical":
-            # Logical operations require bool operands and return array[bool, ()]
-            node.inferred_type = self._create_scalar_array_type(node.code_range, "bool")
-        
-        return node
+
+        # The element type follows the one table (gelb.frontend.type_rules),
+        # the one rule the promotion pass and the intrinsic table use too.
+        left_base = self._get_base_scalar_type(left_type)
+        right_base = self._get_base_scalar_type(right_type)
+        result_type = arithmetic_result_type(left_base, right_base)
+        if result_type is None:
+            # An operand that takes no part in arithmetic (a string):
+            # TypeValidationVisitor rejects the operation with its own
+            # diagnostic; the placeholder keeps the node well-formed.
+            result_type = "int"
+
+        # Shape broadcasting: scalar broadcasts to array shape
+        result_shape = self._broadcast_shapes(left_type, right_type, node.code_range)
+        final_shape = self._denormalize_shape(result_shape, node.code_range)
+        node.inferred_type = ArrayDataType_N(node.code_range, result_type, final_shape)
+
+    def _infer_comparison_type(self, node):
+        """Comparison operations always return scalar bool."""
+        node.inferred_type = self._create_scalar_array_type(node.code_range, "bool")
+
+    def _infer_logical_type(self, node):
+        """Logical operations always return scalar bool."""
+        node.inferred_type = self._create_scalar_array_type(node.code_range, "bool")
+
+    def _broadcast_shapes(self, left_type, right_type, code_range):
+        """Compute result shape from two operand types using broadcasting rules."""
+        left_shape = self._get_shape_if_array(left_type)
+        right_shape = self._get_shape_if_array(right_type)
+        left_dims = len(left_shape.elements)
+        right_dims = len(right_shape.elements)
+
+        if left_dims == 0 and right_dims == 0:
+            return List_N(code_range)
+        elif left_dims == 0:
+            return right_shape
+        elif right_dims == 0:
+            return left_shape
+        elif left_dims == right_dims:
+            return left_shape  # Assume shapes are compatible
+        else:
+            # Rank mismatch: GeLB defines no broadcasting between arrays
+            # of different rank, so there is no result shape.  Leave the
+            # inferred shape scalar; TypeValidationVisitor rejects the
+            # operation afterwards with a source-located diagnostic.
+            return List_N(code_range)
     
     def _infer_lattice_selection_type(self, node, ast_root_node):
         """Infer type of lattice selection based on lattice definition."""
@@ -608,14 +694,12 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
             # This covers both explicit ranges like [0:q-1] and colon ranges [:]
             is_full_range = False
             
-            # Pattern 1: Range from 0 to q-1 (or similar)
-            if (isinstance(df_range.low, IntLiteral_N) and df_range.low.value == 0 and
-                isinstance(df_range.high, Sub_N) and
-                isinstance(df_range.high.left, Identifier_N) and df_range.high.left.name == "q" and
-                isinstance(df_range.high.right, IntLiteral_N) and df_range.high.right.value == 1):
+            # Pattern 1: Range tagged as full DF range by the range resolver
+            # (set when expanding `:` to `0:q-1`)
+            if getattr(df_range, 'is_full_df_range', False):
                 is_full_range = True
-            
-            # Pattern 2: True colon range (low=None, high=None)
+
+            # Pattern 2: True colon range (low=None, high=None) -- before range resolution
             elif df_range.low is None and df_range.high is None:
                 is_full_range = True
             
@@ -623,7 +707,7 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
                 # Full DF selection: f.in[x,y|:] or f.in[x,y|0:q-1] returns array of size q
                 q_value = lattice_def.q
                 if isinstance(q_value, IntLiteral_N):
-                    shape_elements = [Identifier_N(node.code_range, "q")]
+                    shape_elements = [IntLiteral_N(node.code_range, q_value.value)]
                 else:
                     # q is an expression, use it as-is
                     shape_elements = [q_value]
@@ -705,65 +789,34 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
             # Handle legacy cases or single dimension
             size = self._evaluate_size_expression(shape, ast_root_node)
             return [size]
+
+    def _validate_declared_data_type_shape(self, data_type, ast_root_node):
+        """Validate declared array shapes before any value use."""
+        if not isinstance(data_type, ArrayDataType_N):
+            return
+
+        shape = self._get_shape_if_array(data_type)
+        self._extract_dimension_sizes(shape, ast_root_node)
     
     def _evaluate_size_expression(self, expr, ast_root_node, array_dimensions=None):
-        """Evaluate a size expression to get its integer value."""
-        if isinstance(expr, IntLiteral_N):
-            return expr.value
-        elif isinstance(expr, Identifier_N):
-            # Look up symbolic dimension (Nx, Ny, Nz, or constants)
-            return self._resolve_symbolic_dimension(expr.name, ast_root_node, array_dimensions)
-        else:
-            # For now, return a reasonable default for complex expressions
-            # TODO: Implement full constant expression evaluation
-            return 1  # Placeholder
-    
-    def _resolve_symbolic_dimension(self, identifier_name, ast_root_node, array_dimensions=None):
-        """Resolve symbolic dimension identifiers to their values."""
-        # If we have array dimensions provided and this is Nx/Ny/Nz, use array dimensions first
-        if array_dimensions and identifier_name in ['Nx', 'Ny', 'Nz']:
-            dim_index = {'Nx': 0, 'Ny': 1, 'Nz': 2}[identifier_name]
-            if dim_index < len(array_dimensions):
-                return array_dimensions[dim_index]
-        
-        # Try to look up in current block's symbol table
-        if self.current_block and self.current_block.symbol_defs:
-            symbol_def = self.current_block.symbol_defs.get_symbol_definition(identifier_name)
-            if symbol_def is None and self.current_block.symbol_defs.parent_table:
-                symbol_def = self.current_block.symbol_defs.parent_table.get_symbol_definition(identifier_name)
-            
-            if symbol_def and hasattr(symbol_def, 'value'):
-                if hasattr(symbol_def.value, 'value') and isinstance(symbol_def.value.value, IntLiteral_N):
-                    return symbol_def.value.value.value
-        
-        # For implicit dimensions like Nx, Ny, Nz, try to extract from lattice
-        if identifier_name in ['Nx', 'Ny', 'Nz']:
-            return self._extract_grid_dimension(identifier_name, ast_root_node)
-        
-        # Default fallback for unknown dimensions
-        return 1
-    
-    def _extract_grid_dimension(self, dim_name, ast_root_node):
-        """Extract grid dimensions from lattice definitions."""
-        # Look for lattice instantiations to get grid size
-        if ast_root_node.lattices:
-            for stmt in ast_root_node.lattices.stmts.elements:
-                if isinstance(stmt, LatticeInstaStmt_N):
-                    if hasattr(stmt, 'grid_size') and stmt.grid_size:
-                        # Extract appropriate dimension from grid_size
-                        if isinstance(stmt.grid_size, IntLiteral_N):
-                            return stmt.grid_size.value  # 1D case
-                        elif isinstance(stmt.grid_size, Array1DLiteral_N):
-                            # Multi-dimensional case
-                            if dim_name == 'Nx' and len(stmt.grid_size.value.elements) > 0:
-                                return self._evaluate_size_expression(stmt.grid_size.value.elements[0], ast_root_node)
-                            elif dim_name == 'Ny' and len(stmt.grid_size.value.elements) > 1:
-                                return self._evaluate_size_expression(stmt.grid_size.value.elements[1], ast_root_node)
-                            elif dim_name == 'Nz' and len(stmt.grid_size.value.elements) > 2:
-                                return self._evaluate_size_expression(stmt.grid_size.value.elements[2], ast_root_node)
-        
-        # Fallback to reasonable defaults
-        return {'Nx': 32, 'Ny': 32, 'Nz': 32}.get(dim_name, 1)
+        """Evaluate a size expression to get its integer value.
+
+        An extent must be at least 1: a zero or negative extent is an
+        error here, at the extent, instead of a native compiler's
+        complaint about the declaration or a reduction over it.
+        """
+        size = self._evaluate_compile_time_int(
+            expr, ast_root_node, "array shape", array_dimensions)
+        if size is not None and size < 1:
+            raise GeLBExTypeError(
+                expr,
+                f"Array extent must be at least 1, got {size}",
+                "Every extent in array[type, extent] or array[type, "
+                "{extent, ...}] is the number of elements along that "
+                "axis, so it is a positive integer; an empty array is "
+                "not in this version.",
+            )
+        return size
     
     def _classify_range_selection(self, range_elem, dimension_size, ast_root_node, array_dimensions=None):
         """Classify range selection type and calculate result size."""
@@ -793,104 +846,123 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
             # Invalid range
             return "partial_range", 1  # Fallback
     
-    def _validate_compile_time_evaluable(self, expr, context="range expression"):
-        """Ensure expression can be evaluated at compile time."""
-        if expr is None:
-            return True  # None is valid (open-ended ranges)
-        elif isinstance(expr, (IntLiteral_N, RealLiteral_N, BoolLiteral_N)):
-            return True  # Literals are always compile-time
-        elif isinstance(expr, Identifier_N):
-            # Check if it's a compile-time constant or grid dimension
-            if self._is_compile_time_constant(expr.name):
-                return True
-            else:
-                # Variable is not a compile-time constant
-                raise GeLBExTypeError(
-                    expr,
-                    f"Expression in {context} must be compile-time evaluable",
-                    f"Variable '{expr.name}' is not allowed here. Only compile-time constants (literals, const values, or grid dimensions like Nx/Ny/Nz) are permitted in range expressions."
-                )
-        elif isinstance(expr, (Add_N, Sub_N, Mul_N, Div_N)):
-            # Recursively check operands for arithmetic expressions
-            self._validate_compile_time_evaluable(expr.left, context)
-            self._validate_compile_time_evaluable(expr.right, context)
-            return True
-        else:
-            # Any other expression type is not allowed
-            raise GeLBExTypeError(
-                expr,
-                f"Expression in {context} must be compile-time evaluable",
-                f"Complex expressions of type {type(expr).__name__} are not allowed in range expressions. Only literals, constants, and simple arithmetic with constants are permitted."
-            )
-    
-    def _is_compile_time_constant(self, identifier_name):
-        """Check if an identifier represents a compile-time constant."""
-        # Grid dimensions (Nx, Ny, Nz) are compile-time constants
-        if identifier_name in ['Nx', 'Ny', 'Nz']:
-            return True
-        
-        # Check if it's a user-defined constant in symbol table
-        if self.current_block and self.current_block.symbol_defs:
-            symbol_def = self.current_block.symbol_defs.get_symbol_definition(identifier_name)
-            if symbol_def is None and self.current_block.symbol_defs.parent_table:
-                symbol_def = self.current_block.symbol_defs.parent_table.get_symbol_definition(identifier_name)
-            
-            if symbol_def:
-                # Only actual constants are compile-time evaluable
-                # Variables (even if they have assigned values) are NOT compile-time
-                if symbol_def.tag in ["constant", "constant definition", 
-                                     "implicit constant", "implicit dimension constant"]:
-                    return True
-                elif symbol_def.tag in ["variable", "variable declaration", 
-                                       "output variable declaration"]:
-                    # Variables are runtime values, not compile-time constants
-                    return False
-        
-        return False
-    
     def _evaluate_range_bound(self, expr, ast_root_node, array_dimensions=None):
         """Evaluate a range bound expression to get its integer value."""
         if expr is None:
             return None
-        
-        # First validate that the expression is compile-time evaluable
-        self._validate_compile_time_evaluable(expr, "range bound")
-        
-        # Now evaluate the compile-time expression
-        if isinstance(expr, IntLiteral_N):
-            return expr.value
-        elif isinstance(expr, Identifier_N):
-            return self._resolve_symbolic_dimension(expr.name, ast_root_node, array_dimensions)
-        elif isinstance(expr, Sub_N):
-            # Handle expressions like "Nx-1"
-            left_val = self._evaluate_range_bound(expr.left, ast_root_node, array_dimensions)
-            right_val = self._evaluate_range_bound(expr.right, ast_root_node, array_dimensions)
-            if left_val is not None and right_val is not None:
-                return left_val - right_val
-        elif isinstance(expr, Add_N):
-            # Handle expressions like "i+1"
-            left_val = self._evaluate_range_bound(expr.left, ast_root_node, array_dimensions)
-            right_val = self._evaluate_range_bound(expr.right, ast_root_node, array_dimensions)
-            if left_val is not None and right_val is not None:
-                return left_val + right_val
-        elif isinstance(expr, Mul_N):
-            # Handle expressions like "N*2"
-            left_val = self._evaluate_range_bound(expr.left, ast_root_node, array_dimensions)
-            right_val = self._evaluate_range_bound(expr.right, ast_root_node, array_dimensions)
-            if left_val is not None and right_val is not None:
-                return left_val * right_val
-        elif isinstance(expr, Div_N):
-            # Handle expressions like "N/2"
-            left_val = self._evaluate_range_bound(expr.left, ast_root_node, array_dimensions)
-            right_val = self._evaluate_range_bound(expr.right, ast_root_node, array_dimensions)
-            if left_val is not None and right_val is not None and right_val != 0:
-                return left_val // right_val  # Integer division
-        
-        # If we get here, the validation should have caught it
-        raise GeLBException(
-            f"Failed to evaluate compile-time range bound: {expr}",
-            f"This should have been caught by validation"
-        )
+
+        return self._evaluate_compile_time_int(
+            expr, ast_root_node, "range bound", array_dimensions)
+
+    def _evaluate_compile_time_int(
+            self, expr, ast_root_node, context, array_dimensions=None):
+        """Evaluate a compile-time expression that must produce an integer."""
+        if expr is None:
+            return None
+
+        self._validate_compile_time_symbol_refs(
+            expr, context, array_dimensions)
+        bindings = self._compile_time_bindings(ast_root_node, array_dimensions)
+        try:
+            value = eval_const_expr(
+                expr,
+                bindings=bindings,
+                ast=ast_root_node,
+                lattice_info=self._lattice_info,
+            )
+        except (IndexError, TypeError, ValueError, ZeroDivisionError,
+                OverflowError) as exc:
+            raise GeLBExTypeError(
+                expr,
+                f"Expression in {context} must be compile-time evaluable",
+                (
+                    "Only integer literals, constant integer expressions, "
+                    "and active grid dimension constants such as Nx/Ny/Nz "
+                    f"are permitted here. {exc}"
+                ),
+            ) from exc
+
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise GeLBExTypeError(
+                expr,
+                f"Expression in {context} must evaluate to an integer",
+                (
+                    f"Got value {value!r} of type "
+                    f"{type(value).__name__}. Use an integer-valued "
+                    "compile-time expression here."
+                ),
+            )
+
+        return value
+
+    def _validate_compile_time_symbol_refs(
+            self, expr, context, array_dimensions=None):
+        if self.current_block is None or self.current_block.symbol_defs is None:
+            return
+
+        array_dim_names = set()
+        if array_dimensions is not None:
+            array_dim_names = set(DIMENSION_CONSTANT_NAMES[:len(array_dimensions)])
+
+        for symbol_ref in expr.get_referenced_symbols():
+            name = symbol_ref.name
+            if name in array_dim_names:
+                continue
+
+            symbol_def = self.current_block.symbol_defs.get_symbol_definition_local(
+                name)
+            if symbol_def is None or symbol_def.tag == "constant definition":
+                continue
+
+            raise GeLBExTypeError(
+                symbol_ref,
+                f"Expression in {context} must be compile-time evaluable",
+                (
+                    f"'{name}' is not a compile-time constant in this scope. "
+                    "Only integer literals, constant integer expressions, "
+                    "and active grid dimension constants such as Nx/Ny/Nz "
+                    "are permitted here."
+                ),
+            )
+
+    def _compile_time_bindings(self, ast_root_node, array_dimensions=None):
+        """Build bindings for local constants and array-dimension aliases."""
+        bindings = {}
+
+        if array_dimensions is not None:
+            for dim_name, dim_size in zip(DIMENSION_CONSTANT_NAMES, array_dimensions):
+                bindings[dim_name] = dim_size
+
+        if self.current_block is None or self.current_block.symbol_defs is None:
+            return bindings
+
+        for symbol_def in self.current_block.symbol_defs.symbol_defs:
+            if symbol_def.tag != "constant definition":
+                continue
+
+            name = symbol_def.name
+            if name in bindings:
+                continue
+
+            value_expr = symbol_def.value.value
+            try:
+                bindings[name] = eval_const_expr(
+                    value_expr,
+                    bindings=bindings,
+                    ast=ast_root_node,
+                    lattice_info=self._lattice_info,
+                )
+            except (IndexError, TypeError, ValueError, ZeroDivisionError,
+                    OverflowError):
+                # If this constant is actually used in a compile-time
+                # shape/range expression, evaluating that expression will
+                # raise a source-located GeLBExTypeError.  An overflowing
+                # real constant (``real32(1.0e300)``, ``1.0e300 *
+                # 1.0e300``) is an infinity at run time and no
+                # shape; it is simply not bound here.
+                pass
+
+        return bindings
     
     def _are_range_bounds_equal(self, bound1, bound2):
         """Check if two range bounds represent the same value."""
@@ -924,7 +996,22 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
             for dim_size in remaining_dimensions:
                 shape_elements.append(IntLiteral_N(code_range, dim_size))
             return Array1DLiteral_N(code_range, shape_elements)
-    
+
+    def visitFunctionBlock_N(self, node, ast_root_node):
+        """Infer types within a user-defined function body."""
+        for param in node.inputs:
+            self.visit(param, ast_root_node)
+        for param in node.outputs:
+            self.visit(param, ast_root_node)
+        return self._visit_block_stmts(node, ast_root_node)
+
+    def visitDestructuringAssignmentStmt_N(self, node, ast_root_node):
+        """Infer types of destructuring assignment."""
+        for target in node.targets:
+            self.visit(target, ast_root_node)
+        self.visit(node.rhs, ast_root_node)
+        return node
+
     # Intrinsic function type inference
     
     def visitIntrinsicFunctionCall_N(self, node: IntrinsicFunctionCall_N, ast_root_node: Program_N):
@@ -936,9 +1023,13 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         """
         from gelb.frontend.intrinsic_functions import get_intrinsic_function
         
-        # First, infer types of all arguments
-        for arg in node.arguments:
-            self.visit(arg, ast_root_node)
+        # For streaming intrinsics, skip type inference on the lattice
+        # name argument (first arg) -- it's a lattice reference, not a value
+        _STREAMING_INTRINSICS = frozenset({'upstream_dfs', 'bounce_back_dfs'})
+        start = 1 if node.function_name in _STREAMING_INTRINSICS else 0
+        for i, arg in enumerate(node.arguments):
+            if i >= start:
+                self.visit(arg, ast_root_node)
         
         # Look up the intrinsic function definition
         func_def = get_intrinsic_function(node.function_name)
@@ -946,7 +1037,7 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
             raise GeLBExTypeError(
                 node,
                 f"Unknown intrinsic function '{node.function_name}'",
-                f"Available intrinsic functions: sum, dot_prod"
+                f"Available intrinsic functions: sum, dot_prod, sin, cos, sqrt"
             )
         
         # Validate argument count
@@ -957,7 +1048,7 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
                 raise GeLBExTypeError(
                     node,
                     f"Function '{node.function_name}' expects exactly {func_def.min_args} argument{'s' if func_def.min_args != 1 else ''}, got {arg_count}",
-                    f"Usage: {node.function_name}({'array' if node.function_name == 'sum' else 'array1, array2'})"
+                    f"Usage: {node.function_name}({', '.join(f'arg{i+1}' for i in range(func_def.min_args))})"
                 )
         else:
             # Range of argument counts allowed
@@ -979,10 +1070,89 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         
         # Compute and set the return type
         node.inferred_type = func_def.return_type_computer(
-            node.function_name, 
-            node.arguments.elements, 
-            node, 
+            node.function_name,
+            node.arguments.elements,
+            node,
             node.code_range
         )
-        
+
+        # The streaming intrinsics return one DF per lattice direction:
+        # array[real, q] of the named lattice, whatever the lengths of
+        # the velocity arrays.  Those lengths are checked against q by
+        # the stencil-argument pass, whose message names the array; if
+        # the shape were taken from the arrays instead, a declaration
+        # such as ``array[real, 9] fIn = upstream_dfs(...)`` would be
+        # rejected first with a less specific shape mismatch.
+        if node.function_name in _STREAMING_INTRINSICS:
+            lattice_arg = node.arguments.elements[0]
+            info = (self._lattice_info or {}).get(
+                getattr(lattice_arg, "name", None))
+            if info is not None and isinstance(info.get("q"), int):
+                node.inferred_type = ArrayDataType_N(
+                    node.code_range, "real",
+                    IntLiteral_N(node.code_range, info["q"]))
+
+        return node
+
+    def visitUserFunctionCall_N(self, node, ast_root_node):
+        """
+        Infer type of user-defined function call.
+
+        Looks up the function definition from the program symbol table,
+        validates argument count, and sets inferred_type from the function's
+        output declarations.
+        """
+        # Look up the function definition first: a call to an unknown
+        # name is reported as such, not as a fault in its arguments
+        # (a lattice passed to it, say).
+        func_name = node.function_name.name
+        func_sdef = ast_root_node.symbol_defs.get_symbol_definition(func_name)
+        if func_sdef is None or func_sdef.tag != "function":
+            raise GeLBExTypeError(
+                node,
+                f"Unknown function '{func_name}'",
+                "Make sure the function is defined with a 'function' block"
+            )
+
+        # Infer types of all arguments
+        for arg in node.arguments:
+            self.visit(arg, ast_root_node)
+
+        func_block = func_sdef.value  # FunctionBlock_N
+
+        # Validate argument count matches input parameters
+        expected = len(func_block.inputs.elements)
+        actual = len(node.arguments.elements)
+        if actual != expected:
+            raise GeLBExTypeError(
+                node,
+                f"Function '{func_name}' expects {expected} argument{'s' if expected != 1 else ''}, got {actual}",
+                f"Check the function's input parameters"
+            )
+
+        # Determine return type from output declarations
+        outputs = func_block.outputs.elements
+        if len(outputs) == 1:
+            # Single output: return type is the output's data type
+            out_decl = outputs[0]
+            out_dtype = out_decl.data_type
+            if isinstance(out_dtype, ArrayDataType_N):
+                node.inferred_type = out_dtype
+            elif isinstance(out_dtype, ScalarDataType_N):
+                node.inferred_type = self._create_scalar_array_type(
+                    node.code_range, out_dtype.name
+                )
+            else:
+                # String data type name (e.g., "real", "int")
+                node.inferred_type = self._create_scalar_array_type(
+                    node.code_range, str(out_dtype)
+                )
+        else:
+            # Multi-output: store all output types for destructuring
+            # The call itself doesn't have a single type; it produces multiple values
+            # We store the function block reference for later use by
+            # DestructuringAssignmentStmt_N or chained call expansion
+            node.inferred_type = None
+            node.function_block = func_block
+
         return node

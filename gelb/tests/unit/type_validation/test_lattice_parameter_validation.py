@@ -27,7 +27,7 @@ def create_lattice_program(lattices_content):
     dynamic Dyn {{
         f.out[x | 0] = 1;
     }}
-    gauge Out(out = {{int val;}}) {{
+    gauge Out -> (int val) {{
         val = f.in[x | 0];
     }}
     node_classes {{
@@ -351,3 +351,80 @@ class TestErrorMessages:
         error_msg = str(exc_info.value)
         assert "Grid size element [1] = -16 is invalid" in error_msg
         assert "All grid size elements must be positive, got -16" in error_msg
+
+def create_2d_program(lattice_line, constants=""):
+    """A 2D-shaped program (x and y used in every block) with a custom
+    lattice line and optional global constants."""
+    constants_block = f"global_constants {{ {constants} }}" if constants else ""
+    return f"""
+    simulation_description("Test grid_size rank validation");
+    {constants_block}
+    lattices {{
+        {lattice_line}
+    }}
+    initializer Init {{
+        f.out[x, y | 0] = 0;
+    }}
+    dynamic Dyn {{
+        f.out[x, y | 0] = 1;
+    }}
+    gauge Out -> (int val) {{
+        val = f.in[x, y | 0];
+    }}
+    node_classes {{
+        node_class BULK(Init, Dyn, Out);
+    }}
+    geometry {{
+        nodes[:, :] = BULK;
+    }}
+    """
+
+
+class TestGridSizeRankValidation:
+    """The rank of grid_size must match d *at the declaration*.
+
+    The implicit coordinate symbols are derived from the shape of
+    grid_size, so before this check a scalar or named-constant grid_size
+    on a 2D lattice silently made the program 1D and the mismatch
+    surfaced later as an unknown symbol ``y`` at the first use site.
+    """
+
+    @pytest.mark.parametrize("constants,lattice_line", [
+        ("", "lattice f(2, 9, int, 32, {true, true});"),
+        ("const int N = 32;", "lattice f(2, 9, int, N, {true, true});"),
+        ("const int N = 32;", "lattice f(2, 9, int, N * 2, {true, true});"),
+        ("const int D = 2; const int N = 32;",
+         "lattice f(D, 9, int, N, {true, true});"),
+        ("const int N = 32; const array[int, 2] GS = {N, N};",
+         "lattice f(2, 9, int, GS, {true, true});"),
+    ])
+    def test_scalar_or_named_grid_size_on_2d_lattice_is_reported_at_declaration(
+            self, constants, lattice_line):
+        gelb_code = create_2d_program(lattice_line, constants)
+        with pytest.raises(GeLBExTypeError,
+                           match=r"Grid size scalar is invalid for d=2") as exc:
+            get_fully_validated_ast(gelb_code)
+        assert "not a scalar" in str(exc.value)
+        assert "{NX, NY}" in str(exc.value)
+
+    @pytest.mark.parametrize("lattice_line,expected", [
+        ("lattice f(3, 19, int, {32, 32}, {true, true});",
+         r"Grid size has 2 elements but d=3"),
+        ("lattice f(1, 3, int, {32, 32}, {true, true});",
+         r"Grid size has 2 elements but d=1"),
+    ])
+    def test_array_grid_size_of_wrong_rank_is_reported_at_declaration(
+            self, lattice_line, expected):
+        gelb_code = create_2d_program(lattice_line)
+        with pytest.raises(GeLBExTypeError, match=expected):
+            get_fully_validated_ast(gelb_code)
+
+    @pytest.mark.parametrize("constants,lattice_line", [
+        ("const int N = 32;", "lattice f(2, 9, int, {N, N}, {true, true});"),
+        ("const int D = 2; const int N = 32;",
+         "lattice f(D, 9, int, {N, 2 * N}, {true, false});"),
+    ])
+    def test_matching_rank_with_named_constants_is_accepted(
+            self, constants, lattice_line):
+        ast = get_fully_validated_ast(create_2d_program(lattice_line, constants))
+        assert ast is not None

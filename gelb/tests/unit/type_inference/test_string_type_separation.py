@@ -50,7 +50,7 @@ class TestStringTypeValidation:
             f.out[x | 0] = 1;  
         }
         
-        gauge Output(out = {int state;}) {
+        gauge Output -> (int state) {
             state = f.in[x | 0];
         }
         

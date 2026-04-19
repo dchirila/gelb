@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 
+import copy
+
 from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
+from gelb.frontend.implicit_symbols import validate_grid_size_rank
 from gelb.gelb_ast.ASTNodes import *
 from gelb.utils.exceptions import GeLBExTypeError
 
@@ -56,14 +59,45 @@ class ConstantsResolverVisitor(ASTBaseVisitor):
             # NOTE: when we replace symbol occurrences, they are also
             #       automatically reflected in the SymbolsTable
             for srefname in referenced_symbols_names_rhs:
-                sdef = node.symbol_defs.get_symbol_definition(
+                const_stmt = node.symbol_defs.get_symbol_definition(
                     srefname
-                ).value.value
+                ).value
                 stmt.value.replace_symbol_references(
                     srefname,
-                    sdef
+                    self._substitute_for(const_stmt)
                 )
         return node
+
+    # A reference to a constant means the constant's value *in its
+    # declared type*: `const real P = 7` is the real 7.0 wherever P is
+    # used, so `P / Q` is a real division, and `const real32 A =
+    # 16777217.0` is 16777216: the declared width must not be lost
+    # between the declaration and the use.  The substituted
+    # copy is therefore converted to the declared type wherever that type
+    # can change the value or the kind: a real width or a narrow integer
+    # width.  A scalar is wrapped in the conversion intrinsic; an array,
+    # whether written as a literal or computed by an expression, in a
+    # promotion to the declared array type, which the folder applies to
+    # every element (`ARR + {0.0, 0.0}` adds binary32 values when ARR is
+    # `array[real32, 2]`, however ARR was initialized).  An `int` or
+    # `bool` constant is substituted as it is written.
+    _CONVERTED_WIDTHS = frozenset(
+        ('real', 'real16', 'real32', 'real64', 'int8', 'int16', 'int32'))
+
+    @classmethod
+    def _substitute_for(cls, const_stmt):
+        value = copy.deepcopy(const_stmt.value)
+        data_type = getattr(const_stmt, 'data_type', None)
+        dtype = getattr(data_type, 'element_dtype', None)
+        if dtype not in cls._CONVERTED_WIDTHS:
+            return value
+        shape = getattr(data_type, 'shape', None)
+        is_scalar = isinstance(shape, List_N) and len(shape.elements) == 0
+        if is_scalar:
+            arguments = List_N(value.code_range)
+            arguments.append(value)
+            return IntrinsicFunctionCall_N(value.code_range, dtype, arguments)
+        return TypePromotionNode_N(value.code_range, value, copy.deepcopy(data_type))
 
     def visitLatticesBlock_N(
             self,
@@ -119,7 +153,7 @@ class ConstantsResolverVisitor(ASTBaseVisitor):
                     node.replace_symbol_references(srefname, sdef)
         
         # Validate lattice parameters after constants are resolved
-        self._validate_lattice_parameters(node)
+        self._validate_lattice_parameters(node, ast_root_node)
         
         return node
 
@@ -159,7 +193,8 @@ class ConstantsResolverVisitor(ASTBaseVisitor):
         else:
             return None
     
-    def _validate_lattice_parameters(self, node: LatticeInstaStmt_N):
+    def _validate_lattice_parameters(self, node: LatticeInstaStmt_N,
+                                     ast_root_node: Program_N):
         """
         Validate lattice instantiation parameters according to GeLB constraints:
         1. 1 <= d <= 3 (dimensionality)
@@ -194,9 +229,10 @@ class ConstantsResolverVisitor(ASTBaseVisitor):
         if hasattr(node, 'grid_size') and node.grid_size is not None:
             self._validate_grid_size_positive(node.grid_size, node)
             
-            # Validate grid_size shape matches dimensionality d
-            if d_value is not None:
-                self._validate_grid_size_shape(node.grid_size, d_value, node)
+            # Validate grid_size rank matches dimensionality d.  Shared
+            # with the implicit-symbols pass, which runs it first; here it
+            # also covers a d that was a named constant.
+            validate_grid_size_rank(node, ast_root_node)
                 
             # Validate periodicity shape matches grid_size shape
             if hasattr(node, 'periodicity') and node.periodicity is not None:
@@ -225,33 +261,17 @@ class ConstantsResolverVisitor(ASTBaseVisitor):
                             f"All grid size elements must be positive, got {element_value}"
                         )
     
-    def _validate_grid_size_shape(self, grid_size, d_value, lattice_node):
-        """Validate that grid_size shape matches the dimensionality d."""
-        if isinstance(grid_size, IntLiteral_N) or isinstance(grid_size, UnaryMinusExpr_N):
-            # Scalar grid_size is only valid for d=1
-            if d_value != 1:
-                raise GeLBExTypeError(
-                    grid_size,
-                    f"Grid size scalar is invalid for d={d_value}",
-                    f"For d={d_value}, grid_size must be a {d_value}-element array, not a scalar"
-                )
-        elif isinstance(grid_size, Array1DLiteral_N):
-            # Array grid_size: check number of elements matches d
-            num_elements = len(grid_size.value.elements)
-            if num_elements != d_value:
-                raise GeLBExTypeError(
-                    grid_size,
-                    f"Grid size has {num_elements} elements but d={d_value}",
-                    f"Grid size must have exactly {d_value} element{'s' if d_value > 1 else ''} to match dimensionality"
-                )
-    
     def _validate_periodicity_shape(self, grid_size, periodicity, lattice_node):
-        """Validate that periodicity shape matches grid_size shape."""
-        grid_is_scalar = isinstance(grid_size, (IntLiteral_N, UnaryMinusExpr_N))
+        """Validate that periodicity shape matches grid_size shape.
+
+        Constants have been substituted by now, so anything that is not an
+        array literal (a literal, a leftover expression) counts as scalar.
+        """
         grid_is_array = isinstance(grid_size, Array1DLiteral_N)
-        
-        period_is_scalar = isinstance(periodicity, (BoolLiteral_N, Identifier_N))
+        grid_is_scalar = not grid_is_array
+
         period_is_array = isinstance(periodicity, Array1DLiteral_N)
+        period_is_scalar = not period_is_array
         
         if grid_is_scalar and period_is_array:
             raise GeLBExTypeError(

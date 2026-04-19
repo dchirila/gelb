@@ -52,7 +52,7 @@ dynamic Dyn {
     f.out[x | 0] = 1;
 }
 
-gauge Out(out = {int val;}) {
+gauge Out -> (int val) {
     val = f.in[x | 0];
 }
 
@@ -88,7 +88,7 @@ dynamic Dyn {
     f.out[x | 0] = 1;
 }
 
-gauge Out(out = {int val;}) {
+gauge Out -> (int val) {
     val = f.in[x | 0];
 }
 
@@ -105,8 +105,8 @@ geometry {
         ast = get_fully_validated_ast(test_code)
         assert ast is not None
     
-    def test_scalar_array_division_rejected(self):
-        """Test that scalar / array operations are rejected."""
+    def test_scalar_array_division_allowed(self):
+        """Test that scalar / array operations are allowed (element-wise broadcast)."""
         test_code = """
 simulation_description("Test scalar array division");
 
@@ -115,14 +115,14 @@ lattices {
 }
 
 initializer Init {
-    f.out[x | :] = 1 / f.in[x | :];    // scalar / array (ambiguous)
+    f.out[x | :] = 1 / f.in[x | :];    // scalar / array (broadcast)
 }
 
 dynamic Dyn {
     f.out[x | 0] = 1;
 }
 
-gauge Out(out = {int val;}) {
+gauge Out -> (int val) {
     val = f.in[x | 0];
 }
 
@@ -134,17 +134,12 @@ geometry {
     nodes[:] = BULK;
 }
 """
-        
-        with pytest.raises(GeLBExTypeError) as exc_info:
-            get_fully_validated_ast(test_code)
-        
-        error = exc_info.value
-        assert "Cannot perform scalar division by array" in str(error.error)
-        assert "mathematically ambiguous" in str(error.error)
-        assert "array division scalar" in str(error.hint)
-    
-    def test_scalar_array_subtraction_rejected(self):
-        """Test that scalar - array operations are rejected."""
+
+        ast = get_fully_validated_ast(test_code)
+        assert ast is not None
+
+    def test_scalar_array_subtraction_allowed(self):
+        """Test that scalar - array operations are allowed (element-wise broadcast)."""
         test_code = """
 simulation_description("Test scalar array subtraction");
 
@@ -153,14 +148,14 @@ lattices {
 }
 
 initializer Init {
-    f.out[x | :] = 5 - f.in[x | :];    // scalar - array (ambiguous)
+    f.out[x | :] = 5 - f.in[x | :];    // scalar - array (broadcast)
 }
 
 dynamic Dyn {
     f.out[x | 0] = 1;
 }
 
-gauge Out(out = {int val;}) {
+gauge Out -> (int val) {
     val = f.in[x | 0];
 }
 
@@ -172,16 +167,12 @@ geometry {
     nodes[:] = BULK;
 }
 """
-        
-        with pytest.raises(GeLBExTypeError) as exc_info:
-            get_fully_validated_ast(test_code)
-        
-        error = exc_info.value
-        assert "Cannot perform scalar subtraction by array" in str(error.error)
-        assert "mathematically ambiguous" in str(error.error)
-    
-    def test_scalar_array_exponentiation_rejected(self):
-        """Test that scalar ^ array operations are rejected."""
+
+        ast = get_fully_validated_ast(test_code)
+        assert ast is not None
+
+    def test_scalar_array_exponentiation_allowed(self):
+        """Test that scalar ^ array operations are allowed (element-wise broadcast)."""
         test_code = """
 simulation_description("Test scalar array exponentiation");
 
@@ -190,14 +181,14 @@ lattices {
 }
 
 initializer Init {
-    f.out[x | :] = 2.0 ^ f.in[x | :];  // scalar ^ array (ambiguous)
+    f.out[x | :] = 2.0 ^ f.in[x | :];  // scalar ^ array (broadcast)
 }
 
 dynamic Dyn {
     f.out[x | 0] = 1.0;
 }
 
-gauge Out(out = {real val;}) {
+gauge Out -> (real val) {
     val = f.in[x | 0];
 }
 
@@ -209,16 +200,12 @@ geometry {
     nodes[:] = BULK;
 }
 """
-        
-        with pytest.raises(GeLBExTypeError) as exc_info:
-            get_fully_validated_ast(test_code)
-        
-        error = exc_info.value
-        assert "Cannot perform scalar exponentiation by array" in str(error.error)
-        assert "mathematically ambiguous" in str(error.error)
+
+        ast = get_fully_validated_ast(test_code)
+        assert ast is not None
     
-    def test_array_array_operations_rejected(self):
-        """Test that array op array operations are rejected."""
+    def test_array_array_elementwise_operations_allowed(self):
+        """Test that array op array with matching shapes is allowed (element-wise)."""
         test_code = """
 simulation_description("Test array array operations");
 
@@ -228,14 +215,14 @@ lattices {
 }
 
 initializer Init {
-    f.out[x | :] = f.in[x | :] + g.in[x | :];  // array + array (not supported)
+    f.out[x | :] = f.in[x | :] + g.in[x | :];
 }
 
 dynamic Dyn {
     f.out[x | 0] = 1;
 }
 
-gauge Out(out = {int val;}) {
+gauge Out -> (int val) {
     val = f.in[x | 0];
 }
 
@@ -247,24 +234,20 @@ geometry {
     nodes[:] = BULK;
 }
 """
-        
-        with pytest.raises(GeLBExTypeError) as exc_info:
-            get_fully_validated_ast(test_code)
-        
-        error = exc_info.value
-        assert "Cannot perform array addition by array" in str(error.error)
-        assert "operation not supported" in str(error.error)
-    
-    def test_array_array_all_operations_rejected(self):
-        """Test that all array op array operations are rejected."""
+        # Should not raise -- element-wise array ops with matching shapes are valid
+        ast = get_fully_validated_ast(test_code)
+        assert ast is not None
+
+    def test_array_array_all_elementwise_operations_allowed(self):
+        """Test that all element-wise array op array operations are allowed."""
         operations = [
-            ("f.in[x | :] + g.in[x | :]", "addition"),
-            ("f.in[x | :] - g.in[x | :]", "subtraction"), 
-            ("f.in[x | :] * g.in[x | :]", "multiplication"),
-            ("f.in[x | :] / g.in[x | :]", "division"),
+            "f.in[x | :] + g.in[x | :]",
+            "f.in[x | :] - g.in[x | :]",
+            "f.in[x | :] * g.in[x | :]",
+            "f.in[x | :] / g.in[x | :]",
         ]
-        
-        for expr, op_name in operations:
+
+        for expr in operations:
             test_code = f"""
 simulation_description("Test array array operations");
 
@@ -281,7 +264,7 @@ dynamic Dyn {{
     f.out[x | 0] = 1;
 }}
 
-gauge Out(out = {{int val;}}) {{
+gauge Out -> (int val) {{
     val = f.in[x | 0];
 }}
 
@@ -293,12 +276,9 @@ geometry {{
     nodes[:] = BULK;
 }}
 """
-            
-            with pytest.raises(GeLBExTypeError) as exc_info:
-                get_fully_validated_ast(test_code)
-            
-            error = exc_info.value
-            assert f"Cannot perform array {op_name} by array" in str(error.error)
+            # Should not raise -- element-wise operations with matching shapes
+            ast = get_fully_validated_ast(test_code)
+            assert ast is not None
     
     def test_mixed_types_with_arrays(self):
         """Test array/scalar operations with type promotion."""
@@ -321,7 +301,7 @@ dynamic Dyn {
     f.out[x | 0] = 1.0;
 }
 
-gauge Out(out = {real val;}) {
+gauge Out -> (real val) {
     val = f.in[x | 0];
 }
 
@@ -357,7 +337,7 @@ dynamic Dyn {
     f.out[x | 0] = 1;
 }
 
-gauge Out(out = {int val;}) {
+gauge Out -> (int val) {
     val = f.in[x | 0];
 }
 
@@ -374,24 +354,25 @@ geometry {
         ast = get_fully_validated_ast(test_code)
         assert ast is not None
     
-    def test_error_message_quality(self):
-        """Test that error messages are clear and helpful."""
+    def test_array_array_elementwise_with_real_lattices(self):
+        """Test that element-wise array operations work with real-valued lattices."""
         test_code = """
-simulation_description("Test error message quality");
+simulation_description("Test element-wise array operations");
 
 lattices {
     lattice data(1, 5, real, 64, true);
+    lattice other(1, 5, real, 64, true);
 }
 
 initializer Init {
-    data.out[x | :] = 3.14 / data.in[x | :];
+    data.out[x | :] = data.in[x | :] + other.in[x | :];
 }
 
 dynamic Dyn {
     data.out[x | 0] = 1.0;
 }
 
-gauge Out(out = {real val;}) {
+gauge Out -> (real val) {
     val = data.in[x | 0];
 }
 
@@ -403,19 +384,6 @@ geometry {
     nodes[:] = BULK;
 }
 """
-        
-        with pytest.raises(GeLBExTypeError) as exc_info:
-            get_fully_validated_ast(test_code)
-        
-        error = exc_info.value
-        # Check that the error has proper structure
-        assert hasattr(error, 'error')
-        assert hasattr(error, 'hint')
-        assert hasattr(error, 'node')
-        
-        # Check error message content
-        assert "scalar division by array" in str(error.error)
-        assert "mathematically ambiguous" in str(error.error)
-        
-        # Check hint provides alternative
-        assert "array division scalar" in str(error.hint)
+        # Should not raise -- element-wise array operations with matching shapes
+        ast = get_fully_validated_ast(test_code)
+        assert ast is not None

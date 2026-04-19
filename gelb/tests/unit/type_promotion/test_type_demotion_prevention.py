@@ -167,7 +167,7 @@ dynamic Dyn {
     f.out[x | 0] = 1;
 }
 
-gauge Out(out = {int val;}) {
+gauge Out -> (int val) {
     val = f.in[x | 0];
 }
 

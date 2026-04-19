@@ -53,18 +53,18 @@ class TestConstantFoldingDirect:
         assert result.value == 28
     
     def test_division_folding_direct(self):
-        """Test folding division with direct AST construction."""
+        """Test folding integer division with direct AST construction."""
         code_range = CodeRange(1, 1, 1, 5)
         left = IntLiteral_N(code_range, 15)
         right = IntLiteral_N(code_range, 3)
         div_node = Div_N(code_range, left, right)
-        
+
         folder = ConstantFoldingVisitor()
         result = folder.visit(div_node, None)
-        
-        # Integer division in Python returns float
-        assert isinstance(result, RealLiteral_N)
-        assert result.value == 5.0
+
+        # int / int folds to int (Fortran semantics)
+        assert isinstance(result, IntLiteral_N)
+        assert result.value == 5
     
     def test_division_by_zero_not_folded_direct(self):
         """Test that division by zero is not folded."""

@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 
 from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
+from gelb.frontend.implicit_symbols import (
+    TIMESTEP_SYMBOL_NAME,
+    active_coordinate_names,
+    active_dimension_names,
+    grid_dimensions_from_lattices,
+)
 from gelb.gelb_ast.ASTNodes import *
 from gelb.gelb_ast.SymbolDefinition import SymbolDefinition
 
@@ -13,10 +19,14 @@ class ImplicitSymbolsAdderVisitor(ASTBaseVisitor):
     Adds the following implicit symbols:
     - Nx, Ny, Nz: Grid dimensions (constants derived from lattices block grid_size)
     - x, y, z: Lattice site coordinates (like CUDA thread indices, uint64 at runtime)
+    - t:        Current iteration index (0 during the pre-loop gauge snapshot of
+                initial conditions, 1..num_timesteps during the main time loop)
 
     The x, y, z variables represent the current lattice site being processed,
-    similar to threadIdx in CUDA. They are available in initializer, dynamic,
-    and gauge blocks where lattice operations occur.
+    similar to threadIdx in CUDA. The t variable is the current outer-loop
+    iteration and enables time-dependent forcing, ramps, pulses, etc. All
+    four are available in initializer, dynamic, and gauge blocks where
+    lattice operations occur.
 
     NOTE: Should be invoked *after* SymbolsTablesBuilderVisitor (
     build_symbols_tables).
@@ -32,7 +42,9 @@ class ImplicitSymbolsAdderVisitor(ASTBaseVisitor):
         Main entry point. Extract grid dimensions from lattices and add
         implicit symbols to relevant blocks.
         """
-        # First, extract grid dimensions from lattices block
+        # First, extract grid dimensions from lattices block.  The rank of
+        # grid_size was validated against d when the symbol tables were
+        # built, so the shape can be trusted here.
         if node.lattices:
             self._extract_grid_dimensions(node.lattices)
         
@@ -63,7 +75,14 @@ class ImplicitSymbolsAdderVisitor(ASTBaseVisitor):
         
         for block in blocks_needing_coordinates:
             self._add_lattice_coordinates(block)
-        
+            self._add_timestep_symbol(block)
+
+        # The geometry block gets the coordinates too: a `where` paint
+        # predicate is evaluated per cell with x, y, z bound to that
+        # cell.  It does not get `t`: the geometry is fixed for the run.
+        if node.geometry is not None and node.geometry.symbol_defs is not None:
+            self._add_lattice_coordinates(node.geometry)
+
         return node
     
     def _extract_grid_dimensions(self, lattices_block):
@@ -79,76 +98,20 @@ class ImplicitSymbolsAdderVisitor(ASTBaseVisitor):
         - 2D: lattice f(2, 9, real, {64, 32}, {true, false});  // grid_size is Array1DLiteral_N
         - 3D: lattice f(3, 27, real, {64, 32, 16}, {true, false, true});
         """
-        if not lattices_block.stmts or not lattices_block.stmts.elements:
-            # No lattices specified, use default 1D with size 1
-            self.grid_dimensions = [IntLiteral_N(None, 1)]
-            self.dimensionality = 1
-            return
-        
-        # Get the first lattice instantiation statement
-        first_lattice = lattices_block.stmts.elements[0]
-        
-        if not isinstance(first_lattice, LatticeInstaStmt_N):
-            # Not a lattice instantiation, use default
-            self.grid_dimensions = [IntLiteral_N(None, 1)]
-            self.dimensionality = 1
-            return
-        
-        if not hasattr(first_lattice, 'grid_size') or not first_lattice.grid_size:
-            # No grid size specified, use default 1D with size 1
-            self.grid_dimensions = [IntLiteral_N(None, 1)]
-            self.dimensionality = 1
-            return
-        
-        grid_size = first_lattice.grid_size
-        
-        if isinstance(grid_size, IntLiteral_N):
-            # 1D case: lattice f(1, 1, int, 32, false)
-            self.grid_dimensions = [grid_size]
-            self.dimensionality = 1
-            
-        elif isinstance(grid_size, Array1DLiteral_N):
-            # Multi-dimensional case: lattice f(2, 9, real, {64, 32}, {true, false})
-            # grid_size.value is a List_N object containing the elements
-            if hasattr(grid_size, 'value') and hasattr(grid_size.value, 'elements'):
-                self.grid_dimensions = grid_size.value.elements
-                self.dimensionality = len(grid_size.value.elements)
-            elif hasattr(grid_size, 'value') and isinstance(grid_size.value, list):
-                # Direct list case
-                self.grid_dimensions = grid_size.value
-                self.dimensionality = len(grid_size.value)
-            else:
-                # Fallback: treat as 1D
-                self.grid_dimensions = [grid_size]
-                self.dimensionality = 1
-            
-        else:
-            # Handle expressions (like identifiers that reference constants)
-            # For now, assume 1D and use the expression as is
-            self.grid_dimensions = [grid_size]
-            self.dimensionality = 1
-            
-        # Validate dimensionality matches the d parameter
-        if hasattr(first_lattice, 'd') and isinstance(first_lattice.d, IntLiteral_N):
-            expected_dim = first_lattice.d.value
-            if expected_dim != self.dimensionality:
-                # Log warning but continue - this should be caught by validation elsewhere
-                pass
+        self.grid_dimensions = grid_dimensions_from_lattices(lattices_block)
+        self.dimensionality = len(self.grid_dimensions)
     
     def _add_dimension_constants(self, global_constants_block):
         """
         Add Nx, Ny, Nz constants to the global_constants symbol table.
         These represent the grid dimensions and are compile-time constants.
         """
-        dimension_names = ['Nx', 'Ny', 'Nz']
-        
         # The symbol table should already exist from SymbolsTablesBuilderVisitor
         if not hasattr(global_constants_block, 'symbol_defs') or global_constants_block.symbol_defs is None:
             raise ValueError("global_constants_block should have a symbol table by this point in the pipeline")
         
         # Add dimension constants based on actual dimensionality
-        for i in range(self.dimensionality):
-            dim_name = dimension_names[i]
+        for i, dim_name in enumerate(active_dimension_names(self.dimensionality)):
             dim_value = self.grid_dimensions[i]
             
             # Create a symbol definition for the dimension constant
@@ -170,16 +133,12 @@ class ImplicitSymbolsAdderVisitor(ASTBaseVisitor):
         site coordinates being processed. At runtime, they will be uint64 variables
         that range from 0 to Nx-1, Ny-1, Nz-1 respectively.
         """
-        coordinate_names = ['x', 'y', 'z']
-        
         # The symbol table should already exist from SymbolsTablesBuilderVisitor
         if not hasattr(block, 'symbol_defs') or block.symbol_defs is None:
             raise ValueError(f"{block.__class__.__name__} should have a symbol table by this point in the pipeline")
         
         # Add lattice coordinate variables based on dimensionality
-        for i in range(self.dimensionality):
-            coord_name = coordinate_names[i]
-            
+        for coord_name in active_coordinate_names(self.dimensionality):
             # Create a synthetic identifier node for the coordinate variable
             # These will be uint64 variables at runtime, representing current lattice site
             coord_identifier = Identifier_N(None, coord_name)
@@ -195,6 +154,38 @@ class ImplicitSymbolsAdderVisitor(ASTBaseVisitor):
             if not block.symbol_defs.contains_local(coord_name):
                 block.symbol_defs.append(symbol_def)
     
+    def _add_timestep_symbol(self, block):
+        """
+        Add the implicit timestep variable ``t`` to blocks that need it.
+
+        ``t`` is a scalar ``int`` holding the current outer-loop iteration
+        index. It is 0 during the pre-loop gauge pass (which captures the
+        initial conditions) and ranges over 1..num_timesteps during the
+        main time loop. Unlike ``x``/``y``/``z``, which are added only for
+        the dimensions the lattice actually has, ``t`` is added
+        unconditionally to every initializer/dynamic/gauge block.
+
+        Not added if the user has already defined a symbol of the same name
+        (e.g. a global constant ``const int t = 5``) -- in that case the
+        user-defined symbol wins, mirroring the ``x``/``y``/``z`` policy.
+        """
+        if not hasattr(block, 'symbol_defs') or block.symbol_defs is None:
+            raise ValueError(f"{block.__class__.__name__} should have a symbol table by this point in the pipeline")
+
+        # Synthetic identifier for the timestep variable; the backend maps
+        # this name to the outer time-loop iterator (gelb_timestep in the
+        # Fortran backends).
+        t_identifier = Identifier_N(None, TIMESTEP_SYMBOL_NAME)
+
+        symbol_def = SymbolDefinition(
+            name=TIMESTEP_SYMBOL_NAME,
+            tag="implicit timestep variable",
+            value=t_identifier,
+        )
+
+        if not block.symbol_defs.contains_local(TIMESTEP_SYMBOL_NAME):
+            block.symbol_defs.append(symbol_def)
+
     def _find_shared_parent_table(self, node):
         """
         Find the shared parent symbol table when there's no global_constants block.
@@ -224,11 +215,8 @@ class ImplicitSymbolsAdderVisitor(ASTBaseVisitor):
         Add Nx, Ny, Nz constants directly to a symbol table.
         Used when there's no global_constants block.
         """
-        dimension_names = ['Nx', 'Ny', 'Nz']
-        
         # Add dimension constants based on actual dimensionality
-        for i in range(self.dimensionality):
-            dim_name = dimension_names[i]
+        for i, dim_name in enumerate(active_dimension_names(self.dimensionality)):
             dim_value = self.grid_dimensions[i]
             
             # Create a symbol definition for the dimension constant

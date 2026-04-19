@@ -133,7 +133,11 @@ class TestIntrinsicFunctionValidation:
         assert "expects numeric arrays, got array[bool" in str(exc_info.value)
     
     def test_dot_prod_dimension_mismatch_error(self):
-        """Test that dot_prod() with different dimensionalities raises an error."""
+        """Test that dot_prod() with a matrix operand raises an error.
+
+        dot_prod takes vectors: the matrix is reported as such, whatever
+        the other operand.
+        """
         test_string = minimal_gelb_program_1d(
             global_constants_content='''
                 const array[int, 3] a = {1, 2, 3};
@@ -145,8 +149,7 @@ class TestIntrinsicFunctionValidation:
         with pytest.raises(GeLBExTypeError) as exc_info:
             get_typed_ast(test_string)
         
-        assert "requires arrays of the same shape" in str(exc_info.value)
-        assert "Array 1 has 1 dimensions, array 2 has 2 dimensions" in str(exc_info.value)
+        assert "takes vectors; argument 2 is a 2-dimensional array" in str(exc_info.value)
     
     def test_unknown_intrinsic_function_error(self):
         """Test that unknown intrinsic function raises an error."""
@@ -173,3 +176,14 @@ class TestIntrinsicFunctionValidation:
         assert sum_call.function_name == "sum"
         assert hasattr(sum_call, 'inferred_type')
         assert sum_call.inferred_type.element_dtype == "int"  # lattice df_type is int in minimal_gelb_program_1d
+
+    def test_random_wrong_argument_count(self):
+        """Test that random() with arguments raises an error."""
+        test_string = minimal_gelb_program_1d(
+            dynamic_content='real r = random(42);'
+        )
+
+        with pytest.raises(GeLBExTypeError) as exc_info:
+            get_typed_ast(test_string)
+
+        assert "expects exactly 0 arguments, got 1" in str(exc_info.value)

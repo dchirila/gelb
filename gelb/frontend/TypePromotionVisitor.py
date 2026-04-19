@@ -3,6 +3,8 @@
 from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
 from gelb.frontend.visitor_mixins import ProgramTraversalMixin
 from gelb.gelb_ast.ASTNodes import *
+from gelb.frontend.type_rules import (
+    INTEGER_TYPES, REAL_TYPES, common_type, intrinsic_argument_types)
 from gelb.utils.exceptions import GeLBException, GeLBExTypeError
 from gelb.utils.CodeRange import CodeRange
 
@@ -15,7 +17,7 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
     This visitor modifies the AST by wrapping expressions that need
     implicit type promotion in TypePromotionNode_N instances.
     
-    Type promotion hierarchy: bool → int → real
+    Type promotion hierarchy: bool -> int -> real
     """
     
     def __init__(self):
@@ -27,12 +29,12 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         Define the type promotion hierarchy.
         Returns a dict mapping each type to its promotion level.
         """
-        return {
-            'bool': 0,
-            'int': 1,
-            'real': 2,
-            # 'string' does not participate in promotions
-        }
+        # 'string' does not participate in promotions.  The members are
+        # type_rules' (real16 is not in this version).
+        levels = {'bool': 0}
+        levels.update({name: 1 for name in INTEGER_TYPES})
+        levels.update({name: 2 for name in REAL_TYPES})
+        return levels
     
     def _can_promote(self, from_type, to_type):
         """
@@ -86,26 +88,11 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
             return None
     
     def _get_common_type(self, type1, type2):
-        """
-        Find the common type that both types can be promoted to.
-        
-        Returns:
-            str: The common type name, or None if no common type exists
-        """
-        name1 = self._get_type_name(type1)
-        name2 = self._get_type_name(type2)
-        
-        # If either type doesn't participate in promotion, no common type
-        if name1 not in self.promotion_hierarchy:
-            return None
-        if name2 not in self.promotion_hierarchy:
-            return None
-        
-        # Return the type with higher level
-        if self.promotion_hierarchy[name1] >= self.promotion_hierarchy[name2]:
-            return name1
-        else:
-            return name2
+        """The type both operands are converted to: the one table
+        (gelb.frontend.type_rules), or None if either type does not
+        take part in promotion."""
+        return common_type(self._get_type_name(type1),
+                           self._get_type_name(type2))
     
     def _create_promotion(self, expr, target_type_name):
         """
@@ -214,7 +201,7 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         # Visit children first
         node.left = self.visit(node.left, ast_root_node)
         node.right = self.visit(node.right, ast_root_node)
-        
+
         # Check if operands have inferred types
         if not hasattr(node.left, 'inferred_type') or not hasattr(node.right, 'inferred_type'):
             raise GeLBExTypeError(
@@ -222,16 +209,21 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
                 "Missing type information for type promotion",
                 "This appears to be an internal compiler error - type inference should run before type promotion"
             )
-        
+
         left_type = node.left.inferred_type
         right_type = node.right.inferred_type
-        
+
         # Find common type
         common_type = self._get_common_type(left_type, right_type)
         if common_type is None:
             # This will be caught by type validation
             return node
-        
+
+        # For arithmetic operations, bool must be promoted to int
+        # (e.g. bool * bool should produce int, not remain bool)
+        if common_type == 'bool':
+            common_type = 'int'
+
         # Promote left operand if needed
         if self._needs_promotion(left_type, common_type):
             node.left = self._create_promotion(node.left, common_type)
@@ -239,12 +231,20 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         # Promote right operand if needed
         if self._needs_promotion(right_type, common_type):
             node.right = self._create_promotion(node.right, common_type)
-        
-        # Update the operation's inferred type to match new array-based system
-        # Create 0-dimensional array type for scalar result
-        empty_shape = List_N(node.code_range)
-        node.inferred_type = ArrayDataType_N(node.code_range, common_type, empty_shape)
-        
+
+        # Preserve the shape that TypeInferenceVisitor already computed
+        # via broadcasting. Promotion only changes the element type
+        # (int -> real, etc.), not the shape -- so `array[real, 9] * array[real, 9]`
+        # must stay `array[real, 9]`, not be clobbered to a scalar shape.
+        existing = getattr(node, 'inferred_type', None)
+        if isinstance(existing, ArrayDataType_N):
+            preserved_shape = existing.shape
+        else:
+            preserved_shape = List_N(node.code_range)  # fallback: scalar
+        node.inferred_type = ArrayDataType_N(
+            node.code_range, common_type, preserved_shape
+        )
+
         return node
     
     # Comparison operations
@@ -426,33 +426,23 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
     
     def visitGlobalConstantsBlock_N(self, node: GlobalConstantsBlock_N, ast_root_node: Program_N):
         """Process statements in global constants block."""
-        for stmt in node.stmts:
-            self.visit(stmt, ast_root_node)
-        return node
+        return self._visit_block_stmts(node, ast_root_node)
     
     def visitInitializerBlock_N(self, node: InitializerBlock_N, ast_root_node: Program_N):
         """Process statements in initializer block."""
-        for stmt in node.stmts:
-            self.visit(stmt, ast_root_node)
-        return node
+        return self._visit_block_stmts(node, ast_root_node)
     
     def visitDynamicBlock_N(self, node: DynamicBlock_N, ast_root_node: Program_N):
         """Process statements in dynamic block."""
-        for stmt in node.stmts:
-            self.visit(stmt, ast_root_node)
-        return node
+        return self._visit_block_stmts(node, ast_root_node)
     
     def visitGaugeBlock_N(self, node: GaugeBlock_N, ast_root_node: Program_N):
         """Process statements in gauge block."""
-        for stmt in node.stmts:
-            self.visit(stmt, ast_root_node)
-        return node
+        return self._visit_block_stmts(node, ast_root_node)
     
     def visitGeometryBlock_N(self, node: GeometryBlock_N, ast_root_node: Program_N):
         """Process statements in geometry block."""
-        for stmt in node.stmts:
-            self.visit(stmt, ast_root_node)
-        return node
+        return self._visit_block_stmts(node, ast_root_node)
     
     # Pass-through for other nodes
     
@@ -527,16 +517,58 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
                             node.value.elements[i] = self._create_promotion(elem, target_type_name)
         
         return node
-    
+
+    # Intrinsic function calls
+
+    def visitIntrinsicFunctionCall_N(self, node, ast_root_node: Program_N):
+        """Promote inside the arguments, then convert each argument of a
+        scalar intrinsic to the type type_rules gives it: the
+        integer argument of ``sqrt`` to ``real``, both arguments of
+        ``min`` to their common type, both of ``atan2`` to the common
+        real type.  The backends then call the same-typed overload
+        everywhere; ``abs`` and the array intrinsics convert nothing."""
+        args = node.arguments.elements
+        for i, arg in enumerate(args):
+            args[i] = self.visit(arg, ast_root_node)
+        targets = intrinsic_argument_types(
+            node.function_name,
+            [self._get_type_name(getattr(arg, 'inferred_type', None)) for arg in args])
+        for i, target in enumerate(targets):
+            if target is not None and self._needs_promotion(args[i].inferred_type, target):
+                args[i] = self._create_promotion(args[i], target)
+        return node
+
+    def visitUserFunctionCall_N(self, node, ast_root_node: Program_N):
+        """Apply type promotions to user function call arguments."""
+        for i, arg in enumerate(node.arguments.elements):
+            node.arguments.elements[i] = self.visit(arg, ast_root_node)
+        return node
+
+    def visitDestructuringAssignmentStmt_N(self, node, ast_root_node: Program_N):
+        """Apply type promotions in destructuring assignment."""
+        node.rhs = self.visit(node.rhs, ast_root_node)
+        return node
+
+    def visitFunctionBlock_N(self, node, ast_root_node: Program_N):
+        """Apply type promotions within function body."""
+        return self._visit_block_stmts(node, ast_root_node)
+
     # Other nodes that may contain expressions
-    
+
     def visitPaintNodesStmt_N(self, node: PaintNodesStmt_N, ast_root_node: Program_N):
         """Paint statements don't involve type promotion."""
         # The RHS is a node class name, not an expression
         if node.lhs is not None:
             node.lhs = self.visit(node.lhs, ast_root_node)
         return node
-    
+
+    def visitBorderStmt_N(self, node, ast_root_node):
+        return node  # No expressions to promote
+
+    def visitConditionalPaintStmt_N(self, node, ast_root_node):
+        node.predicate = self.visit(node.predicate, ast_root_node)
+        return node
+
     def visitRange_N(self, node: Range_N, ast_root_node: Program_N):
         """Process range bounds."""
         if node.low is not None:
@@ -564,18 +596,35 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         return node
     
     def visitVariableDeclarationStmt_N(self, node: VariableDeclarationStmt_N, ast_root_node: Program_N):
-        """Variable declarations may have initial value expressions to promote."""
+        """A declaration's initializer is promoted like an assignment's
+        right-hand side: a scalar initializing an array is broadcast
+        (``array[real, 9] t = min(a, 0.0);``), and a value of another
+        type is converted to the declared one."""
         if node.initial_value:
-            # Handle potential type promotion for initialization
-            self.visit(node.initial_value, ast_root_node)
-            # Check if the initial value needs promotion to the declared type
+            node.initial_value = self.visit(node.initial_value, ast_root_node)
             if hasattr(node.initial_value, 'inferred_type'):
                 declared_type = node.data_type
                 initial_type = node.initial_value.inferred_type
-                if self._needs_promotion(initial_type, declared_type):
+                declared_is_array = (isinstance(declared_type, ArrayDataType_N)
+                                     and not self._is_scalar_array(declared_type))
+                initial_is_scalar = (self._is_scalar_array(initial_type)
+                                     if isinstance(initial_type, ArrayDataType_N) else True)
+                if declared_is_array and initial_is_scalar:
+                    node.initial_value = self._create_broadcast(node.initial_value, declared_type)
+                elif self._needs_promotion(initial_type, declared_type):
                     node.initial_value = self._create_promotion(node.initial_value, declared_type.element_dtype)
         return node
     
+    def visitTypePromotionNode_N(self, node: TypePromotionNode_N, ast_root_node: Program_N):
+        """Pass through existing type promotion nodes (may appear from earlier passes)."""
+        node.expr = self.visit(node.expr, ast_root_node)
+        return node
+
+    def visitBroadcastNode_N(self, node: BroadcastNode_N, ast_root_node: Program_N):
+        """Pass through broadcast nodes."""
+        node.scalar_expr = self.visit(node.scalar_expr, ast_root_node)
+        return node
+
     def visitLatticeInstaStmt_N(self, node: LatticeInstaStmt_N, ast_root_node: Program_N):
         """Process expressions in lattice instantiation."""
         # Visit dimension and q parameters if they are expressions
