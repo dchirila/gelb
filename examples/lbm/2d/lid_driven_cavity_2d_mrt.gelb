@@ -1,0 +1,148 @@
+// 2D lid-driven square cavity flow -- D2Q9 MRT LBM
+//
+// Same physics as lid_driven_cavity_2d_bgk.gelb (recirculating
+// vortex driven by a tangentially-moving top lid) but with MRT
+// collision in place of BGK.
+//
+// Why MRT for the cavity?
+//   - At Re = 1000 with U_LID = 0.1 (Mohamad's standard choice)
+//     the BGK relaxation time $\tau = 0.5381$ sits close to the
+//     stability limit $\tau$ -> 0.5; the higher-order non-stress
+//     moments are forced to relax at the same rate as the
+//     stress, which hurts both stability and quantitative
+//     accuracy near the lid boundary layer.
+//   - MRT relaxes the higher-order moments ($e, \varepsilon, q_x, q_y$)
+//     independently, at rates around 1.0-1.1, which damps the
+//     non-hydrodynamic moment-noise without slowing the
+//     stress relaxation. Compare measured centerline errors with
+//     scripts/validate_ldc.py; the advantage depends on the setup.
+//
+// Boundary conditions:
+//   - Left, right, bottom walls: stationary full-way bounce-back
+//   - Top lid: moving-wall bounce-back (velocity U_LID in +x)
+//
+// Moving-wall bounce-back (Ladd 1994; Krueger et al. 2017 Eq. 5.26):
+//   f_i^incoming = f_opp(i)^post-collision + 6*w_i*rho_wall*(c_i.u_wall)
+// bounce_back_dfs reflects at the wall cell; rho_wall = 1 for the lid.
+//
+// References:
+//   - Lallemand, P. & Luo, L.-S. (2000), "Theory of the lattice
+//     Boltzmann method", Phys. Rev. E 61(6), 6546.
+//   - Mohamad, A. A. (2011), "Lattice Boltzmann Method", Sec. 8.8.1.
+//   - Ghia, U., Ghia, K. N., Shin, C. T. (1982), J. Comput.
+//     Phys. 48, 387.
+//
+// Defaults: N=65, Re ~= 100 (TAU=0.689, U_LID=0.1).  Override via
+// gelbc -D N=129 -D U_LID=0.1 -D TAU=0.5381 for Re=1000 etc.
+
+simulation_description("2D lid-driven cavity flow (LBM-MRT, D2Q9)");
+
+global_constants {
+    const int N = 65;
+
+    const real U_LID = 0.1;
+    const real TAU = 0.689;
+    const real TAU_INV = 1.0 / TAU;
+
+    // D2Q9 lattice velocities and weights
+    const array[real, 9] EX = {0.0, 1.0, 0.0, -1.0,  0.0, 1.0, -1.0, -1.0,  1.0};
+    const array[real, 9] EY = {0.0, 0.0, 1.0,  0.0, -1.0, 1.0,  1.0, -1.0, -1.0};
+    const array[real, 9] W = {4.0/9.0,
+        1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+
+    // MRT transformation matrix (Lallemand & Luo, 2000)
+    const array[real, {9, 9}] M = {
+        { 1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0},
+        {-4.0, -1.0, -1.0, -1.0, -1.0,  2.0,  2.0,  2.0,  2.0},
+        { 4.0, -2.0, -2.0, -2.0, -2.0,  1.0,  1.0,  1.0,  1.0},
+        { 0.0,  1.0,  0.0, -1.0,  0.0,  1.0, -1.0, -1.0,  1.0},
+        { 0.0, -2.0,  0.0,  2.0,  0.0,  1.0, -1.0, -1.0,  1.0},
+        { 0.0,  0.0,  1.0,  0.0, -1.0,  1.0,  1.0, -1.0, -1.0},
+        { 0.0,  0.0, -2.0,  0.0,  2.0,  1.0,  1.0, -1.0, -1.0},
+        { 0.0,  1.0, -1.0,  1.0, -1.0,  0.0,  0.0,  0.0,  0.0},
+        { 0.0,  0.0,  0.0,  0.0,  0.0,  1.0, -1.0,  1.0, -1.0}};
+
+    const array[real, {9, 9}] M_INV = inverse(M);
+
+    // Relaxation rates: conserved moments (rho, jx, jy) at 0;
+    // bulk viscosity / energy moments at 1.1; stress (pxx, pxy)
+    // at TAU_INV (matches the kinematic viscosity of the bulk).
+    const array[real, 9] S_DIAG = {0.0, 1.1, 1.1, 0.0, 1.1, 0.0, 1.1, TAU_INV, TAU_INV};
+}
+
+lattices {
+    lattice f(2, 9, real, {N, N}, {false, false});
+}
+
+function Macro(array[real, 9] fIn) -> (real rho, real ux, real uy) {
+    rho = sum(fIn);
+    ux = dot_prod(EX, fIn) / rho;
+    uy = dot_prod(EY, fIn) / rho;
+}
+
+function EqMoments(real rho, real ux, real uy) -> (array[real, 9] meq) {
+    real usq = ux * ux + uy * uy;
+    meq = {rho,
+           -2.0 * rho + 3.0 * rho * usq,
+           rho - 3.0 * rho * usq,
+           rho * ux,
+           -1.0 * rho * ux,
+           rho * uy,
+           -1.0 * rho * uy,
+           rho * (ux * ux - uy * uy),
+           rho * ux * uy};
+}
+
+initializer InitFluid {
+    f.out[x, y | :] = W;
+}
+
+dynamic MRTCollStream {
+    array[real, 9] fIn = upstream_dfs(f, x, y, {EX, EY});
+
+    real rho; real ux; real uy;
+    {rho, ux, uy} = Macro(fIn);
+
+    array[real, 9] moments = matmul(M, fIn);
+    array[real, 9] meq = EqMoments(rho, ux, uy);
+
+    f.out[x, y | :] = matmul(M_INV, moments - S_DIAG * (moments - meq));
+}
+
+gauge Hydro -> (real rho, real ux, real uy) {
+    {rho, ux, uy} = Macro(f.in[x, y | :]);
+}
+
+// Full-way bounce-back: the wall stores arriving fluid populations
+// reversed, and the fluid pulls them back on the following step.
+// The effective no-slip surfaces are at 0.5 and N-1.5, so L = N-2.
+dynamic BounceBack {
+    f.out[x, y | :] = bounce_back_dfs(f, x, y, {EX, EY});
+}
+
+dynamic MovingLid {
+    f.out[x, y | :] = bounce_back_dfs(f, x, y, {EX, EY}) + 6.0 * W * (EX * U_LID);
+}
+
+// Display the prescribed wall density and velocity.
+gauge BoundaryHydro -> (real rho, real ux, real uy) {
+    rho = 1.0;
+    ux = U_LID * real(y == N - 1);
+    uy = 0.0;
+}
+
+node_classes {
+    node_class FLUID(InitFluid, MRTCollStream, Hydro);
+    node_class WALL(InitFluid, BounceBack, BoundaryHydro);
+    node_class LID(InitFluid, MovingLid, BoundaryHydro);
+}
+
+// x = horizontal (0=left, N-1=right), y = vertical (0=bottom, N-1=top)
+geometry {
+    nodes[:, :] = FLUID;
+    nodes[0, :] = WALL;        // left wall   (x = 0)
+    nodes[N - 1, :] = WALL;    // right wall  (x = N-1)
+    nodes[:, 0] = WALL;        // bottom wall (y = 0)
+    nodes[:, N - 1] = LID;     // top lid     (y = N-1)
+}

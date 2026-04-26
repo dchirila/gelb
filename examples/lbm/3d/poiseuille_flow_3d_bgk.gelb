@@ -1,0 +1,99 @@
+// 3D Poiseuille flow (gravity-driven) -- D3Q19 BGK
+//
+// Gravity-driven channel flow between two parallel no-slip walls.
+// Periodic in x (flow direction) and z (spanwise), walls in y.
+//
+// At steady state the velocity profile is exactly parabolic:
+//   u_x(y) = G/(2*nu) * y_eff * (H - y_eff)
+//
+// where y_eff is the distance from the bottom wall and H is the
+// effective channel height. With full-way bounce-back walls at y=0
+// and y=NY-1, the no-slip surface is at y=0.5 and y=NY-1.5,
+// giving H = NY - 2.
+//
+// Body force: Guo forcing scheme (2nd-order accurate) with
+// half-force velocity correction and (1 - 1/(2*tau)) prefactor.
+//
+// This is an exact 3D NS solution suitable for convergence studies.
+
+simulation_description("3D Poiseuille flow (BGK, D3Q19)");
+
+global_constants {
+    const int NY = 32;
+    const int NX = 4;
+    const int NZ = 4;
+    const real TAU = 0.8;
+    const real TAU_INV = 1.0 / TAU;
+    const real G = 0.00001;
+
+    // D3Q19 lattice velocities
+    const array[real, 19] EX = { 0.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 1.0,-1.0, 1.0,-1.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0};
+    const array[real, 19] EY = { 0.0, 0.0, 0.0, 1.0,-1.0, 0.0, 0.0, 1.0,-1.0,-1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 1.0,-1.0};
+    const array[real, 19] EZ = { 0.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0,-1.0, 1.0, 1.0,-1.0,-1.0, 1.0};
+
+    // D3Q19 weights
+    const array[real, 19] W = {1.0/3.0,
+        1.0/18.0, 1.0/18.0, 1.0/18.0, 1.0/18.0, 1.0/18.0, 1.0/18.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+
+}
+
+lattices {
+    lattice f(3, 19, real, {NX, NY, NZ}, {true, false, true});
+}
+
+function Macro(array[real, 19] fIn) -> (real rho, real ux, real uy, real uz) {
+    rho = sum(fIn);
+    ux = dot_prod(EX, fIn) / rho;
+    uy = dot_prod(EY, fIn) / rho;
+    uz = dot_prod(EZ, fIn) / rho;
+}
+
+function Eq(real rho, real ux, real uy, real uz) -> (array[real, 19] feq) {
+    real usq = ux*ux + uy*uy + uz*uz;
+    array[real, 19] eu = EX * ux + EY * uy + EZ * uz;
+    feq = W * rho * (1.0 + 3.0*eu + 4.5*eu*eu - 1.5*usq);
+}
+
+initializer InitFluid {
+    f.out[x, y, z | :] = W;
+}
+
+dynamic BGKCollStream {
+    array[real, 19] fIn = upstream_dfs(f, x, y, z, {EX, EY, EZ});
+
+    real rho; real ux; real uy; real uz;
+    {rho, ux, uy, uz} = Macro(fIn);
+
+    // Guo forcing (Guo et al. 2002):
+    //  - half-force velocity correction in equilibrium
+    //  - full source term: S_i = w_i * [(e_i-u)/cs^2 + (e_i.u)/cs^4 * e_i] . F
+    //  - (1 - 1/(2*tau)) prefactor for 2nd-order accuracy
+    real ux_phys = ux + 0.5 * G / rho;
+    array[real, 19] eu = EX * ux + EY * uy + EZ * uz;
+    array[real, 19] Si = W * ((EX - ux) * 3.0 + eu * EX * 9.0) * G;
+    f.out[x, y, z | :] = fIn - TAU_INV * (fIn - Eq(rho, ux_phys, uy, uz))
+        + (1.0 - 0.5 * TAU_INV) * Si;
+}
+
+dynamic BounceBack {
+    f.out[x, y, z | :] = bounce_back_dfs(f, x, y, z, {EX, EY, EZ});
+}
+
+gauge Hydro -> (real rho, real ux, real uy, real uz) {
+    {rho, ux, uy, uz} = Macro(f.in[x, y, z | :]);
+    // Half-force correction: physical velocity with Guo forcing
+    ux = ux + 0.5 * G / rho;
+}
+
+node_classes {
+    node_class FLUID(InitFluid, BGKCollStream, Hydro);
+    node_class WALL(InitFluid, BounceBack, Hydro);
+}
+
+geometry {
+    nodes[:, :, :] = FLUID;
+    nodes[:, 0, :] = WALL;
+    nodes[:, NY - 1, :] = WALL;
+}

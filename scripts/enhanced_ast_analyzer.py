@@ -8,9 +8,12 @@ inspecting the __init__ methods and constructor parameters to understand field t
 
 import ast
 import re
-from pathlib import Path
 from collections import defaultdict
+from pathlib import Path
 from typing import Dict, List, Set
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 
 class EnhancedASTAnalyzer:
     """Enhanced analyzer that inspects actual field types in AST nodes."""
@@ -124,7 +127,7 @@ class EnhancedASTAnalyzer:
     
     def _generate_enhanced_report(self):
         """Generate an enhanced analysis report."""
-        report_path = Path("/home/dchirila/Research/gelb/gelb/docs/visualizations/enhanced_ast_analysis.md")
+        report_path = REPO_ROOT / "docs/visualizations/enhanced_ast_analysis.md"
         
         with open(report_path, 'w') as f:
             f.write("# Enhanced GeLB AST Node Analysis\n")
@@ -166,7 +169,7 @@ class EnhancedASTAnalyzer:
     
     def generate_detailed_dot_graph(self):
         """Generate a more detailed DOT graph with field information."""
-        output_path = Path("/home/dchirila/Research/gelb/gelb/docs/visualizations/gelb_ast.detailed.dot")
+        output_path = REPO_ROOT / "docs/visualizations/gelb_ast.detailed.dot"
         
         with open(output_path, 'w') as f:
             f.write('digraph "GeLB AST Detailed Structure" {\n')

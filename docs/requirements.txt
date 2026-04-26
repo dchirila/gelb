@@ -1,0 +1,11 @@
+# Docs-build dependencies. Sphinx itself is already listed in the
+# project's `dev` group and in the `docs` optional-dependencies group
+# in pyproject.toml; this file exists for the ReadTheDocs builder,
+# which reads `.readthedocs.yaml` and this list directly (it does not
+# look at pyproject's optional-dependencies by default).
+#
+# Keep in sync with pyproject.toml's [project.optional-dependencies].docs.
+
+sphinx >= 7.4.7
+furo >= 2024.8.6
+sphinx-copybutton >= 0.5.2

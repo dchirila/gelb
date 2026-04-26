@@ -1,0 +1,63 @@
+simulation_description("2D Game of Life with a glider (deterministic ICs)");
+
+global_constants {
+    const int GRID = 32;
+}
+
+lattices {
+    lattice f(2, 1, int, {GRID, GRID}, {true, true});
+}
+
+initializer GliderInit {
+    // Glider pattern at (1,1)-(3,3):
+    //   row y=3:  .X.       (2,3)
+    //   row y=2:  ..X       (3,2)
+    //   row y=1:  XXX       (1,1) (2,1) (3,1)
+    // Use bool-to-int promotion: (x == a) * (y == b) auto-promotes to int
+    f.out[x, y | 0] = (x == 2) * (y == 3) +
+                       (x == 3) * (y == 2) +
+                       (x == 1) * (y == 1) +
+                       (x == 2) * (y == 1) +
+                       (x == 3) * (y == 1);
+}
+
+dynamic LifeEvolve {
+    int neighborSum;
+
+    neighborSum = f.in[x - 1, y - 1 | 0] + f.in[x - 1, y | 0] +
+                  f.in[x - 1, y + 1 | 0] + f.in[x, y - 1 | 0] +
+                  f.in[x, y + 1 | 0] + f.in[x + 1, y - 1 | 0] +
+                  f.in[x + 1, y | 0] + f.in[x + 1, y + 1 | 0];
+
+    // Conway's rules using integer arithmetic:
+    //   alive (1) + 2 neighbors -> survive
+    //   alive (1) + 3 neighbors -> survive
+    //   dead  (0) + 3 neighbors -> birth
+    //   else -> death
+    //
+    // This can be expressed as: cell = (neighborSum == 3) || (cell && neighborSum == 2)
+    // Using int: 1 if alive, 0 if dead.
+    // We encode the rule table as: new = ((neighborSum == 3) + (f.in * (neighborSum == 2))) > 0
+    // Simplified: the cell is alive if neighborSum == 3, or if it was alive and neighborSum == 2.
+
+    int alive;
+    int birth;
+    int survive;
+
+    alive = f.in[x, y | 0];
+    birth = (neighborSum == 3);
+    survive = alive * (neighborSum == 2);
+    f.out[x, y | 0] = birth + survive - birth * survive;
+}
+
+gauge CellStatus -> (int status) {
+    status = f.in[x, y | 0];
+}
+
+node_classes {
+    node_class BULK(GliderInit, LifeEvolve, CellStatus);
+}
+
+geometry {
+    nodes[:, :] = BULK;
+}

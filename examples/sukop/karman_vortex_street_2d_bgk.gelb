@@ -1,0 +1,148 @@
+// ============================================================
+// STATUS: EXPERIMENTAL
+// Reference: Sukop & Thorne (2006), Sec. 5.3, Fig 10.
+// ============================================================
+// 2D gravity-driven flow past a circular disk at Re ~= 100 --
+// the classical Karman vortex street.
+//
+// At Re ~= 47 the steady symmetric recirculation behind a circular
+// cylinder loses stability and an alternating (staggered) pattern
+// of vortices is shed downstream -- the "Karman street".  The
+// dimensionless shedding frequency (Strouhal number)
+// asymptotes to  St = f*D/u ~= 0.17  for Re in [100, 200].
+//
+// Setup (faithfully following Sukop Sec. 5.3 and
+// ``examples/lbm/2d/channel_flow_circle_obstacle_2d_bgk.gelb``):
+//
+//   * D2Q9 BGK single-lattice carrier.
+//   * x-periodic channel with bounce-back top/bottom walls.
+//   * Body force G drives the flow; it replaces a pressure
+//     gradient and keeps the setup purely local (no inlet/outlet
+//     BCs needed).
+//   * A circular disk of radius R placed one cell off-center in y:
+//     a small, deterministic asymmetry for the wake instability to
+//     grow from.
+//   * ``border(SOLID) = WALL`` paints the bounce-back wall layer
+//     around the disk: every disk cell that has a non-SOLID neighbour,
+//     diagonals included, so no fluid cell reaches an empty SOLID cell
+//     along any of the nine links.
+//
+// Parameters tuned to Re ~= 100 while keeping Ma < 0.1
+// (Krueger Sec. 7.2.1 -- BGK compressibility error grows as $Ma^2$,
+// so we target Ma <= 0.1 for quantitative validation runs):
+//   D    = 2*R = 40
+//   $\nu = c_s^2 (\tau - 1/2) = 0.02$   ($\tau = 0.56$)
+//   u    ~= 0.049  (centerline of the empty-channel parabola)
+//   Ma   = u * $\sqrt{3}$ ~= 0.085         (Krueger safe regime)
+//   Re   = u * D / $\nu$ ~= 98
+//
+// Reaching Re = 100 at Ma < 0.1 with BGK requires a larger disk
+// than Sukop's original setup (R = 10 gave D = 20 and forced
+// u ~= 0.1, i.e. Ma ~= 0.17).  We grow the grid to 1200x200 and
+// the disk to R = 20 so the same Re can be achieved with a
+// smaller body force (G = 2.0e-7 instead of 1.1e-6).
+//
+// What a run shows (Re on the centreline
+// speed): the flow starts at rest and the body force spins the
+// channel up over its viscous time $H^2/\nu$ ~= $2 * 10^6$ steps, so after
+// 250 000 steps with these defaults Re is about 37 and the wake is
+// steady and symmetric.  With -D NY=256 -D G=4.0e-7 the wake turns
+// unstable around t = 160 000 (Re ~= 75) and sheds from about
+// t = 250 000, with a period of about 6200 steps (St = f*D/u ~= 0.14
+// at Re ~= 90); the tutorial's figure is that run, 300 000 steps.
+// The x-periodic channel feeds the wake back in upstream, so this
+// is a demonstration, not a Strouhal benchmark.
+
+simulation_description("2D Karman vortex street past a disk (BGK, D2Q9) [Sukop 5.3]");
+
+global_constants {
+    const int NX = 1200;
+    const int NY = 200;
+
+    // Collision: $\tau = 0.56$  ->  $\nu = (1/3) * (\tau - 1/2) = 0.02$.
+    const real TAU   = 0.56;
+    const real OMEGA = 1.0 / TAU;
+
+    // Body force.  Empty-channel centerline velocity is
+    //   u_max = $G (H/2)^2 / (2 \nu)$,  H = NY - 2.
+    // With H = 198 and $\nu = 0.02$, G = 2.0e-7 gives u_max ~= 0.049
+    // and Ma ~= 0.085 -- safely inside Krueger's Ma << 0.1 regime.
+    const real G = 2.0e-7;
+
+    // Disk geometry.  Placed at x = NX/4 so there is ~3 * NX/4
+    // of downstream room for the wake; offset slightly from the
+    // midline in y (CY = NY/2 - 1) so the symmetric wake is
+    // immediately unstable -- without this bias the symmetric
+    // solution can persist for tens of thousands of steps.
+    //
+    // R = 20 (D = 40) is the minimum disk size that reaches
+    // Re ~= 100 while keeping Ma < 0.1:  Re = u_max * D / $\nu$ ~= 98.
+    const int CX = NX / 4;
+    const int CY = NY / 2 - 1;
+    const int R  = 20;
+
+    const array[real, 9] EX = {0.0, 1.0, 0.0, -1.0,  0.0, 1.0, -1.0, -1.0,  1.0};
+    const array[real, 9] EY = {0.0, 0.0, 1.0,  0.0, -1.0, 1.0,  1.0, -1.0, -1.0};
+    const array[real, 9] W  = {4.0/9.0,
+                               1.0/9.0,  1.0/9.0,  1.0/9.0,  1.0/9.0,
+                               1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+}
+
+lattices {
+    lattice f(2, 9, real, {NX, NY}, {true, false});
+}
+
+function InCircle(int x, int y, int cx, int cy, int r) -> (bool hit) {
+    hit = (x - cx) * (x - cx) + (y - cy) * (y - cy) < r * r;
+}
+
+function Macro(array[real, 9] fIn) -> (real rho, real ux, real uy) {
+    rho = sum(fIn);
+    ux  = dot_prod(EX, fIn) / rho;
+    uy  = dot_prod(EY, fIn) / rho;
+}
+
+function Feq(real rho, real ux, real uy) -> (array[real, 9] feq) {
+    real usq = ux * ux + uy * uy;
+    array[real, 9] cu = EX * ux + EY * uy;
+    feq = W * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - 1.5 * usq);
+}
+
+initializer InitFluid {
+    f.out[x, y | :] = W;      // rest-state equilibrium, $\rho = 1$
+}
+
+// Buick-Greated shifted-velocity body force: the velocity used
+// in the equilibrium is shifted by $0.5 G / \rho$, which injects
+// momentum $\Delta F = G$ per step at leading order.  This is the same
+// pattern used in ``channel_flow_circle_obstacle_2d_bgk.gelb``
+// and is sufficient for validation runs at Ma << 1.
+dynamic FluidDynamic {
+    array[real, 9] fIn = upstream_dfs(f, x, y, {EX, EY});
+    real rho; real ux; real uy;
+    {rho, ux, uy} = Macro(fIn);
+    ux = ux + 0.5 * G;
+    f.out[x, y | :] = fIn - OMEGA * (fIn - Feq(rho, ux, uy));
+}
+
+dynamic BounceBack {
+    f.out[x, y | :] = bounce_back_dfs(f, x, y, {EX, EY});
+}
+
+gauge Hydro -> (real rho, real ux, real uy) {
+    {rho, ux, uy} = Macro(f.in[x, y | :]);
+}
+
+node_classes {
+    node_class FLUID(InitFluid, FluidDynamic, Hydro);
+    node_class WALL (InitFluid, BounceBack,   Hydro);
+    node_class SOLID() masked;
+}
+
+geometry {
+    nodes[:, :]      = FLUID;
+    nodes[:, 0]      = WALL;
+    nodes[:, NY - 1] = WALL;
+    nodes[where InCircle(x, y, CX, CY, R)] = SOLID;
+    border(SOLID) = WALL;
+}

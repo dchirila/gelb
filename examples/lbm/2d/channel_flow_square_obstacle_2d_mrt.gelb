@@ -1,0 +1,144 @@
+// 2D gravity-driven channel flow past a square obstacle -- D2Q9 MRT LBM
+//
+// Multiple Relaxation Time (MRT) collision for improved stability
+// compared to BGK. Same geometry as the BGK channel flow example.
+//
+// MRT algorithm (Lallemand & Luo, 2000):
+//   1. Pull-stream: fIn = upstream_dfs(f, x, y, {EX, EY})
+//   2. Transform to moment space: m = M * fIn
+//   3. Compute equilibrium moments: meq (directly in moment space)
+//   4. Relax: m_post = m - S * (m - meq)
+//   5. Add body force to momentum moment (s3=s5=0 conserves momentum,
+//      so force must be added explicitly -- velocity-shift alone is not
+//      sufficient for MRT)
+//   6. Transform back: fOut = M^(-1) * m_post
+//
+// The transformation matrix M and its inverse M_INV are pre-computed
+// constants. Each moment relaxes at its own rate (diagonal of S).
+//
+// Boundary conditions:
+//   - y-direction: no-slip walls via full-way bounce-back
+//   - x-direction: periodic (flow wraps around)
+//   - Obstacle: square, bounce-back on surface, masked interior
+//
+// Body force: explicit addition to momentum moment + velocity-shift
+//   in equilibrium for 2nd-order accuracy
+//
+// Parameter sizing follows Krueger et al. (2017), Sec. 7.2.1:
+//   - Ma = u_max * $\sqrt{3}$ < 0.1 to keep compressibility error small.
+//   - Poiseuille analytic (Sec. 6.3): u_max = $G H^2 / (8 \nu)$ with H = NY - 2.
+// With NY=128, $\nu = c_s^2 (\tau - 0.5) = 1/75$, G = 3.5e-7:
+//   H = 126, u_max ~= 0.052, Ma ~= 0.090
+//   Re = u_max * (2R) / $\nu$ ~= 78  (above bluff-body shedding onset).
+
+simulation_description("2D channel flow past square obstacle (LBM-MRT, D2Q9)");
+
+global_constants {
+    const int NY = 128;
+    const int NX = 8 * NY;
+    const real TAU = 0.54;
+    const real TAU_INV = 1.0 / TAU;
+    const real G = 3.5e-7;
+
+    const int OX = NX / 4;
+    const int OY = NY / 2;
+    const int R = 10;
+
+    const array[real, 9] EX = {0.0, 1.0, 0.0, -1.0,  0.0, 1.0, -1.0, -1.0,  1.0};
+    const array[real, 9] EY = {0.0, 0.0, 1.0,  0.0, -1.0, 1.0,  1.0, -1.0, -1.0};
+    const array[real, 9] W = {4.0/9.0,
+        1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+
+    // MRT transformation matrix M (Lallemand & Luo, 2000)
+    // Rows: rho, e, eps, jx, qx, jy, qy, pxx, pxy
+    const array[real, {9, 9}] M = {
+        { 1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0},
+        {-4.0, -1.0, -1.0, -1.0, -1.0,  2.0,  2.0,  2.0,  2.0},
+        { 4.0, -2.0, -2.0, -2.0, -2.0,  1.0,  1.0,  1.0,  1.0},
+        { 0.0,  1.0,  0.0, -1.0,  0.0,  1.0, -1.0, -1.0,  1.0},
+        { 0.0, -2.0,  0.0,  2.0,  0.0,  1.0, -1.0, -1.0,  1.0},
+        { 0.0,  0.0,  1.0,  0.0, -1.0,  1.0,  1.0, -1.0, -1.0},
+        { 0.0,  0.0, -2.0,  0.0,  2.0,  1.0,  1.0, -1.0, -1.0},
+        { 0.0,  1.0, -1.0,  1.0, -1.0,  0.0,  0.0,  0.0,  0.0},
+        { 0.0,  0.0,  0.0,  0.0,  0.0,  1.0, -1.0,  1.0, -1.0}};
+
+    // M^(-1) computed at compile time via SymPy
+    const array[real, {9, 9}] M_INV = inverse(M);
+
+    // MRT relaxation rates (diagonal of S)
+    // s0=0 (rho conserved), s3=s5=0 (momentum conserved)
+    // s7=s8=1/tau (stress, controls viscosity)
+    // s1,s2,s4,s6 tunable for stability
+    const array[real, 9] S_DIAG = {0.0, 1.1, 1.1, 0.0, 1.1, 0.0, 1.1, TAU_INV, TAU_INV};
+
+    // Body force vector in moment space (Lallemand & Luo ordering:
+    // index 3 = jx). Since s3=0 conserves momentum, force must be
+    // added explicitly to the post-collision moments.
+    const array[real, 9] FORCE_MOM = {0.0, 0.0, 0.0, G, 0.0, 0.0, 0.0, 0.0, 0.0};
+}
+
+lattices { lattice f(2, 9, real, {NX, NY}, {true, false}); }
+
+function Macro(array[real, 9] fIn) -> (real rho, real ux, real uy) {
+    rho = sum(fIn);
+    ux = dot_prod(EX, fIn) / rho;
+    uy = dot_prod(EY, fIn) / rho;
+}
+
+// Compute equilibrium moments directly in moment space
+// (more efficient than matmul(M, feq))
+function EqMoments(real rho, real ux, real uy) -> (array[real, 9] meq) {
+    real usq = ux * ux + uy * uy;
+    meq = {rho,
+           -2.0 * rho + 3.0 * rho * usq,
+           rho - 3.0 * rho * usq,
+           rho * ux,
+           -1.0 * rho * ux,
+           rho * uy,
+           -1.0 * rho * uy,
+           rho * (ux * ux - uy * uy),
+           rho * ux * uy};
+}
+
+initializer InitFluid {
+    f.out[x, y | :] = W;
+}
+
+dynamic MRTCollStream {
+    array[real, 9] fIn = upstream_dfs(f, x, y, {EX, EY});
+
+    real rho; real ux; real uy;
+    {rho, ux, uy} = Macro(fIn);
+
+    // Transform to moment space
+    array[real, 9] moments = matmul(M, fIn);
+
+    // Equilibrium moments (velocity-shift for 2nd-order force accuracy)
+    array[real, 9] meq = EqMoments(rho, ux + 0.5 * G, uy);
+
+    // Collide in moment space, add body force, and transform back
+    f.out[x, y | :] = matmul(M_INV, moments - S_DIAG * (moments - meq) + FORCE_MOM);
+}
+
+dynamic BounceBack {
+    f.out[x, y | :] = bounce_back_dfs(f, x, y, {EX, EY});
+}
+
+gauge Hydro -> (real rho, real ux, real uy) {
+    {rho, ux, uy} = Macro(f.in[x, y | :]);
+}
+
+node_classes {
+    node_class FLUID(InitFluid, MRTCollStream, Hydro);
+    node_class WALL(InitFluid, BounceBack, Hydro);
+    node_class SOLID() masked;
+}
+
+geometry {
+    nodes[:, :] = FLUID;
+    nodes[:, 0] = WALL;
+    nodes[:, NY - 1] = WALL;
+    nodes[OX - R:OX + R, OY - R:OY + R] = SOLID;
+    border(SOLID) = WALL;
+}

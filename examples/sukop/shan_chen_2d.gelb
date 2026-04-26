@@ -1,0 +1,179 @@
+// ============================================================
+// STATUS: EXPERIMENTAL
+// Reference: Sukop & Thorne (2006), Sec. 6.3 (Shan-Chen SCMP).
+// ============================================================
+// 2D Shan-Chen single-component multiphase phase separation from
+// a random initial density field -- D2Q9 BGK.
+//
+// A single fluid with an attractive nearest-neighbor interaction
+// spontaneously separates into coexisting liquid and vapor
+// phases.  Starting from a uniform density with small random
+// perturbation, the field evolves through spinodal decomposition
+// (fine stripes) -> coarsening -> a small number of large droplets
+// in a vapor background, minimizing the total interface area
+// over time.
+//
+// Interaction force (Sukop eq 60 + 61):
+//
+//   $F(x) = -G \psi(\rho(x)) \sum_a w_a \psi(\rho(x + c_a)) c_a$
+//
+// with the pseudopotential  $\psi(\rho) = \psi_0 \exp(-\rho_0 / \rho)$  (Sukop
+// eq 62), $\psi_0 = 4$, $\rho_0 = 200$, $G = -120$ (attractive).
+//
+// Force injection follows Sukop's "equilibrium velocity" method
+// (Sukop eq 64): the fluid velocity used in the BGK equilibrium
+// is shifted by $\tau F / \rho$, so the post-collision first moment
+// gets the correct momentum kick.  This is the same Shan-Chen
+// omega-independent force-injection scheme used in most SCMP
+// validation runs (Strang splitting is not required).
+//
+// Nonlocal reads
+// --------------
+// The force at (x, y) needs rho at all 8 neighbors.  GeLB allows a
+// slice-sum at an arbitrary offset,  ``sum(f.in[x + dx, y + dy | :])``,
+// which the backend compiles to a single summation over the DF
+// slots at the offset-indexed (periodic-wrapped) cell.  The form
+// below uses this directly -- no helper function needed.
+//
+// Verification: run 10 000 steps from the random IC.  `rho` is
+// emitted via a gauge; visualize with `gelb-view`.  The field
+// should pass through the stages in Sukop Figure 46:
+//   1) random                  (t = 0)
+//   2) spinodal stripes        (~100 steps)
+//   3) coarsening              (~1000 steps)
+//   4) a few large blobs       (~10 000 steps)
+// The maximum and minimum densities in the final frame should
+// bracket the mean $\rho_0$ and agree with Sukop's flat-interface
+// equilibrium values ($\rho_{liq}$ ~= 524, $\rho_{vap}$ ~= 80) to within ~5%.
+//
+// Alternative pseudopotential form
+// --------------------------------
+// This example uses Sukop & Thorne's (2006) $\psi(\rho) = \psi_0 \exp(-\rho_0 / \rho)$
+// -- the original Shan-Chen 1993 form, tuned around $\rho_0$ ~= 200 to
+// reproduce Sukop Figure 46.  See
+// examples/lbm/2d/shan_chen_multiphase_2d_bgk.gelb for
+// the complementary Shan-Chen 1994 / Krueger (2017) eq. 9.102
+// form  $\psi(\rho) = \rho_0 [1 - \exp(-\rho / \rho_0)]$ (critical G_c ~= -4 for
+// $\rho_0 = 1$).  The two psi forms are pedagogically complementary --
+// same physics, different numerical regimes and density ratios.
+
+simulation_description("2D Shan-Chen SCMP phase separation (BGK, D2Q9) [Sukop 6.3]");
+
+global_constants {
+    const int  N = 1024;
+
+    const real TAU   = 1.0;
+    const real OMEGA = 1.0 / TAU;
+
+    // Shan-Chen interaction parameters (Sukop Table 3 / Sec. 6.3).
+    const real RHO0  = 200.0;      // reference density in $\psi(\rho)$
+    const real PSI0  = 4.0;        // prefactor in $\psi(\rho)$
+    const real G_SC  = -120.0;     // interaction strength (attractive)
+
+    // Initial-condition perturbation amplitude.  Sukop uses a
+    // uniform noise in [0, 1] on top of the mean density $\rho_0$.
+    const real RHO_MEAN = 200.0;
+
+    const array[real, 9] EX = {0.0, 1.0, 0.0, -1.0,  0.0, 1.0, -1.0, -1.0,  1.0};
+    const array[real, 9] EY = {0.0, 0.0, 1.0,  0.0, -1.0, 1.0,  1.0, -1.0, -1.0};
+    const array[real, 9] W  = {4.0/9.0,
+                               1.0/9.0,  1.0/9.0,  1.0/9.0,  1.0/9.0,
+                               1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+}
+
+lattices {
+    lattice f(2, 9, real, {N, N}, {true, true});
+}
+
+function Feq(real rho, real ux, real uy) -> (array[real, 9] feq) {
+    real usq = ux * ux + uy * uy;
+    array[real, 9] cu = EX * ux + EY * uy;
+    feq = W * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - 1.5 * usq);
+}
+
+// Pseudopotential  $\psi(\rho) = \psi_0 \exp(-\rho_0 / \rho)$.
+function Psi(real rho) -> (real psi) {
+    psi = PSI0 * exp(-RHO0 / rho);
+}
+
+// Initial condition: near-uniform density with a small random
+// perturbation -- same recipe as Sukop Sec. 6.3.  One draw per cell,
+// then the DFs are filled proportionally to the D2Q9 weights so
+// that $\rho(x, y)$ matches the drawn value exactly.  (A random() written
+// inside the slice would draw once per direction.)
+initializer InitRandom {
+    real rho_init = RHO_MEAN + random();
+    f.out[x, y | :] = W * rho_init;
+}
+
+// Shan-Chen bulk dynamic.
+//
+// 1. Read the nonlocal densities from `f.in` at the 8 neighbors
+//    (post-collision stored state from the previous step).
+// 2. Evaluate $\psi$ at each neighbor and the current cell.
+// 3. Assemble the discrete gradient
+//       $\sum_a w_a \psi(\rho_{x+c_a}) c_a$
+//    by summing over D2Q9's non-rest velocities with weights
+//    w_axis = 1/9 (E, N, W, S) and w_diag = 1/36 (NE, NW, SW, SE).
+// 4. Multiply by  $-G \psi_C$  to get the force F at (x, y).
+// 5. Pull-stream the DFs, compute the local velocity, inject the
+//    force via the shifted equilibrium velocity  $u_{eq} = u + \tau F / \rho$,
+//    and collide.
+dynamic BulkDynamic {
+    // --- Nonlocal densities ---
+    real rho_C  = sum(f.in[x,     y     | :]);
+    real rho_E  = sum(f.in[x + 1, y     | :]);
+    real rho_W  = sum(f.in[x - 1, y     | :]);
+    real rho_N  = sum(f.in[x,     y + 1 | :]);
+    real rho_S  = sum(f.in[x,     y - 1 | :]);
+    real rho_NE = sum(f.in[x + 1, y + 1 | :]);
+    real rho_NW = sum(f.in[x - 1, y + 1 | :]);
+    real rho_SW = sum(f.in[x - 1, y - 1 | :]);
+    real rho_SE = sum(f.in[x + 1, y - 1 | :]);
+
+    // --- Pseudopotentials ---
+    real psi_C  = Psi(rho_C);
+    real psi_E  = Psi(rho_E);
+    real psi_W  = Psi(rho_W);
+    real psi_N  = Psi(rho_N);
+    real psi_S  = Psi(rho_S);
+    real psi_NE = Psi(rho_NE);
+    real psi_NW = Psi(rho_NW);
+    real psi_SW = Psi(rho_SW);
+    real psi_SE = Psi(rho_SE);
+
+    // --- Weighted pseudopotential gradient ---
+    //   w=1/9  on axis-aligned E/N/W/S
+    //   w=1/36 on diagonal NE/NW/SW/SE
+    real sx = (1.0 /  9.0) * (psi_E  - psi_W)
+            + (1.0 / 36.0) * (psi_NE - psi_NW + psi_SE - psi_SW);
+    real sy = (1.0 /  9.0) * (psi_N  - psi_S)
+            + (1.0 / 36.0) * (psi_NE + psi_NW - psi_SE - psi_SW);
+
+    real Fx = -G_SC * psi_C * sx;
+    real Fy = -G_SC * psi_C * sy;
+
+    // --- Pull-streamed DFs and local velocity ---
+    array[real, 9] fIn = upstream_dfs(f, x, y, {EX, EY});
+    real rho = sum(fIn);
+    real ux  = dot_prod(EX, fIn) / rho;
+    real uy  = dot_prod(EY, fIn) / rho;
+
+    // --- Shan-Chen equilibrium-velocity force injection ---
+    real ux_eq = ux + TAU * Fx / rho;
+    real uy_eq = uy + TAU * Fy / rho;
+
+    f.out[x, y | :] = fIn - OMEGA * (fIn - Feq(rho, ux_eq, uy_eq));
+}
+
+gauge DensityGauge -> (real rho) {
+    rho = sum(f.in[x, y | :]);
+}
+
+node_classes {
+    node_class BULK(InitRandom, BulkDynamic, DensityGauge);
+}
+
+geometry {
+    nodes[:, :] = BULK;
+}

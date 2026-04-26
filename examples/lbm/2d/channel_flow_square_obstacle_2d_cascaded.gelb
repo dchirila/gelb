@@ -1,0 +1,178 @@
+// 2D gravity-driven channel flow past a square obstacle -- D2Q9 Cascaded LBM
+//
+// Cascaded (central moment) collision for enhanced stability at high
+// Reynolds numbers. Based on De Rosis (2017), "Nonorthogonal central-
+// moments-based lattice Boltzmann scheme in three dimensions".
+//
+// Instead of relaxing in the raw moment space (MRT), the cascaded method
+// relaxes central moments -- moments computed relative to the local
+// macroscopic velocity. This eliminates certain non-physical coupling
+// between moments, improving Galilean invariance and stability.
+//
+// Algorithm:
+//   1. Compute central moments via dot products with shifted velocities:
+//        cx = EX - ux,  cy = EY - uy
+//        k_mn = dot_prod(fIn, cx^m * cy^n)
+//   2. Relax each central moment independently
+//   3. Shift post-collision central moments to raw moments (binomial theorem)
+//   4. Reconstruct DFs from raw moments (exact algebraic inverse)
+//
+// No transformation matrix needed -- all operations are algebraic.
+//
+// Boundary conditions and geometry identical to the BGK/MRT versions.
+//
+// Parameter sizing follows Krueger et al. (2017), Sec. 7.2.1:
+//   - Ma = u_max * $\sqrt{3}$ < 0.1 to keep compressibility error small.
+//   - Poiseuille analytic (Sec. 6.3): u_max = $G H^2 / (8 \nu)$ with H = NY - 2.
+// With NY=128, $\nu = c_s^2 (\tau - 0.5) = 1/75$, G = 3.5e-7:
+//   H = 126, u_max ~= 0.052, Ma ~= 0.090
+//   Re = u_max * (2R) / $\nu$ ~= 78  (above bluff-body shedding onset).
+
+simulation_description("2D channel flow past square obstacle (LBM-Cascaded, D2Q9)");
+
+global_constants {
+    const int NY = 128;
+    const int NX = 8 * NY;
+    const real TAU = 0.54;
+    const real G = 3.5e-7;
+
+    const int OX = NX / 4;
+    const int OY = NY / 2;
+    const int R = 10;
+
+    const array[real, 9] EX = {0.0, 1.0, 0.0, -1.0,  0.0, 1.0, -1.0, -1.0,  1.0};
+    const array[real, 9] EY = {0.0, 0.0, 1.0,  0.0, -1.0, 1.0,  1.0, -1.0, -1.0};
+    const array[real, 9] W = {4.0/9.0,
+        1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+
+    // Cascaded relaxation rates
+    const real OMEGA_NU = 1.0 / TAU;  // viscosity (stress tensor)
+    const real OMEGA_B = 1.1;          // bulk viscosity
+    const real OMEGA_3 = 1.0;          // third-order moments
+    const real OMEGA_4 = 1.0;          // fourth-order moment
+}
+
+lattices { lattice f(2, 9, real, {NX, NY}, {true, false}); }
+
+function Macro(array[real, 9] fIn) -> (real rho, real ux, real uy) {
+    rho = sum(fIn);
+    ux = dot_prod(EX, fIn) / rho;
+    uy = dot_prod(EY, fIn) / rho;
+}
+
+function Eq(real rho, real ux, real uy) -> (array[real, 9] feq) {
+    real usq = ux*ux + uy*uy;
+    array[real, 9] eu = EX * ux + EY * uy;
+    feq = W * rho * (1.0 + 3.0*eu + 4.5*eu*eu - 1.5*usq);
+}
+
+// Cascaded collision in central moment space
+function CascadedCollide(array[real, 9] fIn, real rho, real ux, real uy)
+        -> (array[real, 9] fOut) {
+    // Shifted lattice velocities (relative to local flow)
+    array[real, 9] cx = EX - ux;
+    array[real, 9] cy = EY - uy;
+
+    // Central moments: k_mn = sum_i f_i * cx_i^m * cy_i^n
+    // Second order (stress tensor)
+    real k_20 = dot_prod(fIn, cx * cx);
+    real k_02 = dot_prod(fIn, cy * cy);
+    real k_11 = dot_prod(fIn, cx * cy);
+
+    // Third order (energy flux)
+    real k_21 = dot_prod(fIn, cx * cx * cy);
+    real k_12 = dot_prod(fIn, cx * cy * cy);
+
+    // Fourth order
+    real k_22 = dot_prod(fIn, cx * cx * cy * cy);
+
+    // Equilibrium central moments (from Maxwell-Boltzmann)
+    real cs2 = 1.0 / 3.0;
+    real k_20_eq = rho * cs2;
+    real k_02_eq = rho * cs2;
+    // k_11_eq = 0, k_21_eq = 0, k_12_eq = 0
+    real k_22_eq = rho * cs2 * cs2;
+
+    // Relax each central moment independently
+    // Trace (k_20 + k_02) relaxes at bulk rate, traceless part at shear rate
+    real trace = k_20 + k_02;
+    real trace_eq = k_20_eq + k_02_eq;
+    real trace_post = trace - OMEGA_B * (trace - trace_eq);
+
+    real diff = k_20 - k_02;
+    real diff_eq = 0.0;
+    real diff_post = diff - OMEGA_NU * (diff - diff_eq);
+
+    real k_20_post = 0.5 * (trace_post + diff_post);
+    real k_02_post = 0.5 * (trace_post - diff_post);
+    real k_11_post = k_11 - OMEGA_NU * k_11;  // k_11_eq = 0
+
+    real k_21_post = k_21 - OMEGA_3 * k_21;  // k_21_eq = 0
+    real k_12_post = k_12 - OMEGA_3 * k_12;  // k_12_eq = 0
+
+    real k_22_post = k_22 - OMEGA_4 * (k_22 - k_22_eq);
+
+    // Shift post-collision central moments back to raw moments
+    // via the binomial theorem: m_mn = sum C(m,p)*C(n,q) * ux^(m-p) * uy^(n-q) * k_pq
+    // (k_10 = k_01 = 0 by definition of central moments)
+    real jx = rho * ux;
+    real jy = rho * uy;
+    real r20 = k_20_post + ux*ux*rho;
+    real r02 = k_02_post + uy*uy*rho;
+    real r11 = k_11_post + ux*uy*rho;
+    real r21 = k_21_post + 2.0*ux*k_11_post + uy*k_20_post + ux*ux*uy*rho;
+    real r12 = k_12_post + ux*k_02_post + 2.0*uy*k_11_post + ux*uy*uy*rho;
+    real r22 = k_22_post + 2.0*ux*k_12_post + 2.0*uy*k_21_post
+               + ux*ux*k_02_post + uy*uy*k_20_post + 4.0*ux*uy*k_11_post
+               + ux*ux*uy*uy*rho;
+
+    // Reconstruct DFs from raw moments (exact algebraic inverse for D2Q9)
+    fOut = {
+        rho - r20 - r02 + r22,
+        0.5 * (r20 - r22 + jx - r12),
+        0.5 * (r02 - r22 + jy - r21),
+        0.5 * (r20 - r22 - jx + r12),
+        0.5 * (r02 - r22 - jy + r21),
+        0.25 * (r22 + r11 + r21 + r12),
+        0.25 * (r22 - r11 + r21 - r12),
+        0.25 * (r22 + r11 - r21 - r12),
+        0.25 * (r22 - r11 - r21 + r12)
+    };
+}
+
+initializer InitFluid {
+    f.out[x, y | :] = W;
+}
+
+dynamic CascadedCollStream {
+    array[real, 9] fIn = upstream_dfs(f, x, y, {EX, EY});
+
+    real rho; real ux; real uy;
+    {rho, ux, uy} = Macro(fIn);
+    ux = ux + 0.5 * G;  // body force correction
+
+    f.out[x, y | :] = CascadedCollide(fIn, rho, ux, uy);
+}
+
+dynamic BounceBack {
+    f.out[x, y | :] = bounce_back_dfs(f, x, y, {EX, EY});
+}
+
+gauge Hydro -> (real rho, real ux, real uy) {
+    {rho, ux, uy} = Macro(f.in[x, y | :]);
+}
+
+node_classes {
+    node_class FLUID(InitFluid, CascadedCollStream, Hydro);
+    node_class WALL(InitFluid, BounceBack, Hydro);
+    node_class SOLID() masked;
+}
+
+geometry {
+    nodes[:, :] = FLUID;
+    nodes[:, 0] = WALL;
+    nodes[:, NY - 1] = WALL;
+    nodes[OX - R:OX + R, OY - R:OY + R] = SOLID;
+    border(SOLID) = WALL;
+}

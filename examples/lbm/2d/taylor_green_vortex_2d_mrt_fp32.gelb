@@ -1,0 +1,133 @@
+// ============================================================
+// STATUS: VALIDATED
+// Convergence: 2nd order (slope ~2.0, verified up to N=128)
+// See examples/VALIDATION.md for details.
+// ============================================================
+// 2D Taylor-Green vortex decay -- D2Q9 MRT LBM
+//
+// Standard benchmark for incompressible Navier-Stokes solvers.
+// Analytical initial condition decays exponentially with rate nu*k^2.
+//
+// MRT collision suppresses ghost-moment dissipation that limits BGK
+// to first-order spatial convergence, achieving second-order accuracy.
+//
+// Non-hydrodynamic relaxation rates (s1, s2, s4, s6) are set to
+// optimal values that minimize spurious coupling. The stress
+// relaxation rates (s7, s8 = 1/TAU) control the physical viscosity.
+//
+// ---- FP32 Precision: Shifted Distribution Functions ----
+//
+// Stores g_i = f_i - w_i instead of f_i.  Shifted DFs are O(Ma^2)
+// instead of O(1), giving full FP32 precision for density fluctuations
+// and non-equilibrium moments.  The equilibrium moments are shifted by
+// M*W = {1, -2, 1, 0, 0, 0, 0, 0, 0} (Lallemand & Luo matrix).
+// The non-equilibrium part (m - meq) is identical for shifted/unshifted,
+// so the collision operator has the same form.
+
+simulation_description("2D Taylor-Green vortex (LBM-MRT, D2Q9)");
+
+global_constants {
+    const int N = 64;
+    const real32 NU = 1.0 / 30.0;
+    const real32 TAU = (6.0 * NU + 1.0) / 2.0;
+    const real32 TAU_INV = 1.0 / TAU;
+    const real32 U_MAX = 0.04;
+    const real32 PI = 3.141592653589793;
+    const real32 K = 2.0 * PI / N;
+
+    // D2Q9 lattice velocities and weights
+    const array[real32, 9] EX = {0.0, 1.0, 0.0, -1.0,  0.0, 1.0, -1.0, -1.0,  1.0};
+    const array[real32, 9] EY = {0.0, 0.0, 1.0,  0.0, -1.0, 1.0,  1.0, -1.0, -1.0};
+    const array[real32, 9] W = {4.0/9.0,
+        1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+
+    // MRT transformation matrix (Lallemand & Luo, 2000)
+    // Rows: rho, e, eps, jx, qx, jy, qy, pxx, pxy
+    const array[real32, {9, 9}] M = {
+        { 1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0},
+        {-4.0, -1.0, -1.0, -1.0, -1.0,  2.0,  2.0,  2.0,  2.0},
+        { 4.0, -2.0, -2.0, -2.0, -2.0,  1.0,  1.0,  1.0,  1.0},
+        { 0.0,  1.0,  0.0, -1.0,  0.0,  1.0, -1.0, -1.0,  1.0},
+        { 0.0, -2.0,  0.0,  2.0,  0.0,  1.0, -1.0, -1.0,  1.0},
+        { 0.0,  0.0,  1.0,  0.0, -1.0,  1.0,  1.0, -1.0, -1.0},
+        { 0.0,  0.0, -2.0,  0.0,  2.0,  1.0,  1.0, -1.0, -1.0},
+        { 0.0,  1.0, -1.0,  1.0, -1.0,  0.0,  0.0,  0.0,  0.0},
+        { 0.0,  0.0,  0.0,  0.0,  0.0,  1.0, -1.0,  1.0, -1.0}};
+
+    const array[real32, {9, 9}] M_INV = inverse(M);
+
+    // Relaxation rates: s0=s3=s5=0 (conserved), s7=s8=TAU_INV (viscosity)
+    // s1,s2,s4,s6: non-hydrodynamic, set for optimal stability/accuracy
+    const array[real32, 9] S_DIAG = {0.0, 1.1, 1.1, 0.0, 1.1, 0.0, 1.1, TAU_INV, TAU_INV};
+}
+
+lattices {
+    lattice f(2, 9, real32, {N, N}, {true, true});
+}
+
+function Macro(array[real32, 9] fIn) -> (real32 rho, real32 ux, real32 uy) {
+    rho = sum(fIn) + 1.0;
+    ux = dot_prod(EX, fIn) / rho;
+    uy = dot_prod(EY, fIn) / rho;
+}
+
+// Shifted Eq: g_eq = f_eq - W
+function Eq(real32 rho, real32 ux, real32 uy) -> (array[real32, 9] feq) {
+    real32 usq = ux*ux + uy*uy;
+    array[real32, 9] eu = EX * ux + EY * uy;
+    feq = W * (rho * (1.0 + 3.0*eu + 4.5*eu*eu - 1.5*usq) - 1.0);
+}
+
+// Shifted equilibrium moments: meq_g = M*g_eq = M*f_eq - M*W.
+// For the Lallemand & Luo matrix, M*W = {1, -2, 1, 0, 0, 0, 0, 0, 0}.
+function EqMoments(real32 rho, real32 ux, real32 uy)
+        -> (array[real32, 9] meq) {
+    real32 usq = ux * ux + uy * uy;
+    meq = {rho - 1.0,
+           -2.0 * rho + 3.0 * rho * usq + 2.0,
+           rho - 3.0 * rho * usq - 1.0,
+           rho * ux,
+           -1.0 * rho * ux,
+           rho * uy,
+           -1.0 * rho * uy,
+           rho * (ux * ux - uy * uy),
+           rho * ux * uy};
+}
+
+initializer InitTG {
+    real32 xc = x + 0.5;
+    real32 yc = y + 0.5;
+
+    // Taylor-Green analytical fields at t=0
+    real32 rho = 1.0 - 0.75 * U_MAX^2 * (cos(2.0*K*xc) + cos(2.0*K*yc));
+    real32 ux = -1.0 * U_MAX * cos(K*xc) * sin(K*yc);
+    real32 uy = U_MAX * sin(K*xc) * cos(K*yc);
+    f.out[x, y | :] = Eq(rho, ux, uy);
+}
+
+dynamic MRTCollStream {
+    array[real32, 9] fIn = upstream_dfs(f, x, y, {EX, EY});
+
+    real32 rho; real32 ux; real32 uy;
+    {rho, ux, uy} = Macro(fIn);
+
+    // Transform shifted DFs to moment space
+    array[real32, 9] moments = matmul(M, fIn);
+    array[real32, 9] meq = EqMoments(rho, ux, uy);
+
+    // Collision: m_g - S*(m_g - meq_g) -- non-equilibrium part is identical
+    f.out[x, y | :] = matmul(M_INV, moments - S_DIAG * (moments - meq));
+}
+
+gauge Hydro -> (real32 rho, real32 ux, real32 uy) {
+    {rho, ux, uy} = Macro(f.in[x, y | :]);
+}
+
+node_classes {
+    node_class BULK(InitTG, MRTCollStream, Hydro);
+}
+
+geometry {
+    nodes[:,:] = BULK;
+}

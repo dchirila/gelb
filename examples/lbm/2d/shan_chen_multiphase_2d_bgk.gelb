@@ -1,0 +1,158 @@
+// 2D Shan-Chen single-component multiphase flow -- D2Q9 BGK LBM
+// with an auxiliary pseudopotential lattice
+//
+// A single fluid whose molecules attract each other separates
+// spontaneously into a dense (liquid) and a dilute (vapour) phase.
+// Shan & Chen (1993) obtain this from a non-local interaction force
+//
+//     F(x) = -G psi(x) sum_i w_i psi(x + c_i) c_i ,
+//
+// with the pseudopotential psi(rho) = rho_0 [1 - exp(-rho/rho_0)]
+// (Shan & Chen 1994; Krueger et al. 2017, Sec. 9.3).  For rho_0 = 1 the
+// attraction is strong enough for phase separation below
+// G_c ~ -4; this program uses G = -5.  Starting from a uniform
+// density with a small random perturbation, the field goes through
+// spinodal decomposition and coarsening into droplets.
+//
+// Implementation: psi is kept on a second lattice `psi` with one DF
+// per cell.  Each step, the fluid block reads psi of the previous
+// step at the cell and its eight neighbours (psi.in[x +- 1, y +- 1 | 0]),
+// evaluates the force, and applies it as a shift of the velocity
+// used in the equilibrium (u_eq = u + TAU F / rho, the "equilibrium
+// velocity" method of Shan & Chen).  It then refreshes psi from the
+// freshly streamed density.  The fluid therefore sees psi lagged by
+// one step, the usual practice in Shan-Chen codes.
+//
+// Grid: N x N, doubly periodic.  Output: rho, ux, uy and psi per cell.
+// Run with -s <seed> for a reproducible random initial condition.
+//
+// See examples/sukop/shan_chen_2d.gelb for the same model with the
+// pseudopotential form psi(rho) = psi_0 exp(-rho_0/rho) of Sukop &
+// Thorne (2006), tuned to a much larger rho_0; the two forms give the
+// same physics in different numerical regimes.
+//
+// References:
+//   - Shan, X. & Chen, H. (1993), "Lattice Boltzmann model for
+//     simulating flows with multiple phases and components",
+//     Phys. Rev. E 47, 1815-1819.
+//   - Shan, X. & Chen, H. (1994), "Simulation of nonideal gases and
+//     liquid-gas phase transitions by the lattice Boltzmann
+//     equation", Phys. Rev. E 49, 2941-2948.
+//   - Krueger, T. et al. (2017), The Lattice Boltzmann Method:
+//     Principles and Practice, Springer, Sec. 9.3.
+//   - Mohamad, A. A. (2019), Lattice Boltzmann Method, 2nd ed.,
+//     Springer, Sec. 11.1 (further reading).
+
+simulation_description("2D Shan-Chen multiphase separation (LBM-BGK, D2Q9 + pseudopotential lattice)");
+
+global_constants {
+    const int N = 128;                        // N x N, doubly periodic
+    const real RHO0 = 1.0;                    // reference density
+    const real G_SC = -5.0;                   // interaction strength (G < G_c)
+    const real NU = 0.16;                     // viscosity (lattice units)
+    const real TAU = 3.0 * NU + 0.5;
+    const real TAU_INV = 1.0 / TAU;
+
+    const array[real, 9] EX = {0.0, 1.0, 0.0, -1.0,  0.0, 1.0, -1.0, -1.0,  1.0};
+    const array[real, 9] EY = {0.0, 0.0, 1.0,  0.0, -1.0, 1.0,  1.0, -1.0, -1.0};
+    const array[real, 9] W  = {4.0/9.0,
+        1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+
+    // D2Q9 weights of the individual directions (used in the force sum)
+    const real W1 = 1.0 / 9.0;
+    const real W2 = 1.0 / 9.0;
+    const real W3 = 1.0 / 9.0;
+    const real W4 = 1.0 / 9.0;
+    const real W5 = 1.0 / 36.0;
+    const real W6 = 1.0 / 36.0;
+    const real W7 = 1.0 / 36.0;
+    const real W8 = 1.0 / 36.0;
+}
+
+lattices {
+    lattice f(2, 9, real, {N, N}, {true, true});      // doubly-periodic fluid
+    lattice psi(2, 1, real, {N, N}, {true, true});    // auxiliary potential field
+}
+
+function Macro(array[real, 9] fIn) -> (real rho, real ux, real uy) {
+    rho = sum(fIn);
+    ux = dot_prod(EX, fIn) / rho;
+    uy = dot_prod(EY, fIn) / rho;
+}
+
+function Eq(real rho, real ux, real uy) -> (array[real, 9] feq) {
+    real usq = ux * ux + uy * uy;
+    array[real, 9] eu = EX * ux + EY * uy;
+    feq = W * rho * (1.0 + 3.0 * eu + 4.5 * eu * eu - 1.5 * usq);
+}
+
+function Psi(real rho) -> (real p) {
+    p = RHO0 * (1.0 - exp(-rho / RHO0));
+}
+
+// --- Initializer: a small random density perturbation seeds the
+// instability (the usual initial condition for spinodal decomposition).
+initializer InitFluid {
+    real noise = 0.05 * (random() - 0.5);
+    real rho0 = RHO0 + noise;
+    f.out[x, y | :] = Eq(rho0, 0.0, 0.0);
+    psi.out[x, y | 0] = Psi(rho0);
+}
+
+// --- One dynamic block updates both lattices.
+//
+// The fluid lattice f reads psi at the cell and its 8 neighbours
+// from the previous step (psi.in), computes the Shan-Chen force,
+// and applies a BGK collision with the shifted equilibrium velocity.
+// The auxiliary lattice psi is then refreshed from the post-streaming
+// density, so that the next step's force sees it.
+dynamic FluidAndPsi {
+    array[real, 9] fIn = upstream_dfs(f, x, y, {EX, EY});
+    real rho; real ux; real uy;
+    {rho, ux, uy} = Macro(fIn);
+
+    // psi at the cell and its 8 neighbours (previous step)
+    real psi0  = psi.in[x,     y     | 0];
+    real psi_E = psi.in[x + 1, y     | 0];
+    real psi_N = psi.in[x,     y + 1 | 0];
+    real psi_W = psi.in[x - 1, y     | 0];
+    real psi_S = psi.in[x,     y - 1 | 0];
+    real psi_NE = psi.in[x + 1, y + 1 | 0];
+    real psi_NW = psi.in[x - 1, y + 1 | 0];
+    real psi_SW = psi.in[x - 1, y - 1 | 0];
+    real psi_SE = psi.in[x + 1, y - 1 | 0];
+
+    // sum_i w_i psi(x + c_i) c_i over the D2Q9 stencil
+    real Fx = -G_SC * psi0 * (
+        W1 *  1.0 * psi_E  + W3 * (-1.0) * psi_W +
+        W5 *  1.0 * psi_NE + W6 * (-1.0) * psi_NW +
+        W7 * (-1.0) * psi_SW + W8 *  1.0 * psi_SE);
+    real Fy = -G_SC * psi0 * (
+        W2 *  1.0 * psi_N  + W4 * (-1.0) * psi_S +
+        W5 *  1.0 * psi_NE + W6 *  1.0 * psi_NW +
+        W7 * (-1.0) * psi_SW + W8 * (-1.0) * psi_SE);
+
+    // Force applied as a shift of the equilibrium velocity
+    real ux_shifted = ux + TAU * Fx / rho;
+    real uy_shifted = uy + TAU * Fy / rho;
+
+    f.out[x, y | :] = fIn - TAU_INV * (fIn - Eq(rho, ux_shifted, uy_shifted));
+
+    // Refresh psi from the post-streaming density (read at the next
+    // step through psi.in)
+    psi.out[x, y | 0] = Psi(rho);
+}
+
+gauge Hydro -> (real rho, real ux, real uy, real psi_out) {
+    {rho, ux, uy} = Macro(f.in[x, y | :]);
+    psi_out = psi.in[x, y | 0];
+}
+
+node_classes {
+    node_class FLUID(InitFluid, FluidAndPsi, Hydro);
+}
+
+geometry {
+    nodes[:, :] = FLUID;
+}

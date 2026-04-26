@@ -1,0 +1,237 @@
+// ============================================================
+// STATUS: VALIDATED
+// Convergence: ~2nd order (half-way bounce-back + Strang force)
+// See examples/VALIDATION.md for details.
+// ============================================================
+// 3D Poiseuille flow (gravity-driven) -- D3Q19 MRT
+//
+// Gravity-driven channel flow between two parallel no-slip walls.
+// Periodic in x (flow direction) and z (spanwise), walls in y.
+//
+// At steady state the velocity profile is exactly parabolic:
+//   u_x(y) = G/(2*nu) * y_eff * (H - y_eff)
+//
+// where y_eff is the distance from the bottom wall and H is the
+// effective channel height. With proper half-way bounce-back walls,
+// the no-slip surface sits exactly halfway between the wall and the
+// first fluid node: y_wall = 0.5 and y_wall = NY-1.5, giving
+// H = NY - 2.
+//
+// Two techniques are used to achieve near-second-order spatial
+// convergence (the same approach validated in the 2D version):
+//
+//   1. **Half-way bounce-back via wall-cell-reads-fluid**. The wall
+//      cell at y=0 directly samples its adjacent fluid neighbor's
+//      outgoing DFs and stores them in the bounced (opposite) slots.
+//      For D3Q19 this involves the 5 northward-moving slots
+//      (EY > 0: 3, 7, 10, 15, 17) and 5 southward-moving slots
+//      (EY < 0: 4, 8, 9, 16, 18), with the appropriate lattice-
+//      velocity offsets in x and z.
+//
+//   2. **Strang-split body force in moment space**: half the force
+//      added to the jx moment before the collision and half after,
+//      with the collision's equilibrium computed from the post-half-
+//      force velocity. This is symmetric around the collision step,
+//      matching the treatment in the 2D Poiseuille-MRT and
+//      Rayleigh-Benard MRT examples.
+//
+// NOTE: All non-conserved relaxation rates are set to TAU_INV
+// (BGK-equivalent). With the d'Humieres (2002) optimal non-hydro
+// rates (s1=1.19, s2=1.4, s4=1.2, s16-18=1.98), the convergence
+// order degrades to ~1st order due to coupling between non-
+// hydrodynamic modes and the half-way bounce-back wall position.
+// The BGK-equivalent choice avoids this artifact while keeping
+// the MRT infrastructure (collision in moment space, Strang-split
+// body force on the jx moment).
+//
+// This is an exact 3D NS solution suitable for convergence studies.
+
+simulation_description("3D Poiseuille flow (MRT, D3Q19)");
+
+global_constants {
+    const int NY = 32;
+    const int NX = 4;
+    const int NZ = 4;
+    const real TAU = 0.54;
+    const real TAU_INV = 1.0 / TAU;
+
+    // Body-force magnitude.  For grid-convergence studies the Mach
+    // number must stay constant as NY changes:
+    //   u_max ~ $G H^2 / \nu$  =>  G ~ $1/H^2$  where H = NY - 2.
+    // G_BASE is calibrated for NY_BASE = 32 (H = 30); when NY is
+    // overridden via ``-D NY=...`` on the CLI, G rescales
+    // automatically.
+    const int  NY_BASE = 32;
+    const real G_BASE  = 0.00001;
+    const real G = G_BASE * real((NY_BASE - 2) * (NY_BASE - 2))
+                          / real((NY - 2) * (NY - 2));
+
+    // D3Q19 lattice velocities
+    const array[real, 19] EX = { 0.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 1.0,-1.0, 1.0,-1.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0};
+    const array[real, 19] EY = { 0.0, 0.0, 0.0, 1.0,-1.0, 0.0, 0.0, 1.0,-1.0,-1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 1.0,-1.0};
+    const array[real, 19] EZ = { 0.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0,-1.0, 1.0, 1.0,-1.0,-1.0, 1.0};
+
+    // D3Q19 weights
+    const array[real, 19] W = {1.0/3.0,
+        1.0/18.0, 1.0/18.0, 1.0/18.0, 1.0/18.0, 1.0/18.0, 1.0/18.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+
+    // D3Q19 MRT transformation matrix (d'Humieres et al., 2002)
+    const array[real, {19, 19}] M = {
+        { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0},
+        {-30.0,-11.0,-11.0,-11.0,-11.0,-11.0,-11.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0},
+        { 12.0,-4.0,-4.0,-4.0,-4.0,-4.0,-4.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0},
+        { 0.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 1.0,-1.0, 1.0,-1.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0},
+        { 0.0,-4.0, 4.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 1.0,-1.0, 1.0,-1.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0},
+        { 0.0, 0.0, 0.0, 1.0,-1.0, 0.0, 0.0, 1.0,-1.0,-1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 1.0,-1.0},
+        { 0.0, 0.0, 0.0,-4.0, 4.0, 0.0, 0.0, 1.0,-1.0,-1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 1.0,-1.0},
+        { 0.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0,-1.0, 1.0, 1.0,-1.0,-1.0, 1.0},
+        { 0.0, 0.0, 0.0, 0.0, 0.0,-4.0, 4.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0,-1.0, 1.0, 1.0,-1.0,-1.0, 1.0},
+        { 0.0, 2.0, 2.0,-1.0,-1.0,-1.0,-1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,-2.0,-2.0,-2.0,-2.0},
+        { 0.0,-4.0,-4.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,-2.0,-2.0,-2.0,-2.0},
+        { 0.0, 0.0, 0.0, 1.0, 1.0,-1.0,-1.0, 1.0, 1.0, 1.0, 1.0,-1.0,-1.0,-1.0,-1.0, 0.0, 0.0, 0.0, 0.0},
+        { 0.0, 0.0, 0.0,-2.0,-2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0,-1.0,-1.0,-1.0,-1.0, 0.0, 0.0, 0.0, 0.0},
+        { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0,-1.0,-1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0},
+        { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0,-1.0,-1.0},
+        { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0,-1.0,-1.0, 0.0, 0.0, 0.0, 0.0},
+        { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0,-1.0, 1.0,-1.0, 1.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0},
+        { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,-1.0, 1.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0,-1.0, 1.0},
+        { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 1.0,-1.0,-1.0, 1.0,-1.0, 1.0}};
+
+    const array[real, {19, 19}] M_INV = inverse(M);
+
+    // Relaxation rates -- BGK-equivalent (all non-conserved = TAU_INV)
+    // to avoid the wall-position shift from non-hydrodynamic mode coupling.
+    const array[real, 19] S_DIAG = {0.0, TAU_INV, TAU_INV, 0.0, TAU_INV, 0.0, TAU_INV, 0.0, TAU_INV,
+        TAU_INV, TAU_INV, TAU_INV, TAU_INV, TAU_INV, TAU_INV, TAU_INV, TAU_INV, TAU_INV, TAU_INV};
+}
+
+lattices {
+    lattice f(3, 19, real, {NX, NY, NZ}, {true, false, true});
+}
+
+function Macro(array[real, 19] fIn) -> (real rho, real ux, real uy, real uz) {
+    rho = sum(fIn);
+    ux = dot_prod(EX, fIn) / rho;
+    uy = dot_prod(EY, fIn) / rho;
+    uz = dot_prod(EZ, fIn) / rho;
+}
+
+function Eq(real rho, real ux, real uy, real uz) -> (array[real, 19] feq) {
+    real usq = ux*ux + uy*uy + uz*uz;
+    array[real, 19] eu = EX * ux + EY * uy + EZ * uz;
+    feq = W * rho * (1.0 + 3.0*eu + 4.5*eu*eu - 1.5*usq);
+}
+
+initializer InitFluid {
+    f.out[x, y, z | :] = W;
+}
+
+// Bulk dynamic with Strang-split body force in moment space.
+// Mirrors the structure of `MRTCollStream` in the 2D Poiseuille
+// example: half the body force is added to the jx moment (index 3
+// in d'Humieres ordering) before the collision and half after, and
+// the equilibrium during the collision is computed from the post-
+// half-force velocity.
+dynamic MRTCollStream {
+    array[real, 19] fIn = upstream_dfs(f, x, y, z, {EX, EY, EZ});
+
+    array[real, 19] moments = matmul(M, fIn);
+
+    // 1st half body force: add 0.5*G to the jx moment (index 3).
+    // The jx moment is conserved by the collision (S_DIAG[3]=0),
+    // so the force survives the collision intact and the post-half-
+    // force velocity is what enters the equilibrium.
+    moments = moments + {0.0, 0.0, 0.0, 0.5 * G,
+                         0.0, 0.0, 0.0, 0.0, 0.0,
+                         0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                         0.0, 0.0, 0.0};
+
+    real rho = moments[0];
+    real ux = moments[3] / rho;
+    real uy = moments[5] / rho;
+    real uz = moments[7] / rho;
+
+    array[real, 19] meq = matmul(M, Eq(rho, ux, uy, uz));
+    moments = moments - S_DIAG * (moments - meq);
+
+    // 2nd half body force.
+    moments = moments + {0.0, 0.0, 0.0, 0.5 * G,
+                         0.0, 0.0, 0.0, 0.0, 0.0,
+                         0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                         0.0, 0.0, 0.0};
+
+    f.out[x, y, z | :] = matmul(M_INV, moments);
+}
+
+// Bottom wall (y=0): half-way bounce-back via wall cell directly
+// reading the adjacent fluid cell's outgoing DFs into the bounced
+// (opposite) slots.
+//
+// D3Q19 y-component slots:
+//   EY > 0 (northward): 3, 7, 10, 15, 17
+//   EY < 0 (southward): 4, 8,  9, 16, 18
+//
+// For each northward slot d, the wall stores the fluid neighbor's
+// opposite (southward) slot into d.
+dynamic BounceBackBot {
+    f.out[x, y, z |  0] = 0.0;
+    f.out[x, y, z |  1] = 0.0;
+    f.out[x, y, z |  2] = 0.0;
+    f.out[x, y, z |  3] = f.in[x,     y + 1, z     |  4];   // N    <- S
+    f.out[x, y, z |  4] = 0.0;
+    f.out[x, y, z |  5] = 0.0;
+    f.out[x, y, z |  6] = 0.0;
+    f.out[x, y, z |  7] = f.in[x + 1, y + 1, z     |  8];   // NE   <- SW  (EX=+1,EY=+1,EZ=0)
+    f.out[x, y, z |  8] = 0.0;
+    f.out[x, y, z |  9] = 0.0;
+    f.out[x, y, z | 10] = f.in[x - 1, y + 1, z     |  9];   // NW   <- SE  (EX=-1,EY=+1,EZ=0)
+    f.out[x, y, z | 11] = 0.0;
+    f.out[x, y, z | 12] = 0.0;
+    f.out[x, y, z | 13] = 0.0;
+    f.out[x, y, z | 14] = 0.0;
+    f.out[x, y, z | 15] = f.in[x,     y + 1, z + 1 | 16];   // N+Z  <- S-Z (EX=0,EY=+1,EZ=+1)
+    f.out[x, y, z | 16] = 0.0;
+    f.out[x, y, z | 17] = f.in[x,     y + 1, z - 1 | 18];   // N-Z  <- S+Z (EX=0,EY=+1,EZ=-1)
+    f.out[x, y, z | 18] = 0.0;
+}
+
+// Top wall (y=NY-1): symmetric to bottom wall.
+dynamic BounceBackTop {
+    f.out[x, y, z |  0] = 0.0;
+    f.out[x, y, z |  1] = 0.0;
+    f.out[x, y, z |  2] = 0.0;
+    f.out[x, y, z |  3] = 0.0;
+    f.out[x, y, z |  4] = f.in[x,     y - 1, z     |  3];   // S    <- N
+    f.out[x, y, z |  5] = 0.0;
+    f.out[x, y, z |  6] = 0.0;
+    f.out[x, y, z |  7] = 0.0;
+    f.out[x, y, z |  8] = f.in[x + 1, y - 1, z     |  7];   // SE   <- NW  (EX=+1,EY=-1,EZ=0)  -> opp slot 7
+    f.out[x, y, z |  9] = f.in[x - 1, y - 1, z     | 10];   // SW   <- NE  (EX=-1,EY=-1,EZ=0)  -> opp slot 10
+    f.out[x, y, z | 10] = 0.0;
+    f.out[x, y, z | 11] = 0.0;
+    f.out[x, y, z | 12] = 0.0;
+    f.out[x, y, z | 13] = 0.0;
+    f.out[x, y, z | 14] = 0.0;
+    f.out[x, y, z | 15] = 0.0;
+    f.out[x, y, z | 16] = f.in[x,     y - 1, z + 1 | 15];   // S+Z  <- N-Z (EX=0,EY=-1,EZ=+1)  -> opp slot 15
+    f.out[x, y, z | 17] = 0.0;
+    f.out[x, y, z | 18] = f.in[x,     y - 1, z - 1 | 17];   // S-Z  <- N+Z (EX=0,EY=-1,EZ=-1)  -> opp slot 17
+}
+
+gauge Hydro -> (real rho, real ux, real uy, real uz) {
+    {rho, ux, uy, uz} = Macro(f.in[x, y, z | :]);
+}
+
+node_classes {
+    node_class FLUID(InitFluid, MRTCollStream, Hydro);
+    node_class WALL_BOT(InitFluid, BounceBackBot, Hydro);
+    node_class WALL_TOP(InitFluid, BounceBackTop, Hydro);
+}
+
+geometry {
+    nodes[:, :, :] = FLUID;
+    nodes[:, 0, :] = WALL_BOT;
+    nodes[:, NY - 1, :] = WALL_TOP;
+}

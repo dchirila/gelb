@@ -1,0 +1,74 @@
+// 2D HPP lattice-gas cellular automaton
+//
+// Historical precursor to the Lattice Boltzmann method
+// (Hardy-Pomeau-de Pazzis, 1973). Boolean particles live on a square
+// lattice with 4 velocities (E, N, W, S). At most one particle per
+// direction per cell (exclusion principle), so the state fits in 4 bits.
+//
+// One timestep = streaming + collision:
+//   (1) STREAMING -- each particle hops one cell along its velocity.
+//   (2) COLLISION -- only the head-on pair rotates by 90 degrees:
+//         {E,W,0,0}  <->  {0,0,N,S}
+//       Every other 4-bit state is left unchanged.
+//
+// Coarse-grained density = sum of the 4 occupation bits (range 0..4).
+// With random initial conditions inside a central disk, the blob
+// diffuses outward, displaying the characteristic anisotropy of the
+// HPP model (sound speed depends on direction).
+
+simulation_description("2D HPP lattice-gas cellular automaton");
+
+global_constants {
+    const int N = 256;
+    const int R = 40;                 // radius of initial dense blob
+    const int R2 = R * R;             // radius squared
+    const real DENSITY = 0.5;         // initial fill probability per velocity
+}
+
+lattices {
+    // 4 velocities: 0=E(+x), 1=N(+y), 2=W(-x), 3=S(-y)
+    lattice f(2, 4, int, {N, N}, {true, true});
+}
+
+initializer InitBlob {
+    int dx = x - N/2;
+    int dy = y - N/2;
+    int in_blob = ((dx*dx + dy*dy) < R2) + 0;
+
+    f.out[x, y | 0] = in_blob * (random() < DENSITY);
+    f.out[x, y | 1] = in_blob * (random() < DENSITY);
+    f.out[x, y | 2] = in_blob * (random() < DENSITY);
+    f.out[x, y | 3] = in_blob * (random() < DENSITY);
+}
+
+dynamic HPPStep {
+    // Streaming (pull): the particle now at (x,y) moving in direction i
+    // arrived from the neighbor one cell in the -i direction.
+    int fE = f.in[x - 1, y     | 0];
+    int fN = f.in[x,     y - 1 | 1];
+    int fW = f.in[x + 1, y     | 2];
+    int fS = f.in[x,     y + 1 | 3];
+
+    // Collision: head-on pair rotates, everything else is untouched.
+    //   ew_pair = 1 iff exactly {E,W} are present (no N, no S)
+    //   ns_pair = 1 iff exactly {N,S} are present (no E, no W)
+    int ew_pair = fE * fW * (1 - fN) * (1 - fS);
+    int ns_pair = fN * fS * (1 - fE) * (1 - fW);
+
+    f.out[x, y | 0] = fE + ns_pair - ew_pair;
+    f.out[x, y | 1] = fN + ew_pair - ns_pair;
+    f.out[x, y | 2] = fW + ns_pair - ew_pair;
+    f.out[x, y | 3] = fS + ew_pair - ns_pair;
+}
+
+gauge Density -> (int density) {
+    density = f.in[x, y | 0] + f.in[x, y | 1] + f.in[x, y | 2] + f.in[x, y | 3];
+}
+
+node_classes {
+    node_class BULK(InitBlob, HPPStep, Density);
+}
+
+geometry {
+    nodes[:, :] = BULK;
+}

@@ -1,0 +1,214 @@
+// ============================================================
+// STATUS: EXPERIMENTAL
+// Reference: Sukop & Thorne (2006), Sec. 8.5.4; Stockman (1997).
+// ============================================================
+// 2D Taylor-Aris dispersion in a slit.
+//
+// A passive solute disperses in a Poiseuille flow between two
+// no-slip walls.  Longitudinal spread of the depth-averaged
+// concentration is enhanced beyond molecular diffusion by the
+// coupling of radial (wall-normal) diffusion with the parabolic
+// velocity profile.  The effective dispersion coefficient is
+// (Stockman 1997, eq 135)
+//
+//   $D_{eff} = D_m + (2a)^2 \langle u \rangle^2 / (210 D_m)$
+//
+// where 2a = H is the channel height and <u> = (2/3)*u_max is
+// the cross-sectionally averaged velocity.
+//
+// Two lattices (same pattern as
+// ``examples/softwarex-2026-paper/rayleigh_benard_2d_bgk.gelb``):
+//   f : D2Q9, BGK, gravity-driven Poiseuille carrier ($\tau_f = 1$).
+//   c : D2Q9, scalar BGK, passive solute advected by f's velocity.
+//       Equilibrium is the simplified advection-diffusion form
+//         c_i^eq = w_i * C * (1 + 3*c_i . u)
+//       (no $u^2$ term -- solute inertia is negligible).
+//
+// BCs:
+//   x   : periodic (dispersion is measured as $\sigma_x^2$ growth of the
+//         strip; periodic wrap is harmless as long as the strip
+//         spreads much less than the box length NX).
+//   y=0 : half-way bounce-back on both f and c
+//         (no-slip for fluid, no-flux for solute).
+//   y=NY-1 : symmetric.
+//
+// Initial condition: C = 1 in a narrow strip at small x
+// (0 <= x <= XSTRIP-1), C = 0 elsewhere.  Measure
+//   $\langle x \rangle(t)$ and $\langle x^2 \rangle(t) - \langle x \rangle(t)^2$
+// from the gauge output; for $t \gg H^2 / D_m$ the second moment grows
+// linearly at rate 2*D_eff.
+//
+// This is the first GeLB example with a **passive** (one-way-
+// coupled) scalar advected by a fluid.  Rayleigh-Benard also
+// uses two lattices but there the scalar feeds back into the
+// fluid via buoyancy; here the coupling is one-way.
+
+simulation_description("2D Taylor-Aris dispersion in a slit (BGK, D2Q9+D2Q9) [Sukop 8.5.4]");
+
+global_constants {
+    const int  NX = 1000;
+    const int  NY = 20;
+
+    const int  XSTRIP = 10;      // initial solute strip width
+
+    // Fluid: $\tau_f = 1$  -> $\nu = 1/6$.
+    const real TAU_F   = 1.0;
+    const real OMEGA_F = 1.0 / TAU_F;
+
+    // Scalar: $\tau_c = 0.515$  -> $D_m = c_s^2 (\tau_c - 1/2) = 0.005$.
+    const real TAU_C   = 0.515;
+    const real OMEGA_C = 1.0 / TAU_C;
+    const real D_M     = (1.0 / 3.0) * (TAU_C - 0.5);
+
+    // Gravity-driven forcing for the carrier.  For half-way BB
+    // the effective channel height is H = NY - 2, and the
+    // analytical parabolic maximum is
+    //   u_max = $G (H/2)^2 / (2 \nu)$.
+    // With NY=20, H=18, $\nu = 1/6$ we get u_max ~= 243*G.  Pick G so
+    // that u_max ~= 0.01 (Ma << 1).
+    const int  NY_BASE = 20;
+    const real G_BASE  = 4.0e-5;
+    const real G = G_BASE * real((NY_BASE - 2) * (NY_BASE - 2))
+                          / real((NY - 2) * (NY - 2));
+
+    // D2Q9 velocity set (shared by both lattices).
+    const array[real, 9] EX = {0.0, 1.0, 0.0, -1.0,  0.0, 1.0, -1.0, -1.0,  1.0};
+    const array[real, 9] EY = {0.0, 0.0, 1.0,  0.0, -1.0, 1.0,  1.0, -1.0, -1.0};
+    const array[real, 9] W  = {4.0/9.0,
+                               1.0/9.0,  1.0/9.0,  1.0/9.0,  1.0/9.0,
+                               1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+}
+
+lattices {
+    lattice f(2, 9, real, {NX, NY}, {true, false});     // carrier
+    lattice c(2, 9, real, {NX, NY}, {true, false});     // solute
+}
+
+// ---------- Equilibria ----------
+function FeqBGK(real rho, real ux, real uy) -> (array[real, 9] feq) {
+    real usq = ux * ux + uy * uy;
+    array[real, 9] cu = EX * ux + EY * uy;
+    feq = W * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - 1.5 * usq);
+}
+
+// Simplified advection-diffusion equilibrium for a passive scalar:
+//   c_i^eq = w_i * C * (1 + 3*c_i . u)
+// The $u^2$ term is dropped (solute has no inertia of its own).
+function CeqAD(real C, real ux, real uy) -> (array[real, 9] ceq) {
+    array[real, 9] cu = EX * ux + EY * uy;
+    ceq = W * C * (1.0 + 3.0 * cu);
+}
+
+// ---------- Initialization ----------
+// Carrier starts at rest, unit density.  Solute is a rectangular
+// strip of width XSTRIP at the left edge, extending across all y.
+initializer InitAll {
+    f.out[x, y | :] = FeqBGK(1.0, 0.0, 0.0);
+    c.out[x, y | :] = CeqAD(real(x < XSTRIP), 0.0, 0.0);
+}
+
+// ---------- Bulk dynamic ----------
+// Strang-split body force on the carrier: half before collision
+// (via shifted equilibrium velocity), half after (as a direct
+// momentum kick to the DFs via the leading-order Guo source
+// term  $\Delta F_i = w_i * 3 * (c_i \cdot F)$).  Same structure as the shallow
+// water example (reduced_gravity_2d_sw_d2q9.gelb) minus the
+// Coriolis rotation.
+dynamic BulkDynamic {
+    // --- Pull-stream both lattices ---
+    array[real, 9] fIn = upstream_dfs(f, x, y, {EX, EY});
+    array[real, 9] cIn = upstream_dfs(c, x, y, {EX, EY});
+
+    // --- Fluid macroscopic ---
+    real rho = sum(fIn);
+    real ux  = dot_prod(EX, fIn) / rho;
+    real uy  = dot_prod(EY, fIn) / rho;
+
+    // --- 1st half force: inject pre-collision momentum delta so
+    // that mom(fInForced) == rho*(u + 0.5*G/rho, v). ---
+    real ux_h = ux + 0.5 * G / rho;
+    array[real, 9] fInForced = fIn + W * 3.0 * EX * (0.5 * G);
+
+    // --- Fluid BGK collision around the shifted velocity ---
+    array[real, 9] feq   = FeqBGK(rho, ux_h, uy);
+    array[real, 9] fPost = fInForced - OMEGA_F * (fInForced - feq);
+
+    // --- 2nd half force as a Guo DF source term ---
+    f.out[x, y | :] = fPost + W * 3.0 * EX * (0.5 * G);
+
+    // --- Scalar BGK collision, advected by the post-half-force
+    // carrier velocity (ux_h, uy). ---
+    real C = sum(cIn);
+    array[real, 9] ceq = CeqAD(C, ux_h, uy);
+    c.out[x, y | :] = cIn - OMEGA_C * (cIn - ceq);
+}
+
+// ---------- Walls: half-way bounce-back on BOTH lattices ----------
+// Fluid half-way BB gives no-slip at y = 0.5 and y = NY - 1.5.
+// Scalar half-way BB on a scalar D2Q9 gives zero wall-normal
+// diffusive flux at the same half-way positions.
+dynamic WallBotDynamic {
+    f.out[x, y | 0] = 0.0;
+    f.out[x, y | 1] = 0.0;
+    f.out[x, y | 2] = f.in[x,     y + 1 | 4];
+    f.out[x, y | 3] = 0.0;
+    f.out[x, y | 4] = 0.0;
+    f.out[x, y | 5] = f.in[x + 1, y + 1 | 7];
+    f.out[x, y | 6] = f.in[x - 1, y + 1 | 8];
+    f.out[x, y | 7] = 0.0;
+    f.out[x, y | 8] = 0.0;
+
+    c.out[x, y | 0] = 0.0;
+    c.out[x, y | 1] = 0.0;
+    c.out[x, y | 2] = c.in[x,     y + 1 | 4];
+    c.out[x, y | 3] = 0.0;
+    c.out[x, y | 4] = 0.0;
+    c.out[x, y | 5] = c.in[x + 1, y + 1 | 7];
+    c.out[x, y | 6] = c.in[x - 1, y + 1 | 8];
+    c.out[x, y | 7] = 0.0;
+    c.out[x, y | 8] = 0.0;
+}
+
+dynamic WallTopDynamic {
+    f.out[x, y | 0] = 0.0;
+    f.out[x, y | 1] = 0.0;
+    f.out[x, y | 2] = 0.0;
+    f.out[x, y | 3] = 0.0;
+    f.out[x, y | 4] = f.in[x,     y - 1 | 2];
+    f.out[x, y | 5] = 0.0;
+    f.out[x, y | 6] = 0.0;
+    f.out[x, y | 7] = f.in[x + 1, y - 1 | 5];
+    f.out[x, y | 8] = f.in[x - 1, y - 1 | 6];
+
+    c.out[x, y | 0] = 0.0;
+    c.out[x, y | 1] = 0.0;
+    c.out[x, y | 2] = 0.0;
+    c.out[x, y | 3] = 0.0;
+    c.out[x, y | 4] = c.in[x,     y - 1 | 2];
+    c.out[x, y | 5] = 0.0;
+    c.out[x, y | 6] = 0.0;
+    c.out[x, y | 7] = c.in[x + 1, y - 1 | 5];
+    c.out[x, y | 8] = c.in[x - 1, y - 1 | 6];
+}
+
+// ---------- Gauge ----------
+gauge Hydro -> (real rho, real ux, real uy, real C) {
+    array[real, 9] fIn = f.in[x, y | :];
+    array[real, 9] cIn = c.in[x, y | :];
+    rho = sum(fIn);
+    ux  = dot_prod(EX, fIn) / rho;
+    uy  = dot_prod(EY, fIn) / rho;
+    C   = sum(cIn);
+}
+
+node_classes {
+    node_class FLUID   (InitAll, BulkDynamic,   Hydro);
+    node_class WALL_BOT(InitAll, WallBotDynamic, Hydro);
+    node_class WALL_TOP(InitAll, WallTopDynamic, Hydro);
+}
+
+geometry {
+    nodes[:, :]      = FLUID;
+    nodes[:, 0]      = WALL_BOT;
+    nodes[:, NY - 1] = WALL_TOP;
+}

@@ -1,0 +1,158 @@
+// 2D lid-driven cavity at high Reynolds number with a Smagorinsky
+// sub-grid model -- D2Q9 BGK LBM + LES
+//
+// The cavity of lid_driven_cavity_2d_bgk_re1000.gelb with the
+// viscosity lowered to NU = 0.002 (Re ~ 5000).  Plain BGK then
+// sits at TAU = 0.506, close to the stability limit TAU = 1/2.
+// The sub-grid model of Smagorinsky (1963) adds an eddy viscosity
+// nu_T to the molecular viscosity, so the effective relaxation
+// time becomes
+//
+//     tau = 3 (NU + nu_T) + 1/2,      nu_T = (C_s Delta)^2 |S|,
+//
+// where |S| = sqrt(2 S:S) is the magnitude of the strain-rate
+// tensor and C_s is the Smagorinsky constant (0.1-0.2 in common
+// use).  Hou et al. (1996) showed that in LBM the strain rate can
+// be read off the local non-equilibrium momentum flux,
+//
+//     Pi^neq_ij = sum_k (f_k - f_k^eq) c_k,i c_k,j,     S_ij ~ Pi^neq_ij,
+//
+// so tau can be recomputed in every cell at every step from the
+// cell's own DFs, without reading any neighbour.  This program
+// absorbs the proportionality factor between S and Pi^neq (which
+// itself involves tau) into C_s, so no quadratic equation for tau
+// is solved; this is a simplification relative to Hou et al.
+//
+// The per-cell, per-step relaxation time is the point of the
+// example: tau is an ordinary local variable of the dynamic block.
+//
+// Stability note: with NU = 0.002 the base relaxation time is
+// 3 NU + 1/2 = 0.506.  The eddy viscosity only adds to it, but
+// wherever the flow is nearly quiescent the local tau comes close
+// to that base value.  If the run becomes unstable, raise NU to
+// 0.004 (Re ~ 2500, base tau = 0.512).  The Mach number note of
+// the Re = 1000 program applies here too (U_LID = 0.1 gives
+// Ma ~ 0.17).
+//
+// Boundary conditions and axis convention: as in
+// lid_driven_cavity_2d_bgk_re1000.gelb, including the moving-lid
+// correction (the lid moves toward +x).
+//
+// References:
+//   - Smagorinsky, J. (1963), "General circulation experiments with
+//     the primitive equations. I. The basic experiment", Mon. Wea.
+//     Rev. 91, 99-164.
+//   - Hou, S., Sterling, J., Chen, S. & Doolen, G. D. (1996), "A
+//     lattice Boltzmann subgrid model for high Reynolds number
+//     flows", Fields Inst. Commun. 6, 151-166.
+//   - Krueger, T. et al. (2017), The Lattice Boltzmann Method:
+//     Principles and Practice, Springer, Sec. 5.3.3 and Sec. 7.3.
+//   - Mohamad, A. A. (2019), Lattice Boltzmann Method, 2nd ed.,
+//     Springer, Sec. 8.5 (further reading).
+
+simulation_description("2D lid-driven cavity with Smagorinsky LES (LBM-BGK, D2Q9)");
+
+global_constants {
+    const int N = 100;                    // cells per direction
+    const real U_LID = 0.1;
+    const real NU = 0.002;                // small viscosity: high Re
+    const real CS_SMAG = 0.16;            // Smagorinsky constant
+    const real LATTICE_SPACING = 1.0;     // Delta = 1 in lattice units
+
+    // (C_s * Delta)^2, the constant pre-factor of the eddy viscosity
+    const real CS_DELTA_SQ = CS_SMAG * CS_SMAG * LATTICE_SPACING * LATTICE_SPACING;
+
+    // D2Q9 velocity set and weights
+    const array[real, 9] EX = {0.0, 1.0, 0.0, -1.0,  0.0, 1.0, -1.0, -1.0,  1.0};
+    const array[real, 9] EY = {0.0, 0.0, 1.0,  0.0, -1.0, 1.0,  1.0, -1.0, -1.0};
+    const array[real, 9] W  = {4.0/9.0,
+        1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+
+    // c_i,x c_i,x, c_i,y c_i,y and c_i,x c_i,y per direction, used to
+    // contract the non-equilibrium momentum flux below
+    const array[real, 9] EX_EX = EX * EX;
+    const array[real, 9] EY_EY = EY * EY;
+    const array[real, 9] EX_EY = EX * EY;
+}
+
+lattices {
+    lattice f(2, 9, real, {N, N}, {false, false});
+}
+
+function Macro(array[real, 9] fIn) -> (real rho, real ux, real uy) {
+    rho = sum(fIn);
+    ux = dot_prod(EX, fIn) / rho;
+    uy = dot_prod(EY, fIn) / rho;
+}
+
+function Eq(real rho, real ux, real uy) -> (array[real, 9] feq) {
+    real usq = ux * ux + uy * uy;
+    array[real, 9] eu = EX * ux + EY * uy;
+    feq = W * rho * (1.0 + 3.0 * eu + 4.5 * eu * eu - 1.5 * usq);
+}
+
+initializer InitFluid { f.out[x, y | :] = W; }
+
+// --- Bulk: BGK with the Smagorinsky eddy viscosity.  tau is computed
+// per cell from the local non-equilibrium momentum flux; no stencil
+// reads beyond the usual streaming are needed.
+dynamic FluidDynamicLES {
+    array[real, 9] fIn = upstream_dfs(f, x, y, {EX, EY});
+
+    real rho; real ux; real uy;
+    {rho, ux, uy} = Macro(fIn);
+    array[real, 9] feq = Eq(rho, ux, uy);
+    array[real, 9] fneq = fIn - feq;
+
+    // Non-equilibrium momentum flux Pi^neq (local, from f - f^eq)
+    real Pxx = dot_prod(EX_EX, fneq);
+    real Pyy = dot_prod(EY_EY, fneq);
+    real Pxy = dot_prod(EX_EY, fneq);
+
+    // Strain-rate magnitude |S| = sqrt(2 S:S), with S taken
+    // proportional to Pi^neq (the factor is absorbed into CS_SMAG)
+    real S_norm = sqrt(2.0 * (Pxx * Pxx + Pyy * Pyy + 2.0 * Pxy * Pxy));
+
+    real nu_T = CS_DELTA_SQ * S_norm;
+    real tau_local = 3.0 * (NU + nu_T) + 0.5;
+    real omega = 1.0 / tau_local;
+
+    f.out[x, y | :] = fIn - omega * fneq;
+}
+
+gauge Hydro -> (real rho, real ux, real uy) {
+    {rho, ux, uy} = Macro(f.in[x, y | :]);
+}
+
+// Full-way bounce-back: the wall stores arriving fluid populations
+// reversed, and the fluid pulls them back on the following step.
+// The effective no-slip surfaces are at 0.5 and N-1.5, so L = N-2.
+dynamic BounceBack {
+    f.out[x, y | :] = bounce_back_dfs(f, x, y, {EX, EY});
+}
+
+dynamic MovingLid {
+    f.out[x, y | :] = bounce_back_dfs(f, x, y, {EX, EY}) + 6.0 * W * (EX * U_LID);
+}
+
+// Display the prescribed wall density and velocity.
+gauge BoundaryHydro -> (real rho, real ux, real uy) {
+    rho = 1.0;
+    ux = U_LID * real(y == N - 1);
+    uy = 0.0;
+}
+
+node_classes {
+    node_class FLUID(InitFluid, FluidDynamicLES, Hydro);
+    node_class WALL(InitFluid, BounceBack, BoundaryHydro);
+    node_class LID(InitFluid, MovingLid, BoundaryHydro);
+}
+
+geometry {
+    nodes[:, :]     = FLUID;
+    nodes[0, :]     = WALL;
+    nodes[N - 1, :] = WALL;
+    nodes[:, 0]     = WALL;
+    nodes[:, N - 1] = LID;
+}

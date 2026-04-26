@@ -1,0 +1,107 @@
+// 3D lid-driven cubic cavity flow -- D3Q19 BGK LBM
+//
+// 3D analogue of the 2D lid-driven cavity: a cubic cavity with the
+// lid on the +y face -- the canonical 3D wall-handling LBM benchmark.
+//
+// Boundary conditions, per face:
+//   - x = 0, x = N-1:  no-slip (full-way bounce-back).  W and E faces.
+//   - y = 0:           no-slip.  S face.
+//   - z = 0, z = N-1:  no-slip.  B and T faces.
+//   - y = N-1:         moving lid (velocity U_LID in +x).  N face.
+//
+// Boundary formulas:
+//   - no-slip (dynamic BounceBack):  f_i(x) = f_{opp(i)}(x + c_i).
+//   - moving lid (dynamic MovingLid): f_i(x) = f_{opp(i)}(x + c_i) + 6 w_i (c_i . u_wall).
+
+simulation_description("3D lid-driven cubic cavity flow (LBM-BGK, D3Q19)");
+
+global_constants {
+    const int N = 64;
+    const real U_LID = 0.05;
+    const real TAU = 0.8;
+    const real TAU_INV = 1.0 / TAU;
+
+    // D3Q19 lattice velocities (same ordering as Poiseuille-3D)
+    const array[real, 19] EX = { 0.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 1.0,-1.0, 1.0,-1.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0};
+    const array[real, 19] EY = { 0.0, 0.0, 0.0, 1.0,-1.0, 0.0, 0.0, 1.0,-1.0,-1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 1.0,-1.0};
+    const array[real, 19] EZ = { 0.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0,-1.0, 1.0, 1.0,-1.0,-1.0, 1.0};
+
+    // D3Q19 weights
+    const array[real, 19] W = {1.0/3.0,
+        1.0/18.0, 1.0/18.0, 1.0/18.0, 1.0/18.0, 1.0/18.0, 1.0/18.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+}
+
+lattices {
+    // All-walled cavity: no periodicity on any axis.
+    lattice f(3, 19, real, {N, N, N}, {false, false, false});
+}
+
+function Macro(array[real, 19] fIn) -> (real rho, real ux, real uy, real uz) {
+    rho = sum(fIn);
+    ux = dot_prod(EX, fIn) / rho;
+    uy = dot_prod(EY, fIn) / rho;
+    uz = dot_prod(EZ, fIn) / rho;
+}
+
+function Eq(real rho, real ux, real uy, real uz) -> (array[real, 19] feq) {
+    real usq = ux*ux + uy*uy + uz*uz;
+    array[real, 19] eu = EX * ux + EY * uy + EZ * uz;
+    feq = W * rho * (1.0 + 3.0*eu + 4.5*eu*eu - 1.5*usq);
+}
+
+initializer InitFluid {
+    f.out[x, y, z | :] = W;
+}
+
+dynamic FluidDynamic {
+    array[real, 19] fIn = upstream_dfs(f, x, y, z, {EX, EY, EZ});
+
+    real rho; real ux; real uy; real uz;
+    {rho, ux, uy, uz} = Macro(fIn);
+
+    f.out[x, y, z | :] = fIn - TAU_INV * (fIn - Eq(rho, ux, uy, uz));
+}
+
+dynamic BounceBack {
+    f.out[x, y, z | :] = bounce_back_dfs(f, x, y, z, {EX, EY, EZ});
+}
+
+dynamic MovingLid {
+    // Moving-wall bounce-back (Ladd 1994; Krueger et al. 2017 Eq. 5.26):
+    //   f_i^new(x) = f_{opp(i)}^old(x + c_i) + 6 * w_i * (c_i . u_wall)
+    // Here u_wall = (U_LID, 0, 0), so c_i . u_wall = EX[i] * U_LID.
+    f.out[x, y, z | :] = bounce_back_dfs(f, x, y, z, {EX, EY, EZ})
+        + 6.0 * W * (EX * U_LID);
+}
+
+gauge Hydro -> (real rho, real ux, real uy, real uz) {
+    {rho, ux, uy, uz} = Macro(f.in[x, y, z | :]);
+}
+
+// Display the prescribed wall density and velocity.
+gauge BoundaryHydro -> (real rho, real ux, real uy, real uz) {
+    rho = 1.0;
+    ux = U_LID * real(y == N - 1);
+    uy = 0.0;
+    uz = 0.0;
+}
+
+node_classes {
+    node_class FLUID(InitFluid, FluidDynamic, Hydro);
+    node_class WALL(InitFluid, BounceBack, BoundaryHydro);
+    node_class LID(InitFluid, MovingLid, BoundaryHydro);
+}
+
+geometry {
+    nodes[:, :, :] = FLUID;
+    // Five stationary no-slip walls (W, E, S, T, B)
+    nodes[0, :, :] = WALL;          // x = 0     (W)
+    nodes[N - 1, :, :] = WALL;      // x = N-1   (E)
+    nodes[:, 0, :] = WALL;          // y = 0     (S)
+    nodes[:, :, 0] = WALL;          // z = 0     (B)
+    nodes[:, :, N - 1] = WALL;      // z = N-1   (T)
+    // Moving lid on the +y face (N)
+    nodes[:, N - 1, :] = LID;       // y = N-1   (N)
+}

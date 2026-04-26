@@ -1,46 +1,59 @@
-simulation_description("2D example, for simulating a cellular automaton");
+// Conway's Game of Life with random initial conditions.
+//
+// Each cell is randomly set to alive (1) or dead (0) at t=0,
+// then evolves under standard Life rules:
+//   - A live cell with 2 or 3 neighbors survives.
+//   - A dead cell with exactly 3 neighbors is born.
+//   - All other cells die (overcrowding or loneliness).
+//
+// Uses the random() intrinsic to seed the grid.
 
-global_constants { //
-  const int N_NEAREST = 8;
+simulation_description("2D Game of Life — random initial conditions");
+
+global_constants {
+    const int GRID = 128;
+    const real DENSITY = 0.5;  // initial fraction of live cells
 }
 
-lattices { //
-  lattice f(2, 1, bool, {40, 40}, {true, true});
+lattices {
+    lattice f(2, 1, int, {GRID, GRID}, {true, true});
 }
 
-node_classes {
-  node_class BULK(RandomLife, LifeEvolve, CellStatus);
-}
-
-initializer RandomLife { //
-  f.out [x, y |:] = Random();
+initializer RandomLife {
+    f.out[x, y | 0] = (random() < DENSITY) + 0;
 }
 
 dynamic LifeEvolve {
-  const array[bool, {N_NEAREST}] genesis = //
-      {false, false, false,                //
-       true,                               // genesis for 3 neighbors
-       false, false, false, false, false};
-  const array[bool, {N_NEAREST}] deathOrSurvival = //
-      {false, false,                               // death by loneliness
-       true,  true,                                // survival
-       false, false, false, false, false};         // death by overcrowding
+    int neighborSum;
 
-  int neighborSum;
+    neighborSum = f.in[x - 1, y - 1 | 0] + f.in[x - 1, y | 0] +
+                  f.in[x - 1, y + 1 | 0] + f.in[x, y - 1 | 0] +
+                  f.in[x, y + 1 | 0] + f.in[x + 1, y - 1 | 0] +
+                  f.in[x + 1, y | 0] + f.in[x + 1, y + 1 | 0];
 
-  neighborSum = int(f.in[x - 1, y - 1 | 0]) + int(f.in[x - 1, y | 0]) +
-                int(f.in[x - 1, y + 1 | 0]) + int(f.in[x, y - 1 | 0]) +
-                int(f.in[x, y + 1 | 0]) + int(f.in[x + 1, y - 1 | 0]) +
-                int(f.in[x + 1, y | 0]) + int(f.in[x + 1, y + 1 | 0]);
+    // Conway's rules via integer arithmetic (no if/else needed):
+    //   birth:   neighborSum == 3
+    //   survive: cell is alive AND neighborSum == 2
+    //   new = birth OR survive = birth + survive - birth * survive
 
-  f.out[x, y | 0] = (f.in[x, y | 0] && deathOrSurvival[neighborSum]) ||
-                    ((!f.in[x, y | 0]) && genesis[neighborSum]);
+    int alive;
+    int birth;
+    int survive;
+
+    alive = f.in[x, y | 0];
+    birth = (neighborSum == 3);
+    survive = alive * (neighborSum == 2);
+    f.out[x, y | 0] = birth + survive - birth * survive;
 }
 
-gauge CellStatus(out = {bool status}) { //
-  status = f.in[x, y | 0];
+gauge CellStatus -> (int status) {
+    status = f.in[x, y | 0];
 }
 
-geometry { //
-  nodes[:, :] = BULK;
+node_classes {
+    node_class BULK(RandomLife, LifeEvolve, CellStatus);
+}
+
+geometry {
+    nodes[:, :] = BULK;
 }

@@ -1,0 +1,84 @@
+// 3D Taylor-Green vortex decay -- D3Q19 BGK LBM
+//
+// 3D extension of the standard TGV benchmark:
+//   u(x,y,z,t) =  U0 cos(kx) sin(ky) cos(kz) exp(-3 nu k^2 t)
+//   v(x,y,z,t) = -U0 sin(kx) cos(ky) cos(kz) exp(-3 nu k^2 t)
+//   w(x,y,z,t) =  0
+//   p(x,y,z,t) =  rho0 U0^2/16 (cos(2kx)+cos(2ky))(cos(2kz)+2) exp(-6 nu k^2 t)
+//
+// Exact analytical solution to incompressible Navier-Stokes.
+// Decay rate is exp(-3 nu k^2 t) (three spatial dimensions).
+
+simulation_description("3D Taylor-Green vortex (LBM-BGK, D3Q19)");
+
+global_constants {
+    const int N = 32;
+    const real NU = 1.0 / 6.0;
+    const real TAU_INV = 2.0 / (6.0 * NU + 1.0);
+    const real U_MAX = 0.04;
+    const real PI = 3.141592653589793;
+    const real K = 2.0 * PI / N;
+
+    // D3Q19 lattice velocities (rest + 6 face + 12 edge)
+    //          0    1    2    3    4    5    6    7    8    9   10   11   12   13   14   15   16   17   18
+    const array[real, 19] EX = { 0.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 1.0,-1.0, 1.0,-1.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0};
+    const array[real, 19] EY = { 0.0, 0.0, 0.0, 1.0,-1.0, 0.0, 0.0, 1.0,-1.0,-1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 1.0,-1.0};
+    const array[real, 19] EZ = { 0.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0,-1.0, 1.0, 1.0,-1.0,-1.0, 1.0};
+
+    // D3Q19 weights: 1/3 (rest), 1/18 (face), 1/36 (edge)
+    const array[real, 19] W = {1.0/3.0,
+        1.0/18.0, 1.0/18.0, 1.0/18.0, 1.0/18.0, 1.0/18.0, 1.0/18.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+}
+
+lattices {
+    lattice f(3, 19, real, {N, N, N}, {true, true, true});
+}
+
+function Macro(array[real, 19] fIn) -> (real rho, real ux, real uy, real uz) {
+    rho = sum(fIn);
+    ux = dot_prod(EX, fIn) / rho;
+    uy = dot_prod(EY, fIn) / rho;
+    uz = dot_prod(EZ, fIn) / rho;
+}
+
+function Eq(real rho, real ux, real uy, real uz) -> (array[real, 19] feq) {
+    real usq = ux*ux + uy*uy + uz*uz;
+    array[real, 19] eu = EX * ux + EY * uy + EZ * uz;
+    feq = W * rho * (1.0 + 3.0*eu + 4.5*eu*eu - 1.5*usq);
+}
+
+initializer InitTG {
+    real xc = x + 0.5;
+    real yc = y + 0.5;
+    real zc = z + 0.5;
+
+    // 3D Taylor-Green analytical fields at t=0
+    real rho = 1.0 - (U_MAX^2 / 16.0) * (cos(2.0*K*xc) + cos(2.0*K*yc)) * (cos(2.0*K*zc) + 2.0);
+    real ux = U_MAX * cos(K*xc) * sin(K*yc) * cos(K*zc);
+    real uy = -1.0 * U_MAX * sin(K*xc) * cos(K*yc) * cos(K*zc);
+    real uz = 0.0;
+    f.out[x, y, z | :] = Eq(rho, ux, uy, uz);
+}
+
+dynamic BGKCollStream {
+    array[real, 19] fIn = upstream_dfs(f, x, y, z, {EX, EY, EZ});
+
+    real rho; real ux; real uy; real uz;
+    {rho, ux, uy, uz} = Macro(fIn);
+
+    f.out[x, y, z | :] = fIn - TAU_INV * (fIn - Eq(rho, ux, uy, uz));
+}
+
+gauge Hydro -> (real rho, real ux, real uy, real uz) {
+    {rho, ux, uy, uz} = Macro(f.in[x, y, z | :]);
+}
+
+node_classes {
+    node_class BULK(InitTG, BGKCollStream, Hydro);
+}
+
+geometry {
+    nodes[:, :, :] = BULK;
+}

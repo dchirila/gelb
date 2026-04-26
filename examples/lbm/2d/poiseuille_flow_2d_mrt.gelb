@@ -1,0 +1,200 @@
+// ============================================================
+// STATUS: VALIDATED
+// Convergence: ~2nd order (half-way bounce-back + Strang force)
+// See examples/VALIDATION.md for details.
+// ============================================================
+// 2D Poiseuille flow (gravity-driven) -- D2Q9 MRT
+//
+// Gravity-driven channel flow between two parallel no-slip walls.
+// At steady state the velocity profile is parabolic (Poiseuille flow):
+//
+//   u(y) = G/(2*nu) * y_eff * (H - y_eff)
+//
+// where y_eff is the distance from the bottom wall and H is the
+// effective channel height. With proper half-way bounce-back walls,
+// the no-slip surface sits exactly halfway between the wall and the
+// first fluid node: y_wall = 0.5 and y_wall = NY-1.5, giving
+// H = NY - 2.
+//
+// Two techniques are used to achieve near-second-order spatial
+// convergence:
+//
+//   1. **Half-way bounce-back via wall-cell-reads-fluid**, ported
+//      from `examples/lbm/2d/rayleigh_benard_2d_mrt.gelb`. The wall
+//      cell at y=0 directly samples its adjacent fluid neighbor's
+//      outgoing DFs and stores them in the bounced (opposite) slots:
+//
+//          f_wall[x, 0 | 2] = f_fluid[x,   1 | 4]   // N  <- S
+//          f_wall[x, 0 | 5] = f_fluid[x+1, 1 | 7]   // NE <- SW
+//          f_wall[x, 0 | 6] = f_fluid[x-1, 1 | 8]   // NW <- SE
+//
+//   2. **Strang-split body force in moment space**: half the force
+//      added to the jx moment before the collision and half after,
+//      with the collision's equilibrium computed from the post-half-
+//      force velocity. This is symmetric around the collision step
+//      and matches the Boussinesq buoyancy treatment in the RB-MRT
+//      example.
+//
+// Long in x, moderate resolution across the channel.  The flow is
+// x-invariant in exact steady state (body-force-driven, periodic
+// in x), but during the transient from the impulsive uniform IC
+// the profile needs some streamwise extent to let MRT's non-
+// hydrodynamic moments damp out, so NX is set to 4x NY.  Moderate
+// TAU keeps the viscosity-dependent wall-position offset small.
+//
+// Ma note (Krueger et al. 2017, Sec. 7.2.1).  With the default NY=32,
+// G_BASE=1e-5, $\tau = 0.54$ ($\nu = 1/75$) the analytical peak velocity is
+// u_max = $G H^2 / (8 \nu)$ ~= 0.084, so Ma = u_max * $\sqrt{3}$ ~= 0.146 -- above
+// Krueger's recommended Ma << 0.1.  Compressibility error at this Ma
+// is ~2% and does not affect the 2nd-order spatial convergence this
+// file was validated against; the NY-dependent G_BASE rescale above
+// holds Ma constant as NY grows during a convergence sweep.  If a
+// stricter Ma budget is needed, drop G_BASE to 3e-6 (-> u_max ~= 0.025,
+// Ma ~= 0.044) and re-run the convergence study.
+
+simulation_description("2D Poiseuille flow (MRT, D2Q9)");
+
+global_constants {
+    const int NY = 32;    // wall-normal resolution -- convergence-sweep parameter
+    const int NX = 128;   // flow direction -- long enough to damp transients
+    const real TAU = 0.54;
+    const real TAU_INV = 1.0 / TAU;
+
+    // Body-force magnitude.  For grid-convergence studies the Mach
+    // number must stay constant as NY changes:
+    //   u_max ~ $G H^2 / \nu$  =>  G ~ $1/H^2$  where H = NY - 2.
+    // G_BASE is calibrated for NY_BASE = 32 (H = 30); when NY is
+    // overridden via ``-D NY=...`` on the CLI, G rescales
+    // automatically.
+    const int  NY_BASE = 32;
+    const real G_BASE  = 0.00001;
+    const real G = G_BASE * real((NY_BASE - 2) * (NY_BASE - 2))
+                          / real((NY - 2) * (NY - 2));
+
+    const array[real, 9] EX = {0.0, 1.0, 0.0, -1.0,  0.0, 1.0, -1.0, -1.0,  1.0};
+    const array[real, 9] EY = {0.0, 0.0, 1.0,  0.0, -1.0, 1.0,  1.0, -1.0, -1.0};
+    const array[real, 9] W = {4.0/9.0,
+        1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+
+    // MRT transformation matrix M (Lallemand & Luo, 2000)
+    const array[real, {9, 9}] M = {
+        { 1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0},
+        {-4.0, -1.0, -1.0, -1.0, -1.0,  2.0,  2.0,  2.0,  2.0},
+        { 4.0, -2.0, -2.0, -2.0, -2.0,  1.0,  1.0,  1.0,  1.0},
+        { 0.0,  1.0,  0.0, -1.0,  0.0,  1.0, -1.0, -1.0,  1.0},
+        { 0.0, -2.0,  0.0,  2.0,  0.0,  1.0, -1.0, -1.0,  1.0},
+        { 0.0,  0.0,  1.0,  0.0, -1.0,  1.0,  1.0, -1.0, -1.0},
+        { 0.0,  0.0, -2.0,  0.0,  2.0,  1.0,  1.0, -1.0, -1.0},
+        { 0.0,  1.0, -1.0,  1.0, -1.0,  0.0,  0.0,  0.0,  0.0},
+        { 0.0,  0.0,  0.0,  0.0,  0.0,  1.0, -1.0,  1.0, -1.0}};
+
+    const array[real, {9, 9}] M_INV = inverse(M);
+
+    const array[real, 9] S_DIAG = {0.0, 1.1, 1.1, 0.0, 1.1, 0.0, 1.1, TAU_INV, TAU_INV};
+}
+
+lattices { lattice f(2, 9, real, {NX, NY}, {true, false}); }
+
+function Macro(array[real, 9] fIn) -> (real rho, real ux, real uy) {
+    rho = sum(fIn);
+    ux = dot_prod(EX, fIn) / rho;
+    uy = dot_prod(EY, fIn) / rho;
+}
+
+function EqMoments(real rho, real ux, real uy) -> (array[real, 9] meq) {
+    real usq = ux * ux + uy * uy;
+    meq = {rho,
+           -2.0 * rho + 3.0 * rho * usq,
+           rho - 3.0 * rho * usq,
+           rho * ux,
+           -1.0 * rho * ux,
+           rho * uy,
+           -1.0 * rho * uy,
+           rho * (ux * ux - uy * uy),
+           rho * ux * uy};
+}
+
+initializer InitFluid {
+    f.out[x, y | :] = W;
+}
+
+// Bulk dynamic with Strang-split body force in moment space.
+// Mirrors the structure of `BulkDynamic` in
+// `examples/lbm/2d/rayleigh_benard_2d_mrt.gelb`: half the body
+// force is added to the jx moment before the collision and half
+// after, and the equilibrium during the collision is computed
+// from the post-half-force velocity.
+dynamic MRTCollStream {
+    array[real, 9] fIn = upstream_dfs(f, x, y, {EX, EY});
+
+    array[real, 9] moments = matmul(M, fIn);
+
+    // 1st half body force: add 0.5*G to the jx moment (index 3 in
+    // L&L moment ordering). The jx moment is conserved by the
+    // collision (S_DIAG[3]=0), so the force survives the collision
+    // intact and the post-half-force velocity is what enters the
+    // equilibrium.
+    moments = moments + {0.0, 0.0, 0.0, 0.5 * G,
+                         0.0, 0.0, 0.0, 0.0, 0.0};
+
+    real rho = moments[0];
+    real ux = moments[3] / rho;
+    real uy = moments[5] / rho;
+
+    array[real, 9] meq = EqMoments(rho, ux, uy);
+    moments = moments - S_DIAG * (moments - meq);
+
+    // 2nd half body force.
+    moments = moments + {0.0, 0.0, 0.0, 0.5 * G,
+                         0.0, 0.0, 0.0, 0.0, 0.0};
+
+    f.out[x, y | :] = matmul(M_INV, moments);
+}
+
+// Bottom wall: half-way bounce-back via the wall cell directly
+// reading the adjacent fluid cell's outgoing DFs into the bounced
+// (opposite) slots. The fluid cell at (x+EX[d], 1) will pull
+// slot d from this wall cell during its `upstream_dfs` call.
+//
+// For D2Q9: N (2) <-> S (4); NE (5) <-> SW (7); NW (6) <-> SE (8).
+dynamic BounceBackBot {
+    f.out[x, y | 0] = 0.0;
+    f.out[x, y | 1] = 0.0;
+    f.out[x, y | 2] = f.in[x,     y + 1 | 4];   // N  <- S  at (x,   1)
+    f.out[x, y | 3] = 0.0;
+    f.out[x, y | 4] = 0.0;
+    f.out[x, y | 5] = f.in[x + 1, y + 1 | 7];   // NE <- SW at (x+1, 1)
+    f.out[x, y | 6] = f.in[x - 1, y + 1 | 8];   // NW <- SE at (x-1, 1)
+    f.out[x, y | 7] = 0.0;
+    f.out[x, y | 8] = 0.0;
+}
+
+// Top wall: symmetric to the bottom wall.
+dynamic BounceBackTop {
+    f.out[x, y | 0] = 0.0;
+    f.out[x, y | 1] = 0.0;
+    f.out[x, y | 2] = 0.0;
+    f.out[x, y | 3] = 0.0;
+    f.out[x, y | 4] = f.in[x,     y - 1 | 2];   // S  <- N  at (x,   NY-2)
+    f.out[x, y | 5] = 0.0;
+    f.out[x, y | 6] = 0.0;
+    f.out[x, y | 7] = f.in[x - 1, y - 1 | 5];   // SW <- NE at (x-1, NY-2)
+    f.out[x, y | 8] = f.in[x + 1, y - 1 | 6];   // SE <- NW at (x+1, NY-2)
+}
+
+gauge Hydro -> (real rho, real ux, real uy) {
+    {rho, ux, uy} = Macro(f.in[x, y | :]);
+}
+
+node_classes {
+    node_class FLUID(InitFluid, MRTCollStream, Hydro);
+    node_class WALL_BOT(InitFluid, BounceBackBot, Hydro);
+    node_class WALL_TOP(InitFluid, BounceBackTop, Hydro);
+}
+
+geometry {
+    nodes[:, :] = FLUID;
+    nodes[:, 0] = WALL_BOT;
+    nodes[:, NY - 1] = WALL_TOP;
+}

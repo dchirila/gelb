@@ -1,0 +1,125 @@
+// 2D lid-driven cavity flow -- D2Q9 BGK LBM (INCOMPRESSIBLE FUSED)
+//
+// The fused shape of lid_driven_cavity_2d_bgk_fused.gelb with the
+// incompressible algebra: the incompressible equilibrium
+// (delta_rho = rho - 1, u = momentum) collapses the compressible
+// `1/rho` division entirely.
+//
+//   feq_i = W_i * (delta_rho + 3*eu_i + 4.5*eu_i^2 - 1.5*usq)
+//
+// where eu_i = EX_i*u_x + EY_i*u_y and u_x, u_y are *momenta*
+// (sum of c_i*f_i) NOT divided by rho.  Valid in the low-Mach
+// incompressible limit (Ma << 0.1; LDC with U_LID = 0.1 is right
+// at the edge but still acceptable for benchmark purposes).
+//
+// Result on the LDC inner loop: 0 vdivpd, fewer total zmm ops.
+// Numerical output differs from the compressible variant by
+// $O(Ma^2)$ -- kept as a *separate* example so cross-backend
+// bit-equivalence isn't expected.
+
+simulation_description("2D lid-driven cavity (LBM-BGK, D2Q9, incompressible fused)");
+
+global_constants {
+    const int N = 65;
+
+    const real U_LID = 0.1;
+    const real TAU = 0.689;
+    const real TAU_INV = 1.0 / TAU;
+    const real ONE_M_OMEGA = 1.0 - TAU_INV;
+
+    const real K0     = TAU_INV * 4.0 / 9.0;
+    const real K_CARD = TAU_INV * 1.0 / 9.0;
+    const real K_DIAG = TAU_INV * 1.0 / 36.0;
+
+    const array[real, 9] EX = {0.0, 1.0, 0.0, -1.0,  0.0, 1.0, -1.0, -1.0,  1.0};
+    const array[real, 9] EY = {0.0, 0.0, 1.0,  0.0, -1.0, 1.0,  1.0, -1.0, -1.0};
+
+    const array[real, 9] W = {4.0/9.0,
+        1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+}
+
+lattices {
+    lattice f(2, 9, real, {N, N}, {false, false});
+}
+
+function Macro(array[real, 9] fIn) -> (real rho, real ux, real uy) {
+    rho = sum(fIn);
+    ux = dot_prod(EX, fIn) / rho;
+    uy = dot_prod(EY, fIn) / rho;
+}
+
+initializer InitFluid {
+    f.out[x, y | :] = W;
+}
+
+dynamic FluidDynamicIncompFused {
+    array[real, 9] fIn = upstream_dfs(f, x, y, {EX, EY});
+
+    // Incompressible moments -- u_x, u_y are MOMENTA (no division).
+    real delta_rho = (fIn[0] + fIn[1] + fIn[2] + fIn[3] + fIn[4]
+                    + fIn[5] + fIn[6] + fIn[7] + fIn[8]) - 1.0;
+    real u_x = fIn[1] - fIn[3] + fIn[5] - fIn[6] - fIn[7] + fIn[8];
+    real u_y = fIn[2] - fIn[4] + fIn[5] + fIn[6] - fIn[7] - fIn[8];
+
+    real u0Pu1 = u_x + u_y;
+    real u0Mu1 = u_x - u_y;
+    real f_eq_common = delta_rho - 1.5 * (u_x * u_x + u_y * u_y);
+
+    // Per-direction BGK update -- fully fused, no `1/rho`.
+    f.out[x, y | 0] = ONE_M_OMEGA * fIn[0] + K0 * f_eq_common;
+
+    f.out[x, y | 1] = ONE_M_OMEGA * fIn[1]
+                    + K_CARD * (f_eq_common + 3.0 * u_x + 4.5 * u_x * u_x);
+    f.out[x, y | 2] = ONE_M_OMEGA * fIn[2]
+                    + K_CARD * (f_eq_common + 3.0 * u_y + 4.5 * u_y * u_y);
+    f.out[x, y | 3] = ONE_M_OMEGA * fIn[3]
+                    + K_CARD * (f_eq_common - 3.0 * u_x + 4.5 * u_x * u_x);
+    f.out[x, y | 4] = ONE_M_OMEGA * fIn[4]
+                    + K_CARD * (f_eq_common - 3.0 * u_y + 4.5 * u_y * u_y);
+
+    f.out[x, y | 5] = ONE_M_OMEGA * fIn[5]
+                    + K_DIAG * (f_eq_common + 3.0 * u0Pu1 + 4.5 * u0Pu1 * u0Pu1);
+    f.out[x, y | 6] = ONE_M_OMEGA * fIn[6]
+                    + K_DIAG * (f_eq_common - 3.0 * u0Mu1 + 4.5 * u0Mu1 * u0Mu1);
+    f.out[x, y | 7] = ONE_M_OMEGA * fIn[7]
+                    + K_DIAG * (f_eq_common - 3.0 * u0Pu1 + 4.5 * u0Pu1 * u0Pu1);
+    f.out[x, y | 8] = ONE_M_OMEGA * fIn[8]
+                    + K_DIAG * (f_eq_common + 3.0 * u0Mu1 + 4.5 * u0Mu1 * u0Mu1);
+}
+
+gauge Hydro -> (real rho, real ux, real uy) {
+    {rho, ux, uy} = Macro(f.in[x, y | :]);
+}
+
+// Full-way bounce-back: the wall stores arriving fluid populations
+// reversed, and the fluid pulls them back on the following step.
+// The effective no-slip surfaces are at 0.5 and N-1.5, so L = N-2.
+dynamic BounceBack {
+    f.out[x, y | :] = bounce_back_dfs(f, x, y, {EX, EY});
+}
+
+dynamic MovingLid {
+    f.out[x, y | :] = bounce_back_dfs(f, x, y, {EX, EY}) + 6.0 * W * (EX * U_LID);
+}
+
+// Display the prescribed wall density and velocity.
+gauge BoundaryHydro -> (real rho, real ux, real uy) {
+    rho = 1.0;
+    ux = U_LID * real(y == N - 1);
+    uy = 0.0;
+}
+
+node_classes {
+    node_class FLUID(InitFluid, FluidDynamicIncompFused, Hydro);
+    node_class WALL(InitFluid, BounceBack, BoundaryHydro);
+    node_class LID(InitFluid, MovingLid, BoundaryHydro);
+}
+
+geometry {
+    nodes[:, :] = FLUID;
+    nodes[0, :] = WALL;
+    nodes[N - 1, :] = WALL;
+    nodes[:, 0] = WALL;
+    nodes[:, N - 1] = LID;
+}

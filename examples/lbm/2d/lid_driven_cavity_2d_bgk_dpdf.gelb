@@ -1,0 +1,135 @@
+// 2D lid-driven cavity flow -- D2Q9 BGK LBM, **incompressible LBM**
+// with **delta-PDF storage**.
+//
+// The incompressible formulation with zero-centred populations:
+//   incompressible LBM        -> momentum instead of velocity
+//   zero-centred populations  -> store g = f - W (delta-PDF)
+//
+// Algorithmic differences vs the standard compressible f-PDF version
+// (lid_driven_cavity_2d_bgk.gelb):
+//
+//   Compressible f-PDF (standard textbook BGK):
+//     rho = sum(f)
+//     u   = sum(EX*f) / rho                    <- divides by rho
+//     feq = W*rho*(1 + 3*eu + 4.5*eu^2 - 1.5*usq)  <- rho factor
+//
+//   Incompressible delta-PDF (this file):
+//     delta_rho = sum(g)                        (rho == 1 conceptually)
+//     u   = sum(EX*g)                           <- NO division by rho
+//     geq = W*(delta_rho + 3*eu + 4.5*eu^2 - 1.5*usq)  <- no rho factor
+//
+// The two models give physically slightly different solutions
+// (incompressible drops $O(Ma^3)$ terms relative to compressible) but
+// converge to the same incompressible-Navier-Stokes limit at low Ma.
+//
+// Storage transformation (g = f - W):
+//   * f_init = W                     ->  g_init = 0
+//   * BGK: g_new = $(1 - \omega)$ * g_old + $\omega$ * geq,  geq = feq - W
+//   * Bounce-back: g_new[x,y|i] = g_old[x+EX[i],y+EY[i]|opp(i)]   (paired weights cancel)
+//   * Moving-lid BB: g_new[x,y|i] = g_old[x+EX[i],y+EY[i]|opp(i)] + 6*W_i*(c_i . u_wall)
+//   * Gauge: rho_out = 1 + sum(g)
+//
+// Full-way bounce-back reads the same neighbouring opposite DFs as the
+// f-PDF version: paired W_i terms cancel. The lid correction uses
+// reference density 1 for this incompressible model.
+//
+// Parameters: same as the f-PDF version (N=65, U_LID=0.1, TAU=0.689).
+
+simulation_description("2D lid-driven cavity flow (LBM-BGK, D2Q9, incompressible delta-PDF)");
+
+global_constants {
+    const int N = 65;
+
+    const real U_LID = 0.1;
+    const real TAU = 0.689;
+    const real TAU_INV = 1.0 / TAU;
+
+    // D2Q9 lattice velocities
+    const array[real, 9] EX = {0.0, 1.0, 0.0, -1.0,  0.0, 1.0, -1.0, -1.0,  1.0};
+    const array[real, 9] EY = {0.0, 0.0, 1.0,  0.0, -1.0, 1.0,  1.0, -1.0, -1.0};
+
+    // D2Q9 weights
+    const array[real, 9] W = {4.0/9.0,
+        1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+}
+
+lattices {
+    // Stores g = f - W, not f.
+    lattice f(2, 9, real, {N, N}, {false, false});
+}
+
+// Macro: extract delta_rho, ux, uy from the g array.
+// Incompressible LBM: ux/uy are pure sums of EX*g, EY*g (no /rho).
+function Macro(array[real, 9] gIn) -> (real delta_rho, real ux, real uy) {
+    delta_rho = sum(gIn);
+    ux = dot_prod(EX, gIn);   // incompressible: u = sum(EX*g), no /rho
+    uy = dot_prod(EY, gIn);
+}
+
+// Incompressible equilibrium in delta-PDF form.
+// Drops $O(Ma^3)$ term that would otherwise couple delta_rho with the
+// u-polynomial.  Compile-time-constant coefficients * shared scalars.
+function GEq(real delta_rho, real ux, real uy) -> (array[real, 9] geq) {
+    real usq = ux*ux + uy*uy;
+    array[real, 9] eu = EX * ux + EY * uy;
+    geq = W * (delta_rho + 3.0*eu + 4.5*eu*eu - 1.5*usq);
+}
+
+initializer InitFluid {
+    // Rest state: f = W -> g = 0.
+    f.out[x, y | :] = 0.0;
+}
+
+dynamic FluidDynamic {
+    array[real, 9] gIn = upstream_dfs(f, x, y, {EX, EY});
+
+    real delta_rho;
+    real ux;
+    real uy;
+
+    {delta_rho, ux, uy} = Macro(gIn);
+
+    // BGK in delta form: g_new = g - tau_inv*(g - geq).
+    f.out[x, y | :] = gIn - TAU_INV * (gIn - GEq(delta_rho, ux, uy));
+}
+
+gauge Hydro -> (real rho, real ux, real uy) {
+    array[real, 9] gIn = f.in[x, y | :];
+    real delta_rho = sum(gIn);
+    rho = 1.0 + delta_rho;
+    ux = dot_prod(EX, gIn);   // incompressible velocity (no /rho)
+    uy = dot_prod(EY, gIn);
+}
+
+// Full-way bounce-back: the wall stores arriving fluid populations
+// reversed, and the fluid pulls them back on the following step.
+// The effective no-slip surfaces are at 0.5 and N-1.5, so L = N-2.
+dynamic BounceBack {
+    f.out[x, y | :] = bounce_back_dfs(f, x, y, {EX, EY});
+}
+
+dynamic MovingLid {
+    f.out[x, y | :] = bounce_back_dfs(f, x, y, {EX, EY}) + 6.0 * W * (EX * U_LID);
+}
+
+// Display the prescribed wall density and velocity.
+gauge BoundaryHydro -> (real rho, real ux, real uy) {
+    rho = 1.0;
+    ux = U_LID * real(y == N - 1);
+    uy = 0.0;
+}
+
+node_classes {
+    node_class FLUID(InitFluid, FluidDynamic, Hydro);
+    node_class WALL(InitFluid, BounceBack, BoundaryHydro);
+    node_class LID(InitFluid, MovingLid, BoundaryHydro);
+}
+
+geometry {
+    nodes[:, :] = FLUID;
+    nodes[0, :] = WALL;        // left wall
+    nodes[N - 1, :] = WALL;    // right wall
+    nodes[:, 0] = WALL;        // bottom wall
+    nodes[:, N - 1] = LID;     // top lid
+}

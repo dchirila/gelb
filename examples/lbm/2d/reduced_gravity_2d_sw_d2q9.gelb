@@ -1,0 +1,423 @@
+// ============================================================
+// 2D single-layer reduced-gravity shallow-water ocean -- D2Q9 LBM
+//
+// Reference: Salmon (1999), "The lattice Boltzmann method as a
+// basis for ocean circulation modeling", J. Marine Res. 57,
+// 503-535.  Specifically Section 3 (shallow-water D2Q9 with
+// full non-linear equilibria 3.13-3.15) and Figure 3a
+// (no-slip, 100x100 basin, double-gyre wind stress).
+//
+// Physics:
+//   * one active upper layer of depth h(x, y, t) over a passive
+//     abyss; reduced gravity g' (written here as G)
+//   * wind-stress forcing  $\tau_x(y) = -\tau_0 \cos(2\pi y / L)$,
+//                         $\tau_y$    = 0      (idealized double gyre:
+//                         easterlies at the north/south walls and
+//                         westerlies across the middle band, driving
+//                         a subpolar cyclone in the north and a
+//                         subtropical anticyclone in the south --
+//                         Salmon 1999 Sec. 3.4 / Fig 3a)
+//   * Ekman bottom friction via the  $h/(h + \delta_E)$  scaling of $\tau$
+//     (matters only when h drops to the Ekman depth; kept for
+//     faithfulness to Salmon)
+//   * Coriolis on a beta-plane:  $f(y) = f_0 + \beta y$
+//   * closed rectangular basin with half-way no-slip walls
+//
+// Collision is **MRT** in the Gram-Schmidt moments of
+// D2Q9 (Lallemand & Luo 2000; Krueger et al. 2017, ch. 10): the
+// shear stresses and the energy moment relax at OMEGA, so the
+// shear and bulk viscosities are those of BGK at the same OMEGA,
+// while the three non-hydrodynamic ("ghost") moments $\varepsilon, q_x, q_y$
+// relax at rate 1.  At Salmon's relaxation rate (OMEGA = 1.9) plain
+// BGK lets grid-scale ghost modes grow along the western boundary
+// until the run blows up (measured: at step 17 000 on the
+// 100x100 basin); damping the ghosts removes them without
+// changing the hydrodynamics.
+//
+// Forcing is injected via **Strang splitting** around the
+// collision (half -> collide -> half), so the combined forced
+// scheme retains 2nd-order accuracy in time.
+//
+// Coriolis stability subtlety
+// ---------------------------
+// In Salmon's units $f_0 \Delta t$ ~= 0.47. Explicit Euler applied to
+// the rotation  d(hu)/dt = f*hv,  d(hv)/dt = -f*hu  has per-step
+// amplification  $\sqrt{1 + (f \Delta t)^2}$ ~= 1.105, which drifts to
+// astronomical values over ~200K spin-up steps long before
+// viscous damping can absorb it.  We therefore use an **exact**
+// 2D rotation of (hu, hv) via `cos`/`sin` intrinsics, which
+// preserves $|hu|^2 + |hv|^2$ identically and is unconditionally
+// stable.
+//
+// Guo-style momentum injection
+// ----------------------------
+// The collision conserves h and (hu, hv): their relaxation rates are
+// zero, so whatever momentum the DFs carry before the collision
+// they carry after it.  The first half of the Strang force must
+// therefore already be in the DFs when the collision runs; we
+// inject the pre-collision momentum delta,
+//
+//   f_in_forced = f_in + w * 3 * (c . $\Delta F_{pre}$)
+//
+// so that `mom(f_in_forced) == (hu_h, hv_h)`, the momentum feq is
+// built from.  The second half-force is a second Guo injection
+// against (hu_h, hv_h) as the base, giving the final targeted
+// momentum exactly.  The leading-order Guo source
+//
+//   f_i += w_i * 3 * (c_i . $\Delta F$)           ($c_s^2 = 1/3$)
+//
+// exactly changes the (hu, hv) moment by ($\Delta hu, \Delta hv$) and leaves h
+// untouched.  Higher-moment errors are $O(Ma^2)$ and are relaxed by
+// the collision in the following step.
+//
+// Without the pre-collision injection the first half-force would
+// be lost (MRT) or applied with a weight $\omega$ instead of 1 (BGK, whose
+// post-collision moment is $(1 - \omega) * mom(f_{in}) + \omega * mom(feq)$); either way
+// the Guo delta of the second half is computed against the wrong
+// base, and the spurious force drives the basin unstable at
+// $\omega = 1.9$.
+
+// Wall BC
+// -------
+// Half-way bounce-back is delivered by the wall cell reading the
+// adjacent fluid cell's outgoing DFs in the bounced slots -- the
+// same pattern used by `rayleigh_benard_2d_mrt.gelb` and
+// `poiseuille_flow_2d_mrt.gelb`.  The basin has four edge-wall
+// classes + four single-cell corner classes; each corner class
+// handles exactly the one diagonal slot that points at its
+// sole diagonal fluid neighbor.  Wall classes are `masked`, so
+// their cells do not emit gauge output and show up as NaN in
+// the NetCDF file -- `gelb-view` then draws the basin outline
+// naturally.
+// ============================================================
+
+simulation_description("2D reduced-gravity shallow-water ocean (SW D2Q9 MRT, Salmon 1999)");
+
+global_constants {
+    // Grid size, walls included.  Salmon uses a 100x100 fluid
+    // grid; with one wall ring on each side that's 102x102 total.
+    const int NX = 102;
+    const int NY = 102;
+
+    // Dimensionless lattice units  ($c = \Delta t = 1$).
+    const real H0    = 1.0;    // mean layer depth
+    const real G     = 0.25;   // reduced gravity: $gh/c^2 = 0.5^2$
+    // Relaxation rate of the shear (and energy) moments: Salmon's
+    // $\lambda = 0.95 \lambda_{max}$ (Salmon 1999 Sec. 4, eq. 4.4), i.e. OMEGA = 1.9,
+    // $\nu = c_s^2 (1/OMEGA - 1/2)$ ~= 8.8e-3 in lattice units and a Munk
+    // western boundary layer $(\nu/\beta)^{1/3}$ ~= 1.4 cells.  The MRT
+    // collision below keeps this stable on Salmon's 100x100 basin.
+    // A more viscous, smoother basin: `-D OMEGA=1.2` ($\nu$ ~= 0.11).
+    const real OMEGA = 1.9;
+
+    // Coriolis parameters on a beta-plane, taken directly from
+    // Salmon Sec. 3.4:  $f_0 = (2\pi / \mathrm{day}) \Delta t$ with $\Delta t = 0.075$ day, and
+    // $\beta = f_0 / (6400\,\mathrm{km} / \Delta x)$ with $\Delta x = 40$ km -> factor 160.
+    const real F0   = 0.4712;          // ~= $2\pi * 0.075$
+    const real BETA = F0 / 160.0;
+
+    // Wind stress profile  $\tau_x(y) = -TAU0 * \cos(2\pi y / (NY - 1))$
+    // (classical Stommel/Munk double-gyre, Salmon Sec. 3.4).  TAU0 is
+    // Salmon's production value in lattice units.  Multiplied by
+    // the `min(1, t / T_RAMP)` ramp below, the basin sees zero
+    // stress at rest and reaches full forcing smoothly over the
+    // first T_RAMP steps -- long enough for viscous damping to
+    // absorb the initial gravity-wave transient.
+    const real TAU0 = 1.0e-4;
+    const real T_RAMP = 20000.0;
+    const real PI   = 3.14159265358979323846;
+    const real TWO_PI = 2.0 * PI;
+
+    // Ekman bottom friction:  $h/(h + \delta_E)$.  In these units
+    // $\delta_E / H_0$ = 100 m / 40 km ~= 0.0025.
+    const real DELTA_E = 0.0025;
+
+    // D2Q9 velocity set and weights
+    //   0=rest, 1=E, 2=N, 3=W, 4=S, 5=NE, 6=NW, 7=SW, 8=SE
+    const array[real, 9] EX = {0.0, 1.0, 0.0, -1.0,  0.0, 1.0, -1.0, -1.0,  1.0};
+    const array[real, 9] EY = {0.0, 0.0, 1.0,  0.0, -1.0, 1.0,  1.0, -1.0, -1.0};
+    const array[real, 9] W  = {4.0/9.0,
+                               1.0/9.0,  1.0/9.0,  1.0/9.0,  1.0/9.0,
+                               1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+
+    // Pressure-term coefficient array for Salmon's SW equilibrium:
+    //   slot 0 (rest):     -5/6
+    //   slots 1..8:       + w_i * 3/2
+    // Multiplied by $g h^2$ inside `FeqSW` this yields eqs 3.13-3.15
+    // exactly, with $\sum_i P\_COEF[i] = 0$ so $\sum h_i^{eq} = h$.
+    const array[real, 9] P_COEF = {-5.0/6.0,
+                                    1.0/6.0,  1.0/6.0,  1.0/6.0,  1.0/6.0,
+                                    1.0/24.0, 1.0/24.0, 1.0/24.0, 1.0/24.0};
+
+    // MRT: Gram-Schmidt moment basis of D2Q9 in the velocity order
+    // above (rows: $h, e, \varepsilon, j_x, q_x, j_y, q_y, p_{xx}, p_{xy}$), as in
+    // poiseuille_flow_2d_mrt.gelb.
+    const array[real, {9, 9}] M = {
+        { 1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0},
+        {-4.0, -1.0, -1.0, -1.0, -1.0,  2.0,  2.0,  2.0,  2.0},
+        { 4.0, -2.0, -2.0, -2.0, -2.0,  1.0,  1.0,  1.0,  1.0},
+        { 0.0,  1.0,  0.0, -1.0,  0.0,  1.0, -1.0, -1.0,  1.0},
+        { 0.0, -2.0,  0.0,  2.0,  0.0,  1.0, -1.0, -1.0,  1.0},
+        { 0.0,  0.0,  1.0,  0.0, -1.0,  1.0,  1.0, -1.0, -1.0},
+        { 0.0,  0.0, -2.0,  0.0,  2.0,  1.0,  1.0, -1.0, -1.0},
+        { 0.0,  1.0, -1.0,  1.0, -1.0,  0.0,  0.0,  0.0,  0.0},
+        { 0.0,  0.0,  0.0,  0.0,  0.0,  1.0, -1.0,  1.0, -1.0}};
+    const array[real, {9, 9}] M_INV = inverse(M);
+
+    // Relaxation rates per moment: h, j_x, j_y conserved (0); e,
+    // p_xx, p_xy at OMEGA (BGK's shear and bulk viscosity); the
+    // ghost moments $\varepsilon, q_x, q_y$ at S_GHOST.
+    const real S_GHOST = 1.0;
+    const array[real, 9] S_DIAG = {0.0, OMEGA, S_GHOST, 0.0, S_GHOST,
+                                   0.0, S_GHOST, OMEGA, OMEGA};
+}
+
+lattices {
+    // Closed basin: non-periodic in both axes.
+    lattice f(2, 9, real, {NX, NY}, {false, false});
+}
+
+// ---------- Equilibrium ----------
+//
+// Salmon's SW equilibrium (eqs 3.13-3.15) is, algebraically, the
+// standard D2Q9 BGK equilibrium with rho replaced by h *plus* a
+// "pressure-like" term proportional to $g h^2$ that encodes the
+// reduced-gravity surface-pressure gradient  $-\nabla(g h^2 / 2)$:
+//
+//   non-rest slots:  $+ w_i (3/2) g h^2$
+//   rest slot:       $-(5/6) g h^2$
+//
+// The two together preserve  $\sum_i h_i^{eq} = h$.
+function FeqSW(real h, real ux, real uy) -> (array[real, 9] feq) {
+    real usq = ux * ux + uy * uy;
+    array[real, 9] cu = EX * ux + EY * uy;
+
+    // Standard D2Q9 BGK equilibrium with $\rho \mapsto h$, plus Salmon's
+    // pressure-like term P_COEF * $g h^2$ (encoding $-\nabla(g h^2 / 2)$).
+    feq = W * h * (1.0 + 3.0 * cu + 4.5 * cu * cu - 1.5 * usq)
+          + P_COEF * (G * h * h);
+}
+
+// ---------- Initialization ----------
+//
+// Rest equilibrium everywhere (u = v = 0, h = H0).  Wall cells
+// use the same initializer: at rest the equilibrium is
+// symmetric (f_i^eq = f_{opp(i)}^eq for u=0), so every slot the
+// first-step bounce-back would read from a wall is already
+// correct without any special pre-population.
+initializer InitAll {
+    f.out[x, y | :] = FeqSW(H0, 0.0, 0.0);
+}
+
+// ---------- Bulk dynamic ----------
+dynamic BulkDynamic {
+    // Pull-stream and extract conserved moments.
+    array[real, 9] fIn = upstream_dfs(f, x, y, {EX, EY});
+    real h   = sum(fIn);
+    real hu0 = dot_prod(EX, fIn);
+    real hv0 = dot_prod(EY, fIn);
+
+    // Ekman-scaled double-gyre wind stress, y-only profile, with
+    // a linear spin-up ramp $\tau_0 * \min(1, t / T\_RAMP)$ that reaches
+    // full strength after T_RAMP outer-loop steps.
+    real bf    = h / (h + DELTA_E);
+    real ramp  = min(1.0, real(t) / T_RAMP);
+    real tau_x = -TAU0 * cos(TWO_PI * real(y) / real(NY - 1)) * ramp;
+
+    // Half-angle rotation coefficients for Coriolis.
+    real f_loc = F0 + BETA * real(y);
+    real ca    = cos(0.5 * f_loc);
+    real sa    = sin(0.5 * f_loc);
+
+    // --- 1st half force: wind/2 then rotate/2 ---
+    real hu_a = hu0 + 0.5 * bf * tau_x;
+    real hu_h =  ca * hu_a + sa * hv0;
+    real hv_h = -sa * hu_a + ca * hv0;
+
+    // Inject pre-collision momentum delta so mom(fInForced) = (hu_h, hv_h).
+    real d1_hu = hu_h - hu0;
+    real d1_hv = hv_h - hv0;
+    array[real, 9] fInForced = fIn + W * 3.0 * (EX * d1_hu + EY * d1_hv);
+
+    // --- MRT collision: feq built from (hu_h, hv_h) matches mom(fInForced);
+    // h, j_x, j_y are conserved (S_DIAG = 0), so the first moment
+    // after collision is exactly (hu_h, hv_h).
+    array[real, 9] feq   = FeqSW(h, hu_h / h, hv_h / h);
+    array[real, 9] mom   = matmul(M, fInForced);
+    mom = mom - S_DIAG * (mom - matmul(M, feq));
+    array[real, 9] fPost = matmul(M_INV, mom);
+
+    // --- 2nd half force: rotate/2 then wind/2 (symmetric to the first half) ---
+    real hu_b =  ca * hu_h + sa * hv_h;
+    real hv_f = -sa * hu_h + ca * hv_h;
+    real hu_f = hu_b + 0.5 * bf * tau_x;
+
+    // Inject post-collision momentum delta.
+    real d2_hu = hu_f - hu_h;
+    real d2_hv = hv_f - hv_h;
+    f.out[x, y | :] = fPost + W * 3.0 * (EX * d2_hu + EY * d2_hv);
+}
+
+// ---------- Wall dynamics ----------
+//
+// For a wall cell at position P, each "bounced" slot d is set to
+// the adjacent fluid cell's outgoing DF in the opposite direction,
+// so that when the fluid cell runs `upstream_dfs` next step and
+// pulls slot d from P, it receives its own reflected outgoing DF.
+//
+// D2Q9 opposite pairs:  E (1) <-> W (3);  N (2) <-> S (4);
+//                       NE (5) <-> SW (7);  NW (6) <-> SE (8).
+
+// Bottom wall (y = 0, interior x).  Fluid at (x, 1) pulls
+// slots 2, 5, 6 from (x, 0), (x-1, 0), (x+1, 0) respectively.
+dynamic WallBotDynamic {
+    f.out[x, y | 0] = 0.0;
+    f.out[x, y | 1] = 0.0;
+    f.out[x, y | 2] = f.in[x,     y + 1 | 4];   // N  <- S  at fluid (x,   1)
+    f.out[x, y | 3] = 0.0;
+    f.out[x, y | 4] = 0.0;
+    f.out[x, y | 5] = f.in[x + 1, y + 1 | 7];   // NE <- SW at fluid (x+1, 1)
+    f.out[x, y | 6] = f.in[x - 1, y + 1 | 8];   // NW <- SE at fluid (x-1, 1)
+    f.out[x, y | 7] = 0.0;
+    f.out[x, y | 8] = 0.0;
+}
+
+// Top wall (y = NY-1, interior x).  The reader of wall slot 7
+// (SW) is fluid at (x-1, NY-2), and the reader of slot 8 (SE) is
+// fluid at (x+1, NY-2) -- the MIRROR of the bottom wall's (5, 6)
+// pair, obtained by negating EY in the pull-stream equations.
+dynamic WallTopDynamic {
+    f.out[x, y | 0] = 0.0;
+    f.out[x, y | 1] = 0.0;
+    f.out[x, y | 2] = 0.0;
+    f.out[x, y | 3] = 0.0;
+    f.out[x, y | 4] = f.in[x,     y - 1 | 2];   // S  <- N  at fluid (x,   NY-2)
+    f.out[x, y | 5] = 0.0;
+    f.out[x, y | 6] = 0.0;
+    f.out[x, y | 7] = f.in[x - 1, y - 1 | 5];   // SW <- NE at fluid (x-1, NY-2)
+    f.out[x, y | 8] = f.in[x + 1, y - 1 | 6];   // SE <- NW at fluid (x+1, NY-2)
+}
+
+// Left wall (x = 0, interior y).  Fluid at (1, y) pulls
+// slots 1, 5, 8 from (0, y), (0, y-1), (0, y+1) respectively.
+dynamic WallLeftDynamic {
+    f.out[x, y | 0] = 0.0;
+    f.out[x, y | 1] = f.in[x + 1, y     | 3];   // E  <- W  at fluid (1, y)
+    f.out[x, y | 2] = 0.0;
+    f.out[x, y | 3] = 0.0;
+    f.out[x, y | 4] = 0.0;
+    f.out[x, y | 5] = f.in[x + 1, y + 1 | 7];   // NE <- SW at fluid (1, y+1)
+    f.out[x, y | 6] = 0.0;
+    f.out[x, y | 7] = 0.0;
+    f.out[x, y | 8] = f.in[x + 1, y - 1 | 6];   // SE <- NW at fluid (1, y-1)
+}
+
+// Right wall (x = NX-1, interior y).
+dynamic WallRightDynamic {
+    f.out[x, y | 0] = 0.0;
+    f.out[x, y | 1] = 0.0;
+    f.out[x, y | 2] = 0.0;
+    f.out[x, y | 3] = f.in[x - 1, y     | 1];   // W  <- E  at fluid (NX-2, y)
+    f.out[x, y | 4] = 0.0;
+    f.out[x, y | 5] = 0.0;
+    f.out[x, y | 6] = f.in[x - 1, y + 1 | 8];   // NW <- SE at fluid (NX-2, y+1)
+    f.out[x, y | 7] = f.in[x - 1, y - 1 | 5];   // SW <- NE at fluid (NX-2, y-1)
+    f.out[x, y | 8] = 0.0;
+}
+
+// Corner (0, 0): only the NE slot is consumed by the sole
+// diagonal fluid neighbor at (1, 1).
+dynamic WallBLDynamic {
+    f.out[x, y | 0] = 0.0;
+    f.out[x, y | 1] = 0.0;
+    f.out[x, y | 2] = 0.0;
+    f.out[x, y | 3] = 0.0;
+    f.out[x, y | 4] = 0.0;
+    f.out[x, y | 5] = f.in[x + 1, y + 1 | 7];   // NE <- SW at fluid (1, 1)
+    f.out[x, y | 6] = 0.0;
+    f.out[x, y | 7] = 0.0;
+    f.out[x, y | 8] = 0.0;
+}
+
+// Corner (NX-1, 0): only the NW slot is consumed, by fluid (NX-2, 1).
+dynamic WallBRDynamic {
+    f.out[x, y | 0] = 0.0;
+    f.out[x, y | 1] = 0.0;
+    f.out[x, y | 2] = 0.0;
+    f.out[x, y | 3] = 0.0;
+    f.out[x, y | 4] = 0.0;
+    f.out[x, y | 5] = 0.0;
+    f.out[x, y | 6] = f.in[x - 1, y + 1 | 8];   // NW <- SE at fluid (NX-2, 1)
+    f.out[x, y | 7] = 0.0;
+    f.out[x, y | 8] = 0.0;
+}
+
+// Corner (0, NY-1): only the SE slot is consumed, by fluid (1, NY-2).
+dynamic WallTLDynamic {
+    f.out[x, y | 0] = 0.0;
+    f.out[x, y | 1] = 0.0;
+    f.out[x, y | 2] = 0.0;
+    f.out[x, y | 3] = 0.0;
+    f.out[x, y | 4] = 0.0;
+    f.out[x, y | 5] = 0.0;
+    f.out[x, y | 6] = 0.0;
+    f.out[x, y | 7] = 0.0;
+    f.out[x, y | 8] = f.in[x + 1, y - 1 | 6];   // SE <- NW at fluid (1, NY-2)
+}
+
+// Corner (NX-1, NY-1): only the SW slot is consumed, by fluid (NX-2, NY-2).
+dynamic WallTRDynamic {
+    f.out[x, y | 0] = 0.0;
+    f.out[x, y | 1] = 0.0;
+    f.out[x, y | 2] = 0.0;
+    f.out[x, y | 3] = 0.0;
+    f.out[x, y | 4] = 0.0;
+    f.out[x, y | 5] = 0.0;
+    f.out[x, y | 6] = 0.0;
+    f.out[x, y | 7] = f.in[x - 1, y - 1 | 5];   // SW <- NE at fluid (NX-2, NY-2)
+    f.out[x, y | 8] = 0.0;
+}
+
+// ---------- Gauge ----------
+//
+// Output physical fields.  Velocities are divided by h so that
+// `gelb-view` shows them directly as (u, v) in lattice units.
+// Multiply depth by 500 m and velocities by 540 km/day to
+// recover Salmon's dimensional values.
+gauge OceanGauge -> (real depth, real uX, real uY) {
+    array[real, 9] f_in = f.in[x, y | :];
+    real h  = sum(f_in);
+    real hu = dot_prod(EX, f_in);
+    real hv = dot_prod(EY, f_in);
+    depth = h;
+    uX    = hu / h;
+    uY    = hv / h;
+}
+
+node_classes {
+    node_class FLUID(InitAll, BulkDynamic, OceanGauge);
+    // Wall classes are masked: their cells participate in the
+    // simulation (their dynamics deliver the bounce-back BC)
+    // but they emit no gauge output, so NetCDF records NaN at
+    // every wall cell and `gelb-view` shows the basin outline.
+    node_class WALL_BOT  (InitAll, WallBotDynamic)   masked;
+    node_class WALL_TOP  (InitAll, WallTopDynamic)   masked;
+    node_class WALL_LEFT (InitAll, WallLeftDynamic)  masked;
+    node_class WALL_RIGHT(InitAll, WallRightDynamic) masked;
+    node_class WALL_BL   (InitAll, WallBLDynamic)    masked;
+    node_class WALL_BR   (InitAll, WallBRDynamic)    masked;
+    node_class WALL_TL   (InitAll, WallTLDynamic)    masked;
+    node_class WALL_TR   (InitAll, WallTRDynamic)    masked;
+}
+
+geometry {
+    nodes[:, :]           = FLUID;
+    nodes[:, 0]           = WALL_BOT;
+    nodes[:, NY - 1]      = WALL_TOP;
+    nodes[0, :]           = WALL_LEFT;
+    nodes[NX - 1, :]      = WALL_RIGHT;
+    nodes[0, 0]           = WALL_BL;
+    nodes[NX - 1, 0]      = WALL_BR;
+    nodes[0, NY - 1]      = WALL_TL;
+    nodes[NX - 1, NY - 1] = WALL_TR;
+}

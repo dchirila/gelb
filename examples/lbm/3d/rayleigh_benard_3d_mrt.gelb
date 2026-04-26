@@ -1,0 +1,553 @@
+// ============================================================
+// 3D Rayleigh-Benard convection -- D3Q19 fluid + D3Q7 temperature
+//
+// Port of the reference Fortran solver in
+// `results_for_phd_thesis__Nov_2017/rb_3d/runs__*/Pr_*/Ra_*/`
+// (`MrtSolverBoussinesq3D_class.f90`, CUDA Fortran).
+//
+//   * D3Q19 fluid + D3Q7 temperature, both MRT collision
+//   * d'Humieres moment ordering
+//     [rho, e, eps, jx, qx, jy, qy, jz, qz,
+//      3pxx, 3pixx, pww, piww, pxy, pyz, pxz, mx, my, mz]
+//   * BGK-equivalent relaxation rates (all non-conserved = S_NU)
+//     -- the d'Humieres "optimal" non-hydro rates (1.19, 1.4,
+//     1.2, 1.98) cause grid-scale instabilities on coarse grids
+//   * Equilibrium via matmul(M, feq_BGK) rather than hand-written
+//     moment-space expressions (which are sensitive to M-matrix
+//     normalization -- same lesson as the 3D Poiseuille example)
+//   * Boussinesq buoyancy Strang-split into the jy moment
+//     (half before / half after the collision)
+//   * D3Q7 temperature with Wang/Yoshida relaxation
+//   * Yoshida anti-bounce-back temperature BC (0.25*T_wall)
+//   * Half-way fluid bounce-back via wall-cell-reads-fluid
+//
+// For the Fortran-matching grid: -D NY=43 -D RA=1700.0
+// ============================================================
+
+simulation_description("3D Rayleigh-Bénard convection (MRT, Fortran-reference port)");
+
+global_constants {
+    const int NY = 16;
+    const int NX = 2 * NY;
+    const int NZ = 2 * NY;
+
+    // Dimensionless numbers
+    const real RA = 10000.0;
+    const real PR = 0.71;
+    const real MAX_MACH = 0.1;
+
+    // Derived LBM parameters (Fortran rb_3d.f90 mirror of
+    // rb_2d.f90 lines 79-83; same formulas).
+    //
+    // CRITICAL: same NY-vs-(NY-2) caveat as in the 2D example.
+    // The Fortran reference uses ``Ny`` = *fluid-row count*, so
+    // the GeLB analogue is ``NY - 2``. Using ``NY`` directly
+    // would shift the effective Rayleigh number by
+    // ``((NY-2)/NY)^3``.
+    const real ALPHA_G    = MAX_MACH * MAX_MACH / (3.0 * real(NY - 2));
+    const real VISCOSITY  = real(NY - 2) * MAX_MACH * sqrt(PR / (3.0 * RA));
+    const real DIFFUSIVITY = real(NY - 2) * MAX_MACH / sqrt(3.0 * RA * PR);
+
+    // D3Q19 MRT relaxation rates.
+    // `S_NU = $1/(3\nu + 1/2)$` is the shear-viscosity rate.
+    const real S_NU = 1.0 / (3.0 * VISCOSITY + 0.5);
+
+    // Relaxation vector in d'Humieres moment ordering:
+    //   [rho, e, eps, jx, qx, jy, qy, jz, qz,
+    //    3pxx, 3pixx, pww, piww, pxy, pyz, pxz, mx, my, mz]
+    //
+    // BGK-equivalent rates (all non-conserved = S_NU). This avoids
+    // the instability of the d'Humieres "optimal" non-hydrodynamic
+    // rates (1.19, 1.4, 1.2, 1.98) on coarse grids -- the same
+    // lesson as the 3D Poiseuille case and consistent with the 2D
+    // RB-MRT example which also uses BGK-like rates.
+    const array[real, 19] S_FLUID = {
+        0.0,    // rho   -- conserved
+        S_NU,   // e
+        S_NU,   // eps
+        0.0,    // jx    -- conserved
+        S_NU,   // qx
+        0.0,    // jy    -- conserved
+        S_NU,   // qy
+        0.0,    // jz    -- conserved
+        S_NU,   // qz
+        S_NU,   // 3pxx  (shear viscosity)
+        S_NU,   // 3pixx
+        S_NU,   // pww   (shear viscosity)
+        S_NU,   // piww
+        S_NU,   // pxy   (shear viscosity)
+        S_NU,   // pyz   (shear viscosity)
+        S_NU,   // pxz   (shear viscosity)
+        S_NU,   // mx
+        S_NU,   // my
+        S_NU    // mz
+    };
+
+    // D3Q7 MRT relaxation rates (Fortran lines 348-351).
+    // `S_A = $2/(8\kappa + 1)$` is the thermal-diffusion rate shared
+    // by moments 1-3 (jxT, jyT, jzT).
+    const real S_A = 2.0 / (8.0 * DIFFUSIVITY + 1.0);
+
+    // Fortran mRelaxVecTemp(0) = 1 (conserved rho_T; the exact
+    // value is a no-op since tempMoms(0) already equals its
+    // equilibrium). We mirror the Fortran literal for a
+    // bit-faithful port.
+    const array[real, 7] S_TEMP = {
+        1.0,    // rho_T -- conserved (rate irrelevant)
+        S_A,    // jxT
+        S_A,    // jyT
+        S_A,    // jzT
+        1.9,    // e_T
+        1.9,    // anti-xy
+        1.9     // anti-yz
+    };
+
+    // Temperature equilibrium parameter (Fortran line 79:
+    //   real(RK), parameter :: aParam = -3./4).
+    const real A_PARAM = -3.0 / 4.0;
+
+    // Wall temperatures (Fortran lines 10-12:
+    //   TEMP_HOT_WALL = 1, TEMP_COLD_WALL = 0).
+    const real T_HOT  = 1.0;
+    const real T_COLD = 0.0;
+
+    // IC seeding for the convective instability. Mirrors Fortran
+    // lines 353, 415-422: a localized delta of amplitude
+    // ``T_HOT / 1e5`` at the single cell ``(x = NX/2, y = 2)``
+    // (matching Fortran's ``(Nx/2+1, 2)`` in 1-based indexing)
+    // *for every z*, plus uniform random noise of amplitude
+    // ``T_HOT / 1e8`` elsewhere.  The delta is a LINE along z,
+    // not a point -- Fortran seeds the entire x=Nx/2+1, y=2 column
+    // uniformly in z.
+    const real IC_NOISE_AMP    = T_HOT / 1.0e8;
+    const real DELTA_PERTURB   = T_HOT / 1.0e5;
+    const int  DELTA_PERTURB_X = NX / 2;
+    const int  DELTA_PERTURB_Y = 2;
+
+    // D3Q19 lattice velocities (GeLB ordering -- rest + 6 face + 12 edge).
+    // Index:   0   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16  17  18
+    const array[real, 19] EX = { 0.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 1.0,-1.0, 1.0,-1.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0};
+    const array[real, 19] EY = { 0.0, 0.0, 0.0, 1.0,-1.0, 0.0, 0.0, 1.0,-1.0,-1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 1.0,-1.0};
+    const array[real, 19] EZ = { 0.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0,-1.0, 1.0, 1.0,-1.0,-1.0, 1.0};
+    const array[real, 19] W  = {1.0/3.0,
+        1.0/18.0, 1.0/18.0, 1.0/18.0, 1.0/18.0, 1.0/18.0, 1.0/18.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+
+    // D3Q19 MRT transformation matrix in d'Humieres moment ordering
+    // (cross-checked against `taylor_green_vortex_3d_mrt.gelb` and
+    // Fortran `dfs_to_moments_fluid.incf90`). Column indices match
+    // the GeLB DF ordering above (not the Fortran DF ordering, which
+    // differs at edge DFs 8/10, 12/14, 16/18), but the resulting
+    // moment-space vector has the same semantics (moment k here =
+    // moment k in Fortran).
+    const array[real, {19, 19}] M = {
+        { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0},  // rho
+        {-30.0,-11.0,-11.0,-11.0,-11.0,-11.0,-11.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0},  // e
+        { 12.0,-4.0,-4.0,-4.0,-4.0,-4.0,-4.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0},  // eps
+        { 0.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 1.0,-1.0, 1.0,-1.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0},  // jx
+        { 0.0,-4.0, 4.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 1.0,-1.0, 1.0,-1.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0},  // qx
+        { 0.0, 0.0, 0.0, 1.0,-1.0, 0.0, 0.0, 1.0,-1.0,-1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 1.0,-1.0},  // jy
+        { 0.0, 0.0, 0.0,-4.0, 4.0, 0.0, 0.0, 1.0,-1.0,-1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 1.0,-1.0},  // qy
+        { 0.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0,-1.0, 1.0, 1.0,-1.0,-1.0, 1.0},  // jz
+        { 0.0, 0.0, 0.0, 0.0, 0.0,-4.0, 4.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0,-1.0, 1.0, 1.0,-1.0,-1.0, 1.0},  // qz
+        { 0.0, 2.0, 2.0,-1.0,-1.0,-1.0,-1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,-2.0,-2.0,-2.0,-2.0},  // 3pxx
+        { 0.0,-4.0,-4.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,-2.0,-2.0,-2.0,-2.0},  // 3pixx
+        { 0.0, 0.0, 0.0, 1.0, 1.0,-1.0,-1.0, 1.0, 1.0, 1.0, 1.0,-1.0,-1.0,-1.0,-1.0, 0.0, 0.0, 0.0, 0.0},  // pww
+        { 0.0, 0.0, 0.0,-2.0,-2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0,-1.0,-1.0,-1.0,-1.0, 0.0, 0.0, 0.0, 0.0},  // piww
+        { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0,-1.0,-1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0},  // pxy
+        { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0,-1.0,-1.0},  // pyz
+        { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0,-1.0,-1.0, 0.0, 0.0, 0.0, 0.0},  // pxz
+        { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0,-1.0, 1.0,-1.0, 1.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0},  // mx
+        { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,-1.0, 1.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0,-1.0, 1.0},  // my
+        { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0, 1.0,-1.0,-1.0, 1.0,-1.0, 1.0}   // mz
+    };
+    const array[real, {19, 19}] M_INV = inverse(M);
+
+    // D3Q7 lattice velocities (rest + 6 face).
+    //   0=rest, 1=+x, 2=-x, 3=+y, 4=-y, 5=+z, 6=-z
+    const array[real, 7] EX7 = {0.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0};
+    const array[real, 7] EY7 = {0.0, 0.0, 0.0, 1.0,-1.0, 0.0, 0.0};
+    const array[real, 7] EZ7 = {0.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0};
+
+    // D3Q7 transformation matrix N. Rows match the Fortran
+    // `dfs_to_moments_temperature.incf90` expansion:
+    //   rho_T   : f0 + f1 + f2 + f3 + f4 + f5 + f6
+    //   jxT     : f1 - f2
+    //   jyT     : f3 - f4
+    //   jzT     : f5 - f6
+    //   e_T     : -6*f0 + f1 + f2 + f3 + f4 + f5 + f6
+    //   anti-xy : f1 + f2 - f3 - f4
+    //   anti-yz : f1 + f2 + f3 + f4 - 2*f5 - 2*f6
+    const array[real, {7, 7}] N = {
+        { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0},  // rho_T
+        { 0.0, 1.0,-1.0, 0.0, 0.0, 0.0, 0.0},  // jxT
+        { 0.0, 0.0, 0.0, 1.0,-1.0, 0.0, 0.0},  // jyT
+        { 0.0, 0.0, 0.0, 0.0, 0.0, 1.0,-1.0},  // jzT
+        {-6.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0},  // e_T
+        { 0.0, 1.0, 1.0,-1.0,-1.0, 0.0, 0.0},  // anti-xy
+        { 0.0, 1.0, 1.0, 1.0, 1.0,-2.0,-2.0}   // anti-yz
+    };
+    const array[real, {7, 7}] N_INV = inverse(N);
+}
+
+lattices {
+    // Periodic in x and z; walls (non-periodic) in y.
+    lattice f(3, 19, real, {NX, NY, NZ}, {true, false, true});
+    lattice g(3,  7, real, {NX, NY, NZ}, {true, false, true});
+}
+
+// ---------- Helper functions ----------
+
+// Standard BGK equilibrium in distribution-function space.
+// The equilibrium moments are computed as meq = matmul(M, Eq(...))
+// in the collision step.  This avoids hand-written moment-space
+// equilibrium expressions that are sensitive to M-matrix normalization.
+function Eq(real rho, real ux, real uy, real uz) -> (array[real, 19] feq) {
+    real usq = ux*ux + uy*uy + uz*uz;
+    array[real, 19] eu = EX * ux + EY * uy + EZ * uz;
+    feq = W * rho * (1.0 + 3.0*eu + 4.5*eu*eu - 1.5*usq);
+}
+
+// D3Q7 temperature equilibrium moments (Fortran lines 238-243).
+// Fortran uses `temp*(jX/rho)`, where rho = fluidMoms(0) ~= 1
+// is the full density and jX/rho gives the velocity.
+function TempEqMoments(real T, real rho, real uX, real uY, real uZ)
+        -> (array[real, 7] neq) {
+    neq = { T,                            // 0 rho_T
+            T * (uX / rho),              // 1 jxT
+            T * (uY / rho),              // 2 jyT
+            T * (uZ / rho),              // 3 jzT
+            A_PARAM * T,                  // 4 e_T
+            0.0,                          // 5 anti-xy
+            0.0                           // 6 anti-yz
+    };
+}
+
+// ---------- Initializer ----------
+
+// Quadratic $\delta\rho$ profile + linear T profile + localized delta
+// perturbation + uniform random noise. Mirrors
+// `MrtSolverBoussinesq3D_class.f90` lines 407-422.
+//
+// NOTE: the same NY-vs-(NY-2) rule applies here as for the
+// derived constants -- the quadratic and linear profiles use
+// ``NY - 2`` (= fluid row count), *not* ``NY``.
+initializer InitBulk {
+    // Quadratic $\delta\rho$ profile (Fortran lines 409-410, with
+    // Ny replaced by NY-2 for GeLB's wall-inclusive NY).
+    real dRho = (3.0 * ALPHA_G / (2.0 * real(NY - 2))) *
+                (real(y) - 0.5) * (real(NY - 2) + 0.5 - real(y));
+
+    // Linear T profile + uniform noise + localized delta
+    // (Fortran lines 415-422).  The delta is a LINE along z:
+    // no z-predicate, matching Fortran's unconditional
+    // ``if (x == Nx/2+1 .and. y == 2)`` inside the z loop.
+    real T_init =
+        1.0 - (2.0 * real(y) - 1.0) / (2.0 * real(NY - 2))
+        + (random() - 0.5) * IC_NOISE_AMP
+        + DELTA_PERTURB * real(x == DELTA_PERTURB_X && y == DELTA_PERTURB_Y);
+
+    // Non-equilibrium IC: only the rho moment is populated for
+    // the fluid and only the rho_T moment for the temperature.
+    // Higher moments are left at zero -- the MRT collision
+    // relaxes them into equilibrium over the first few steps,
+    // generating the characteristic Fortran-reference start-up
+    // transient that seeds the critical eigenmode.
+    // The Fortran reference stores the FULL density (1 + dRho) in
+    // moment 0, not just the deviation. This is load-bearing:
+    // the equilibrium expressions (FluidEqMoments) are written for
+    // rho ~= 1, and without the background density the energy
+    // equilibrium is O(1e-4) instead of O(10), causing immediate
+    // blowup.
+    array[real, 19] m_init = {1.0 + dRho, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                              0.0,  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    f.out[x, y, z | :] = matmul(M_INV, m_init);
+
+    array[real, 7] n_init = {T_init, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    g.out[x, y, z | :] = matmul(N_INV, n_init);
+}
+
+// Wall initializers -- pre-populate the wall cells with the
+// bounce-back values that the adjacent fluid cells will need at
+// step 1. Mirrors Fortran lines 454-467, which fills the OLD
+// buffer at the wall cells (y=0 and y=Ny+1) with the IC
+// outgoing DFs from the adjacent fluid cells before the time
+// loop starts.
+//
+// Because the IC dRho/T profiles depend only on y (not on x or
+// z), every fluid column at y=1 (or y=NY-2) has the same
+// outgoing DFs, so we can pre-compute them once per wall.
+initializer InitWallBot {
+    // m_init at the adjacent fluid row y=1
+    real dRho_y1 = (3.0 * ALPHA_G / (2.0 * real(NY - 2))) *
+                   (1.0 - 0.5) * (real(NY - 2) + 0.5 - 1.0);
+    array[real, 19] m_init_y1 =
+        {1.0 + dRho_y1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+         0.0,           0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    array[real, 19] f_init_y1 = matmul(M_INV, m_init_y1);
+
+    // Slots that the adjacent fluid at (x, 1, z) will pull from
+    // the wall cell at (x, 0, z). Each slot d with EY[d] > 0:
+    //   wall[d] = f_fluid_source[OPP(d)]
+    // where the fluid source is at (x+EX[d], 1, z+EZ[d]) and
+    // OPP(d) reverses (EX, EY, EZ). Because the IC is x- and
+    // z-translation invariant, we use the same f_init_y1 for
+    // every such fluid source.
+    //
+    //   d=3  (0,+1, 0): source (x,   1, z),   OPP=4
+    //   d=7  (+1,+1, 0): source (x+1, 1, z),  OPP=8
+    //   d=10 (-1,+1, 0): source (x-1, 1, z),  OPP=9
+    //   d=15 (0,+1,+1): source (x,   1, z+1), OPP=16
+    //   d=17 (0,+1,-1): source (x,   1, z-1), OPP=18
+    f.out[x, y, z |  0] = 0.0;
+    f.out[x, y, z |  1] = 0.0;
+    f.out[x, y, z |  2] = 0.0;
+    f.out[x, y, z |  3] = f_init_y1[4];
+    f.out[x, y, z |  4] = 0.0;
+    f.out[x, y, z |  5] = 0.0;
+    f.out[x, y, z |  6] = 0.0;
+    f.out[x, y, z |  7] = f_init_y1[8];
+    f.out[x, y, z |  8] = 0.0;
+    f.out[x, y, z |  9] = 0.0;
+    f.out[x, y, z | 10] = f_init_y1[9];
+    f.out[x, y, z | 11] = 0.0;
+    f.out[x, y, z | 12] = 0.0;
+    f.out[x, y, z | 13] = 0.0;
+    f.out[x, y, z | 14] = 0.0;
+    f.out[x, y, z | 15] = f_init_y1[16];
+    f.out[x, y, z | 16] = 0.0;
+    f.out[x, y, z | 17] = f_init_y1[18];
+    f.out[x, y, z | 18] = 0.0;
+
+    // Temperature: only the +y slot (index 3 in D3Q7) needs
+    // pre-population with the Yoshida-corrected value. The
+    // noise-free T at y=1 is used; the O(1e-8) noise mismatch
+    // is negligible.
+    real T_y1 = 1.0 - (2.0 * 1.0 - 1.0) / (2.0 * real(NY - 2));
+    array[real, 7] n_init_y1 = {T_y1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    array[real, 7] g_init_y1 = matmul(N_INV, n_init_y1);
+    g.out[x, y, z | 0] = 0.0;
+    g.out[x, y, z | 1] = 0.0;
+    g.out[x, y, z | 2] = 0.0;
+    g.out[x, y, z | 3] = -g_init_y1[4] + 0.25 * T_HOT;
+    g.out[x, y, z | 4] = 0.0;
+    g.out[x, y, z | 5] = 0.0;
+    g.out[x, y, z | 6] = 0.0;
+}
+
+initializer InitWallTop {
+    // Symmetric: adjacent fluid row is y = NY - 2.
+    real dRho_top = (3.0 * ALPHA_G / (2.0 * real(NY - 2))) *
+                    (real(NY - 2) - 0.5) *
+                    (real(NY - 2) + 0.5 - real(NY - 2));
+    array[real, 19] m_init_top =
+        {1.0 + dRho_top, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+         0.0,            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    array[real, 19] f_init_top = matmul(M_INV, m_init_top);
+
+    // Slots with EY[d] < 0 at the top wall:
+    //   d=4  (0,-1, 0): source (x,   NY-2, z),   OPP=3
+    //   d=8  (-1,-1, 0): source (x-1, NY-2, z),  OPP=7
+    //   d=9  (+1,-1, 0): source (x+1, NY-2, z),  OPP=10
+    //   d=16 (0,-1,-1): source (x,   NY-2, z-1), OPP=15
+    //   d=18 (0,-1,+1): source (x,   NY-2, z+1), OPP=17
+    f.out[x, y, z |  0] = 0.0;
+    f.out[x, y, z |  1] = 0.0;
+    f.out[x, y, z |  2] = 0.0;
+    f.out[x, y, z |  3] = 0.0;
+    f.out[x, y, z |  4] = f_init_top[3];
+    f.out[x, y, z |  5] = 0.0;
+    f.out[x, y, z |  6] = 0.0;
+    f.out[x, y, z |  7] = 0.0;
+    f.out[x, y, z |  8] = f_init_top[7];
+    f.out[x, y, z |  9] = f_init_top[10];
+    f.out[x, y, z | 10] = 0.0;
+    f.out[x, y, z | 11] = 0.0;
+    f.out[x, y, z | 12] = 0.0;
+    f.out[x, y, z | 13] = 0.0;
+    f.out[x, y, z | 14] = 0.0;
+    f.out[x, y, z | 15] = 0.0;
+    f.out[x, y, z | 16] = f_init_top[15];
+    f.out[x, y, z | 17] = 0.0;
+    f.out[x, y, z | 18] = f_init_top[17];
+
+    real T_top = 1.0 - (2.0 * real(NY - 2) - 1.0) / (2.0 * real(NY - 2));
+    array[real, 7] n_init_top = {T_top, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    array[real, 7] g_init_top = matmul(N_INV, n_init_top);
+    g.out[x, y, z | 0] = 0.0;
+    g.out[x, y, z | 1] = 0.0;
+    g.out[x, y, z | 2] = 0.0;
+    g.out[x, y, z | 3] = 0.0;
+    g.out[x, y, z | 4] = -g_init_top[3] + 0.25 * T_COLD;
+    g.out[x, y, z | 5] = 0.0;
+    g.out[x, y, z | 6] = 0.0;
+}
+
+// ---------- Bulk dynamic ----------
+
+// Coupled D3Q19+D3Q7 MRT collision with Strang-split Boussinesq
+// buoyancy. Mirrors Fortran lines 152-265.
+dynamic BulkDynamic {
+    // Pull-stream both lattices.
+    array[real, 19] fIn = upstream_dfs(f, x, y, z, {EX, EY, EZ});
+    array[real,  7] gIn = upstream_dfs(g, x, y, z, {EX7, EY7, EZ7});
+
+    // Moment transforms.
+    array[real, 19] fluidMoms = matmul(M, fIn);
+    array[real,  7] tempMoms  = matmul(N, gIn);
+
+    // Strang splitting: 1st half of buoyancy force into the jy
+    // moment (index 5 in d'Humieres ordering). Fortran line 200.
+    fluidMoms = fluidMoms +
+        {0.0, 0.0, 0.0, 0.0, 0.0,
+         0.5 * ALPHA_G * tempMoms[0],
+         0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+
+    // Read macros AFTER the half-force (Fortran lines 211-218).
+    // rho is the FULL density (~= 1); jX/jY/jZ are momenta.
+    real rho  = fluidMoms[0];
+    real jX   = fluidMoms[3];
+    real jY   = fluidMoms[5];
+    real jZ   = fluidMoms[7];
+    real T    = tempMoms[0];
+
+    // Velocities from momenta (needed for Eq and TempEqMoments).
+    real ux = jX / rho;
+    real uy = jY / rho;
+    real uz = jZ / rho;
+
+    // Equilibrium moments via matmul(M, feq_BGK) -- the only safe
+    // approach, since hand-written moment-space expressions are
+    // sensitive to M-matrix normalization (same lesson as 3D Poiseuille).
+    array[real, 19] fluidMeq = matmul(M, Eq(rho, ux, uy, uz));
+    array[real,  7] tempMeq  = TempEqMoments(T, rho, jX, jY, jZ);
+
+    // MRT collision in moment space (Fortran lines 246-247).
+    fluidMoms = fluidMoms - S_FLUID * (fluidMoms - fluidMeq);
+    tempMoms  = tempMoms  - S_TEMP  * (tempMoms  - tempMeq);
+
+    // Strang splitting: 2nd half of buoyancy force (Fortran line 250).
+    fluidMoms = fluidMoms +
+        {0.0, 0.0, 0.0, 0.0, 0.0,
+         0.5 * ALPHA_G * tempMoms[0],
+         0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+
+    // Back-transform to distribution space.
+    f.out[x, y, z | :] = matmul(M_INV, fluidMoms);
+    g.out[x, y, z | :] = matmul(N_INV, tempMoms);
+}
+
+// ---------- Wall dynamics ----------
+
+// Bottom wall: half-way fluid bounce-back (wall cell reads the
+// adjacent fluid cell's outgoing DFs) + Yoshida thermal
+// anti-bounce-back. Mirrors Fortran lines 278-303.
+dynamic WallBotDynamic {
+    // ----- Fluid: half-way bounce-back -----
+    // For each direction d with EY[d] > 0, the fluid cell at
+    // (x+EX[d], 1, z+EZ[d]) will pull slot d from this wall
+    // cell; we store the bounced value = fluid_source's slot
+    // OPP(d).
+    f.out[x, y, z |  0] = 0.0;
+    f.out[x, y, z |  1] = 0.0;
+    f.out[x, y, z |  2] = 0.0;
+    f.out[x, y, z |  3] = f.in[x,     y + 1, z     | 4];   // +y  <- -y  at (x,1,z)
+    f.out[x, y, z |  4] = 0.0;
+    f.out[x, y, z |  5] = 0.0;
+    f.out[x, y, z |  6] = 0.0;
+    f.out[x, y, z |  7] = f.in[x + 1, y + 1, z     | 8];   // +x+y <- -x-y
+    f.out[x, y, z |  8] = 0.0;
+    f.out[x, y, z |  9] = 0.0;
+    f.out[x, y, z | 10] = f.in[x - 1, y + 1, z     | 9];   // -x+y <- +x-y
+    f.out[x, y, z | 11] = 0.0;
+    f.out[x, y, z | 12] = 0.0;
+    f.out[x, y, z | 13] = 0.0;
+    f.out[x, y, z | 14] = 0.0;
+    f.out[x, y, z | 15] = f.in[x,     y + 1, z + 1 | 16];  // +y+z <- -y-z
+    f.out[x, y, z | 16] = 0.0;
+    f.out[x, y, z | 17] = f.in[x,     y + 1, z - 1 | 18];  // +y-z <- -y+z
+    f.out[x, y, z | 18] = 0.0;
+
+    // ----- Temperature: Yoshida anti-bounce-back -----
+    // Only the +y slot (index 3) needs the Yoshida value.
+    g.out[x, y, z | 0] = 0.0;
+    g.out[x, y, z | 1] = 0.0;
+    g.out[x, y, z | 2] = 0.0;
+    g.out[x, y, z | 3] = -g.in[x, y + 1, z | 4] + 0.25 * T_HOT;
+    g.out[x, y, z | 4] = 0.0;
+    g.out[x, y, z | 5] = 0.0;
+    g.out[x, y, z | 6] = 0.0;
+}
+
+// Top wall: symmetric to the bottom wall. Directions with
+// EY[d] < 0 are indices 4, 8, 9, 16, 18.
+dynamic WallTopDynamic {
+    f.out[x, y, z |  0] = 0.0;
+    f.out[x, y, z |  1] = 0.0;
+    f.out[x, y, z |  2] = 0.0;
+    f.out[x, y, z |  3] = 0.0;
+    f.out[x, y, z |  4] = f.in[x,     y - 1, z     |  3];  // -y  <- +y
+    f.out[x, y, z |  5] = 0.0;
+    f.out[x, y, z |  6] = 0.0;
+    f.out[x, y, z |  7] = 0.0;
+    f.out[x, y, z |  8] = f.in[x - 1, y - 1, z     |  7];  // -x-y <- +x+y
+    f.out[x, y, z |  9] = f.in[x + 1, y - 1, z     | 10];  // +x-y <- -x+y
+    f.out[x, y, z | 10] = 0.0;
+    f.out[x, y, z | 11] = 0.0;
+    f.out[x, y, z | 12] = 0.0;
+    f.out[x, y, z | 13] = 0.0;
+    f.out[x, y, z | 14] = 0.0;
+    f.out[x, y, z | 15] = 0.0;
+    f.out[x, y, z | 16] = f.in[x,     y - 1, z - 1 | 15];  // -y-z <- +y+z
+    f.out[x, y, z | 17] = 0.0;
+    f.out[x, y, z | 18] = f.in[x,     y - 1, z + 1 | 17];  // -y+z <- +y-z
+
+    g.out[x, y, z | 0] = 0.0;
+    g.out[x, y, z | 1] = 0.0;
+    g.out[x, y, z | 2] = 0.0;
+    g.out[x, y, z | 3] = 0.0;
+    g.out[x, y, z | 4] = -g.in[x, y - 1, z | 3] + 0.25 * T_COLD;
+    g.out[x, y, z | 5] = 0.0;
+    g.out[x, y, z | 6] = 0.0;
+}
+
+// ---------- Gauge ----------
+
+// Saved fields match Fortran lines 203-207: the moments are
+// captured AFTER the first half-force is added but BEFORE
+// collision. To reproduce that timing here, the gauge re-runs
+// the same matmul + half-force as `BulkDynamic`'s prologue.
+gauge RBOutput -> (real rho, real uX, real uY, real uZ, real T) {
+    array[real, 19] fIn = f.in[x, y, z | :];
+    array[real,  7] gIn = g.in[x, y, z | :];
+    array[real, 19] fluidMoms = matmul(M, fIn);
+    real T_local = sum(gIn);
+    fluidMoms = fluidMoms +
+        {0.0, 0.0, 0.0, 0.0, 0.0,
+         0.5 * ALPHA_G * T_local,
+         0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    rho  = fluidMoms[0];
+    // Output velocities (= momenta / rho), not raw momenta.
+    uX   = fluidMoms[3] / rho;
+    uY   = fluidMoms[5] / rho;
+    uZ   = fluidMoms[7] / rho;
+    T    = T_local;
+}
+
+node_classes {
+    node_class FLUID(InitBulk, BulkDynamic, RBOutput);
+    // Wall classes are masked: their dynamics run every step to
+    // enforce the BC, but their cells are excluded from gauge
+    // output so the saved NetCDF contains only fluid-interior
+    // data -- matching the Fortran reference which writes nothing
+    // at y=0 and y=Ny-1.
+    node_class WALL_BOT(InitWallBot, WallBotDynamic) masked;
+    node_class WALL_TOP(InitWallTop, WallTopDynamic) masked;
+}
+
+geometry {
+    nodes[:, :, :]      = FLUID;
+    nodes[:, 0, :]      = WALL_BOT;
+    nodes[:, NY - 1, :] = WALL_TOP;
+}

@@ -1,0 +1,117 @@
+// ============================================================
+// STATUS: VALIDATED
+// Convergence: order ~1.5 (L2 5.3e-7 at NY=16, 2.1e-8 at NY=128,
+// NX=8, bounce_back_dfs walls)
+// See examples/VALIDATION.md for details.
+// ============================================================
+// 2D Couette flow -- D2Q9 MRT
+//
+// Shear flow between a stationary bottom wall and a moving top wall.
+// At steady state the velocity profile is exactly linear:
+//
+//   u(y) = U_WALL * y_eff / H
+//
+// where y_eff is the distance from the bottom wall and H is the
+// effective channel height. With full-way bounce-back walls at y=0
+// (stationary) and y=NY-1 (moving at U_WALL), the no-slip surfaces
+// are halfway between wall and fluid nodes:
+//   y_bot = 0.5,  y_top = NY - 1.5,  H = NY - 2.
+//
+// No body force -- the flow is driven entirely by the moving wall.
+// The moving-wall bounce-back formula is:
+//   f_i^out(x) = f_{opp(i)}^in(x + c_i) + 6 * w_i * (c_ix * U_WALL)
+//
+// MRT collision for improved accuracy compared to BGK.
+
+simulation_description("2D Couette flow (MRT, D2Q9)");
+
+global_constants {
+    const int NY = 32;    // gap between the walls -- convergence-sweep parameter
+    const int NX = 128;   // flow direction (periodic) -- long enough to damp transients
+    const real TAU = 0.54;
+    const real TAU_INV = 1.0 / TAU;
+    const real U_WALL = 0.01;
+
+    const array[real, 9] EX = {0.0, 1.0, 0.0, -1.0,  0.0, 1.0, -1.0, -1.0,  1.0};
+    const array[real, 9] EY = {0.0, 0.0, 1.0,  0.0, -1.0, 1.0,  1.0, -1.0, -1.0};
+    const array[real, 9] W = {4.0/9.0,
+        1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+
+    // MRT transformation matrix (Lallemand & Luo, 2000)
+    const array[real, {9, 9}] M = {
+        { 1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0},
+        {-4.0, -1.0, -1.0, -1.0, -1.0,  2.0,  2.0,  2.0,  2.0},
+        { 4.0, -2.0, -2.0, -2.0, -2.0,  1.0,  1.0,  1.0,  1.0},
+        { 0.0,  1.0,  0.0, -1.0,  0.0,  1.0, -1.0, -1.0,  1.0},
+        { 0.0, -2.0,  0.0,  2.0,  0.0,  1.0, -1.0, -1.0,  1.0},
+        { 0.0,  0.0,  1.0,  0.0, -1.0,  1.0,  1.0, -1.0, -1.0},
+        { 0.0,  0.0, -2.0,  0.0,  2.0,  1.0,  1.0, -1.0, -1.0},
+        { 0.0,  1.0, -1.0,  1.0, -1.0,  0.0,  0.0,  0.0,  0.0},
+        { 0.0,  0.0,  0.0,  0.0,  0.0,  1.0, -1.0,  1.0, -1.0}};
+
+    const array[real, {9, 9}] M_INV = inverse(M);
+
+    const array[real, 9] S_DIAG = {0.0, 1.1, 1.1, 0.0, 1.1, 0.0, 1.1, TAU_INV, TAU_INV};
+}
+
+lattices { lattice f(2, 9, real, {NX, NY}, {true, false}); }
+
+function Macro(array[real, 9] fIn) -> (real rho, real ux, real uy) {
+    rho = sum(fIn);
+    ux = dot_prod(EX, fIn) / rho;
+    uy = dot_prod(EY, fIn) / rho;
+}
+
+function EqMoments(real rho, real ux, real uy) -> (array[real, 9] meq) {
+    real usq = ux * ux + uy * uy;
+    meq = {rho,
+           -2.0 * rho + 3.0 * rho * usq,
+           rho - 3.0 * rho * usq,
+           rho * ux,
+           -1.0 * rho * ux,
+           rho * uy,
+           -1.0 * rho * uy,
+           rho * (ux * ux - uy * uy),
+           rho * ux * uy};
+}
+
+initializer InitFluid {
+    f.out[x, y | :] = W;
+}
+
+dynamic MRTCollStream {
+    array[real, 9] fIn = upstream_dfs(f, x, y, {EX, EY});
+
+    real rho; real ux; real uy;
+    {rho, ux, uy} = Macro(fIn);
+
+    array[real, 9] moments = matmul(M, fIn);
+    array[real, 9] meq = EqMoments(rho, ux, uy);
+
+    f.out[x, y | :] = matmul(M_INV, moments - S_DIAG * (moments - meq));
+}
+
+dynamic BounceBack {
+    f.out[x, y | :] = bounce_back_dfs(f, x, y, {EX, EY});
+}
+
+dynamic MovingWall {
+    f.out[x, y | :] = bounce_back_dfs(f, x, y, {EX, EY}) + 6.0 * W * (EX * U_WALL);
+}
+
+gauge Hydro -> (real rho, real ux, real uy) {
+    {rho, ux, uy} = Macro(f.in[x, y | :]);
+}
+
+node_classes {
+    node_class FLUID(InitFluid, MRTCollStream, Hydro);
+    node_class WALL(InitFluid, BounceBack, Hydro);
+    node_class TOP(InitFluid, MovingWall, Hydro);
+}
+
+geometry {
+    nodes[:, :] = FLUID;
+    nodes[:, 0] = WALL;
+    nodes[:, NY - 1] = TOP;
+}

@@ -1,0 +1,210 @@
+// ============================================================
+// 2D reduced-gravity planetary-geostrophic ocean -- D2Q5 LBM
+//
+// Reference: Salmon (1999), "The lattice Boltzmann method as a
+// basis for ocean circulation modeling", J. Marine Res. 57,
+// 503-535.  Specifically Section 5 (planetary-geostrophic D2Q5
+// equilibrium, eq. 5.3) and Figure 6a (no-slip, 100x100 basin,
+// double-gyre wind stress).
+//
+// This is the third variant in the Salmon port triad:
+//
+//   * reduced_gravity_2d_sw_d2q9.gelb   -- full SW D2Q9  (Fig 3a)
+//   * reduced_gravity_2d_pg_d2q9.gelb   -- PG   D2Q9     (Fig 3c/d)
+//   * reduced_gravity_2d_pg_d2q5.gelb   -- PG   D2Q5     (Fig 6a)  <- this file
+//
+// Physics & forcing setup (geometry, Coriolis, wind ramp, gauge,
+// Strang-split forcing, Guo momentum injection, exact-rotation
+// Coriolis) are identical to the D2Q9 variants -- the only
+// changes are:
+//
+//   1. 5-velocity lattice (no diagonal directions)
+//   2. Salmon's explicit PG D2Q5 equilibrium (eq. 5.3):
+//         $h_0^{eq} = h - g h^2$
+//         $h_i^{eq} = g h^2 / 4 + (h/2) (c_i \cdot u)$          (i = 1..4)
+//      The "velocity coupling weight" is 1/2 per non-rest slot,
+//      and the Guo momentum injection that preserves this form is
+//         $\Delta F_i = (1/2) (c_i \cdot \Delta F)$                    (i = 1..4)
+//      (Sanity check:  $\sum c_{ix} \Delta F_i = (1/2)(1+1) \Delta F_x = \Delta F_x$)
+//   3. Wall classes -- only four edge classes are needed, not
+//      eight.  D2Q5 has no diagonal velocities, so no corner cell
+//      is ever read by an interior fluid cell; the 4 basin
+//      corners are left as ordinary edge-wall cells (their
+//      content is never consumed).
+//
+// With $u^2$ dropped and only cardinal velocities, the western
+// boundary layer in Fig 6a is thinner and more anisotropic than
+// in Fig 3a/3c -- the classical D2Q5 grid-aligned footprint.
+// ============================================================
+
+simulation_description("2D reduced-gravity planetary-geostrophic ocean (PG D2Q5, Salmon 1999)");
+
+global_constants {
+    const int NX = 102;
+    const int NY = 102;
+
+    const real H0 = 1.0;
+    const real G  = 0.25;
+    // BGK relaxation.  With Salmon's PG D2Q5 equilibrium the
+    // Chapman-Enskog viscosity is  $\nu = c_s^2 (1/\omega - 1/2)$  with
+    // $c_s^2 = 1/2$ for this lattice (Salmon Sec. 5).  At $\omega = 1.2$ that
+    // gives $\nu$ ~= 0.167.  D2Q5 carries viscous stress on only
+    // four directions, so the effective damping per unit $\nu$ is
+    // lower than D2Q9 -- in practice $\omega = 1.2$ is stable to ~50K
+    // steps on $100^2$ but gravity-wave growth overtakes viscous
+    // damping past ~100K steps.  For longer runs override with
+    //   `-D OMEGA=1.0`  ($\nu = 0.25$)  or  `-D OMEGA=0.8`  ($\nu = 0.375$)
+    const real OMEGA = 1.2;
+
+    const real F0   = 0.4712;
+    const real BETA = F0 / 160.0;
+
+    const real TAU0    = 1.0e-4;
+    const real T_RAMP  = 20000.0;
+    const real PI      = 3.14159265358979323846;
+    const real TWO_PI  = 2.0 * PI;
+    const real DELTA_E = 0.0025;
+
+    // D2Q5 velocity set
+    //   0 = rest,  1 = E,  2 = N,  3 = W,  4 = S
+    const array[real, 5] EX = {0.0, 1.0, 0.0, -1.0,  0.0};
+    const array[real, 5] EY = {0.0, 0.0, 1.0,  0.0, -1.0};
+
+    // Coefficient arrays for Salmon's D2Q5 PG equilibrium (eq 5.3):
+    //   h_i^eq = H_COEF_i * h  +  P_COEF_i * g*h^2  +  U_COEF_i * h * (c_i . u)
+    //
+    //   H_COEF = {1, 0, 0, 0, 0}               -- rest slot carries h
+    //   P_COEF = {-1, 1/4, 1/4, 1/4, 1/4}       ($\sum = 0$ -> $\sum h_i^{eq} = h$)
+    //   U_COEF = { 0, 1/2, 1/2, 1/2, 1/2}       ($\sum c_{ix}^2 U\_COEF_i = 1$)
+    const array[real, 5] H_COEF = {1.0,  0.0,  0.0,  0.0,  0.0};
+    const array[real, 5] P_COEF = {-1.0, 0.25, 0.25, 0.25, 0.25};
+    const array[real, 5] U_COEF = {0.0,  0.5,  0.5,  0.5,  0.5};
+}
+
+lattices {
+    lattice f(2, 5, real, {NX, NY}, {false, false});
+}
+
+// ---------- Equilibrium ----------
+//
+// Salmon D2Q5 PG equilibrium (eq 5.3), written as a linear
+// combination of three coefficient arrays:
+//   h_i^eq = H_COEF_i * h          (mass carried by rest slot)
+//          + P_COEF_i * g*h^2     (surface-gradient pressure)
+//          + U_COEF_i * h*(c_i . u)  (momentum carrier, linear in u)
+function FeqPG5(real h, real ux, real uy) -> (array[real, 5] feq) {
+    array[real, 5] cu = EX * ux + EY * uy;
+    feq = H_COEF * h + P_COEF * (G * h * h) + U_COEF * h * cu;
+}
+
+// ---------- Initialization ----------
+initializer InitAll {
+    f.out[x, y | :] = FeqPG5(H0, 0.0, 0.0);
+}
+
+// ---------- Bulk dynamic ----------
+dynamic BulkDynamic {
+    array[real, 5] fIn = upstream_dfs(f, x, y, {EX, EY});
+    real h   = sum(fIn);
+    real hu0 = dot_prod(EX, fIn);
+    real hv0 = dot_prod(EY, fIn);
+
+    real bf    = h / (h + DELTA_E);
+    real ramp  = min(1.0, real(t) / T_RAMP);
+    real tau_x = -TAU0 * cos(TWO_PI * real(y) / real(NY - 1)) * ramp;
+
+    real f_loc = F0 + BETA * real(y);
+    real ca    = cos(0.5 * f_loc);
+    real sa    = sin(0.5 * f_loc);
+
+    // --- 1st half force: wind/2 then rotate/2 ---
+    real hu_a = hu0 + 0.5 * bf * tau_x;
+    real hu_h =  ca * hu_a + sa * hv0;
+    real hv_h = -sa * hu_a + ca * hv0;
+
+    // Pre-collision Guo injection -- D2Q5 form:  $\Delta F_i = U\_COEF_i * (c_i \cdot \Delta F)$.
+    // The velocity-coupling coefficient is U_COEF (= 1/2 on each
+    // non-rest slot), so this exactly reproduces (hu_h, hv_h) from
+    // (hu0, hv0) at the first moment.
+    real d1_hu = hu_h - hu0;
+    real d1_hv = hv_h - hv0;
+    array[real, 5] fInForced = fIn + U_COEF * (EX * d1_hu + EY * d1_hv);
+
+    array[real, 5] feq   = FeqPG5(h, hu_h / h, hv_h / h);
+    array[real, 5] fPost = fInForced - OMEGA * (fInForced - feq);
+
+    // --- 2nd half force: rotate/2 then wind/2 ---
+    real hu_b =  ca * hu_h + sa * hv_h;
+    real hv_f = -sa * hu_h + ca * hv_h;
+    real hu_f = hu_b + 0.5 * bf * tau_x;
+
+    real d2_hu = hu_f - hu_h;
+    real d2_hv = hv_f - hv_h;
+    f.out[x, y | :] = fPost + U_COEF * (EX * d2_hu + EY * d2_hv);
+}
+
+// ---------- Wall dynamics ----------
+//
+// D2Q5 opposite pairs: E(1) <-> W(3), N(2) <-> S(4).
+// No diagonal slots -- each wall cell serves exactly one bounced
+// slot, and the four basin corners are never read by any fluid
+// cell (no diagonal pull), so no corner classes are needed.
+
+dynamic WallBotDynamic {
+    f.out[x, y | 0] = 0.0;
+    f.out[x, y | 1] = 0.0;
+    f.out[x, y | 2] = f.in[x, y + 1 | 4];   // N <- S at fluid (x, 1)
+    f.out[x, y | 3] = 0.0;
+    f.out[x, y | 4] = 0.0;
+}
+
+dynamic WallTopDynamic {
+    f.out[x, y | 0] = 0.0;
+    f.out[x, y | 1] = 0.0;
+    f.out[x, y | 2] = 0.0;
+    f.out[x, y | 3] = 0.0;
+    f.out[x, y | 4] = f.in[x, y - 1 | 2];   // S <- N at fluid (x, NY-2)
+}
+
+dynamic WallLeftDynamic {
+    f.out[x, y | 0] = 0.0;
+    f.out[x, y | 1] = f.in[x + 1, y | 3];   // E <- W at fluid (1, y)
+    f.out[x, y | 2] = 0.0;
+    f.out[x, y | 3] = 0.0;
+    f.out[x, y | 4] = 0.0;
+}
+
+dynamic WallRightDynamic {
+    f.out[x, y | 0] = 0.0;
+    f.out[x, y | 1] = 0.0;
+    f.out[x, y | 2] = 0.0;
+    f.out[x, y | 3] = f.in[x - 1, y | 1];   // W <- E at fluid (NX-2, y)
+    f.out[x, y | 4] = 0.0;
+}
+
+// ---------- Gauge ----------
+gauge OceanGauge -> (real depth, real uX, real uY) {
+    array[real, 5] f_in = f.in[x, y | :];
+    real h  = sum(f_in);
+    real hu = dot_prod(EX, f_in);
+    real hv = dot_prod(EY, f_in);
+    depth = h;
+    uX    = hu / h;
+    uY    = hv / h;
+}
+
+node_classes {
+    node_class FLUID(InitAll, BulkDynamic, OceanGauge);
+    node_class WALL_BOT  (InitAll, WallBotDynamic)   masked;
+    node_class WALL_TOP  (InitAll, WallTopDynamic)   masked;
+    node_class WALL_LEFT (InitAll, WallLeftDynamic)  masked;
+    node_class WALL_RIGHT(InitAll, WallRightDynamic) masked;
+}
+
+geometry {
+    nodes[:, :]      = FLUID;
+    nodes[:, 0]      = WALL_BOT;
+    nodes[:, NY - 1] = WALL_TOP;
+    nodes[0, :]      = WALL_LEFT;
+    nodes[NX - 1, :] = WALL_RIGHT;
+}

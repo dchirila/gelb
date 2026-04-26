@@ -1,0 +1,289 @@
+// ============================================================
+// STATUS: EXPERIMENTAL
+// Reference: Sukop & Thorne (2006), Sec. 5.1.3.
+// ============================================================
+// 2D pressure-driven Poiseuille flow in a slit -- D2Q9 BGK.
+//
+// Channel flow between two parallel no-slip walls, driven by a
+// density difference between the inlet (west, $\rho_{in}$) and the
+// outlet (east, $\rho_{out}$) instead of a body force.  With the ideal
+// EOS  $P = \rho c_s^2 = \rho / 3$  the prescribed density jump acts as a
+// linear pressure drop, and the steady-state velocity profile is
+// the classical parabola
+//
+//   $u(y) = (G^* / (2\nu)) y_{eff} (H - y_{eff})$,   $G^* = \Delta\rho c_s^2 / L$
+//
+// where H = NY - 2 is the effective half-way-BB channel height,
+// L = NX - 1 is the channel length, and y_eff is the distance
+// from the bottom wall's half-way position.
+//
+// Two BC ingredients:
+//
+//   1. **Half-way bounce-back walls** at top and bottom
+//      (y = 0 and y = NY-1), delivered by the wall cell reading
+//      the adjacent fluid cell's outgoing DFs into the opposite
+//      (bounced) slots -- the same pattern used in
+//      `examples/lbm/2d/poiseuille_flow_2d_mrt.gelb` and
+//      `examples/lbm/2d/reduced_gravity_2d_sw_d2q9.gelb`.
+//
+//   2. **Zou-He density (pressure) boundary conditions** at the
+//      west inlet (x = 0) and east outlet (x = NX-1), enforcing
+//      $\rho = \rho_{in}$ (resp. $\rho_{out}$) and zero tangential velocity.
+//
+//      At the west boundary cell the unknown streamed-in DFs are
+//      1 (E), 5 (NE), 8 (SE); at the east boundary cell they are
+//      3 (W), 6 (NW), 7 (SW).  The reconstruction uses mass,
+//      x-momentum, y-momentum, and the non-equilibrium bounceback
+//      closure on the wall-normal DF.
+//
+//      Note: Sukop's pseudocode for the west/south pressure form
+//      contains a sign error in u_x.  The formulas below were
+//      derived from scratch (the east/north forms in the book are
+//      correct and agree with this derivation by the symmetry
+//      u_x -> -u_x, x -> -x).  The derivation mirrors the velocity
+//      Zou-He variant in
+//      `examples/lbm/2d/poiseuille_flow_2d_mrt_zouhe.gelb`.
+//
+// D2Q9 velocity index convention:
+//   0: rest     1: E      2: N      3: W      4: S
+//   5: NE       6: NW     7: SW     8: SE
+//
+// Verification: centerline u(y) after ~30 000 steps matches the
+// analytical parabola $u(y) = (\Delta\rho c_s^2) / (2 \nu L) * y_{eff} (H - y_{eff})$.
+
+simulation_description("2D Poiseuille flow (BGK + Zou-He pressure BCs, D2Q9) [Sukop 5.1.3]");
+
+global_constants {
+    const int  NX = 100;
+    const int  NY = 21;
+    const real TAU = 1.0;                     // $\nu = c_s^2 (\tau - 1/2) = 1/6$
+    const real OMEGA = 1.0 / TAU;
+
+    // Inlet/outlet densities.  $\Delta\rho$ kept small (0.02) so Ma << 1
+    // and compressibility error stays negligible.
+    const real RHO_IN  = 1.01;
+    const real RHO_OUT = 0.99;
+
+    const array[real, 9] EX = {0.0, 1.0, 0.0, -1.0,  0.0, 1.0, -1.0, -1.0,  1.0};
+    const array[real, 9] EY = {0.0, 0.0, 1.0,  0.0, -1.0, 1.0,  1.0, -1.0, -1.0};
+    const array[real, 9] W  = {4.0/9.0,
+                               1.0/9.0,  1.0/9.0,  1.0/9.0,  1.0/9.0,
+                               1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+}
+
+lattices {
+    lattice f(2, 9, real, {NX, NY}, {false, false});
+}
+
+function FeqBGK(real rho, real ux, real uy) -> (array[real, 9] feq) {
+    real usq = ux * ux + uy * uy;
+    array[real, 9] cu = EX * ux + EY * uy;
+    feq = W * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - 1.5 * usq);
+}
+
+// Rest-state equilibrium at mean density everywhere.  For the
+// west/east inlet cells this slightly understates rho (they carry
+// $\rho_{in}$ resp. $\rho_{out}$ in steady state), but the mismatch relaxes
+// within the first few steps.
+initializer InitRest {
+    f.out[x, y | :] = FeqBGK(1.0, 0.0, 0.0);
+}
+
+// ---------- Bulk BGK collision + pull-stream ----------
+dynamic BulkDynamic {
+    array[real, 9] fIn = upstream_dfs(f, x, y, {EX, EY});
+    real rho = sum(fIn);
+    real ux  = dot_prod(EX, fIn) / rho;
+    real uy  = dot_prod(EY, fIn) / rho;
+    array[real, 9] feq = FeqBGK(rho, ux, uy);
+    f.out[x, y | :] = fIn - OMEGA * (fIn - feq);
+}
+
+// ---------- Top/bottom walls: half-way bounce-back ----------
+//
+// For the wall cell at P, each bounced slot d is set to the
+// adjacent fluid cell's outgoing DF in the opposite direction:
+// when the fluid cell runs `upstream_dfs` next step and pulls
+// slot d from P, it receives its own reflected outgoing DF.
+dynamic WallBotDynamic {
+    f.out[x, y | 0] = 0.0;
+    f.out[x, y | 1] = 0.0;
+    f.out[x, y | 2] = f.in[x,     y + 1 | 4];   // N  <- S  at fluid (x,   1)
+    f.out[x, y | 3] = 0.0;
+    f.out[x, y | 4] = 0.0;
+    f.out[x, y | 5] = f.in[x + 1, y + 1 | 7];   // NE <- SW at fluid (x+1, 1)
+    f.out[x, y | 6] = f.in[x - 1, y + 1 | 8];   // NW <- SE at fluid (x-1, 1)
+    f.out[x, y | 7] = 0.0;
+    f.out[x, y | 8] = 0.0;
+}
+
+dynamic WallTopDynamic {
+    f.out[x, y | 0] = 0.0;
+    f.out[x, y | 1] = 0.0;
+    f.out[x, y | 2] = 0.0;
+    f.out[x, y | 3] = 0.0;
+    f.out[x, y | 4] = f.in[x,     y - 1 | 2];   // S  <- N  at fluid (x,   NY-2)
+    f.out[x, y | 5] = 0.0;
+    f.out[x, y | 6] = 0.0;
+    f.out[x, y | 7] = f.in[x - 1, y - 1 | 5];   // SW <- NE at fluid (x-1, NY-2)
+    f.out[x, y | 8] = f.in[x + 1, y - 1 | 6];   // SE <- NW at fluid (x+1, NY-2)
+}
+
+// ---------- West inlet: Zou-He pressure BC ($\rho$ = RHO_IN) ----------
+//
+// Knowns at (0, y), 1 <= y <= NY-2:   0, 2, 3, 4, 6, 7
+// Unknowns:                         1, 5, 8  (would stream from x = -1)
+//
+// Derivation ($u_y = 0$, $\rho$ = RHO_IN):
+//   mass :  $\sum f_i = \rho$
+//   x-mom:  $(f_1+f_5+f_8) - (f_3+f_6+f_7) = \rho u_x$
+//   =>  $u_x = 1 - (f_0 + f_2 + f_4 + 2(f_3 + f_6 + f_7)) / \rho$
+//   non-eq closure on normal:  $f_1 = f_3 + (2/3) \rho u_x$
+//   $f_5 = f_7 + (1/6) \rho u_x + 0.5 (f_4 - f_2)$
+//   $f_8 = f_6 + (1/6) \rho u_x + 0.5 (f_2 - f_4)$
+dynamic ZouHeWest {
+    real f0 = f.in[x,     y     | 0];
+    real f2 = f.in[x,     y - 1 | 2];
+    real f3 = f.in[x + 1, y     | 3];
+    real f4 = f.in[x,     y + 1 | 4];
+    real f6 = f.in[x + 1, y - 1 | 6];
+    real f7 = f.in[x + 1, y + 1 | 7];
+
+    real ux = 1.0 - (f0 + f2 + f4 + 2.0 * (f3 + f6 + f7)) / RHO_IN;
+
+    real f1 = f3 + (2.0 / 3.0) * RHO_IN * ux;
+    real f5 = f7 + (1.0 / 6.0) * RHO_IN * ux + 0.5 * (f4 - f2);
+    real f8 = f6 + (1.0 / 6.0) * RHO_IN * ux + 0.5 * (f2 - f4);
+
+    f.out[x, y | 0] = f0;
+    f.out[x, y | 1] = f1;
+    f.out[x, y | 2] = f2;
+    f.out[x, y | 3] = f3;
+    f.out[x, y | 4] = f4;
+    f.out[x, y | 5] = f5;
+    f.out[x, y | 6] = f6;
+    f.out[x, y | 7] = f7;
+    f.out[x, y | 8] = f8;
+}
+
+// ---------- East outlet: Zou-He pressure BC ($\rho$ = RHO_OUT) ----------
+//
+// Knowns at (NX-1, y), 1 <= y <= NY-2:  0, 1, 2, 4, 5, 8
+// Unknowns:                            3, 6, 7
+//
+//   $u_x = -1 + (f_0 + f_2 + f_4 + 2(f_1 + f_5 + f_8)) / \rho$
+//   $f_3 = f_1 - (2/3) \rho u_x$
+//   $f_6 = f_8 - (1/6) \rho u_x + 0.5 (f_4 - f_2)$
+//   $f_7 = f_5 - (1/6) \rho u_x + 0.5 (f_2 - f_4)$
+dynamic ZouHeEast {
+    real f0 = f.in[x,     y     | 0];
+    real f1 = f.in[x - 1, y     | 1];
+    real f2 = f.in[x,     y - 1 | 2];
+    real f4 = f.in[x,     y + 1 | 4];
+    real f5 = f.in[x - 1, y - 1 | 5];
+    real f8 = f.in[x - 1, y + 1 | 8];
+
+    real ux = -1.0 + (f0 + f2 + f4 + 2.0 * (f1 + f5 + f8)) / RHO_OUT;
+
+    real f3 = f1 - (2.0 / 3.0) * RHO_OUT * ux;
+    real f6 = f8 - (1.0 / 6.0) * RHO_OUT * ux + 0.5 * (f4 - f2);
+    real f7 = f5 - (1.0 / 6.0) * RHO_OUT * ux + 0.5 * (f2 - f4);
+
+    f.out[x, y | 0] = f0;
+    f.out[x, y | 1] = f1;
+    f.out[x, y | 2] = f2;
+    f.out[x, y | 3] = f3;
+    f.out[x, y | 4] = f4;
+    f.out[x, y | 5] = f5;
+    f.out[x, y | 6] = f6;
+    f.out[x, y | 7] = f7;
+    f.out[x, y | 8] = f8;
+}
+
+// ---------- Corners: half-way bounce-back diagonal readers ----------
+//
+// Each corner has exactly one diagonal fluid neighbor and only
+// needs to populate the one diagonal slot that neighbor consumes.
+// This is a small physical inconsistency with the pressure BCs
+// (corners enforce no-slip, not $\Delta\rho$) but it is localized to a
+// single cell per corner and does not reach the centerline.
+
+dynamic CornerBL {     // (0, 0): fluid (1, 1) pulls slot 5 from here
+    f.out[x, y | 0] = 0.0;
+    f.out[x, y | 1] = 0.0;
+    f.out[x, y | 2] = 0.0;
+    f.out[x, y | 3] = 0.0;
+    f.out[x, y | 4] = 0.0;
+    f.out[x, y | 5] = f.in[x + 1, y + 1 | 7];
+    f.out[x, y | 6] = 0.0;
+    f.out[x, y | 7] = 0.0;
+    f.out[x, y | 8] = 0.0;
+}
+
+dynamic CornerBR {     // (NX-1, 0): fluid (NX-2, 1) pulls slot 6
+    f.out[x, y | 0] = 0.0;
+    f.out[x, y | 1] = 0.0;
+    f.out[x, y | 2] = 0.0;
+    f.out[x, y | 3] = 0.0;
+    f.out[x, y | 4] = 0.0;
+    f.out[x, y | 5] = 0.0;
+    f.out[x, y | 6] = f.in[x - 1, y + 1 | 8];
+    f.out[x, y | 7] = 0.0;
+    f.out[x, y | 8] = 0.0;
+}
+
+dynamic CornerTL {     // (0, NY-1): fluid (1, NY-2) pulls slot 8
+    f.out[x, y | 0] = 0.0;
+    f.out[x, y | 1] = 0.0;
+    f.out[x, y | 2] = 0.0;
+    f.out[x, y | 3] = 0.0;
+    f.out[x, y | 4] = 0.0;
+    f.out[x, y | 5] = 0.0;
+    f.out[x, y | 6] = 0.0;
+    f.out[x, y | 7] = 0.0;
+    f.out[x, y | 8] = f.in[x + 1, y - 1 | 6];
+}
+
+dynamic CornerTR {     // (NX-1, NY-1): fluid (NX-2, NY-2) pulls slot 7
+    f.out[x, y | 0] = 0.0;
+    f.out[x, y | 1] = 0.0;
+    f.out[x, y | 2] = 0.0;
+    f.out[x, y | 3] = 0.0;
+    f.out[x, y | 4] = 0.0;
+    f.out[x, y | 5] = 0.0;
+    f.out[x, y | 6] = 0.0;
+    f.out[x, y | 7] = f.in[x - 1, y - 1 | 5];
+    f.out[x, y | 8] = 0.0;
+}
+
+// ---------- Gauge ----------
+gauge Hydro -> (real rho, real ux, real uy) {
+    array[real, 9] fIn = f.in[x, y | :];
+    rho = sum(fIn);
+    ux  = dot_prod(EX, fIn) / rho;
+    uy  = dot_prod(EY, fIn) / rho;
+}
+
+node_classes {
+    node_class FLUID   (InitRest, BulkDynamic,  Hydro);
+    node_class WALL_BOT(InitRest, WallBotDynamic) masked;
+    node_class WALL_TOP(InitRest, WallTopDynamic) masked;
+    node_class WALL_W  (InitRest, ZouHeWest,    Hydro);
+    node_class WALL_E  (InitRest, ZouHeEast,    Hydro);
+    node_class CORN_BL (InitRest, CornerBL)     masked;
+    node_class CORN_BR (InitRest, CornerBR)     masked;
+    node_class CORN_TL (InitRest, CornerTL)     masked;
+    node_class CORN_TR (InitRest, CornerTR)     masked;
+}
+
+geometry {
+    nodes[:, :]           = FLUID;
+    nodes[:, 0]           = WALL_BOT;
+    nodes[:, NY - 1]      = WALL_TOP;
+    nodes[0, :]           = WALL_W;
+    nodes[NX - 1, :]      = WALL_E;
+    nodes[0, 0]           = CORN_BL;
+    nodes[NX - 1, 0]      = CORN_BR;
+    nodes[0, NY - 1]      = CORN_TL;
+    nodes[NX - 1, NY - 1] = CORN_TR;
+}

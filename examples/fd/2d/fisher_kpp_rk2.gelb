@@ -1,0 +1,124 @@
+// 2D Fisher-KPP reaction-diffusion integrated with RK2 (midpoint rule)
+//
+//     du/dt = D * Laplacian(u) + r * u * (1 - u)
+//
+// Demonstrates explicit-stage Runge-Kutta time integration of a genuine
+// 2D spatial PDE in GeLB, with the RK stages persisted on a secondary
+// memory lattice.
+//
+// WHY A WIDE STENCIL?
+//   A GeLB `dynamic` block runs once per timestep and reads only from
+//   `u.in`, i.e. the previous full time level. For an ODE (no spatial
+//   coupling), a full RK step fits trivially in one block. For a PDE,
+//   each later RK stage is the RHS evaluated at an intermediate state
+//   that lives on the lattice -- its Laplacian at (x,y) needs the
+//   previous-stage value at the 4 cardinal neighbours, which in turn
+//   needs the stage-before-that at THEIR neighbours, and so on. So
+//   stage k needs u_n on a diamond of radius k around (x,y). RK2 => r=2
+//   (13 cells); RK4 would need r=4 (41 cells).
+//
+//   Because the reaction term  r*u*(1-u)  is purely local, it only adds
+//   a local correction at the centre of each 5-point Laplacian stencil
+//   and does NOT widen the diamond.
+//
+// LATTICES
+//   u    (q=1): solution field, the only primary unknown
+//   mem  (q=2): MEMORY -- DF 0 holds k1 at (x,y), DF 1 holds k2 at (x,y).
+//               Persisted across time steps and surfaced via the gauge
+//               so that the two RK stages can be visualised alongside
+//               u itself.
+//
+// IC: small disk of u=1 inside an otherwise u=0 domain. The u=0 state is
+// unstable under the reaction r*u*(1-u), but only grows where it is
+// seeded by diffusion from the disk, so a circular front nucleates at
+// the disk boundary and spreads outward at asymptotic speed c*=2*sqrt(D*r).
+
+simulation_description("2D Fisher-KPP reaction-diffusion (RK2 midpoint)");
+
+global_constants {
+    const int  N       = 256;
+    const int  SEED_R  = 12;
+    const int  SEED_R2 = SEED_R * SEED_R;
+    const real DIFF    = 0.2;         // diffusion coefficient D
+    const real RATE    = 0.5;         // logistic growth rate r
+    const real DT      = 0.5;         // RK2 time step
+}
+
+lattices {
+    // Primary solution field
+    lattice u(2, 1, real, {N, N}, {true, true});
+    // Memory lattice: DF 0 = k1(x,y), DF 1 = k2(x,y) from the last step
+    lattice mem(2, 2, real, {N, N}, {true, true});
+}
+
+// Semi-discrete RHS operator at a single cell:
+//   L(u)(x,y) = D * ( uE + uW + uN + uS - 4 uc ) + r * uc * (1 - uc)
+// "uc" is the centre, the other four are its cardinal neighbours.
+// Single-output => called as an expression.
+function Rhs(real uc, real uE, real uW, real uN, real uS) -> (real k) {
+    k = DIFF * (uE + uW + uN + uS - 4.0 * uc) + RATE * uc * (1.0 - uc);
+}
+
+initializer SeedDisk {
+    int dx = x - N/2;
+    int dy = y - N/2;
+    int in_seed = ((dx*dx + dy*dy) < SEED_R2) + 0;
+    u.out[x, y | 0]  = in_seed;       // exact {0, 1} -- u=0 outside the disk
+    mem.out[x, y | :] = 0.0;
+}
+
+dynamic RK2Step {
+    // ---------- u_n on the radius-2 diamond (13 cells) ----------
+    real u00 = u.in[x,     y     | 0];
+    real uE  = u.in[x + 1, y     | 0];
+    real uW  = u.in[x - 1, y     | 0];
+    real uN  = u.in[x,     y + 1 | 0];
+    real uS  = u.in[x,     y - 1 | 0];
+    real uEE = u.in[x + 2, y     | 0];
+    real uWW = u.in[x - 2, y     | 0];
+    real uNN = u.in[x,     y + 2 | 0];
+    real uSS = u.in[x,     y - 2 | 0];
+    real uNE = u.in[x + 1, y + 1 | 0];
+    real uNW = u.in[x - 1, y + 1 | 0];
+    real uSE = u.in[x + 1, y - 1 | 0];
+    real uSW = u.in[x - 1, y - 1 | 0];
+
+    // ---------- Stage 1: k1 at centre + 4 cardinal neighbours ----------
+    // Each k1 evaluation uses its own 5-point stencil drawn from the diamond.
+    real k1_00 = Rhs(u00, uE,  uW,  uN,  uS );
+    real k1_E  = Rhs(uE,  uEE, u00, uNE, uSE);
+    real k1_W  = Rhs(uW,  u00, uWW, uNW, uSW);
+    real k1_N  = Rhs(uN,  uNE, uNW, uNN, u00);
+    real k1_S  = Rhs(uS,  uSE, uSW, u00, uSS);
+
+    // ---------- Midpoint state  u* = u_n + (dt/2) * k1  ----------
+    real us_00 = u00 + 0.5 * DT * k1_00;
+    real us_E  = uE  + 0.5 * DT * k1_E;
+    real us_W  = uW  + 0.5 * DT * k1_W;
+    real us_N  = uN  + 0.5 * DT * k1_N;
+    real us_S  = uS  + 0.5 * DT * k1_S;
+
+    // ---------- Stage 2: k2 at centre only ----------
+    real k2_00 = Rhs(us_00, us_E, us_W, us_N, us_S);
+
+    // ---------- Midpoint update:  u_{n+1} = u_n + dt * k2 ----------
+    u.out[x, y | 0] = u00 + DT * k2_00;
+
+    // ---------- Memory lattice: persist the two stages ----------
+    mem.out[x, y | 0] = k1_00;
+    mem.out[x, y | 1] = k2_00;
+}
+
+gauge Out -> (real u_val, real k1, real k2) {
+    u_val = u.in[x, y | 0];
+    k1    = mem.in[x, y | 0];
+    k2    = mem.in[x, y | 1];
+}
+
+node_classes {
+    node_class BULK(SeedDisk, RK2Step, Out);
+}
+
+geometry {
+    nodes[:, :] = BULK;
+}

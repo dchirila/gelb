@@ -1,0 +1,87 @@
+// 2D gravity-driven channel flow past a circular obstacle -- D2Q9 BGK LBM
+//
+// Demonstrates Karman vortex shedding behind a cylinder.  Gravity acts in
+// the x-direction as a constant body force; no-slip walls at y=0 and
+// y=NY-1 close the channel.
+//
+// Parameter sizing follows Krueger et al. (2017), Sec. 7.2.1:
+//   - Ma = u_max * $\sqrt{3}$ < 0.1 to keep compressibility error small.
+//   - Poiseuille analytic (Sec. 6.3): u_max = $G H^2 / (8 \nu)$ with H = NY - 2.
+//
+// With NY=128, $\nu = c_s^2 (\tau - 0.5) = 1/75$, G = 3.5e-7:
+//   H = 126, u_max ~= 3.5e-7 * 15876 / 0.1067 ~= 0.052
+//   Ma ~= 0.090 (ok), Re = u_max * D / $\nu$ ~= 78   (D = 2*R = 20)
+// Re ~= 78 is above the cylinder shedding onset Re_crit ~= 47, so the
+// Karman street still forms.
+
+simulation_description("2D channel flow past circular obstacle (LBM-BGK, D2Q9)");
+
+global_constants {
+    const int NY = 128;
+    const int NX = 8 * NY;
+    const real TAU = 0.54;
+    const real TAU_INV = 1.0 / TAU;
+    const real G = 3.5e-7;
+    const int CX = NX / 4;
+    const int CY = NY / 2;
+    const int R = 10;
+    const array[real, 9] EX = {0.0, 1.0, 0.0, -1.0,  0.0, 1.0, -1.0, -1.0,  1.0};
+    const array[real, 9] EY = {0.0, 0.0, 1.0,  0.0, -1.0, 1.0,  1.0, -1.0, -1.0};
+    const array[real, 9] W = {4.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+}
+
+lattices {
+    lattice f(2, 9, real, {NX, NY}, {true, false});
+}
+
+function InCircle(int x, int y, int cx, int cy, int r) -> (bool hit) {
+    hit = (x - cx)*(x - cx) + (y - cy)*(y - cy) < r*r;
+}
+
+function Macro(array[real, 9] fIn) -> (real rho, real ux, real uy) {
+    rho = sum(fIn);
+    ux = dot_prod(EX, fIn) / rho;
+    uy = dot_prod(EY, fIn) / rho;
+}
+
+function Eq(real rho, real ux, real uy) -> (array[real, 9] feq) {
+    real usq = ux*ux + uy*uy;
+    array[real, 9] eu = EX * ux + EY * uy;
+    feq = W * rho * (1.0 + 3.0*eu + 4.5*eu*eu - 1.5*usq);
+}
+
+initializer InitFluid {
+    f.out[x, y | :] = W;
+}
+
+dynamic FluidDynamic {
+    array[real, 9] fIn = upstream_dfs(f, x, y, {EX, EY});
+    real rho;
+    real ux;
+    real uy;
+    {rho, ux, uy} = Macro(fIn);
+    ux = ux + 0.5 * G;
+    f.out[x, y | :] = fIn - TAU_INV * (fIn - Eq(rho, ux, uy));
+}
+
+dynamic BounceBack {
+    f.out[x, y | :] = bounce_back_dfs(f, x, y, {EX, EY});
+}
+
+gauge Hydro -> (real rho, real ux, real uy) {
+    {rho, ux, uy} = Macro(f.in[x, y | :]);
+}
+
+node_classes {
+    node_class FLUID(InitFluid, FluidDynamic, Hydro);
+    node_class WALL(InitFluid, BounceBack, Hydro);
+    node_class SOLID() masked;
+}
+
+geometry {
+    nodes[:, :] = FLUID;
+    nodes[:, 0] = WALL;
+    nodes[:, NY - 1] = WALL;
+    nodes[where InCircle(x, y, CX, CY, R)] = SOLID;
+    border(SOLID) = WALL;
+}

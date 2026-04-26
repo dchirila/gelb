@@ -1,0 +1,125 @@
+// 2D lid-driven square cavity at Re = 1000 -- D2Q9 BGK LBM
+//
+// Incompressible flow in a square cavity with three stationary
+// no-slip walls and a lid sliding along the top.  This is the
+// classic benchmark for incompressible Navier-Stokes solvers: at
+// Re = 1000 the steady flow consists of one primary vortex,
+// displaced toward the lid's downstream wall, and two smaller
+// counter-rotating vortices in the lower corners.  Ghia, Ghia &
+// Shin (1982) tabulate the centre-line velocity profiles that
+// every cavity solver is compared against (their Tables I and II).
+//
+// Lattice setup: N = 100 cells per side, including two boundary rows.
+// The midway wall positions enclose L = N-2 = 98 lattice spacings. U_LID = 0.1
+// and NU = 0.01 therefore give Re = 980 (approximately 1000), with
+// TAU = 3 NU + 1/2 = 0.53. Override NU=0.0098 for exactly Re=1000.
+// Use scripts/validate_ldc.py for a long-time centerline comparison
+// at a prescribed Reynolds number.
+// Mohamad (2019) Sec. 8.8.1 gives a related worked cavity example.
+//
+// Boundary conditions:
+//   - Bottom, left, right walls: stationary full-way bounce-back
+//   - Top lid: moving-wall bounce-back (Ladd 1994; Krueger et al.
+//     2017, Sec. 5.3.3), the lid moving toward +x as in Ghia et al.
+//     The wall reads and reverses arriving populations; the lid adds
+//     +6*w_i*(c_i.u_wall), with reference wall density rho_wall = 1.
+//
+// Axis convention: x = horizontal (0 = left), y = vertical (0 = bottom)
+//
+// Mach number: U_LID = 0.1 gives Ma = U_LID * sqrt(3) ~ 0.17, above
+// the Ma << 0.1 that Krueger et al. (2017) Sec. 7.2.1 recommend for
+// quantitative incompressible comparisons. Run scripts/validate_ldc.py
+// to measure the error against Ghia at the desired grid and lid speed.
+//
+// References:
+//   - Ghia, U., Ghia, K. N. & Shin, C. T. (1982), "High-Re solutions
+//     for incompressible flow using the Navier-Stokes equations and
+//     a multigrid method", J. Comput. Phys. 48, 387-411.
+//   - Krueger, T. et al. (2017), The Lattice Boltzmann Method:
+//     Principles and Practice, Springer, Sec. 5.3.3 and Sec. 7.3.
+//   - Mohamad, A. A. (2019), Lattice Boltzmann Method, 2nd ed.,
+//     Springer, Sec. 8.8.1 (further reading).
+
+simulation_description("2D lid-driven cavity at Re = 1000 (LBM-BGK, D2Q9)");
+
+global_constants {
+    const int N = 100;                    // cells per direction
+    const real U_LID = 0.1;               // lid velocity, lattice units
+    const real NU = 0.01;                 // kinematic viscosity, lattice units
+    const real TAU = 3.0 * NU + 0.5;      // 0.53
+    const real TAU_INV = 1.0 / TAU;
+
+    // D2Q9 velocity set and weights
+    const array[real, 9] EX = {0.0, 1.0, 0.0, -1.0,  0.0, 1.0, -1.0, -1.0,  1.0};
+    const array[real, 9] EY = {0.0, 0.0, 1.0,  0.0, -1.0, 1.0,  1.0, -1.0, -1.0};
+    const array[real, 9] W  = {4.0/9.0,
+        1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+}
+
+lattices {
+    lattice f(2, 9, real, {N, N}, {false, false});
+}
+
+function Macro(array[real, 9] fIn) -> (real rho, real ux, real uy) {
+    rho = sum(fIn);
+    ux = dot_prod(EX, fIn) / rho;
+    uy = dot_prod(EY, fIn) / rho;
+}
+
+function Eq(real rho, real ux, real uy) -> (array[real, 9] feq) {
+    real usq = ux * ux + uy * uy;
+    array[real, 9] eu = EX * ux + EY * uy;
+    feq = W * rho * (1.0 + 3.0 * eu + 4.5 * eu * eu - 1.5 * usq);
+}
+
+// --- Initializer: fluid at rest with unit density ---
+initializer InitFluid {
+    f.out[x, y | :] = W;
+}
+
+// --- Bulk: BGK collision + pull streaming ---
+dynamic FluidDynamic {
+    array[real, 9] fIn = upstream_dfs(f, x, y, {EX, EY});
+
+    real rho; real ux; real uy;
+    {rho, ux, uy} = Macro(fIn);
+    f.out[x, y | :] = fIn - TAU_INV * (fIn - Eq(rho, ux, uy));
+}
+
+gauge Hydro -> (real rho, real ux, real uy) {
+    {rho, ux, uy} = Macro(f.in[x, y | :]);
+}
+
+// Full-way bounce-back: the wall stores arriving fluid populations
+// reversed, and the fluid pulls them back on the following step.
+// The effective no-slip surfaces are at 0.5 and N-1.5, so L = N-2.
+dynamic BounceBack {
+    f.out[x, y | :] = bounce_back_dfs(f, x, y, {EX, EY});
+}
+
+dynamic MovingLid {
+    f.out[x, y | :] = bounce_back_dfs(f, x, y, {EX, EY}) + 6.0 * W * (EX * U_LID);
+}
+
+// Display the prescribed wall density and velocity.
+gauge BoundaryHydro -> (real rho, real ux, real uy) {
+    rho = 1.0;
+    ux = U_LID * real(y == N - 1);
+    uy = 0.0;
+}
+
+node_classes {
+    node_class FLUID(InitFluid, FluidDynamic, Hydro);
+    node_class WALL(InitFluid, BounceBack, BoundaryHydro);
+    node_class LID(InitFluid, MovingLid, BoundaryHydro);
+}
+
+// x = horizontal (0=left, N-1=right), y = vertical (0=bottom, N-1=top)
+geometry {
+    nodes[:, :]     = FLUID;
+    nodes[0, :]     = WALL;   // left wall
+    nodes[N - 1, :] = WALL;   // right wall
+    nodes[:, 0]     = WALL;   // bottom wall
+    nodes[:, N - 1] = LID;    // top lid
+}

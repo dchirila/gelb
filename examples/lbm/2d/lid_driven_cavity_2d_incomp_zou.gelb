@@ -1,0 +1,138 @@
+// 2D lid-driven cavity flow -- D2Q9 BGK with Zou incompressible EDF
+//
+// Zou-He et al. (1995) incompressible LBE for steady flows.  Same
+// evolution equation as the standard LBGK model but with a modified
+// equilibrium distribution that *decouples* the density from the
+// momentum and recovers the *exact* incompressible Navier-Stokes
+// equations at steady state -- the artificial-compressibility error
+// of the standard EDF is removed.
+//
+// References:
+//   - Q. Zou, S. Hou, S. Chen, G.D. Doolen, "An improved
+//     incompressible lattice Boltzmann model for time-independent
+//     flows", J. Stat. Phys. 81 (1995) 35-48.
+//   - Guo & Shu (2013), Sec. 3.1, eqs. (3.1)-(3.4).
+//
+// Key differences vs the standard EDF:
+//
+// Standard:    f_i^eq = w_i * rho * [1 + 3(c.u) + 9/2(c.u)^2 - 3/2 u^2]
+// Zou (incomp): f_i^eq = w_i      * [rho + 3(c.u) + 9/2(c.u)^2 - 3/2 u^2]
+//
+// In the Zou model, ``rho`` appears as an additive term inside the
+// bracket rather than as a multiplicative pre-factor.  This breaks
+// the ``rho * u^2``-style cubic Mach-number coupling that drives
+// the artificial-compressibility error in standard LBM.
+//
+// Macros:
+//   rho = sum(f_i)             // same as standard
+//   u   = sum(c_i * f_i)       // *not* divided by rho -- this is
+//                              // ``(rho * u)`` in the standard model
+//                              // but in Zou it is interpreted directly
+//                              // as the velocity, since the equilibrium
+//                              // also drops the ``rho`` pre-factor on
+//                              // the velocity terms.
+//
+// At steady state the recovered equations are exactly
+//   div(u) = 0,
+//   du/dt + div(uu) = -grad(p) + nu * div( grad(u) + grad(u)^T ),
+// with ``p = c_s^2 * rho``.  No compressibility correction.
+//
+// Caveat: the Zou model is only accurate for *time-independent*
+// flows.  For unsteady problems the Chen-Ohashi or Guo et al. (2000)
+// pressure-based variants are needed.  LDC at moderate Re is steady
+// at long times, so the Zou model is a good fit.
+//
+// Boundary conditions: half-way bounce-back on links crossing the
+// three stationary walls or moving lid (Krueger et al. 2017 eq. 5.26).
+// The incompressible model uses reference density 1 in the lid term.
+//
+// Defaults: N=65, Re ~= 100 (TAU=0.689, U_LID=0.1).  Override via
+// gelbc -D N=129 -D U_LID=0.1 -D TAU=0.5381 for Re=1000 etc.
+
+simulation_description("2D lid-driven cavity flow (LBM-BGK + Zou incompressible EDF, D2Q9)");
+
+global_constants {
+    const int N = 65;
+
+    const real U_LID = 0.1;
+    const real TAU = 0.689;
+    const real TAU_INV = 1.0 / TAU;
+
+    const array[real, 9] EX = {0.0, 1.0, 0.0, -1.0,  0.0, 1.0, -1.0, -1.0,  1.0};
+    const array[real, 9] EY = {0.0, 0.0, 1.0,  0.0, -1.0, 1.0,  1.0, -1.0, -1.0};
+    const array[real, 9] W = {4.0/9.0,
+        1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+}
+
+lattices {
+    lattice f(2, 9, real, {N, N}, {false, false});
+}
+
+// Macros for the Zou (1995) incompressible model:
+//   rho = sum(f_i)               (same as standard)
+//   u   = sum(c_i * f_i)         (NOT divided by rho)
+function Macro(array[real, 9] fIn) -> (real rho, real ux, real uy) {
+    rho = sum(fIn);
+    ux = dot_prod(EX, fIn);
+    uy = dot_prod(EY, fIn);
+}
+
+// Zou (1995) incompressible equilibrium distribution:
+//   f_i^eq = w_i * [rho + 3*(c.u) + 9/2*(c.u)^2 - 3/2*u^2]
+// Note rho is *additive*, not multiplicative as in the standard EDF.
+function Eq(real rho, real ux, real uy) -> (array[real, 9] feq) {
+    real usq = ux*ux + uy*uy;
+    array[real, 9] eu = EX * ux + EY * uy;
+    feq = W * (rho + 3.0*eu + 4.5*eu*eu - 1.5*usq);
+}
+
+initializer InitFluid {
+    f.out[x, y | :] = W;
+}
+
+dynamic FluidDynamic {
+    array[real, 9] fIn = upstream_dfs(f, x, y, {EX, EY});
+
+    real rho; real ux; real uy;
+    {rho, ux, uy} = Macro(fIn);
+
+    f.out[x, y | :] = fIn - TAU_INV * (fIn - Eq(rho, ux, uy));
+}
+
+gauge Hydro -> (real rho, real ux, real uy) {
+    {rho, ux, uy} = Macro(f.in[x, y | :]);
+}
+
+// Full-way bounce-back: the wall stores arriving fluid populations
+// reversed, and the fluid pulls them back on the following step.
+// The effective no-slip surfaces are at 0.5 and N-1.5, so L = N-2.
+dynamic BounceBack {
+    f.out[x, y | :] = bounce_back_dfs(f, x, y, {EX, EY});
+}
+
+dynamic MovingLid {
+    f.out[x, y | :] = bounce_back_dfs(f, x, y, {EX, EY}) + 6.0 * W * (EX * U_LID);
+}
+
+// Display the prescribed wall density and velocity.
+gauge BoundaryHydro -> (real rho, real ux, real uy) {
+    rho = 1.0;
+    ux = U_LID * real(y == N - 1);
+    uy = 0.0;
+}
+
+node_classes {
+    node_class FLUID(InitFluid, FluidDynamic, Hydro);
+    node_class WALL(InitFluid, BounceBack, BoundaryHydro);
+    node_class LID(InitFluid, MovingLid, BoundaryHydro);
+}
+
+// x = horizontal (0=left, N-1=right), y = vertical (0=bottom, N-1=top)
+geometry {
+    nodes[:, :] = FLUID;
+    nodes[0, :] = WALL;        // left wall   (x = 0)
+    nodes[N - 1, :] = WALL;    // right wall  (x = N-1)
+    nodes[:, 0] = WALL;        // bottom wall (y = 0)
+    nodes[:, N - 1] = LID;     // top lid     (y = N-1)
+}

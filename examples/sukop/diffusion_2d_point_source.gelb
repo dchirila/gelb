@@ -1,0 +1,76 @@
+// ============================================================
+// STATUS: EXPERIMENTAL
+// Reference: Sukop & Thorne (2006), Sec. 8.5.1 (2D test).
+// ============================================================
+// 2D pure diffusion from an instantaneous point source.
+//
+// The D2Q9 scalar lattice ``c`` is used with a simplified diffusive
+// equilibrium  c_i^eq = w_i * C  (no velocity coupling: the carrier
+// fluid is absent).  Starting from an impulse of mass $M_0$ at the
+// center of an initially-empty domain, the concentration spreads
+// as a radially-symmetric Gaussian whose analytical form (Crank
+// 1975, eq 129) is
+//
+//   $C(r, t) = M_0 / (4 \pi D t) * \exp(-r^2 / (4 D t))$
+//
+// With $\tau = 1$, the D2Q9 diffusivity is
+//   $D = c_s^2 (\tau - 1/2) = (1/3) * (1/2) = 1/6$  $lu^2/ts$.
+//
+// Domain is 201x201 with periodic BCs; runs are kept short
+// (<= 1500 steps) so that the Gaussian tail has not yet wrapped
+// around.  At t = 1500 and D = 1/6, $\sigma = \sqrt{2 D t}$ ~= 22.4 lu,
+// comfortably inside the 100-lu half-domain.
+//
+// Verification: radial profile of C at t = 500, 1000, 1500 should
+// match the Gaussian above.  Peak value at r = 0 decays as
+//   $C_{peak}(t) = M_0 / (4 \pi D t)$.
+
+simulation_description("2D diffusion from a point source (D2Q9 scalar) [Sukop 8.5.1]");
+
+global_constants {
+    const int  N = 201;
+    const int  XC = 100;     // center cell
+    const int  YC = 100;
+    const real M0 = 10000.0;
+
+    const real TAU   = 1.0;
+    const real OMEGA = 1.0 / TAU;
+
+    const array[real, 9] W  = {4.0/9.0,
+                               1.0/9.0,  1.0/9.0,  1.0/9.0,  1.0/9.0,
+                               1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+    const array[real, 9] EX = {0.0, 1.0, 0.0, -1.0,  0.0, 1.0, -1.0, -1.0,  1.0};
+    const array[real, 9] EY = {0.0, 0.0, 1.0,  0.0, -1.0, 1.0,  1.0, -1.0, -1.0};
+}
+
+lattices {
+    lattice c(2, 9, real, {N, N}, {true, true});
+}
+
+// Delta-source initial condition:  $C(x, y, 0) = M_0 \delta_{x,XC} \delta_{y,YC}$.
+// Bool-to-real promotion via the ``(x == XC) * (y == YC)`` idiom
+// (same trick used in ``heat_diffusion_1d_periodic.gelb`` and
+// ``game_of_life_glider.gelb``).
+initializer InitDelta {
+    c.out[x, y | :] = W * M0 * real((x == XC) && (y == YC));
+}
+
+// Diffusive BGK: pull-stream, accumulate C, relax towards
+// c_i^eq = w_i * C.  No velocity term -- this is pure diffusion.
+dynamic Diffuse {
+    array[real, 9] cIn = upstream_dfs(c, x, y, {EX, EY});
+    real C = sum(cIn);
+    c.out[x, y | :] = (1.0 - OMEGA) * cIn + OMEGA * W * C;
+}
+
+gauge ConcentrationGauge -> (real C) {
+    C = sum(c.in[x, y | :]);
+}
+
+node_classes {
+    node_class BULK(InitDelta, Diffuse, ConcentrationGauge);
+}
+
+geometry {
+    nodes[:, :] = BULK;
+}

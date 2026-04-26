@@ -1,0 +1,55 @@
+name: Release health
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  release-health:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ gfortran libnetcdf-dev libnetcdff-dev
+
+      - name: Install project
+        run: uv sync --all-extras
+
+      - name: Build package artifacts
+        run: uv build --wheel --sdist
+
+      - name: Smoke installed wheel
+        run: |
+          python -m venv /tmp/gelb-wheel
+          /tmp/gelb-wheel/bin/python -m pip install --upgrade pip
+          /tmp/gelb-wheel/bin/python -m pip install dist/*.whl
+          /tmp/gelb-wheel/bin/gelbc \
+            examples/basic/1d/ex0_int_vec_setto_one.gelb \
+            --diagnostics-json
+
+      - name: Run focused tests
+        run: |
+          uv run pytest \
+            gelb/tests/integration/test_example_diagnostics.py \
+            gelb/tests/integration/test_geometry_lint.py \
+            gelb/tests/unit/midware/test_periodic_continuity_validator.py \
+            gelb/tests/numeric \
+            -q
+
+      - name: Build documentation with warnings as errors
+        run: uv run sphinx-build -b html -W --keep-going docs /tmp/gelb-docs

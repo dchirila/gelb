@@ -1,0 +1,116 @@
+// Grid of independent Van der Pol oscillators integrated with classical
+// 4th-order Runge-Kutta -- demonstrates RK time integration AND using a
+// secondary lattice as per-site memory.
+//
+// System (per cell, no spatial coupling):
+//     dx/dt = y
+//     dy/dt = MU * (1 - x^2) * y - x          (Van der Pol, relaxation osc.)
+//
+// All trajectories converge to the same limit cycle; with initial
+// conditions laid out from grid coordinates the domain doubles as a
+// phase-plane basin plot.
+//
+// Two lattices:
+//   state   (q=2): DF 0 = x,  DF 1 = y            -> primary state
+//   slopes  (q=8): DF 0..7   = {k1x,k1y,...,k4x,k4y}  -> MEMORY
+// The `slopes` lattice plays no role in the dynamics -- it is written at
+// the end of every step purely to persist diagnostic data (the four RK
+// stage vectors computed during the step). It survives to the next step
+// and is read by the gauge for output, demonstrating that GeLB secondary
+// lattices are a clean place to park per-site scratch / history data
+// alongside the primary state.
+//
+// Because the ODE has no spatial coupling, a full RK4 step fits inside a
+// single dynamic block: k1..k4 are local scalars within that block, and
+// their evaluation of the vector field requires only the current (x, y)
+// at the *same* cell -- no neighbour reads, no wide stencil, no stage
+// splitting across GeLB timesteps.
+
+simulation_description("Van der Pol grid — RK4 integration with memory lattice");
+
+global_constants {
+    const int  N     = 128;
+    const real MU    = 1.0;       // VdP damping parameter
+    const real DT    = 0.02;      // RK4 time step
+    const real X_MAX = 3.5;       // half-width of initial-condition box
+    const real Y_MAX = 3.5;
+}
+
+lattices {
+    // Primary state lattice: (x, y) phase-space coordinates
+    lattice state(2, 2, real, {N, N}, {true, true});
+    // Memory lattice: 4 RK slopes x 2 components, persisted across steps
+    lattice slopes(2, 8, real, {N, N}, {true, true});
+}
+
+// Van der Pol vector field at a single phase-space point.
+function VdP(real x, real y) -> (real fx, real fy) {
+    fx = y;
+    fy = MU * (1.0 - x*x) * y - x;
+}
+
+initializer Init {
+    // Map cell coordinates to an initial (x0, y0) tiled across phase space.
+    real x0 = -X_MAX + 2.0 * X_MAX * (real(x) + 0.5) / real(N);
+    real y0 = -Y_MAX + 2.0 * Y_MAX * (real(y) + 0.5) / real(N);
+    state.out[x, y | 0]  = x0;
+    state.out[x, y | 1]  = y0;
+    slopes.out[x, y | :] = 0.0;
+}
+
+dynamic RK4Step {
+    real xn = state.in[x, y | 0];
+    real yn = state.in[x, y | 1];
+
+    // --- Four RK4 stages, all evaluated locally (pure ODE per cell) ---
+    real k1x;
+    real k1y;
+    {k1x, k1y} = VdP(xn, yn);
+
+    real k2x;
+    real k2y;
+    {k2x, k2y} = VdP(xn + 0.5*DT*k1x, yn + 0.5*DT*k1y);
+
+    real k3x;
+    real k3y;
+    {k3x, k3y} = VdP(xn + 0.5*DT*k2x, yn + 0.5*DT*k2y);
+
+    real k4x;
+    real k4y;
+    {k4x, k4y} = VdP(xn + DT*k3x, yn + DT*k3y);
+
+    // Weighted update:  u_{n+1} = u_n + dt/6 * (k1 + 2 k2 + 2 k3 + k4)
+    state.out[x, y | 0] = xn + (DT/6.0) * (k1x + 2.0*k2x + 2.0*k3x + k4x);
+    state.out[x, y | 1] = yn + (DT/6.0) * (k1y + 2.0*k2y + 2.0*k3y + k4y);
+
+    // --- Persist the 4 RK slopes on the memory lattice ---
+    slopes.out[x, y | 0] = k1x;
+    slopes.out[x, y | 1] = k1y;
+    slopes.out[x, y | 2] = k2x;
+    slopes.out[x, y | 3] = k2y;
+    slopes.out[x, y | 4] = k3x;
+    slopes.out[x, y | 5] = k3y;
+    slopes.out[x, y | 6] = k4x;
+    slopes.out[x, y | 7] = k4y;
+}
+
+gauge Out -> (real x_pos, real y_pos, real k1_norm, real k4_norm) {
+    x_pos = state.in[x, y | 0];
+    y_pos = state.in[x, y | 1];
+
+    // Norms of the first and last RK slope -- drawn from the MEMORY lattice.
+    real k1x = slopes.in[x, y | 0];
+    real k1y = slopes.in[x, y | 1];
+    real k4x = slopes.in[x, y | 6];
+    real k4y = slopes.in[x, y | 7];
+    k1_norm = sqrt(k1x*k1x + k1y*k1y);
+    k4_norm = sqrt(k4x*k4x + k4y*k4y);
+}
+
+node_classes {
+    node_class BULK(Init, RK4Step, Out);
+}
+
+geometry {
+    nodes[:, :] = BULK;
+}
