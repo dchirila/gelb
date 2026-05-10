@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Measure what turning off nvcc's fused multiply-add costs GeLB's CUDA
+# backend (user manual, Numerical semantics: Build modes).
+#
+# Decision rule (set 2026-09-27): if -fmad=false costs more than 5 %
+# on these benchmarks, CUDA keeps nvcc's fusion; otherwise fusion is off
+# on every backend.
+#
+# Usage, from the repository root on a machine with a CUDA GPU:
+#   scripts/bench-cuda-fusion            # default: 2000 steps, 5 rounds
+#   GELB_NVCC_ARCH=-arch=sm_86 STEPS=4000 ROUNDS=7 scripts/bench-cuda-fusion
+#
+# Each round runs every example with fusion on and off, alternating, so
+# drift in clock speed or temperature hits both variants alike.
+set -euo pipefail
+
+REPO="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+STEPS="${STEPS:-2000}"
+ROUNDS="${ROUNDS:-5}"
+ARCH="${GELB_NVCC_ARCH:--arch=sm_89}"
+BASE_FLAGS="-O3 $ARCH -std=c++17 --expt-relaxed-constexpr -DNDEBUG -diag-suppress=177"
+EXAMPLES=(
+    examples/lbm/2d/taylor_green_vortex_2d_bgk.gelb
+    examples/lbm/2d/channel_flow_circle_obstacle_2d_bgk.gelb
+    examples/sukop/shan_chen_2d.gelb
+    examples/lbm/3d/lid_driven_cavity_3d_bgk.gelb
+)
+
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/gelb-cuda-fusion.XXXXXX")"
+RESULTS="$WORK/results.txt"
+echo "work directory: $WORK"
+nvidia-smi --query-gpu=name,driver_version --format=csv,noheader || true
+nvcc --version 2>/dev/null | tail -1 || echo "nvcc not found on PATH"
+
+for round in $(seq 1 "$ROUNDS"); do
+    for ex in "${EXAMPLES[@]}"; do
+        name="$(basename "$ex" .gelb)"
+        for variant in fused off; do
+            flags="$BASE_FLAGS"
+            [[ "$variant" == off ]] && flags="$flags -fmad=false"
+            dir="$WORK/$name.$variant"
+            mkdir -p "$dir"
+            cp "$REPO/$ex" "$dir/"
+            log="$dir/run.$round.log"
+            if (cd "$dir" && GELB_NVCC_FLAGS="$flags" \
+                    "$REPO/scripts/gelb-run" -b gpu_cuda_cpp --seed 1 \
+                    -n "$STEPS" -w "$STEPS" "$(basename "$ex")" > "$log" 2>&1); then
+                mlups="$(grep 'Compute MLUPS' "$log" | awk '{print $3}' | tail -1)"
+                echo "$name $variant ${mlups:-NA}" | tee -a "$RESULTS"
+            else
+                echo "$name $variant FAILED (see $log)" | tee -a "$RESULTS"
+            fi
+            rm -f "$dir"/*.nc
+        done
+    done
+done
+
+python3 - "$RESULTS" <<'PY'
+import statistics, sys, collections
+rows = collections.defaultdict(list)
+for line in open(sys.argv[1]):
+    name, variant, value = line.split()[:3]
+    if value not in ("NA", "FAILED"):
+        rows[(name, variant)].append(float(value))
+print(f"\n{'example':42s} {'fused':>10s} {'off':>10s} {'cost':>8s}")
+for name in sorted({n for n, _ in rows}):
+    on, off = rows.get((name, "fused")), rows.get((name, "off"))
+    if not on or not off:
+        print(f"{name:42s} incomplete"); continue
+    m_on, m_off = statistics.median(on), statistics.median(off)
+    print(f"{name:42s} {m_on:10.1f} {m_off:10.1f} {100 * (m_on - m_off) / m_on:7.1f}%")
+print("\nMedian Compute MLUPS per variant; cost = slowdown with -fmad=false.")
+print("Rule: more than 5 % on these benchmarks -> CUDA keeps nvcc's fusion.")
+PY
