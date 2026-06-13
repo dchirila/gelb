@@ -1,0 +1,34 @@
+// Hardening test: a 2D lattice is declared with x-periodic boundaries,
+// but the painted geometry places a WALL only on the x=0 column and
+// leaves the x=Nx-1 column as BULK.  Streaming would silently wrap
+// distribution functions from the BULK right edge into the WALL left
+// edge, producing wrong results.
+//
+// The periodic-continuity validator must catch this at compile time
+// and raise GeLBExGeometryDiscontinuity, naming axis 'x' and the
+// first mismatching coords.
+
+simulation_description("Discontinuous periodic geometry (must fail)");
+
+lattices {
+  lattice f(2, 1, int, {8, 8}, {true, false});  // x-periodic, y-bounded
+}
+
+initializer InitB { f.out[x, y | 0] = 0; }
+initializer InitW { f.out[x, y | 0] = 1; }
+
+dynamic DynB { f.out[x, y | 0] = f.in[x, y | 0]; }
+dynamic DynW { f.out[x, y | 0] = f.in[x, y | 0]; }
+
+gauge OutB -> (int val) { val = f.in[x, y | 0]; }
+gauge OutW -> (int val) { val = f.in[x, y | 0]; }
+
+node_classes {
+  node_class BULK(InitB, DynB, OutB);
+  node_class WALL(InitW, DynW, OutW);
+}
+
+geometry {
+  nodes[:, :] = BULK;
+  nodes[0:0, :] = WALL;  // wall only on x=0; nothing on x=Nx-1
+}
