@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>body{font-family:-apple-system,Helvetica,sans-serif;font-size:13px;line-height:1.45;margin:12px} pre{background:#f2f2f2;padding:6px 8px;font-size:12px;overflow-x:auto}</style></head>
+<body>
+<h3>What the installer does</h3>
+<ol>
+<li>Copies GeLB to <code>~/gelb</code> (an existing <code>~/gelb</code> is kept as <code>~/gelb.bak-&lt;date&gt;</code>).</li>
+<li>For each shell you tick, appends one PATH line to that shell's startup file: <code>~/.zprofile</code>, <code>~/.bash_profile</code> (or <code>~/.profile</code>), <code>~/.tcshrc</code> (or <code>~/.cshrc</code>). Running the installer again never adds the line twice.</li>
+<li>Writes <code>~/gelb/.vscode/settings.json</code> and, if ticked and VS Code is installed, installs the GeLB extension.</li>
+<li>Compiles and runs one example as a check (20 to 40 seconds) and writes <code>~/gelb/INSTALL_REPORT.txt</code>. If the check fails, that report opens by itself and says what to do.</li>
+</ol>
+<h3>Afterwards</h3>
+<p>Open a <b>new</b> Terminal window and try:</p>
+<pre>gelb-run -n 1000 -w 100 --view ~/gelb/examples/lbm/2d/taylor_green_vortex_2d_bgk.gelb</pre>
+<p>The guide is <code>~/gelb/START_HERE.md</code>; the manual is in <code>~/gelb/docs/html/index.html</code>.</p>
+<h3>Installing from Terminal instead</h3>
+<pre>installer -pkg "GeLB-@VERSION@.pkg" -target CurrentUserHomeDirectory</pre>
+<p>configures your login shell; <code>installer -showChoicesXML</code> and <code>-applyChoiceChangesXML</code> change the choices.</p>
+<h3>Uninstall</h3>
+<p>Delete <code>~/gelb</code> and the two GeLB lines the installer added to your shell startup file; remove the extension from VS Code's Extensions view.</p>
+</body></html>

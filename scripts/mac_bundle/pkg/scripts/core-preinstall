@@ -1,0 +1,22 @@
+#!/bin/bash
+#
+# preinstall of the GeLB core package: keep a previous installation.
+# Installer would otherwise merge the new files over the old tree and
+# report success, and a stale file from an older release could shadow a
+# new one.  $2 is the install destination (~/gelb).  A failure here
+# aborts the installation before anything is written.
+set -u
+DEST="${2:-}"
+[[ -n "$DEST" && -d "$DEST" && "$(basename "$DEST")" == "gelb" ]] || exit 0
+if [[ -z "$(ls -A "$DEST" 2>/dev/null)" ]]; then
+    rmdir "$DEST" 2>/dev/null || true       # empty folder: nothing to keep
+    exit 0
+fi
+BAK="$DEST.bak-$(date +%Y%m%d-%H%M%S)"
+if ! mv "$DEST" "$BAK"; then
+    echo "GeLB: could not move the existing $DEST aside (to $BAK); nothing was installed." >&2
+    exit 1
+fi
+# Tell the postinstall where the old tree went (same install session).
+printf '%s' "$BAK" > "${INSTALLER_TEMP:-/tmp}/gelb-previous-install" 2>/dev/null || true
+exit 0

@@ -1,0 +1,41 @@
+#!/bin/bash
+#
+# postinstall of the "VS Code extension" choice.  Finds the `code`
+# command (Installer's PATH is minimal, so the application bundle is
+# probed directly) and installs the VSIX from ~/gelb.  Never fails the
+# installation; the outcome goes into the report.
+set -u
+# Installer passes the package's install destination as $2: the home
+# folder for a payload-free component (install location "/"), ~/gelb for
+# the core component (install location "/gelb").  Accept both.
+if [[ -x "${2:-}/bin/gelb-run" ]]; then
+    DEST="$2"
+elif [[ -x "${2:-$HOME}/gelb/bin/gelb-run" ]]; then
+    DEST="${2:-$HOME}/gelb"
+else
+    exit 0
+fi
+HOME_DIR="$(dirname "$DEST")"
+REPORT="$DEST/INSTALL_REPORT.txt"
+say() { printf '%s\n' "$*" >> "$REPORT" 2>/dev/null || true; }
+
+VSIX="$(ls "$DEST"/vscode-gelb/*.vsix 2>/dev/null | head -n 1 || true)"
+[[ -n "$VSIX" ]] || { say "VS Code: no .vsix found in $DEST/vscode-gelb"; exit 0; }
+
+CODE=""
+for c in "$(command -v code 2>/dev/null || true)" \
+         "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code" \
+         "$HOME_DIR/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"; do
+    if [[ -n "$c" && -x "$c" ]]; then CODE="$c"; break; fi
+done
+if [[ -z "$CODE" ]]; then
+    say "VS Code: not found. To install the extension later: in VS Code open the Extensions view,"
+    say "  click the '...' menu, choose 'Install from VSIX...' and pick $VSIX"
+    exit 0
+fi
+if "$CODE" --install-extension "$VSIX" --force >/dev/null 2>&1; then
+    say "VS Code: extension installed ($(basename "$VSIX"))"
+else
+    say "VS Code: 'code --install-extension' failed; install $VSIX by hand (Extensions view, '...', Install from VSIX...)"
+fi
+exit 0

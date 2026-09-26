@@ -1,0 +1,4 @@
+#!/bin/sh
+# gelb-view -- the GeLB viewer (simulation output and program geometry).
+. "$(dirname "$0")/gelb-env.sh"
+exec "$GELB_PYTHON" -m gelb.visualization.gelb_view "$@"

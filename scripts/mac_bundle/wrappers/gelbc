@@ -1,0 +1,4 @@
+#!/bin/sh
+# gelbc -- the GeLB compiler, run with the bundled Python.
+. "$(dirname "$0")/gelb-env.sh"
+exec "$GELB_PYTHON" -m gelb.gelbc "$@"

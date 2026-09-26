@@ -1,0 +1,4 @@
+#!/bin/sh
+# gelb-run -- compile and run a GeLB program with the bundled toolchain.
+. "$(dirname "$0")/gelb-env.sh"
+exec "$GELB_HOME/scripts/gelb-run" "$@"

@@ -1,0 +1,92 @@
+#!/bin/bash
+#
+# postinstall of the GeLB core package.  Installer runs it as the user,
+# after the payload has been copied to ~/gelb, with a minimal PATH and
+# $2 = the home folder (the install destination of a home-domain
+# package).  It never fails the installation: problems go into
+# ~/gelb/INSTALL_REPORT.txt, which is opened in a window when the
+# install runs from the GUI.
+set -u
+# Installer passes the package's install destination as $2: the home
+# folder for a payload-free component (install location "/"), ~/gelb for
+# the core component (install location "/gelb").  Accept both.
+if [[ -x "${2:-}/bin/gelb-run" ]]; then
+    DEST="$2"
+elif [[ -x "${2:-$HOME}/gelb/bin/gelb-run" ]]; then
+    DEST="${2:-$HOME}/gelb"
+else
+    exit 0
+fi
+HOME_DIR="$(dirname "$DEST")"
+REPORT="$DEST/INSTALL_REPORT.txt"
+PROBLEM=0
+say() { printf '%s\n' "$*" >> "$REPORT"; }
+
+[[ -x "$DEST/python/bin/python3.12" ]] || exit 0   # nothing to check
+
+# Installer does not quarantine what it installs, but make sure: Gatekeeper
+# would otherwise refuse the bundled Python and libraries.
+/usr/bin/xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
+
+# Settings for the VS Code extension (the extension itself is a separate choice).
+mkdir -p "$DEST/.vscode"
+cat > "$DEST/.vscode/settings.json" <<JSON
+{
+  "gelb.gelbcCommand": "$DEST/bin/gelbc",
+  "gelb.gelbViewCommand": "$DEST/bin/gelb-view",
+  "gelb.gelbRunCommand": "$DEST/bin/gelb-run"
+}
+JSON
+
+: > "$REPORT"
+say "$(head -n 1 "$DEST/VERSION") installed into $DEST on $(date '+%Y-%m-%d %H:%M')"
+PREV="$(cat "${INSTALLER_TEMP:-/tmp}/gelb-previous-install" 2>/dev/null || true)"
+if [[ -n "$PREV" && -d "$PREV" ]]; then
+    say "Your previous installation was moved to $PREV (delete it once this one works)."
+fi
+say ""
+
+# Compiler check.
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/gelb-install.XXXXXX")"
+trap 'rm -rf "$TMP"' EXIT
+CLANG_LINE="$(/usr/bin/clang++ --version 2>/dev/null | head -n 1 || true)"
+printf 'int main() { return 0; }\n' > "$TMP/cc.cpp"
+if [[ -z "$CLANG_LINE" ]] || ! /usr/bin/clang++ "$TMP/cc.cpp" -o "$TMP/cc" >"$TMP/cc.log" 2>&1; then
+    PROBLEM=1
+    say "PROBLEM: no working C++ compiler."
+    say "  Install Xcode or the Command Line Tools (in Terminal: xcode-select --install)."
+    say "  If Xcode is installed but its license was never accepted: sudo xcodebuild -license accept"
+    say "  Then run the installer again, or just try gelb-run in a new Terminal window."
+    [[ -s "$TMP/cc.log" ]] && { say ""; say "compiler output:"; sed 's/^/  /' "$TMP/cc.log" >> "$REPORT"; }
+else
+    say "Compiler: $CLANG_LINE"
+    # Smoke test: compile and run one example, then plot its output headless.
+    EX="$DEST/examples/lbm/2d/taylor_green_vortex_2d_bgk.gelb"
+    if (cd "$TMP" && "$DEST/bin/gelb-run" -n 100 -w 100 "$EX") >"$TMP/run.log" 2>&1; then
+        say "Compiled and ran $(basename "$EX"): $(grep -i 'Compute MLUPS' "$TMP/run.log" | tr -s ' ' || echo ok)"
+        if (cd "$TMP" && "$DEST/bin/gelb-view" data taylor_green_vortex_2d_bgk.nc --no-gui -o smoke.png) >"$TMP/view.log" 2>&1 \
+           && ls "$TMP"/smoke*.png >/dev/null 2>&1; then
+            say "gelb-view plotted the output: OK"
+        else
+            PROBLEM=1
+            say "PROBLEM: gelb-view could not plot the output."; sed 's/^/  /' "$TMP/view.log" >> "$REPORT"
+        fi
+    else
+        PROBLEM=1
+        say "PROBLEM: the example did not compile or run."; sed 's/^/  /' "$TMP/run.log" | tail -n 40 >> "$REPORT"
+    fi
+fi
+
+say ""
+if [[ "$PROBLEM" == 0 ]]; then
+    say "Everything checked out. Open a new Terminal window and try:"
+else
+    say "Once the problem above is fixed, open a new Terminal window and try:"
+fi
+say "  gelb-run -n 1000 -w 100 --view $DEST/examples/lbm/2d/taylor_green_vortex_2d_bgk.gelb"
+say "The guide is $DEST/START_HERE.md."
+
+if [[ "$PROBLEM" == 1 && "${COMMAND_LINE_INSTALL:-0}" != 1 ]]; then
+    /usr/bin/open -t "$REPORT" 2>/dev/null || true
+fi
+exit 0

@@ -1,4 +1,5 @@
-.idea/workspace.xml
+.idea/
+/.vscode/
 
 # Ignore all __pycache__ directories
 **/__pycache__/
@@ -15,7 +16,59 @@ build/
 **/*.rst.html
 *.html
 
-# ANTLR generated files
+# ANTLR generated files (Python modules are committed so the package
+# is installable without a JDK; .interp/.tokens are tooling artefacts
+# that add no value to end users).
 gelb/antlr_part/generated_code/*.interp
 gelb/antlr_part/generated_code/*.tokens
-gelb/antlr_part/generated_code/*.py
+
+# Fortran build artifacts
+# .mod = Fortran module interface (compiler-generated; analogous to .h
+#        files in C).
+*.mod
+*.o
+
+# Simulation output (NetCDF) and sweep result directories
+*.nc
+rb_sweep_results_*/
+rb_2d/
+rb_3d/
+
+# Claude Code workspace state
+.claude/
+
+# Imported PhD thesis reference sources (external, not part of gelb)
+results_for_phd_thesis__Nov_2017/
+
+# Other reference PDFs (books I bought, etc.)
+refs/
+
+# Release manual PDF. It is generated from docs/ and attached to
+# releases, not tracked during normal development.
+/GeLB_User_Tutorial.pdf
+.DS_Store
+
+# VSCode extension build artifacts
+vscode-gelb/node_modules/
+vscode-gelb/out/
+vscode-gelb/*.vsix
+
+# Docusaurus source for gelb-lang.org — lives in its own repo
+# (dropped here as a working copy; never meant to be committed into gelb/)
+gelb_site/
+
+# Asymptote intermediate output. The .asy sources + rendered .pdf
+# / .svg are tracked; the .eps (and gs's tmp files) are regenerated
+# from the source on every scripts/render_figs.sh run.
+docs/figs/*.eps
+
+# Sphinx build output. `make html` in docs/ writes here; the content
+# is derived from the .rst sources, so there's no reason to track it.
+docs/_build/
+
+# Machine notes (private, not to be committed)
+.machine_notes/
+
+# AST visualisation outputs are generated on demand (see docs/visualizations/README.md)
+docs/visualizations/*
+!docs/visualizations/README.md

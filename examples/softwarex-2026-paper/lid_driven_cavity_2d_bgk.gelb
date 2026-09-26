@@ -1,0 +1,103 @@
+// 2D lid-driven square cavity flow -- D2Q9 BGK LBM
+//
+// Standard benchmark for incompressible Navier-Stokes solvers.
+// A square cavity with stationary no-slip walls on three sides and a
+// moving lid on top, driving a recirculating vortex.
+//
+// Boundary conditions:
+//   - Left, right, bottom walls: stationary full-way bounce-back
+//   - Top lid: moving-wall bounce-back (velocity U_LID in +x direction)
+//
+// Axis convention: x = horizontal (left to right), y = vertical (bottom to top)
+//
+// Moving-wall bounce-back (Ladd 1994; Krueger et al. 2017 Eq. 5.26):
+//   f_i^new(x) = f_{opp(i)}^old(x + c_i) + 6 * w_i * (c_i . u_wall)
+// In array form, with the bounced-back DFs from bounce_back_dfs(...):
+//   f.out = bounce_back_dfs(...) + 6 * W * (EX * U_LID)
+//
+// Parameters: N=65, Re=100, TAU=0.689
+
+simulation_description("2D lid-driven cavity flow (LBM-BGK, D2Q9)");
+
+global_constants {
+    const int N = 65;
+    
+    const real U_LID = 0.1;
+    const real TAU = 0.689;
+    const real TAU_INV = 1.0 / TAU;
+
+    // D2Q9 lattice velocities
+    const array[real, 9] EX = {0.0, 1.0, 0.0, -1.0,  0.0, 1.0, -1.0, -1.0,  1.0};
+    const array[real, 9] EY = {0.0, 0.0, 1.0,  0.0, -1.0, 1.0,  1.0, -1.0, -1.0};
+    
+    // D2Q9 weights
+    const array[real, 9] W = {4.0/9.0,
+        1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+}
+
+lattices {
+    lattice f(2, 9, real, {N, N}, {false, false});
+}
+
+function Macro(array[real, 9] fIn) -> (real rho, real ux, real uy) {
+    rho = sum(fIn);
+    ux = dot_prod(EX, fIn) / rho;
+    uy = dot_prod(EY, fIn) / rho;
+}
+
+function Eq(real rho, real ux, real uy) -> (array[real, 9] feq) {
+    real usq = ux*ux + uy*uy;
+    array[real, 9] eu = EX * ux + EY * uy;
+    feq = W * rho * (1.0 + 3.0*eu + 4.5*eu*eu - 1.5*usq);
+}
+
+initializer InitFluid {
+    f.out[x, y | :] = W;
+}
+
+dynamic FluidDynamic {
+    array[real, 9] fIn = upstream_dfs(f, x, y, {EX, EY});
+    
+    real rho;
+    real ux;
+    real uy;
+    
+    {rho, ux, uy} = Macro(fIn);
+    
+    f.out[x, y | :] = fIn - TAU_INV * (fIn - Eq(rho, ux, uy));
+}
+
+dynamic BounceBack {
+    f.out[x, y | :] = bounce_back_dfs(f, x, y, {EX, EY});
+}
+
+dynamic MovingLid {
+    f.out[x, y | :] = bounce_back_dfs(f, x, y, {EX, EY}) + 6.0 * W * (EX * U_LID);
+}
+
+gauge Hydro -> (real rho, real ux, real uy) {
+    {rho, ux, uy} = Macro(f.in[x, y | :]);
+}
+
+// Display the prescribed wall density and velocity.
+gauge BoundaryHydro -> (real rho, real ux, real uy) {
+    rho = 1.0;
+    ux = U_LID * real(y == N - 1);
+    uy = 0.0;
+}
+
+node_classes {
+    node_class FLUID(InitFluid, FluidDynamic, Hydro);
+    node_class WALL(InitFluid, BounceBack, BoundaryHydro);
+    node_class LID(InitFluid, MovingLid, BoundaryHydro);
+}
+
+// x = horizontal (0=left, N-1=right), y = vertical (0=bottom, N-1=top)
+geometry {
+    nodes[:, :] = FLUID;
+    nodes[0, :] = WALL;        // left wall   (x = 0)
+    nodes[N - 1, :] = WALL;    // right wall  (x = N-1)
+    nodes[:, 0] = WALL;        // bottom wall (y = 0)
+    nodes[:, N - 1] = LID;     // top lid     (y = N-1)
+}

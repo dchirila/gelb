@@ -1,0 +1,121 @@
+// 2D Rayleigh-Benard convection (D2Q9 fluid + D2Q5 temperature)
+// Boundary conditions:
+//   x-direction: periodic
+//   y-direction: no-slip walls (bounce-back) for fluid,
+//                fixed temperature (Dirichlet) for temperature
+
+simulation_description(
+    "2D Rayleigh-Benard convection (BGK, D2Q9+D2Q5)");
+
+global_constants {
+    const int NY = 32;
+    const int NX = 4 * NY;
+    // Rayleigh number (moderate, above Ra_c ~ 1708)
+    const real RA = 10000.0;
+    const real PR = 0.71;         // Prandtl number (air)
+    const real MAX_MACH = 0.1;    // Maximum Mach number
+    // Derived LBM parameters (from Ra, Pr, NY)
+    const real ALPHA_G = MAX_MACH * MAX_MACH / (3.0 * NY);
+    const real VISCOSITY = NY * MAX_MACH * sqrt(PR / (3.0 * RA));
+    const real DIFFUSIVITY = NY * MAX_MACH / sqrt(3.0 * RA * PR);
+    const real TAU_F = 0.5 + 3.0 * VISCOSITY;
+    const real TAU_G = 0.5 + 3.0 * DIFFUSIVITY;
+    const real OMEGA_F = 1.0 / TAU_F;
+    const real OMEGA_G = 1.0 / TAU_G;
+    const real T_HOT = 1.0;
+    const real T_COLD = 0.0;
+    // Seed for the convective instability (as in the MRT example):
+    // a localised delta at one cell plus weak noise everywhere
+    const real IC_NOISE_AMP = T_HOT / 1.0e8;
+    const real DELTA_PERTURB = T_HOT / 1.0e5;
+    const int DELTA_PERTURB_X = NX / 2;
+    const int DELTA_PERTURB_Y = 2;
+    const array[real, 9] EX =
+        {0.0, 1.0, 0.0, -1.0,  0.0, 1.0, -1.0, -1.0,  1.0};
+    const array[real, 9] EY =
+        {0.0, 0.0, 1.0,  0.0, -1.0, 1.0,  1.0, -1.0, -1.0};
+    const array[real, 9] W  = {4.0/9.0,
+        1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+    const array[real, 5] EX5 = {0.0, 1.0, 0.0, -1.0,  0.0};
+    const array[real, 5] EY5 = {0.0, 0.0, 1.0,  0.0, -1.0};
+    const array[real, 5] W5  =
+        {1.0/3.0, 1.0/6.0, 1.0/6.0, 1.0/6.0, 1.0/6.0};
+}
+
+lattices {
+    lattice f(2, 9, real, {NX, NY}, {true, false});   // fluid D2Q9
+    lattice g(2, 5, real, {NX, NY}, {true, false});   // temp. D2Q5
+}
+
+function Macro(array[real, 9] fIn) -> (real rho, real ux, real uy) {
+    rho = sum(fIn);
+    ux = dot_prod(EX, fIn) / rho;
+    uy = dot_prod(EY, fIn) / rho;
+}
+
+function Eq(real rho, real ux, real uy) -> (array[real, 9] feq) {
+    real usq = ux*ux + uy*uy;
+    array[real, 9] eu = EX * ux + EY * uy;
+    feq = W * rho * (1.0 + 3.0*eu + 4.5*eu*eu - 1.5*usq);
+}
+
+// --- D2Q5 equilibrium (linear in T, advected by the flow) ---
+function EqTemp(real T, real ux, real uy) -> (array[real, 5] geq) {
+    array[real, 5] eu = EX5 * ux + EY5 * uy;
+    geq = W5 * T * (1.0 + 3.0 * eu);
+}
+
+// --- Initializer: fluid at rest, linear temperature profile ---
+initializer InitBulk {
+    f.out[x, y | :] = Eq(1.0, 0.0, 0.0);
+    real T_init = T_HOT + (T_COLD - T_HOT) * (y + 0.5) / NY
+        + (random() - 0.5) * IC_NOISE_AMP
+        + DELTA_PERTURB
+          * real(x == DELTA_PERTURB_X && y == DELTA_PERTURB_Y);
+    g.out[x, y | :] = EqTemp(T_init, 0.0, 0.0);
+}
+
+// --- Dynamic: coupled BGK collision for fluid + temperature ---
+dynamic BulkDynamic {
+    array[real, 9] fIn = upstream_dfs(f, x, y, {EX, EY});
+    array[real, 5] gIn = upstream_dfs(g, x, y, {EX5, EY5});
+    real rho; real ux; real uy;
+    {rho, ux, uy} = Macro(fIn);
+    real T = sum(gIn);
+    // Strang splitting: 1st half of the buoyancy force
+    uy = uy + 0.5 * ALPHA_G * T;
+    f.out[x, y | :] = fIn - OMEGA_F * (fIn - Eq(rho, ux, uy));
+    // Strang splitting: 2nd half of the buoyancy force
+    uy = uy + 0.5 * ALPHA_G * T;
+    g.out[x, y | :] = gIn - OMEGA_G * (gIn - EqTemp(T, ux, uy));
+}
+
+// --- Dynamic: bounce-back for fluid + fixed hot temperature ---
+dynamic WallBotDynamic {
+    f.out[x, y | :] = bounce_back_dfs(f, x, y, {EX, EY});
+    g.out[x, y | :] = EqTemp(T_HOT, 0.0, 0.0);
+}
+
+// --- Dynamic: bounce-back for fluid + fixed cold temperature ---
+dynamic WallTopDynamic {
+    f.out[x, y | :] = bounce_back_dfs(f, x, y, {EX, EY});
+    g.out[x, y | :] = EqTemp(T_COLD, 0.0, 0.0);
+}
+
+gauge RBOutput -> (real rho, real ux, real uy, real T) {
+    {rho, ux, uy} = Macro(f.in[x, y | :]);
+    T = sum(g.in[x, y | :]);
+}
+
+node_classes {
+    node_class FLUID(InitBulk, BulkDynamic, RBOutput);
+    node_class WALL_BOT(InitBulk, WallBotDynamic, RBOutput);
+    node_class WALL_TOP(InitBulk, WallTopDynamic, RBOutput);
+}
+
+geometry {
+    nodes[:, :] = FLUID;
+    nodes[:, 0] = WALL_BOT;
+    nodes[:, NY - 1] = WALL_TOP;
+}

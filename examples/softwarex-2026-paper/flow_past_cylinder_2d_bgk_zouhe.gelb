@@ -1,0 +1,170 @@
+// 2D flow past a circular cylinder -- D2Q9 BGK with Zou-He open boundaries.
+//
+// Companion / validation anchor for flow_past_madeira_2d_bgk_zouhe.gelb
+// (SoftwareX paper, Section "Illustrative examples"): identical numerics
+// and boundary treatment, canonical geometry.  Flow enters at the TOP row
+// (Zou-He velocity inlet, u = (0, -U_IN)) and leaves at the BOTTOM row
+// (zero-gradient outflow), so both programs share the
+// map-like orientation with the stream running top -> bottom.  The
+// lateral (x) boundaries are periodic -- no channel walls, so the wake
+// is not confined and no corner nodes are needed.
+//
+//   D    = 2*R = 48 cells,  blockage D/NX = 9.4%
+//   nu   = (TAU - 1/2)/3 = 0.016    (TAU = 0.548)
+//   U_IN = 0.05,  Ma = U_IN*sqrt(3) ~ 0.087  (< 0.1, Krueger safe regime)
+//   Re   = U_IN * D / nu = 150
+//
+// At Re = 150 an unconfined cylinder sheds a clean laminar Karman street
+// with St = f*D/U ~ 0.18 (Williamson 1989); the periodic 9.4%-blockage
+// setup here should land slightly above that.  Upstream headroom is 8 D,
+// downstream 24 D.
+//
+// Run (from the gelb repo root; ~2-6 min on a modern multicore CPU):
+//   ./scripts/gelb-run -b cpu_highway -n 200000 -w 10000 \
+//       examples/softwarex-2026-paper/flow_past_cylinder_2d_bgk_zouhe.gelb
+//
+// Zou-He references:
+//   - Zou & He (1997), Phys. Fluids 9(6), 1591.
+//   - examples/lbm/2d/couette_flow_2d_bgk_zouhe.gelb   (velocity form)
+//
+// D2Q9 velocity index convention:
+//   0: rest    1: E    2: N    3: W    4: S
+//   5: NE      6: NW   7: SW   8: SE
+
+simulation_description("2D flow past a cylinder, Zou-He inlet/outlet (LBM-BGK, D2Q9)");
+
+global_constants {
+    const int NX = 512;               // lateral (periodic)
+    const int NY = 1536;              // streamwise (inlet top, outlet bottom)
+    const real TAU = 0.548;           // nu = (TAU - 0.5)/3 = 0.016
+    const real TAU_INV = 1.0 / TAU;
+
+    const real U_IN = 0.05;           // inflow speed
+    const real U_INX = 0.0;           // inflow velocity components:
+    const real U_INY = -1.0 * U_IN;   // straight down (top -> bottom)
+
+    // Cylinder: 8 D upstream headroom, 24 D of wake room downstream;
+    // the 1-cell x-offset off the domain centerline (plus the initial
+    // perturbation below) breaks the symmetric-wake transient early.
+    const int CX = NX / 2 - 1;
+    const int CY = 3 * NY / 4;
+    const int R = 24;
+
+    const real PI = 3.14159265358979;
+    const array[real, 9] EX = {0.0, 1.0, 0.0, -1.0,  0.0, 1.0, -1.0, -1.0,  1.0};
+    const array[real, 9] EY = {0.0, 0.0, 1.0,  0.0, -1.0, 1.0,  1.0, -1.0, -1.0};
+    const array[real, 9] W = {4.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0,
+                              1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
+}
+
+lattices {
+    lattice f(2, 9, real, {NX, NY}, {true, false});
+}
+
+function InCircle(int x, int y, int cx, int cy, int r) -> (bool hit) {
+    hit = (x - cx) * (x - cx) + (y - cy) * (y - cy) < r * r;
+}
+
+function Macro(array[real, 9] fIn) -> (real rho, real ux, real uy) {
+    rho = sum(fIn);
+    ux = dot_prod(EX, fIn) / rho;
+    uy = dot_prod(EY, fIn) / rho;
+}
+
+function Eq(real rho, real ux, real uy) -> (array[real, 9] feq) {
+    real usq = ux*ux + uy*uy;
+    array[real, 9] eu = EX * ux + EY * uy;
+    feq = W * rho * (1.0 + 3.0*eu + 4.5*eu*eu - 1.5*usq);
+}
+
+// Uniform free stream plus a small transverse perturbation that seeds
+// the shedding instability (it decays everywhere except in the wake).
+initializer InitFluid {
+    real ux0 = U_INX + 0.05 * U_IN * sin(6.0 * PI * real(y) / real(NY));
+    f.out[x, y | :] = Eq(1.0, ux0, U_INY);
+}
+
+// Obstacle cells start at REST equilibrium so every lattice slot a
+// wall cell might copy from (including SOLID interior neighbors) holds
+// a finite, zero-momentum value.
+initializer InitWall {
+    f.out[x, y | :] = W;
+}
+
+dynamic FluidDynamic {
+    array[real, 9] fIn = upstream_dfs(f, x, y, {EX, EY});
+    real rho;
+    real ux;
+    real uy;
+    {rho, ux, uy} = Macro(fIn);
+    f.out[x, y | :] = fIn - TAU_INV * (fIn - Eq(rho, ux, uy));
+}
+
+// Zou-He velocity inlet at the top row (y = NY-1): prescribe
+// u = (U_INX, U_INY) with U_INY < 0 (inflow, southward).  Post-streaming
+// knowns are 0,1,3 (same row) and 2,5,6 (from the row below); the
+// unknowns 4 (S), 7 (SW), 8 (SE) are reconstructed from mass and
+// momentum plus the non-equilibrium bounce-back closure on the normal
+// direction, then the node collides like any bulk node.
+dynamic ZouHeInlet {
+    real f0 = f.in[x,     y     | 0];
+    real f1 = f.in[x - 1, y     | 1];
+    real f3 = f.in[x + 1, y     | 3];
+    real f2 = f.in[x,     y - 1 | 2];
+    real f5 = f.in[x - 1, y - 1 | 5];
+    real f6 = f.in[x + 1, y - 1 | 6];
+
+    real rho_in = (f0 + f1 + f3 + 2.0 * (f2 + f5 + f6)) / (1.0 + U_INY);
+    real nxd = 0.5 * (f1 - f3);
+    real f4 = f2 - (2.0 / 3.0) * rho_in * U_INY;
+    real f7 = f5 + nxd - (1.0 / 6.0) * rho_in * U_INY - 0.5 * rho_in * U_INX;
+    real f8 = f6 - nxd - (1.0 / 6.0) * rho_in * U_INY + 0.5 * rho_in * U_INX;
+
+    array[real, 9] fIn = {f0, f1, f2, f3, f4, f5, f6, f7, f8};
+    real rho;
+    real ux;
+    real uy;
+    {rho, ux, uy} = Macro(fIn);
+    f.out[x, y | :] = fIn - TAU_INV * (fIn - Eq(rho, ux, uy));
+}
+
+// Zero-gradient outflow at the bottom row (y = 0): the node copies
+// its upstream neighbor's post-collision state, i.e. d f / d y = 0.
+// A pressure (Zou-He density) outlet is too reflective for a vortex
+// street: clamping rho at the boundary while the wake convects
+// through it drives a spurious recirculating state.
+dynamic Outflow {
+    f.out[x, y | :] = f.in[x, y + 1 | :];
+}
+
+// Bounce-back on the obstacle ring: bounce_back_dfs loads each slot i
+// with the neighboring cell's DF pointing back along -e_i, so when that
+// fluid neighbor pulls slot i on the next step it receives its own
+// reflected population -- the no-slip surface sits half a link outside
+// the ring, and every fluid-facing link conserves mass exactly.  (Slots
+// whose neighbor is another WALL/SOLID cell copy rest-state values; they
+// are never pulled by fluid cells.)  The ring is an arbitrary closed
+// curve, so all 8 directions take part.
+dynamic BounceBack {
+    f.out[x, y | :] = bounce_back_dfs(f, x, y, {EX, EY});
+}
+
+gauge Hydro -> (real rho, real ux, real uy) {
+    {rho, ux, uy} = Macro(f.in[x, y | :]);
+}
+
+node_classes {
+    node_class FLUID(InitFluid, FluidDynamic, Hydro);
+    node_class INLET(InitFluid, ZouHeInlet, Hydro);
+    node_class OUTLET(InitFluid, Outflow, Hydro);
+    node_class WALL(InitWall, BounceBack, Hydro);
+    node_class SOLID(InitWall) masked;
+}
+
+geometry {
+    nodes[:, :] = FLUID;
+    nodes[:, 0] = OUTLET;
+    nodes[:, NY - 1] = INLET;
+    nodes[where InCircle(x, y, CX, CY, R)] = SOLID;
+    border(SOLID) = WALL;
+}

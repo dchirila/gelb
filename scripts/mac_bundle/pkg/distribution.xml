@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Distribution for the GeLB macOS installer (productbuild).  The
+     build script substitutes @VERSION@ and @TARGET_MIN@.  Everything
+     installs into the current user's home folder (~/gelb), so no
+     administrator password is needed; the shell and VS Code choices
+     are payload-free component packages whose postinstall scripts do
+     the work. -->
+<installer-gui-script minSpecVersion="2">
+  <title>GeLB @VERSION@</title>
+  <organization>org.gelb</organization>
+  <options customize="always" require-scripts="false" rootVolumeOnly="true" hostArchitectures="arm64"/>
+  <domains enable_anywhere="false" enable_currentUserHome="true" enable_localSystem="false"/>
+  <welcome file="welcome.html" mime-type="text/html"/>
+  <readme file="readme.html" mime-type="text/html"/>
+  <license file="license.txt" mime-type="text/plain"/>
+  <conclusion file="conclusion.html" mime-type="text/html"/>
+  <installation-check script="gelb_check()"/>
+  <script><![CDATA[
+    function gelb_check() {
+      if (system.compareVersions(system.version.ProductVersion, '@TARGET_MIN@') < 0) {
+        my.result.title = 'macOS @TARGET_MIN@ or newer is required';
+        my.result.message = 'This build of GeLB needs macOS @TARGET_MIN@ or newer on Apple Silicon.';
+        my.result.type = 'Fatal';
+        return false;
+      }
+      if (!system.files.fileExistsAtPath('/Applications/Xcode.app') &&
+          !system.files.fileExistsAtPath('/Library/Developer/CommandLineTools/usr/bin/clang++')) {
+        my.result.title = 'No C++ compiler found';
+        my.result.message = 'GeLB compiles simulations with the clang++ that comes with Xcode or the Command Line Tools (xcode-select --install). You can continue; the compile check at the end of the installation will fail until one of them is installed.';
+        my.result.type = 'Warning';
+        return false;
+      }
+      return true;
+    }
+    function login_shell_is(name) {
+      return system.env.SHELL != undefined && system.env.SHELL.indexOf(name) != -1;
+    }
+  ]]></script>
+  <choices-outline>
+    <line choice="core"/>
+    <line choice="shell_zsh"/>
+    <line choice="shell_bash"/>
+    <line choice="shell_tcsh"/>
+    <line choice="vscode"/>
+  </choices-outline>
+  <choice id="core" title="GeLB @VERSION@" visible="true" enabled="false" selected="true"
+          description="The compiler (gelbc), the compile-and-run wrapper (gelb-run), the viewer (gelb-view), all examples, the user tutorial, a private Python and the libraries they need. Installs into ~/gelb (about 400 MB); the last step compiles and runs one example, which takes about half a minute.">
+    <pkg-ref id="org.gelb.pkg.core"/>
+  </choice>
+  <choice id="shell_zsh" title="Set up zsh" start_selected="login_shell_is('zsh')"
+          description="Adds one PATH line to ~/.zprofile so that gelb-run, gelbc and gelb-view are found in new Terminal windows.">
+    <pkg-ref id="org.gelb.pkg.shell.zsh"/>
+  </choice>
+  <choice id="shell_bash" title="Set up bash" start_selected="login_shell_is('bash')"
+          description="Adds one PATH line to ~/.bash_profile (or to ~/.profile when that is the file you already use).">
+    <pkg-ref id="org.gelb.pkg.shell.bash"/>
+  </choice>
+  <choice id="shell_tcsh" title="Set up tcsh" start_selected="login_shell_is('tcsh') || login_shell_is('csh')"
+          description="Adds one setenv PATH line to ~/.tcshrc (or to ~/.cshrc when that is the file you already use).">
+    <pkg-ref id="org.gelb.pkg.shell.tcsh"/>
+  </choice>
+  <choice id="vscode" title="VS Code extension" start_selected="system.files.fileExistsAtPath('/Applications/Visual Studio Code.app')"
+          description="Installs the GeLB language extension (syntax highlighting, Problems panel, geometry preview) into Visual Studio Code, if it is installed. The settings that point the extension at ~/gelb are written in any case.">
+    <pkg-ref id="org.gelb.pkg.vscode"/>
+  </choice>
+  <pkg-ref id="org.gelb.pkg.core" version="@VERSION@" onConclusion="none">core.pkg</pkg-ref>
+  <pkg-ref id="org.gelb.pkg.shell.zsh" version="@VERSION@" onConclusion="none">shell-zsh.pkg</pkg-ref>
+  <pkg-ref id="org.gelb.pkg.shell.bash" version="@VERSION@" onConclusion="none">shell-bash.pkg</pkg-ref>
+  <pkg-ref id="org.gelb.pkg.shell.tcsh" version="@VERSION@" onConclusion="none">shell-tcsh.pkg</pkg-ref>
+  <pkg-ref id="org.gelb.pkg.vscode" version="@VERSION@" onConclusion="none">vscode.pkg</pkg-ref>
+</installer-gui-script>

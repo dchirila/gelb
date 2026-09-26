@@ -3,7 +3,7 @@
 import pytest
 from gelb.tests.test_utils import minimal_gelb_program_1d
 from gelb.frontend.stage1_frontend import (
-    get_ast, validate_ast_root_is_program, validate_gauges
+    get_ast, validate_ast_root_is_program, validate_block_signatures
 )
 from gelb.utils.exceptions import GeLBExTypeError
 
@@ -24,7 +24,7 @@ class TestGaugeValidation:
         dynamic Update {
             f.out[x | 0] = 1;
         }
-        gauge ValidGauge(out = {int result; real value;}) {
+        gauge ValidGauge -> (int result, real value) {
             result = 42;
             value = 3.14;
         }
@@ -40,7 +40,7 @@ class TestGaugeValidation:
         validate_ast_root_is_program(ast)
         
         # Should not raise any exceptions
-        validate_gauges(ast)
+        validate_block_signatures(ast)
     
     def test_invalid_gauge_no_outputs(self):
         """Test that gauges without output specifications are rejected."""
@@ -55,7 +55,7 @@ class TestGaugeValidation:
         dynamic Update {
             f.out[x | 0] = 1;
         }
-        gauge InvalidGauge() {
+        gauge InvalidGauge {
             int temp;
             temp = 42;
         }
@@ -71,11 +71,11 @@ class TestGaugeValidation:
         validate_ast_root_is_program(ast)
         
         with pytest.raises(GeLBExTypeError) as exc_info:
-            validate_gauges(ast)
+            validate_block_signatures(ast)
         
         assert "InvalidGauge" in str(exc_info.value)
         assert "no output specification" in str(exc_info.value)
-        assert "out = {" in str(exc_info.value)  # Hint should mention syntax
+        assert "-> (type name, ...)" in str(exc_info.value)
     
     def test_invalid_gauge_empty_outputs(self):
         """Test that gauges with empty output specifications are rejected."""
@@ -90,7 +90,7 @@ class TestGaugeValidation:
         dynamic Update {
             f.out[x | 0] = 1;
         }
-        gauge EmptyGauge(out = {}) {
+        gauge EmptyGauge -> () {
             int temp;
             temp = 42;
         }
@@ -106,7 +106,7 @@ class TestGaugeValidation:
         validate_ast_root_is_program(ast)
         
         with pytest.raises(GeLBExTypeError) as exc_info:
-            validate_gauges(ast)
+            validate_block_signatures(ast)
         
         assert "EmptyGauge" in str(exc_info.value)
         assert "no output specification" in str(exc_info.value)
@@ -124,10 +124,10 @@ class TestGaugeValidation:
         dynamic Update {
             f.out[x | 0] = 1;
         }
-        gauge ValidGauge(out = {int result;}) {
+        gauge ValidGauge -> (int result) {
             result = 42;
         }
-        gauge InvalidGauge() {
+        gauge InvalidGauge {
             int temp;
             temp = 42;
         }
@@ -144,7 +144,7 @@ class TestGaugeValidation:
         
         # Should fail on the first invalid gauge encountered
         with pytest.raises(GeLBExTypeError) as exc_info:
-            validate_gauges(ast)
+            validate_block_signatures(ast)
         
         assert "InvalidGauge" in str(exc_info.value)
     
@@ -161,7 +161,7 @@ class TestGaugeValidation:
         dynamic Update {
             f.out[x | 0] = 1;
         }
-        gauge UnassignedGauge(out = {int result; real value;}) {
+        gauge UnassignedGauge -> (int result, real value) {
             int temp;
             temp = 42;
         }
@@ -177,7 +177,7 @@ class TestGaugeValidation:
         validate_ast_root_is_program(ast)
         
         with pytest.raises(GeLBExTypeError) as exc_info:
-            validate_gauges(ast)
+            validate_block_signatures(ast)
         
         assert "UnassignedGauge" in str(exc_info.value)
         assert "declares output variables" in str(exc_info.value)
@@ -198,7 +198,7 @@ class TestGaugeValidation:
         dynamic Update {
             f.out[x | 0] = 1;
         }
-        gauge PartialGauge(out = {int result; real value;}) {
+        gauge PartialGauge -> (int result, real value) {
             result = 42;
         }
         node_classes {
@@ -213,7 +213,7 @@ class TestGaugeValidation:
         validate_ast_root_is_program(ast)
         
         with pytest.raises(GeLBExTypeError) as exc_info:
-            validate_gauges(ast)
+            validate_block_signatures(ast)
         
         assert "PartialGauge" in str(exc_info.value)
         assert "declares output variable 'value'" in str(exc_info.value)
@@ -234,7 +234,7 @@ class TestGaugeValidation:
         dynamic Update {
             f.out[x | 0] = 1;
         }
-        gauge CompleteGauge(out = {int result; real value;}) {
+        gauge CompleteGauge -> (int result, real value) {
             result = 42;
             value = 3.14;
         }
@@ -250,4 +250,42 @@ class TestGaugeValidation:
         validate_ast_root_is_program(ast)
         
         # Should not raise any exceptions
-        validate_gauges(ast)
+        validate_block_signatures(ast)
+
+
+class TestFunctionResultValidation:
+    """Test that every function declares at least one named result."""
+
+    @staticmethod
+    def _program_with_function(function_source):
+        return minimal_gelb_program_1d().replace(
+            "node_classes {",
+            f"{function_source}\nnode_classes {{",
+        )
+
+    def test_function_with_named_result_passes(self):
+        ast = get_ast(
+            "gelb_program",
+            self._program_with_function(
+                "function Valid(int value) -> (int result) "
+                "{ result = value; }"
+            ),
+        )
+
+        validate_block_signatures(ast)
+
+    def test_function_without_results_is_rejected(self):
+        ast = get_ast(
+            "gelb_program",
+            self._program_with_function(
+                "function Invalid() -> () { int unused; }"
+            ),
+        )
+
+        with pytest.raises(GeLBExTypeError) as exc_info:
+            validate_block_signatures(ast)
+
+        message = str(exc_info.value)
+        assert "Function 'Invalid' has no results" in message
+        assert "one result is used as an expression" in message
+        assert "several results is used with destructuring" in message
