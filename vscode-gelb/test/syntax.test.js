@@ -69,8 +69,33 @@ describe('GeLB Syntax Highlighting', () => {
             ));
         });
 
+        it('should highlight the where of a predicate paint', () => {
+            const tokens = tokenizeLine(grammar, '    nodes[where InCircle(x, y, CX, CY, R)] = SOLID;');
+            assert(tokens.some(t =>
+                t.text === 'nodes' &&
+                t.scopes.includes('keyword.control.gelb')
+            ));
+            assert(tokens.some(t =>
+                t.text === 'where' &&
+                t.scopes.includes('keyword.control.gelb')
+            ));
+            // the coordinates are ordinary identifiers, not keywords
+            assert(!tokens.some(t =>
+                t.text === 'x' && t.scopes.some(s => s.startsWith('keyword'))
+            ));
+        });
+
+        it('should mark reserved words for later language stages', () => {
+            const tokens = tokenizeLine(grammar, 'zone reduction update');
+            ['zone', 'reduction', 'update'].forEach(word => {
+                assert(tokens.some(t =>
+                    t.text === word && t.scopes.includes('keyword.reserved.gelb')
+                ), `${word} is reserved`);
+            });
+        });
+
         it('should highlight lattice declaration keyword', () => {
-            const tokens = tokenizeLine(grammar, 'lattice f(d=2, q=9, df_type=real);');
+            const tokens = tokenizeLine(grammar, 'lattice f(2, 9, real, {N, N}, {true, false});');
             assert(tokens.some(t => 
                 t.text === 'lattice' && 
                 t.scopes.includes('keyword.control.gelb')
@@ -131,7 +156,7 @@ describe('GeLB Syntax Highlighting', () => {
 
     describe('Constants', () => {
         it('should highlight true/false', () => {
-            const tokens = tokenizeLine(grammar, 'set_grid_periodicity({true, false});');
+            const tokens = tokenizeLine(grammar, 'lattice f(2, 9, real, {N, N}, {true, false});');
             assert(tokens.some(t => t.text === 'true' && t.scopes.includes('constant.language.gelb')));
             assert(tokens.some(t => t.text === 'false' && t.scopes.includes('constant.language.gelb')));
         });
@@ -196,13 +221,24 @@ describe('GeLB Syntax Highlighting', () => {
         it('should highlight string literals', () => {
             const tokens = tokenizeLine(grammar, 'simulation_description("Test simulation");');
             assert(tokens.some(t => 
-                t.text.includes('"Test simulation"') && 
+                t.text.includes('Test simulation') && 
                 t.scopes.includes('string.quoted.double.gelb')
             ));
         });
     });
 
     describe('Operators', () => {
+        it('should highlight the named-result arrow as one operator', () => {
+            const tokens = tokenizeLine(
+                grammar,
+                'function F(real x) -> (real y) {'
+            );
+            assert(tokens.some(t =>
+                t.text === '->' &&
+                t.scopes.includes('keyword.operator.return-type.gelb')
+            ));
+        });
+
         it('should highlight assignment operator', () => {
             const tokens = tokenizeLine(grammar, 'N = 32');
             assert(tokens.some(t => 
@@ -274,7 +310,7 @@ describe('GeLB Syntax Highlighting', () => {
 
     describe('Complex Examples', () => {
         it('should correctly highlight a complete lattice declaration', () => {
-            const line = 'lattice f(d=2, q=9, df_type=real);';
+            const line = 'lattice f(2, 9, real, {N, N}, {true, false});';
             const tokens = tokenizeLine(grammar, line);
             
             assert(tokens.some(t => t.text === 'lattice' && t.scopes.includes('keyword.control.gelb')));

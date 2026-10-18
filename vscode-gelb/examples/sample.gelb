@@ -1,130 +1,65 @@
 // Sample GeLB program demonstrating syntax highlighting
-simulation_description("2D Lid-Driven Cavity Flow");
+// 2D Taylor-Green vortex decay - D2Q9 BGK LBM
 
-/* 
- * Global constants define simulation parameters
- * that remain fixed throughout the simulation
- */
+simulation_description("2D Taylor-Green vortex (LBM-BGK, D2Q9)");
+
 global_constants {
-    const int Nx = 128;        // Grid size in x direction
-    const int Ny = 128;        // Grid size in y direction
-    const real TAU = 0.6;      // Relaxation time
-    const real U_LID = 0.1;    // Lid velocity
-    const real RHO_0 = 1.0;    // Initial density
+    const int N = 64;
+    const real NU = 1.0 / 6.0;
+    const real TAU_INV = 2.0 / (6.0 * NU + 1.0);
+    const real U_MAX = 0.04;
+    const real PI = 3.141592653589793;
+    const real K = 2.0 * PI / N;
+
+    const array[real, 9] EX = {0.0, 1.0, 0.0, -1.0,  0.0, 1.0, -1.0, -1.0,  1.0};
+    const array[real, 9] EY = {0.0, 0.0, 1.0,  0.0, -1.0, 1.0,  1.0, -1.0, -1.0};
+    const array[real, 9] W = {4.0/9.0,
+        1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
 }
 
-// Lattice configuration
 lattices {
-    // D2Q9 lattice for 2D flow simulation
-    lattice f(d=2, q=9, df_type=real);
+    lattice f(2, 9, real, {N, N}, {true, true});
 }
 
-// Initialize distribution functions to equilibrium
-initializer InitEquilibrium {
-    // Set initial equilibrium distribution
-    f.out[x,y|:] = compute_equilibrium(RHO_0, 0.0, 0.0);
+function Macro(array[real, 9] fIn) -> (real rho, real ux, real uy) {
+    rho = sum(fIn);
+    ux = dot_prod(EX, fIn) / rho;
+    uy = dot_prod(EY, fIn) / rho;
 }
 
-// Main collision-streaming dynamics
-dynamic StreamCollide {
-    // Compute macroscopic quantities
-    real rho = sum(f.in[x,y|:]);
-    real ux = (f.in[x,y|1] - f.in[x,y|3] + 
-               f.in[x,y|5] - f.in[x,y|6] - 
-               f.in[x,y|7] + f.in[x,y|8]) / rho;
-    real uy = (f.in[x,y|2] - f.in[x,y|4] + 
-               f.in[x,y|5] + f.in[x,y|6] - 
-               f.in[x,y|7] - f.in[x,y|8]) / rho;
-    
-    // BGK collision with streaming
-    f.out[x,y|:] = f.in[x,y|:] + 
-                   (1.0/TAU) * (compute_equilibrium(rho, ux, uy) - f.in[x,y|:]);
+function Eq(real rho, real ux, real uy) -> (array[real, 9] feq) {
+    real usq = ux*ux + uy*uy;
+    array[real, 9] eu = EX * ux + EY * uy;
+    feq = W * rho * (1.0 + 3.0*eu + 4.5*eu*eu - 1.5*usq);
 }
 
-// Lid boundary condition
-dynamic StreamCollideLid {
-    real rho = sum(f.in[x,y|:]);
-    
-    // Apply lid velocity
-    f.out[x,y|:] = f.in[x,y|:] + 
-                   (1.0/TAU) * (compute_equilibrium(rho, U_LID, 0.0) - f.in[x,y|:]);
+initializer InitTG {
+    real xc = x + 0.5;
+    real yc = y + 0.5;
+    real rho = 1.0 - 0.75 * U_MAX^2 * (cos(2.0*K*xc) + cos(2.0*K*yc));
+    real ux = -1.0 * U_MAX * cos(K*xc) * sin(K*yc);
+    real uy = U_MAX * sin(K*xc) * cos(K*yc);
+    f.out[x, y | :] = Eq(rho, ux, uy);
 }
 
-// Bounce-back boundary condition for walls
-dynamic BounceBack {
-    // Simple bounce-back: reverse all distribution functions
-    f.out[x,y|0] = f.in[x,y|0];
-    f.out[x,y|1] = f.in[x,y|3];
-    f.out[x,y|2] = f.in[x,y|4];
-    f.out[x,y|3] = f.in[x,y|1];
-    f.out[x,y|4] = f.in[x,y|2];
-    f.out[x,y|5] = f.in[x,y|7];
-    f.out[x,y|6] = f.in[x,y|8];
-    f.out[x,y|7] = f.in[x,y|5];
-    f.out[x,y|8] = f.in[x,y|6];
+dynamic BGKCollStream {
+    array[real, 9] fIn = upstream_dfs(f, x, y, {EX, EY});
+    real rho;
+    real ux;
+    real uy;
+    {rho, ux, uy} = Macro(fIn);
+    f.out[x, y | :] = fIn - TAU_INV * (fIn - Eq(rho, ux, uy));
 }
 
-// Output macroscopic flow fields
-gauge OutputFlow(out = {real rho; real ux; real uy; real speed;}) {
-    // Compute density
-    rho = sum(f.in[x,y|:]);
-    
-    // Compute velocity components  
-    ux = (f.in[x,y|1] - f.in[x,y|3] + 
-          f.in[x,y|5] - f.in[x,y|6] - 
-          f.in[x,y|7] + f.in[x,y|8]) / rho;
-    uy = (f.in[x,y|2] - f.in[x,y|4] + 
-          f.in[x,y|5] + f.in[x,y|6] - 
-          f.in[x,y|7] - f.in[x,y|8]) / rho;
-    
-    // Compute speed magnitude
-    speed = sqrt(ux * ux + uy * uy);
+gauge Hydro -> (real rho, real ux, real uy) {
+    {rho, ux, uy} = Macro(f.in[x, y | :]);
 }
 
-// Define node classes for different regions
 node_classes {
-    node_class BULK(InitEquilibrium, StreamCollide, OutputFlow);
-    node_class LID(InitEquilibrium, StreamCollideLid, OutputFlow);
-    node_class WALL(InitEquilibrium, BounceBack, OutputFlow);
+    node_class BULK(InitTG, BGKCollStream, Hydro);
 }
 
-// Geometry specification
 geometry {
-    // Set grid dimensions
-    set_grid_size({Nx, Ny});
-    
-    // Non-periodic boundaries
-    set_grid_periodicity({false, false});
-    
-    // Assign node classes to regions
-    nodes[:,:] = BULK;           // Interior nodes
-    nodes[:,0] = WALL;           // Bottom wall
-    nodes[:,Ny-1] = LID;         // Top lid (moving)
-    nodes[0,:] = WALL;           // Left wall
-    nodes[Nx-1,:] = WALL;        // Right wall
-}
-
-// Test various syntax elements
-function compute_equilibrium(real rho, real ux, real uy) {
-    // Test arithmetic operators
-    real u2 = ux * ux + uy * uy;
-    real factor = 1.0 - 1.5 * u2;
-    
-    // Test comparison operators
-    if (u2 > 0.1) {
-        factor = factor * 0.9;
-    }
-    
-    // Test logical operators
-    bool is_valid = (rho > 0.0) && (u2 < 1.0);
-    
-    // Test array operations
-    real result[9];
-    result[0] = 4.0/9.0 * rho * factor;
-    
-    // Test intrinsic functions
-    real sum_val = sum(result);
-    real dot_val = dot_prod(result, result);
-    
-    return result;
+    nodes[:, :] = BULK;
 }

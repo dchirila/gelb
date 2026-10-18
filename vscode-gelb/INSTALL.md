@@ -1,22 +1,37 @@
 # Installation Instructions for GeLB VSCode Extension
 
+## Features
+
+- **Syntax highlighting** for `.gelb` files
+- **Snippets** for common GeLB constructs
+- **Live preview pane** showing geometry / stencils / combined view
+  while you edit (command: "GeLB: Show Source Preview")
+- **Geometry lint warnings** (command: "GeLB: Lint Geometry")
+
+The preview features require the `gelb-view` CLI to be installed
+(see the main GeLB project README).  By default the extension
+expects `gelb-view` on PATH; if you use `uv`, set the
+`gelb.gelbViewCommand` setting to `uv run gelb-view`.
+
 ## Quick Install (For Users)
 
 ### Method 1: Install in VSCode directly
-1. Copy the `vscode-gelb` folder to your VSCode extensions directory:
+1. Build the extension first (one-time, see "Development Setup" below)
+2. Copy the `vscode-gelb` folder to your VSCode extensions directory:
    - **Windows**: `%USERPROFILE%\.vscode\extensions\`
    - **macOS**: `~/.vscode/extensions/`
    - **Linux**: `~/.vscode/extensions/`
 
-2. Restart VSCode
+3. Restart VSCode
 
-3. Open any `.gelb` file to see syntax highlighting in action
+4. Open any `.gelb` file to see syntax highlighting and run
+   "GeLB: Show Source Preview" from the command palette
 
 ### Method 2: Install from VSIX (if packaged)
 1. Open VSCode
 2. Press `Cmd+Shift+P` (macOS) or `Ctrl+Shift+P` (Windows/Linux)
 3. Type "Install from VSIX" and select the command
-4. Browse to and select the `gelb-lang-0.1.0.vsix` file
+4. Browse to and select the generated `.vsix` file
 5. Restart VSCode
 
 ## Development Setup
@@ -38,7 +53,14 @@
    npm install
    ```
 
-4. Open in VSCode:
+4. Compile TypeScript:
+   ```bash
+   npm run compile        # one-shot build
+   # OR
+   npm run watch          # rebuild on save during development
+   ```
+
+5. Open in VSCode:
    ```bash
    code .
    ```
@@ -47,15 +69,32 @@
 1. Press `F5` in VSCode to launch a new Extension Development Host window
 2. Open a `.gelb` file in the new window
 3. Verify syntax highlighting works
+4. From the command palette (`Cmd+Shift+P` / `Ctrl+Shift+P`),
+   run "GeLB: Show Source Preview" — a webview should appear with
+   the rendered geometry.  Edit the file and save; the preview
+   refreshes automatically.
 
 ### Running Tests
 ```bash
 # Run grammar structure tests
 node test/grammar.test.js
 
-# Run full test suite (requires dependencies)
+# Run full test suite (requires dependencies): grammar, parser, the
+# Run view's command line and its request lifecycle; no VS Code needed
 npm test
+
+# The Run view in a real VS Code (an Extension Development Host with a
+# throwaway profile and only this extension), against a stand-in
+# gelb-run. Linux, off-screen:
+env -u WAYLAND_DISPLAY xvfb-run -a -s "-screen 0 1600x1000x24" npm run test:vscode
+# macOS:
+npm run test:vscode
+# plus a run of the real scripts/gelb-run (compiles an example):
+GELB_TEST_REAL=1 npm run test:vscode
 ```
+
+VS Code is `/usr/share/code/code` when it exists (or `GELB_VSCODE`),
+otherwise `@vscode/test-electron` downloads one.
 
 ## Packaging the Extension
 

@@ -2,7 +2,7 @@
   "name": "gelb-lang",
   "displayName": "GeLB Language Support",
   "description": "Syntax highlighting and language support for GeLB (Generic Lattice Boltzmann) files",
-  "version": "0.1.0",
+  "version": "0.6.3",
   "publisher": "gelb-lang",
   "repository": {
     "type": "git",
@@ -23,7 +23,11 @@
     "scientific-computing",
     "dsl"
   ],
-  "icon": "images/icon.png",
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:gelb",
+    "workspaceContains:**/*.gelb"
+  ],
   "contributes": {
     "languages": [
       {
@@ -35,11 +39,7 @@
         "extensions": [
           ".gelb"
         ],
-        "configuration": "./language-configuration.json",
-        "icon": {
-          "light": "./images/icon.png",
-          "dark": "./images/icon.png"
-        }
+        "configuration": "./language-configuration.json"
       }
     ],
     "grammars": [
@@ -54,18 +54,257 @@
         "language": "gelb",
         "path": "./snippets/gelb.json"
       }
-    ]
+    ],
+    "commands": [
+      {
+        "command": "gelb.showInteractivePreview",
+        "title": "GeLB: Show Source Preview",
+        "category": "GeLB"
+      },
+      {
+        "command": "gelb.lintGeometry",
+        "title": "GeLB: Lint Geometry",
+        "category": "GeLB"
+      },
+      {
+        "command": "gelb.run",
+        "title": "Run",
+        "category": "GeLB",
+        "icon": "$(play)"
+      },
+      {
+        "command": "gelb.stopRun",
+        "title": "Stop Run",
+        "category": "GeLB",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "gelb.showRunLog",
+        "title": "Show Run Log",
+        "category": "GeLB",
+        "icon": "$(output)"
+      },
+      {
+        "command": "gelb.editRunParameter",
+        "title": "Edit Run Parameter",
+        "category": "GeLB"
+      },
+      {
+        "command": "gelb.clearRunConstants",
+        "title": "Clear Constant Overrides",
+        "category": "GeLB",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "gelb.openRunOutputFolder",
+        "title": "Open Run Output Folder",
+        "category": "GeLB",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "gelb.openLastOutputInViewer",
+        "title": "Open Last Output in Viewer",
+        "category": "GeLB",
+        "icon": "$(graph)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "gelb.editRunParameter",
+          "when": "false"
+        }
+      ],
+      "editor/title": [
+        {
+          "when": "resourceLangId == gelb",
+          "command": "gelb.run",
+          "group": "navigation@1"
+        },
+        {
+          "when": "resourceLangId == gelb",
+          "command": "gelb.showInteractivePreview",
+          "group": "navigation@2"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "gelb.run",
+          "when": "view == gelbRun",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gelb.stopRun",
+          "when": "view == gelbRun && gelb.runInProgress",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gelb.showRunLog",
+          "when": "view == gelbRun",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "gelb.clearRunConstants",
+          "when": "view == gelbRun && viewItem == gelb.run.constants",
+          "group": "inline"
+        }
+      ]
+    },
+    "taskDefinitions": [
+      {
+        "type": "gelb-run",
+        "properties": {
+          "file": {
+            "type": "string",
+            "description": "The .gelb file the Run view runs."
+          },
+          "request": {
+            "type": "string",
+            "description": "The Run view's request; one per run."
+          }
+        }
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "gelb-sidebar",
+          "title": "GeLB",
+          "icon": "./media/gelb-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "gelb-sidebar": [
+        {
+          "id": "gelbProgramStructure",
+          "name": "Program Structure",
+          "contextualTitle": "GeLB",
+          "initialSize": 20
+        },
+        {
+          "id": "gelbRun",
+          "name": "Run",
+          "contextualTitle": "GeLB",
+          "initialSize": 20
+        },
+        {
+          "id": "gelbDiagnostics",
+          "name": "Other Diagnostics",
+          "contextualTitle": "GeLB",
+          "initialSize": 10
+        },
+        {
+          "id": "gelbDocs",
+          "name": "Docs",
+          "contextualTitle": "GeLB",
+          "visibility": "collapsed",
+          "initialSize": 1
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "gelbProgramStructure",
+        "contents": "No GeLB file open.\n\nOpen a [.gelb file](command:workbench.action.files.openFile) to see its program structure — top-level blocks (lattices, initializers, dynamic / gauge blocks, node classes, geometry) and nested declarations — for quick navigation.\n\n[$(folder-opened) Open a .gelb file](command:workbench.action.files.openFile)"
+      },
+      {
+        "view": "gelbRun",
+        "contents": "No GeLB file open.\n\nOpen a [.gelb file](command:workbench.action.files.openFile) to run it with gelb-run from here — time steps, write interval, constant overrides, backend and output folder as editable rows, the run itself as a task in the terminal panel.\n\n[$(folder-opened) Open a .gelb file](command:workbench.action.files.openFile)"
+      },
+      {
+        "view": "gelbDiagnostics",
+        "contents": "[$(eye) Show Source Preview](command:gelb.showInteractivePreview)\n[$(search) Lint Geometry](command:gelb.lintGeometry)\n[$(warning) Show Problems](command:workbench.panel.markers.view.focus)"
+      },
+      {
+        "view": "gelbDocs",
+        "contents": "$(book) [Reference Manual](https://gelb.readthedocs.io)\n$(home) [gelb-lang.org](https://gelb-lang.org)\n$(comment-discussion) [GitHub Discussions](https://github.com/dchirila/gelb/discussions)"
+      }
+    ],
+    "configuration": {
+      "title": "GeLB",
+      "properties": {
+        "gelb.refreshOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Refresh the preview when the .gelb file is saved"
+        },
+        "gelb.stencilAnimationDurationMs": {
+          "type": "number",
+          "default": 3000,
+          "minimum": 500,
+          "maximum": 15000,
+          "description": "Total duration (ms) of the Space-triggered stencil animation in the Interactive Preview — split into four equal phases: blue (reads) fade-in / fade-out, then red (writes) fade-in / fade-out."
+        },
+        "gelb.gelbcCommand": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Command that runs `gelbc` for the Problems-panel diagnostics; it may carry arguments (`uv run gelbc`), and quotes group a path with spaces. Empty (the default): found automatically, from the `.venv` (or through `uv run`) of the GeLB source checkout the file or workspace is in, a GeLB installation such as the macOS installer's `~/gelb`, or the `PATH`."
+        },
+        "gelb.lintOnOpen": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run gelbc diagnostics when a .gelb file is opened."
+        },
+        "gelb.lintOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run gelbc diagnostics when a .gelb file is saved."
+        },
+        "gelb.gelbViewCommand": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Command that runs `gelb-view` for the previews, Lint Geometry and the Run view's viewer; arguments and quotes as for `gelb.gelbcCommand`. Empty (the default): found automatically, like `gelbc`."
+        },
+        "gelb.gelbRunCommand": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Name or path of the `gelb-run` the Run view uses: one executable, no arguments (a path with spaces needs no quotes); a relative path such as `./scripts/gelb-run` is taken from the workspace folder; a bare name is looked up by VS Code's task shell. Empty (the default): found automatically, as the `scripts/gelb-run` of the GeLB source checkout the file or workspace is in, the `gelb-run` of a GeLB installation such as the macOS installer's `~/gelb`, or `gelb-run` on the `PATH`."
+        },
+        "gelb.runOutputFolder": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "markdownDescription": "Folder the Run view runs `gelb-run` in, which is where the `<name>.nc` output lands. Empty: next to the source file. A relative path is taken from the workspace folder; `~` and `${workspaceFolder}` are expanded; the folder is created if missing. The Run view's *Output folder* row overrides this per file."
+        },
+        "gelb.runDefaultTimeSteps": {
+          "type": "integer",
+          "default": 1000,
+          "minimum": 1,
+          "description": "Time steps (gelb-run -n) the Run view starts with for a file it has not run before."
+        },
+        "gelb.runDefaultWriteEvery": {
+          "type": "integer",
+          "default": 100,
+          "minimum": 1,
+          "description": "Output interval (gelb-run -w) the Run view starts with for a file it has not run before."
+        }
+      }
+    }
   },
   "scripts": {
-    "test": "node ./test/runTests.js"
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "test": "node ./test/grammar.test.js && mocha ./test/syntax.test.js ./test/parser.test.js ./test/runCommand.test.js ./test/gelbTools.test.js ./test/diagnosticRange.test.js ./test/runController.test.js ./test/runLifecycle.test.js",
+    "test:vscode": "node ./test/runTests.js"
   },
   "devDependencies": {
-    "@types/vscode": "^1.74.0",
     "@types/mocha": "^10.0.0",
     "@types/node": "^18.0.0",
-    "mocha": "^10.0.0",
-    "vscode-test": "^1.6.0",
-    "vscode-textmate": "^8.0.0",
-    "vscode-oniguruma": "^1.7.0"
+    "@types/vscode": "^1.74.0",
+    "@vscode/test-electron": "^2.5.2",
+    "mocha": "^11.7.5",
+    "playwright-core": "~1.61.1",
+    "three": "^0.184.0",
+    "typescript": "^5.4.0",
+    "vscode-oniguruma": "^1.7.0",
+    "vscode-textmate": "^8.0.0"
+  },
+  "overrides": {
+    "serialize-javascript": "^7.0.5",
+    "diff": "^9.0.0"
   }
 }

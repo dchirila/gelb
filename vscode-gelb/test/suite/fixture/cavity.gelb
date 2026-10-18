@@ -1,0 +1,2 @@
+// A stand-in program for the Run view tests; fake-gelb-run does not read it.
+simulation_description("Run view test")

@@ -18,6 +18,20 @@ def running_within_pytest():
     return "PYTEST_CURRENT_TEST" in os.environ
 
 
+def _suppress_print_and_exit():
+    """Return True if GeLBException subclasses should SKIP their
+    `print(self)` + `os._exit(1)` side effects.
+
+    - In pytest, callers assert on the raised exception type, so the
+      forced-exit path would abort the test runner.
+    - In gelbc's --diagnostics-json mode, the exception is intentionally
+      allowed to propagate up to the top-level JSON emitter; any
+      stderr output would corrupt the stdout JSON contract.
+    """
+    return running_within_pytest() or getattr(
+        config, 'DIAGNOSTICS_MODE', False)
+
+
 class GeLBException(Exception):
     """Base-class for all GeLB exceptins."""
     def __init__(self, error, hint):
@@ -25,11 +39,28 @@ class GeLBException(Exception):
         # own printing (instead of relying on the Python default)
         self.error = error
         self.hint = hint
+        if not _suppress_print_and_exit():
+            print(self)
+
+    def _source_location(self):
+        """Subclass hook: return ``(line, col)`` to anchor the error
+        display at a specific source location, or ``None`` to use the
+        default error+hint banner.  When a location is returned,
+        :meth:`__str__` displays the offending source line via
+        :func:`show_error_in_src`; when ``None``, it falls back to
+        :func:`error_with_hint_to_term`.
+        """
+        return None
 
     def __str__(self):
-        if not running_within_pytest():
+        if _suppress_print_and_exit():
+            return f"{self.error}: {self.hint}"
+        loc = self._source_location()
+        if loc is not None:
+            show_error_in_src(loc[0], loc[1], self.error, self.hint)
+        else:
             error_with_hint_to_term(self.error, self.hint)
-            os._exit(1)  # really abort
+        os._exit(1)  # really abort
 
 
 class GeLBExIncorrectStagesOrdering(GeLBException):
@@ -38,8 +69,6 @@ class GeLBExIncorrectStagesOrdering(GeLBException):
     """
     def __init__(self, error, hint=feedback_on_slack_hint):
         super().__init__(error, hint)
-        if not running_within_pytest():
-            print(self)
 
 
 class GeLBExInvalidGrammarRule(GeLBException):
@@ -61,8 +90,6 @@ class GeLBExInvalidGrammarRule(GeLBException):
             f" file). " + feedback_on_slack_hint
         )
         super().__init__(error, hint)
-        if not running_within_pytest():
-            print(self)
 
 
 class GeLBExMissingCSTVisitationMethod(GeLBException):
@@ -90,8 +117,6 @@ class GeLBExMissingCSTVisitationMethod(GeLBException):
             f"). " + feedback_on_slack_hint
         )
         super().__init__(error, hint)
-        if not running_within_pytest():
-            print(self)
 
 
 class GeLBExMissingASTVisitationMethod(GeLBException):
@@ -116,8 +141,6 @@ class GeLBExMissingASTVisitationMethod(GeLBException):
 
         )
         super().__init__(error, hint)
-        if not running_within_pytest():
-            print(self)
 
 
 class GeLBExSyntaxError(GeLBException):
@@ -151,14 +174,9 @@ class GeLBExSyntaxError(GeLBException):
                 )
 
         super().__init__(error, hint)
-        if not running_within_pytest():
-            print(self)
 
-    def __str__(self):
-        """Override base-class's __str__, because we want to print the code"""
-        if not running_within_pytest():
-            show_error_in_src(self.line, self.column, self.error, self.hint)
-            os._exit(1)  # really abort
+    def _source_location(self):
+        return (self.line, self.column)
 
 
 class GeLBExInvalidNoOfOccurrences(GeLBException):
@@ -327,20 +345,11 @@ class GeLBExInvalidNoOfOccurrences(GeLBException):
                         f" block. " + learning_gelb_hint
                 )
         super().__init__(error, hint)
-        if not running_within_pytest():
-            print(self)
 
-    def __str__(self):
-        """
-        Override base-class's __str__, because we want to print the code (but
-        only sometimes).
-        """
-        if not running_within_pytest():
-            if (self.line is not None) and (self.column is not None):
-                show_error_in_src(self.line, self.column, self.error, self.hint)
-            else:
-                super().__str__()
-            os._exit(1)  # really abort
+    def _source_location(self):
+        if self.line is not None and self.column is not None:
+            return (self.line, self.column)
+        return None
 
 
 class GeLBExIncorrectInputFileExtension(GeLBException):
@@ -360,8 +369,6 @@ class GeLBExIncorrectInputFileExtension(GeLBException):
             f"{click.style('.gelb', underline=True) + Fore.RED}"
         )
         super().__init__(error, hint)
-        if not running_within_pytest():
-            print(self)
 
 
 class GeLBExCouldNotFindInputFile(GeLBException):
@@ -382,8 +389,6 @@ class GeLBExCouldNotFindInputFile(GeLBException):
                 f" {suggest_files}"
             )
         super().__init__(error, hint)
-        if not running_within_pytest():
-            print(self)
 
 
 class GeLBExCouldNotReadInputFile(GeLBException):
@@ -402,8 +407,6 @@ class GeLBExCouldNotReadInputFile(GeLBException):
             f" to allow gelbc to read it."
         )
         super().__init__(error, hint)
-        if not running_within_pytest():
-            print(self)
 
 
 class GeLBExEmptyInputFile(GeLBException):
@@ -421,8 +424,6 @@ class GeLBExEmptyInputFile(GeLBException):
             f"{learning_gelb_hint}"
         )
         super().__init__(error, hint)
-        if not running_within_pytest():
-            print(self)
 
 
 class GeLBExAntlr4JavaLibNotFound(GeLBException):
@@ -441,8 +442,6 @@ class GeLBExAntlr4JavaLibNotFound(GeLBException):
             f" copy it to the expected location."
         )
         super().__init__(error, hint)
-        if not running_within_pytest():
-            print(self)
 
 
 class GeLBExPython3PackageMissing(GeLBException):
@@ -462,8 +461,6 @@ class GeLBExPython3PackageMissing(GeLBException):
             f" GeLB repository clone. " + feedback_on_slack_hint
         )
         super().__init__(error, hint)
-        if not running_within_pytest():
-            print(self)
 
 
 class GeLBExGrammarFileNotFound(GeLBException):
@@ -481,8 +478,6 @@ class GeLBExGrammarFileNotFound(GeLBException):
             f" restoring it with \"git checkout\". " + feedback_on_slack_hint
         )
         super().__init__(error, hint)
-        if not running_within_pytest():
-            print(self)
 
 
 class GeLBExAntlr4JavaToolFailed(GeLBException):
@@ -502,8 +497,6 @@ class GeLBExAntlr4JavaToolFailed(GeLBException):
             feedback_on_slack_hint
         )
         super().__init__(error, hint)
-        if not running_within_pytest():
-            print(self)
 
 
 class GeLBExSymbolExists(GeLBException):
@@ -528,22 +521,22 @@ class GeLBExSymbolExists(GeLBException):
             f"."
         )
         super().__init__(error, hint)
-        if not running_within_pytest():
-            print(self)
 
     def __str__(self):
-        """Override base-class's __str__, because we want to print the code"""
-        if not running_within_pytest():
-            show_double_definition_error(
-                self.curr_instance.value.code_range.start_line,
-                self.curr_instance.value.code_range.start_col,
-                self.prev_instance.value.code_range.start_line,
-                self.prev_instance.value.code_range.start_col,
-                self.prev_instance.name,
-                self.prev_instance.tag
-            )
-            super().__str__()
-            os._exit(1)  # really abort
+        """Show both definitions, with the error and hint at the new one."""
+        if _suppress_print_and_exit():
+            return f"{self.error}: {self.hint}"
+        show_double_definition_error(
+            self.curr_instance.value.code_range.start_line,
+            self.curr_instance.value.code_range.start_col,
+            self.prev_instance.value.code_range.start_line,
+            self.prev_instance.value.code_range.start_col,
+            self.prev_instance.name,
+            self.prev_instance.tag,
+            self.error,
+            self.hint,
+        )
+        os._exit(1)
 
 
 class GeLBExSymbolUnknown(GeLBException):
@@ -563,19 +556,10 @@ class GeLBExSymbolUnknown(GeLBException):
             f" {click.style(name, underline=True) + Fore.GREEN}."
         )
         super().__init__(error, hint)
-        if not running_within_pytest():
-            print(self)
 
-    def __str__(self):
-        """Override base-class's __str__, because we want to print the code"""
-        if not running_within_pytest():
-            show_error_in_src(
-                self.symbol_ref.code_range.start_line,
-                self.symbol_ref.code_range.start_col,
-                self.error, self.hint
-            )
-            # super().__str__()
-            os._exit(1)  # really abort
+    def _source_location(self):
+        return (self.symbol_ref.code_range.start_line,
+                self.symbol_ref.code_range.start_col)
 
 
 class GeLBExSymbolConstantRecursion(GeLBException):
@@ -597,19 +581,36 @@ class GeLBExSymbolConstantRecursion(GeLBException):
             f" literal values or on other (already-defined) constants."
         )
         super().__init__(error, hint)
-        if not running_within_pytest():
-            print(self)
 
-    def __str__(self):
-        """Override base-class's __str__, because we want to print the code"""
-        if not running_within_pytest():
-            show_error_in_src(
-                self.symbol_ref.code_range.start_line,
-                self.symbol_ref.code_range.start_col,
-                self.error, self.hint
-            )
-            # super().__str__()
-            os._exit(1)  # really abort
+    def _source_location(self):
+        return (self.symbol_ref.code_range.start_line,
+                self.symbol_ref.code_range.start_col)
+
+
+class GeLBExFunctionRecursion(GeLBException):
+    """
+    GeLB exception, for signaling that user-defined functions form a
+    recursive call cycle (e.g. A -> B -> A).
+    """
+    def __init__(self, call_node, cycle_path):
+        self.call_node = call_node
+        self.cycle_path = cycle_path
+        cycle_str = ' → '.join(cycle_path)
+        error = (
+            f"Function"
+            f" {click.style(cycle_path[0], underline=True) + Fore.RED}"
+            f" is part of a recursive call cycle:"
+            f" {click.style(cycle_str, underline=True) + Fore.RED}."
+        )
+        hint = (
+            f"GeLB functions must be non-recursive"
+            f" (they are inlined at compile time)."
+        )
+        super().__init__(error, hint)
+
+    def _source_location(self):
+        return (self.call_node.code_range.start_line,
+                self.call_node.code_range.start_col)
 
 
 class GeLBExSymbolWrongType(GeLBException):
@@ -627,19 +628,10 @@ class GeLBExSymbolWrongType(GeLBException):
         )
         hint = f"Specify the name of a {expected_type}."
         super().__init__(error, hint)
-        if not running_within_pytest():
-            print(self)
 
-    def __str__(self):
-        """Override base-class's __str__, because we want to print the code"""
-        if not running_within_pytest():
-            show_error_in_src(
-                self.symbol_ref.code_range.start_line,
-                self.symbol_ref.code_range.start_col,
-                self.error, self.hint
-            )
-            # super().__str__()
-            os._exit(1)  # really abort
+    def _source_location(self):
+        return (self.symbol_ref.code_range.start_line,
+                self.symbol_ref.code_range.start_col)
 
 
 class GeLBExSymbolRefBeforeDef(GeLBException):
@@ -665,19 +657,10 @@ class GeLBExSymbolRefBeforeDef(GeLBException):
             f" above the first reference."
         )
         super().__init__(self.error, self.hint)
-        if not running_within_pytest():
-            print(self)
 
-    def __str__(self):
-        """Override base-class's __str__, because we want to print the code"""
-        if not running_within_pytest():
-            show_error_in_src(
-                self.symbol_ref.code_range.start_line,
-                self.symbol_ref.code_range.start_col,
-                self.error, self.hint
-            )
-            # super().__str__()
-            os._exit(1)  # really abort
+    def _source_location(self):
+        return (self.symbol_ref.code_range.start_line,
+                self.symbol_ref.code_range.start_col)
 
 
 class GeLBExSymbolNotAllowedHere(GeLBException):
@@ -691,19 +674,10 @@ class GeLBExSymbolNotAllowedHere(GeLBException):
         self.hint = hint
 
         super().__init__(self.error, self.hint)
-        if not running_within_pytest():
-            print(self)
 
-    def __str__(self):
-        """Override base-class's __str__, because we want to print the code"""
-        if not running_within_pytest():
-            show_error_in_src(
-                self.symbol_ref.code_range.start_line,
-                self.symbol_ref.code_range.start_col,
-                self.error, self.hint
-            )
-            # super().__str__()
-            os._exit(1)  # really abort
+    def _source_location(self):
+        return (self.symbol_ref.code_range.start_line,
+                self.symbol_ref.code_range.start_col)
 
 
 class GeLBExConstantAssignment(GeLBException):
@@ -726,19 +700,10 @@ class GeLBExConstantAssignment(GeLBException):
             f" declare it as a variable instead, or use a different name."
         )
         super().__init__(error, hint)
-        if not running_within_pytest():
-            print(self)
 
-    def __str__(self):
-        """Override base-class's __str__, because we want to print the code"""
-        if not running_within_pytest():
-            show_error_in_src(
-                self.identifier_node.code_range.start_line,
-                self.identifier_node.code_range.start_col,
-                self.error, self.hint
-            )
-            # super().__str__()
-            os._exit(1)  # really abort
+    def _source_location(self):
+        return (self.identifier_node.code_range.start_line,
+                self.identifier_node.code_range.start_col)
 
 
 class GeLBExTypeError(GeLBException):
@@ -751,19 +716,71 @@ class GeLBExTypeError(GeLBException):
     def __init__(self, node, error, hint):
         self.node = node
         super().__init__(error, hint)
-        if not running_within_pytest():
-            print(self)
     
-    def __str__(self):
-        """Override base-class's __str__, because we want to print the code"""
-        if not running_within_pytest():
-            show_error_in_src(
-                self.node.code_range.start_line,
-                self.node.code_range.start_col,
-                self.error,
-                self.hint
-            )
-            os._exit(1)  # really abort
-        else:
-            # For pytest, return formatted error message
-            return f"{self.error}: {self.hint}"
+    def _source_location(self):
+        return (self.node.code_range.start_line,
+                self.node.code_range.start_col)
+
+
+class GeLBExStencilError(GeLBException):
+    """
+    GeLB exception for stencil-level validation errors.
+
+    Raised when compile-time stencil analysis detects issues such as
+    uninitialized lattice DFs or out-of-bounds lattice access.
+    When source_line is provided, anchors the diagnostic at the block
+    name; source_end_line is retained for machine-readable ranges.
+    """
+    def __init__(self, error, hint, source_line=None, source_end_line=None):
+        self.source_line = source_line
+        self.source_end_line = source_end_line
+        super().__init__(error, hint)
+
+    def _source_location(self):
+        if self.source_line is not None:
+            from gelb.utils.error_utils import source_anchor_column
+            return self.source_line, source_anchor_column(self.source_line, self.error)
+        return None
+
+
+class GeLBExGeometryDiscontinuity(GeLBException):
+    """GeLB exception, for signaling that the painted geometry has a
+    node-class discontinuity at the wrap edge of an axis declared
+    periodic.
+
+    Periodic wrapping would silently stream distribution functions
+    across the discontinuity, producing wrong results.  The user must
+    either make the geometry continuous at that wrap edge or declare
+    the axis non-periodic in the lattice declaration.
+    """
+    def __init__(self, axis_name, coord_first, coord_last,
+                 nc_first, nc_last, periodicity_stmt=None):
+        self.axis_name = axis_name
+        self.coord_first = coord_first
+        self.coord_last = coord_last
+        self.nc_first = nc_first
+        self.nc_last = nc_last
+        self.periodicity_stmt = periodicity_stmt
+        error = (
+            f"Axis {click.style(axis_name, underline=True) + Fore.RED}"
+            f" is declared periodic, but cell"
+            f" {click.style(str(coord_first), underline=True) + Fore.RED}"
+            f" is {click.style(nc_first, underline=True) + Fore.RED}"
+            f" while its wrap-partner"
+            f" {click.style(str(coord_last), underline=True) + Fore.RED}"
+            f" is {click.style(nc_last, underline=True) + Fore.RED}."
+            f" Periodic wrapping would stream across an NC boundary."
+        )
+        hint = (
+            f"Either make the geometry continuous at the wrap edge of"
+            f" axis {click.style(axis_name, underline=True) + Fore.GREEN},"
+            f" or declare that axis as non-periodic in the"
+            f" lattice declaration."
+        )
+        super().__init__(error, hint)
+
+    def _source_location(self):
+        if self.periodicity_stmt is None:
+            return None
+        cr = self.periodicity_stmt.code_range
+        return (cr.start_line, cr.start_col)

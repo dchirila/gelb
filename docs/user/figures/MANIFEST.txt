@@ -1,0 +1,33 @@
+GeLB User Tutorial — Figure Manifest
+=====================================
+
+Regenerated at: 2026-10-19 02:08:42 EEST
+Git HEAD:       (pre-release development tree)
+
+Per-figure status:
+
+  04_hello_world_spacetime.png                   not regenerated
+  05_heat_diffusion_profile.png                  generated 2026-10-19
+  05_setup_sketch.png                            regenerated 2026-10-19 at the size it is shown (a third of the text width)
+  07_cavity_streamlines.png                      regenerated 2026-10-19 with bounce_back_dfs walls (t = 8000, Re = 980)
+  07_ldc_ghia_validation.png                     regenerated 2026-10-19 from the N = 129 JSON (bounce_back_dfs cavity)
+  08_poiseuille_convergence.png                  not regenerated
+  09_rb_temperature_rolls.png                    not regenerated
+  10_karman_vorticity.png                        regenerated 2026-10-19: bounce_back_dfs walls, NY = 256, G = 4e-7, 300 000 steps on gpu_cuda_cpp (t = 150k, 230k, 300k); rerun with the one-pass border() ring that covers the diagonals: fluid fields bit-identical to the two-pass run, PNG unchanged
+  11_shanchen_phase_separation.png               generated 2026-10-18
+  12_gol_glider.png                              regenerated 2026-10-19 on a 32x32 torus; rerun after the example's default became GRID = 32: byte-identical
+  13_salmon_gyre.png                             regenerated 2026-10-19 with the MRT ocean example (OMEGA = 1.9)
+  05_geometry.png                                not regenerated: the geometry renderer changed after its last render
+  07_geometry.png                                not regenerated: the geometry renderer changed after its last render
+  09_geometry.png                                not regenerated
+  10_geometry.png                                regenerated 2026-10-19: the border() ring covers the diagonals
+  13_geometry.png                                regenerated 2026-10-19 with the legend outside the axes; rerun after the ocean example moved to MRT collision: byte-identical
+  15_stencil_bgk_d2q9.svg                        not regenerated
+  16_mlups_backend_comparison.png                not regenerated
+  17_rb_onset_validation.png                     not regenerated
+
+Regenerate from scratch with:
+    rm docs/user/figures/*.png docs/user/figures/*.gif \
+       docs/user/figures/*.svg
+    python scripts/gen_tutorial_figures.py
+    node scripts/gen_vscode_screenshots.mjs   # vscode_*.png

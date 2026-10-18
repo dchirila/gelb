@@ -1,6 +1,6 @@
 ![GitHub all releases](https://img.shields.io/github/downloads/dchirila/gelb/total?logo=GitHub&style=flat-square)
 [![Website](https://img.shields.io/website?logo=Read%20The%20Docs&style=flat-square&url=https%3A%2F%2Fgelb-lang.org)](https://gelb-lang.org)
-[![Twitter Follow](https://img.shields.io/twitter/follow/gelb12410715?label=GeLB-lang&style=social)](https://twitter.com/gelb12410715)
+[![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-d97706?style=flat-square)](./LICENSE)
 
 <p align="center">
     <img
@@ -17,10 +17,10 @@ GeLB is a domain-specific programming language (DSL) and compiler framework for 
 
 - **Easy to learn**: Intuitive syntax designed for LBM researchers and practitioners
 - **Compile-time validation**: Built-in correctness checks prevent common LBM implementation bugs
-- **High performance**: Automatic optimization and parallelization (coming soon)
+- **High performance**: Automatic optimization and parallelization (portable-SIMD CPU and CUDA GPU backends)
 - **Type safety**: Advanced type system with compile-time range validation
 - **Extensible**: Open-source framework with clean architecture
-- **Multiple backends**: Currently supports Fortran, with GPU OpenCL planned
+- **Multiple backends**: serial CPU Fortran (educational reference), portable-SIMD C++ via Google Highway (`cpu_highway`, OpenMP-parallel), and GPU CUDA C++ (`gpu_cuda_cpp`, nvcc)
 - **IDE Support**: VSCode extension with syntax highlighting and code snippets
 
 ## Core Concepts
@@ -49,36 +49,67 @@ Key design principles:
 - **No print statements**: All output through Gauges for consistency
 - **Automatic parallelization**: Users don't specify parallelization details
 
-## Current Implementation Status
+## Implementation
 
-### ✅ Frontend (98% Complete)
+### ✅ Frontend
 - ANTLR4-based parser with full grammar support
 - Complete AST construction with visitor pattern
 - Sophisticated type inference system
 - Hierarchical symbol tables with scoping
 - Compile-time constant folding and validation
 - Range resolution and validation
-- Intrinsic functions: `sum()` and `dot_prod()` implemented
+- Rich set of intrinsic functions: math (`sin`, `cos`, `exp`, `log`, `sqrt`, `abs`, `min`, `max`, `mod`, `atan2`, `tan`, `tanh`), array (`sum`, `dot_prod`, `matmul`, `transpose`, `inverse`), LBM-specific (`upstream_dfs`, `bounce_back_dfs`), and `random`
 
-### ✅ Midware (Core Complete)
+### ✅ Midware
 - AST optimization passes
 - Constant folding and propagation
 - Division by zero validation
 - AST validation for backend consumption
 
-### 🚧 Backend (In Development)
-- CPU Serial Fortran backend (primary target) - skeleton implemented
-- GPU OpenCL backend - planned
-- OpenMP parallel backend - planned
+### ✅ Backends
+- **CPU Serial Fortran** (`cpu_fortran_serial`, gfortran): strictly single-threaded by design — educational source-level reference + bit-equivalence correctness anchor; 1D/2D/3D grids, multi-node-class geometry, periodic BCs, bounce-back walls, NetCDF + stdout output, automatic MLUPS measurement
+- **CPU Portable SIMD** (`cpu_highway`, default; g++ + Google Highway + OpenMP): cross-platform vectorized backend (x86 AVX-512 / AVX2 / SSE; ARM NEON), the multi-threaded performance backend
+- **GPU CUDA C++** (`gpu_cuda_cpp`, nvcc): CUDA backend for NVIDIA GPUs with device kernels, device-side node-class maps, multi-lattice examples, cuRAND support for `random()`, SoA layout, and optional captured `cudaGraph_t` execution. See the backend documentation and example smoke tests for the currently validated feature set.
+- **Explicit-width FP types**: `real32` / `real64` with precision-aware literal emission (no implicit FP64 promotion)
+- **CLI constant overrides**: `-D NAME=VALUE` to override `global_constants` without editing source
+- **User-defined functions**: Single-output (Fortran `function`) and multi-output (Fortran `subroutine`) with destructuring assignment
 
 ## Installation
 
-GeLB uses `uv` for Python package management and requires Python 3.12.7+.
+GeLB requires Python 3.10+. The recommended public-release workflow is a
+source checkout managed with `uv`; the project still uses standard
+`pyproject.toml` metadata, so a conventional virtual environment plus
+`pip install -e .` also works for development.
+
+The native one-step runner (`./scripts/gelb-run`) currently assumes a source
+checkout because it compiles generated Fortran/C++/CUDA code and uses the
+vendored Google Highway submodule. Use `git clone --recursive`, or run
+`git submodule update --init --recursive` after cloning.
+
+### Prerequisites
+
+The bootstrap script checks for these and refuses to run if any are missing:
+
+- **Hard**: Python ≥ 3.10, `git`, `curl`, an internet connection
+- **Soft** (warns if missing, but you'll need them later): a C compiler
+  (`gcc` on Linux, Xcode CLT on macOS, MSVC/MinGW on Windows), `gfortran`
+  for the reference Fortran backend, and `g++` with OpenMP support for the
+  default `cpu_highway` backend
+- **Optional**: a JDK — only needed by `./scripts/regenerate_antlr.sh`,
+  which in turn is only needed if you modify `GeLB.g4`. Day-to-day
+  development does not require Java.
+- **Optional**: CUDA toolkit (`nvcc`) — only needed if you want the
+  GPU CUDA backend (`-b gpu_cuda_cpp`). Chapter 16 of the tutorial,
+  [docs/user/16_performance_backends.rst](docs/user/16_performance_backends.rst),
+  shows a first run on it and says when it pays off.
 
 ### Quick Start
 
-1. **Setup the development environment**:
+1. **Clone with submodules and set up the environment**:
    ```bash
+   git clone --recursive https://github.com/dchirila/gelb.git
+   cd gelb
+
    # On Unix/MacOS:
    ./scripts/gelb_bootstrap.sh
    
@@ -95,14 +126,24 @@ GeLB uses `uv` for Python package management and requires Python 3.12.7+.
    .\.venv\Scripts\activate
    ```
 
-3. **Install GeLB in development mode**:
+3. **Install or synchronize dependencies**:
    ```bash
-   uv pip install -e .
+   uv sync --all-extras           # recommended: compiler + gui + docs + dev tools
+
+   # Standards-compatible fallback:
+   python -m pip install -e '.[gui,docs,dev]'
    ```
 
-4. **Run the compiler**:
+4. **Compile and run a simulation**:
    ```bash
-   uv run python gelbc.py examples/basic/1d/ex0_int_vec_setto_one.gelb
+   # One-step compile & run (CPU):
+   ./scripts/gelb-run -n 1000 -w 100 examples/lbm/2d/taylor_green_vortex_2d_bgk.gelb
+   
+   # One-step compile & run (GPU, requires nvcc):
+   ./scripts/gelb-run -b gpu_cuda_cpp -n 1000 -w 100 examples/lbm/2d/taylor_green_vortex_2d_bgk.gelb
+   
+   # Or compile only:
+   uv run gelbc examples/lbm/2d/taylor_green_vortex_2d_bgk.gelb -o output.f90 --num-timesteps 1000
    ```
 
 ### Optional: Clean Generated Files
@@ -120,18 +161,24 @@ GeLB comes with a VSCode extension for enhanced development experience:
 
 1. **Install the extension**:
    ```bash
+   # Build the extension TypeScript (one-off)
+   (cd vscode-gelb && npm install && npm run compile)
+
    # Copy extension to VSCode extensions directory
-   cp -r vscode-gelb ~/.vscode/extensions/gelb-lang-0.1.0
-   
+   cp -r vscode-gelb ~/.vscode/extensions/gelb-lang.gelb-lang-0.5.0
+
    # Or on Windows:
-   # xcopy vscode-gelb %USERPROFILE%\.vscode\extensions\gelb-lang-0.1.0\ /E
+   # xcopy vscode-gelb %USERPROFILE%\.vscode\extensions\gelb-lang.gelb-lang-0.5.0\ /E
    ```
 
 2. **Features**:
    - Syntax highlighting for all GeLB constructs
    - Code snippets (type `gelb-program` for a complete template)
    - Automatic bracket matching and indentation
-   - Support for intrinsic functions (`sum`, `dot_prod`)
+   - GeLB sidebar (activity bar) with a live Program Structure outline, a Run view, Other Diagnostics and Docs
+   - Outline pane, breadcrumbs, and Go-to-Symbol (`⌘⇧O` / `⌘T`) driven by the same structural parser
+   - **Interactive source preview** (`GeLB: Show Source Preview`) — live geometry + stencil explorer with pan/zoom (2D) or orbit/WASD fly-through (3D), per-cell selection, and a Space-triggered stencil animation
+   - **Problems-panel diagnostics** driven by `gelbc --diagnostics-json` on open / save of a `.gelb` file — click an entry to jump to the source range; the preview refuses to run while errors exist
 
 3. **Restart VSCode** and open any `.gelb` file to see the extension in action
 
@@ -143,50 +190,63 @@ See [vscode-gelb/README.md](vscode-gelb/README.md) for more details.
 simulation_description("2D Lid-driven cavity flow");
 
 global_constants {
-    const int Nx = 128;
-    const int Ny = 128;
-    const real TAU = 0.6;
-    const real U_LID = 0.1;
+    const int N = 64;
+    const real NU = 1.0 / 6.0;
+    const real TAU_INV = 2.0 / (6.0 * NU + 1.0);
+    const real U_MAX = 0.04;
+    const real PI = 3.141592653589793;
+    const real K = 2.0 * PI / N;
+    const array[real, 9] EX = {0.0, 1.0, 0.0, -1.0,  0.0, 1.0, -1.0, -1.0,  1.0};
+    const array[real, 9] EY = {0.0, 0.0, 1.0,  0.0, -1.0, 1.0,  1.0, -1.0, -1.0};
+    const array[real, 9] W = {4.0/9.0,
+        1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0,
+        1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
 }
 
 lattices {
-    lattice f(d=2, q=9, df_type=real);
+    lattice f(2, 9, real, {N, N}, {true, true});
 }
 
-initializer InitEquilibrium {
-    f.out[x,y|:] = compute_equilibrium(1.0, 0.0, 0.0);
+function Macro(array[real, 9] fIn) -> (real rho, real ux, real uy) {
+    rho = sum(fIn);
+    ux = dot_prod(EX, fIn) / rho;
+    uy = dot_prod(EY, fIn) / rho;
 }
 
-dynamic StreamCollide {
-    real rho = sum(f.in[x,y|:]);
-    real ux = compute_velocity_x(f.in[x,y|:], rho);
-    real uy = compute_velocity_y(f.in[x,y|:], rho);
-    
-    f.out[x,y|:] = f.in[x,y|:] 
-                 + (1.0/TAU) * (compute_equilibrium(rho, ux, uy) - f.in[x,y|:]);
+function Eq(real rho, real ux, real uy) -> (array[real, 9] feq) {
+    real usq = ux*ux + uy*uy;
+    array[real, 9] eu = EX * ux + EY * uy;
+    feq = W * rho * (1.0 + 3.0*eu + 4.5*eu*eu - 1.5*usq);
 }
 
-gauge OutputFlow(out = {real rho; real ux; real uy;}) {
-    rho = sum(f.in[x,y|:]);
-    ux = compute_velocity_x(f.in[x,y|:], rho);
-    uy = compute_velocity_y(f.in[x,y|:], rho);
+initializer InitTG {
+    real xc = x + 0.5;
+    real yc = y + 0.5;
+    real rho = 1.0 - 0.75 * U_MAX^2 * (cos(2.0*K*xc) + cos(2.0*K*yc));
+    real ux = -1.0 * U_MAX * cos(K*xc) * sin(K*yc);
+    real uy = U_MAX * sin(K*xc) * cos(K*yc);
+    f.out[x, y | :] = Eq(rho, ux, uy);
+}
+
+dynamic BGKCollStream {
+    array[real, 9] fIn = upstream_dfs(f, x, y, {EX, EY});
+    real rho;
+    real ux;
+    real uy;
+    {rho, ux, uy} = Macro(fIn);
+    f.out[x, y | :] = fIn - TAU_INV * (fIn - Eq(rho, ux, uy));
+}
+
+gauge Hydro -> (real rho, real ux, real uy) {
+    {rho, ux, uy} = Macro(f.in[x, y | :]);
 }
 
 node_classes {
-    node_class BULK(InitEquilibrium, StreamCollide, OutputFlow);
-    node_class LID(InitEquilibrium, StreamCollideLid, OutputFlow);
-    node_class WALL(InitEquilibrium, BounceBack, OutputFlow);
+    node_class BULK(InitTG, BGKCollStream, Hydro);
 }
 
 geometry {
-    set_grid_size({Nx, Ny});
-    set_grid_periodicity({false, false});
-    
-    nodes[:,:] = BULK;
-    nodes[:,0] = WALL;        // Bottom wall
-    nodes[:,Ny-1] = LID;       // Top lid
-    nodes[0,:] = WALL;        // Left wall
-    nodes[Nx-1,:] = WALL;     // Right wall
+    nodes[:, :] = BULK;
 }
 ```
 
@@ -202,7 +262,7 @@ GeLB intentionally restricts certain features to enable automatic parallelizatio
 - **No user-defined types**: Built-in types only (int, real, bool)
 
 ### Supported Alternatives
-- **Intrinsic functions**: `sum()`, `dot_prod()` (more coming: min, max, etc.)
+- **Intrinsic functions**: `sum`, `dot_prod`, `matmul`, `transpose`, `inverse`, `upstream_dfs`, `bounce_back_dfs`, `random`, `sin`, `cos`, `tan`, `tanh`, `sqrt`, `exp`, `log`, `abs`, `min`, `max`, `mod`, `atan2`
 - **Node classes**: Different behavior for different spatial regions
 - **Pure functions**: Mathematical functions without side effects
 - **Compile-time computation**: Constants and ranges resolved at compile time
@@ -210,13 +270,16 @@ GeLB intentionally restricts certain features to enable automatic parallelizatio
 ## Reserved Keywords
 
 The following are reserved and cannot be used as identifiers:
-- Coordinates: `x`, `y`, `z`
-- Types: `int`, `real`, `bool`
-- Blocks: `lattice`, `lattices`, `initializer`, `dynamic`, `gauge`
-- Node specification: `node_class`, `node_classes`, `geometry`, `nodes`
+- Implicit coordinates: `x`, `y`, `z` — reserved in all blocks *except* user-defined function parameters and local variables
+- Implicit dimension constants: `Nx`, `Ny`, `Nz` — reserved in all blocks *except* user-defined function parameters and local variables
+- Implicit timestep counter: `t` — integer holding the current outer-loop index (0 at the pre-loop gauge pass, 1..N during the time loop); available in `initializer`, `dynamic`, and `gauge` blocks; maps to `gelb_timestep` in the Fortran backends
+- Types: `int` (≡ `int64`), `real` (≡ `real64`), `bool` (1-byte logical) (and explicit-width variants: `int8`, `int16`, `int32`, `int64`, `real32`, `real64`). The type names also serve as explicit cast intrinsics — e.g. `int(real_var)` truncates a real to int, `real(int_var)` promotes an int to real.
+- Blocks: `lattice`, `lattices`, `initializer`, `dynamic`, `gauge`, `function`, `global_constants`
+- Node specification: `node_class`, `node_classes`, `geometry`, `nodes`, `masked`
+- Geometry statements: `border`
 - Lattice access: `in`, `out`
 - Constants: `const`, `true`, `false`
-- Functions: `sum`, `dot_prod`
+- Intrinsic functions: `sum`, `dot_prod`, `matmul`, `transpose`, `inverse`, `upstream_dfs`, `bounce_back_dfs`, `random`, `sin`, `cos`, `tan`, `tanh`, `sqrt`, `exp`, `log`, `abs`, `min`, `max`, `mod`, `atan2`, `determinant`
 
 ## Documentation
 
@@ -225,44 +288,30 @@ For comprehensive documentation, visit [gelb-lang.org](https://gelb-lang.org).
 Key documentation:
 - [Language Tutorial](https://gelb-lang.org/tutorial)
 - [Language Reference](https://gelb-lang.org/reference)
-- [Developer Guide](https://gelb-lang.org/docs/GeLB_developer_guide/intro-for-devs)
 - [API Documentation](https://gelb-lang.org/api)
 
 ## Contributing
 
-We welcome contributions! Please see our [Developer Guide](https://gelb-lang.org/docs/GeLB_developer_guide/intro-for-devs) for details on:
-- Setting up the development environment
-- Understanding the compiler architecture
-- Adding new features
-- Testing guidelines
-- Submitting pull requests
+We welcome contributions! The day-to-day conventions (setting up,
+branching, tests, regenerating the parser, building the manual) are
+collected in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Development Workflow
 
 1. **Make changes to grammar**: Edit `.g4` files
 2. **Regenerate parser**: `./scripts/regenerate_antlr.sh`
 3. **Run tests**: `uv run pytest`
-4. **Check types**: `uv run mypy gelb`
-5. **Format code**: `uv run black gelb`
+4. **Build the manual**: `uv run sphinx-build -b html -W --keep-going docs docs/_build/html`
 
-## Upcoming Features
+## Roadmap
 
-### Near-term (v0.2)
-- Complete Fortran backend implementation
-- Additional intrinsic functions (min, max, vector operations)
-- Enhanced error messages with source location
-
-### Medium-term (v0.3)
-- GPU OpenCL backend
-- Multiple gauge output specifications
-- Geometry file import
-- Conditional node selection in geometry
-
-### Long-term (v1.0)
-- Mesh refinement support
-- Non-Cartesian meshes
+### Planned
+- Geometry file import (external mesh definitions)
 - Distributed memory parallelization (MPI)
+- Mesh refinement support
 - Interactive simulation monitoring
+
+Detailed priorities are tracked in the project's GitHub issues.
 
 ## Using GeLB in Your Work
 
@@ -272,6 +321,17 @@ If you use GeLB for your research, please cite:
 ```
 
 We'd love to hear about your use cases and feature requests!
+
+## Release Manual PDF
+
+The user tutorial PDF is a generated release artifact, not a tracked
+source file. To regenerate it from a source checkout:
+
+```bash
+uv run python scripts/build_manual_pdfs.py
+```
+
+The command writes `GeLB_User_Tutorial.pdf` in the repository root.
 
 ## License
 
@@ -286,7 +346,8 @@ GeLB was created to make LBM simulations more accessible and productive for rese
 
 - Website: [gelb-lang.org](https://gelb-lang.org)
 - GitHub: [github.com/dchirila/gelb](https://github.com/dchirila/gelb)
-- Twitter: [@gelb12410715](https://twitter.com/gelb12410715)
+- Discussions: [GitHub Discussions](https://github.com/dchirila/gelb/discussions)
+- Issues: [GitHub Issues](https://github.com/dchirila/gelb/issues)
 
 ---
 

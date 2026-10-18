@@ -1,0 +1,57 @@
+#!/bin/bash
+#
+# Stands in for gelb-run in the Extension Development Host tests
+# (test/suite): records how it was called in calls/<pid>.call next to
+# itself, writes <name>.nc into its working directory, and behaves as
+# its -D pairs say:
+#   -D SLEEP=<s>     "simulate" for s seconds first (a child process)
+#   -D EXIT=<n>      exit with status n
+#   -D NOOUT=1       write no .nc
+#   -D IGNOREINT=1   ignore Ctrl-C (SIGINT), it and its children
+# --view keeps a "viewer" child running until it is stopped.
+
+calls="$(cd "$(dirname "$0")" && pwd)/calls"
+mkdir -p "$calls"
+rec="$calls/$$.call"
+{
+    echo "pid=$$"
+    echo "pgid=$(ps -o pgid= $$ | tr -d ' ')"
+    echo "cwd=$PWD"
+    for a in "$@"; do printf 'arg=%s\n' "$a"; done
+} > "$rec"
+
+SLEEP=0; EXIT=0; NOOUT=0; IGNOREINT=0; VIEW=0; file=
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -D)
+            case "$2" in
+                SLEEP=*) SLEEP=${2#SLEEP=} ;;
+                EXIT=*) EXIT=${2#EXIT=} ;;
+                NOOUT=*) NOOUT=1 ;;
+                IGNOREINT=*) IGNOREINT=1 ;;
+            esac
+            shift 2 ;;
+        -n|-w|-s|-b) shift 2 ;;
+        --view) VIEW=1; shift ;;
+        *) file=$1; shift ;;
+    esac
+done
+
+if [ "$IGNOREINT" = 1 ]; then
+    trap '' INT
+else
+    trap 'echo interrupted >> "$rec"; kill "$child" 2>/dev/null; wait "$child" 2>/dev/null; exit 130' INT
+fi
+trap 'echo hangup >> "$rec"; exit 129' HUP
+
+sleep "$SLEEP" & child=$!
+echo "child=$child" >> "$rec"
+wait "$child"
+[ "$NOOUT" = 1 ] || : > "$(basename "$file" .gelb).nc"
+if [ "$VIEW" = 1 ]; then
+    sleep 600 & child=$!
+    echo "viewer=$child" >> "$rec"
+    wait "$child"
+fi
+echo "exit=$EXIT" >> "$rec"
+exit "$EXIT"

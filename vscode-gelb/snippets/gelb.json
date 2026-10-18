@@ -10,7 +10,7 @@
       "}",
       "",
       "lattices {",
-      "\tlattice ${6:f}(d=${7:2}, q=${8:9}, df_type=${9:real});",
+      "\tlattice ${6:f}(${7:2}, ${8:9}, ${9:real}, {${2:N}, ${2:N}}, {${10:true}, ${10:true}});",
       "}",
       "",
       "initializer ${10:Init} {",
@@ -21,7 +21,7 @@
       "\t${6:f}.out[${11:x,y}|:] = ${6:f}.in[${11:x,y}|:];",
       "}",
       "",
-      "gauge ${14:Output}(out = {${15:real val;}}) {",
+      "gauge ${14:Output} -> (${15:real val}) {",
       "\t${16:val} = ${17:0.0};",
       "}",
       "",
@@ -30,8 +30,6 @@
       "}",
       "",
       "geometry {",
-      "\tset_grid_size({${2:N}, ${2:N}});",
-      "\tset_grid_periodicity({${19:true}, ${19:true}});",
       "\tnodes[:,:] = ${18:BULK};",
       "}",
       "$0"
@@ -41,9 +39,47 @@
   "Lattice Declaration": {
     "prefix": "lattice",
     "body": [
-      "lattice ${1:name}(d=${2:2}, q=${3:9}, df_type=${4:real});"
+      "lattice ${1:f}(${2:2}, ${3:9}, ${4:real}, {${5:NX}, ${6:NY}}, {${7:true}, ${8:false}});"
     ],
     "description": "Declare a new lattice"
+  },
+  "Function Block": {
+    "prefix": "function",
+    "body": [
+      "function ${1:FuncName}(${2:array[real, 9] fIn}) -> (${3:real rho}) {",
+      "\t${4:rho = sum(fIn);}",
+      "}",
+      "$0"
+    ],
+    "description": "Create a user-defined function (side-effect-free)"
+  },
+  "Destructuring Assignment": {
+    "prefix": "destruct",
+    "body": [
+      "{${1:rho}, ${2:ux}, ${3:uy}} = ${4:Macro}(${5:fIn});"
+    ],
+    "description": "Destructuring assignment from multi-output function"
+  },
+  "Upstream DFs": {
+    "prefix": "upstream",
+    "body": [
+      "upstream_dfs(${1:f}, ${2:x}, ${3:y}, {${4:EX}, ${5:EY}})"
+    ],
+    "description": "Pull upstream distribution functions"
+  },
+  "Bounce-Back DFs": {
+    "prefix": "bounceback",
+    "body": [
+      "bounce_back_dfs(${1:f}, ${2:x}, ${3:y}, {${4:EX}, ${5:EY}})"
+    ],
+    "description": "Bounce-back wall: each neighbour's population that points back at this cell"
+  },
+  "Masked Node Class": {
+    "prefix": "masked",
+    "body": [
+      "node_class ${1:SOLID}() masked;"
+    ],
+    "description": "Define a masked (solid) node class"
   },
   "Initializer Block": {
     "prefix": "initializer",
@@ -69,7 +105,7 @@
   "Gauge Block": {
     "prefix": "gauge",
     "body": [
-      "gauge ${1:GaugeName}(out = {${2:real rho; real u;}}) {",
+      "gauge ${1:GaugeName} -> (${2:real rho, real u}) {",
       "\t${3:rho} = ${4:sum(f.in[x,y|:])};",
       "\t${5:u} = ${6:0.0};",
       "}",
@@ -109,10 +145,7 @@
     "prefix": "geometry",
     "body": [
       "geometry {",
-      "\tset_grid_size({${1:Nx}, ${2:Ny}});",
-      "\tset_grid_periodicity({${3:false}, ${4:false}});",
-      "\t",
-      "\tnodes[:,:] = ${5:BULK};",
+      "\tnodes[:, :] = ${1:BULK};",
       "\t$0",
       "}"
     ],

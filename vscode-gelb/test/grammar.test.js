@@ -51,7 +51,7 @@ assert(keywords.length > 0, 'Keywords section has patterns');
 const expectedKeywords = [
     'simulation_description', 'global_constants', 'lattices', 
     'lattice', 'initializer', 'dynamic', 'gauge', 
-    'node_classes', 'node_class', 'geometry', 'nodes'
+    'node_classes', 'node_class', 'geometry', 'nodes', 'where'
 ];
 
 const keywordPattern = keywords.find(p => p.name === 'keyword.control.gelb');
@@ -112,6 +112,13 @@ assert(operators.some(o => o.name === 'keyword.operator.assignment.gelb'), 'Has 
 assert(operators.some(o => o.name === 'keyword.operator.arithmetic.gelb'), 'Has arithmetic operators');
 assert(operators.some(o => o.name === 'keyword.operator.comparison.gelb'), 'Has comparison operators');
 assert(operators.some(o => o.name === 'keyword.operator.logical.gelb'), 'Has logical operators');
+const arrowPattern = operators.find(
+    o => o.name === 'keyword.operator.return-type.gelb');
+assert(arrowPattern, 'Has named-result arrow operator');
+if (arrowPattern) {
+    assert(new RegExp(arrowPattern.match).test('->'),
+        'Named-result arrow pattern matches ->');
+}
 
 // Summary
 console.log('\n' + '='.repeat(50));

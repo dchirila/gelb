@@ -1,33 +1,38 @@
 # GeLB Language Support for Visual Studio Code
 
-This extension provides rich language support for GeLB (Generic Lattice Boltzmann) files in Visual Studio Code.
+This extension provides language support for GeLB (Generic Lattice Boltzmann) files in Visual Studio Code.
 
 ## Features
 
 ### Syntax Highlighting
-Full syntax highlighting support for GeLB language constructs:
-- Keywords (`simulation_description`, `lattices`, `initializer`, `dynamic`, `gauge`, etc.)
-- Data types (`int`, `real`, `bool`)
-- Constants and literals
-- Intrinsic functions (`sum`, `dot_prod`)
-- Comments (line and block)
-- Operators and punctuation
-- Coordinate variables (`x`, `y`, `z`)
+Full syntax highlighting for all GeLB language constructs:
+- Block keywords: `simulation_description`, `lattices`, `initializer`, `dynamic`, `gauge`, `node_classes`, `geometry`, `function`
+- Modifiers and selectors: `const`, `masked`, and lattice-buffer
+  selectors `in` / `out`
+- Data types: `int`, `int8`, `int16`, `int32`, `int64`, `real`, `real16`, `real32`, `real64`, `bool`, `array`
+- Intrinsic functions: `sum`, `dot_prod`, `sin`, `cos`, `tan`, `tanh`, `sqrt`, `exp`, `log`, `abs`, `min`, `max`, `mod`, `atan2`, `matmul`, `transpose`, `random`, `upstream_dfs`, `bounce_back_dfs`
+- Coordinate variables: `x`, `y`, `z`
+- Comments (line `//` and block `/* */`), operators, and punctuation
 
 ### Code Snippets
-Productive code snippets to speed up GeLB development:
-- `gelb-program` - Complete GeLB program template
-- `lattice` - Lattice declaration
-- `initializer` - Initializer block
-- `dynamic` - Dynamic update block
-- `gauge` - Gauge output block
-- `node-class` - Node class definition
-- `const` - Global constant declaration
-- `geometry` - Geometry setup
-- `sum` - Sum function call
-- `dot` - Dot product function call
-- `lat2d` - 2D lattice selection
-- `lat3d` - 3D lattice selection
+Productive snippets to speed up GeLB development:
+- `gelb-program` — complete GeLB program template
+- `lattice` — lattice declaration
+- `function` — user-defined function block with named `-> (...)` results
+- `initializer` — initializer block
+- `dynamic` — dynamic update block
+- `gauge` — gauge output block
+- `node-class` — node class definition
+- `masked` — masked (solid) node class
+- `const` — global constant declaration
+- `geometry` — geometry setup block
+- `upstream` — `upstream_dfs(...)` call
+- `bounceback` — `bounce_back_dfs(...)` call
+- `destruct` — destructuring assignment `{a, b} = Func(x);`
+- `sum` — sum function call
+- `dot` — dot product function call
+- `lat2d` — 2D lattice selection
+- `lat3d` — 3D lattice selection
 
 ### Language Configuration
 - Automatic bracket matching and closing
@@ -35,116 +40,183 @@ Productive code snippets to speed up GeLB development:
 - Comment toggling (Cmd+/ or Ctrl+/)
 - Code folding support
 
+### GeLB sidebar (activity bar)
+A dedicated GeLB icon in VSCode's activity bar opens a panel with
+four views tailored to `.gelb` development:
+
+- **Program Structure** — a GeLB-aware outline of the currently
+  active `.gelb` file. Top-level blocks (`global_constants`,
+  `lattices`, each `initializer` / `dynamic` / `gauge`,
+  `node_classes`, `geometry`) and nested children (constants,
+  lattice declarations, node-class declarations with their
+  `(init, dyn, gauge)` tuples). Click an entry to jump to its
+  line; the tree updates live as you edit.
+- **Run** — runs the file Program Structure shows with `gelb-run`,
+  as a VS Code task: its output (compiler messages, the progress
+  bar, the MLUPS report) appears in a terminal of the panel named
+  "GeLB run: *file* #*n*", and every step of every run in the
+  **GeLB Run** output (*Show Run Log*, also in the view's title
+  bar). The everyday parameters are rows you click to edit:
+
+  | Row | gelb-run | Default |
+  |-----|----------|---------|
+  | Time steps | `-n` | `gelb.runDefaultTimeSteps` (1000) |
+  | Write every | `-w` | `gelb.runDefaultWriteEvery` (100) |
+  | Constants | `-D NAME=VALUE`, one per override, picked from the file's `global_constants` (or typed) | none |
+  | Seed (only when the file calls `random()`) | `-s` | from the clock |
+  | Backend | `-b` | `cpu_highway` |
+  | Open viewer | `--view` | on |
+  | Output folder | the run's working directory, where `<name>.nc` lands | next to the source file, or `gelb.runOutputFolder` |
+
+  The values are remembered per file (in the workspace state), so a
+  second run with the same overrides is one click. *Run* (also in
+  the view's title bar) saves the file and starts `gelb-run` in the
+  output folder with these arguments; nothing is typed into a
+  terminal. The log shows each run as the equivalent command line,
+  for example
+  `cd '/Users/me/runs' && '/Users/me/gelb/bin/gelb-run' -n 40000 -w 1000 -D 'N=257' --view '/Users/me/gelb/examples/lbm/2d/lid_driven_cavity_2d_bgk.gelb'`,
+  to copy into a terminal for the gelb-run flags the view has no row
+  for (`-k`, `-v`, `-F`, `-m stdout`, the `--cuda-*` knobs).
+
+  The **Status** row shows the current or last run, numbered as in
+  the log: *starting*, *running* (compiling, simulating, or with its
+  viewer window open), *stopping*, *finished*, *stopped*, or why it
+  failed; click it for the log. One run at a time: *Run* while a run
+  is starting is ignored (the status bar says so); while one is
+  running it asks first and offers *Stop and Run*. *Stop* sends
+  Ctrl-C to `gelb-run` and everything it started (compiler,
+  simulation, viewer) and ends the task when that has not stopped it
+  within 3 seconds. A run that has not reported its start after 10
+  seconds is reported, with buttons to its terminal and to the log;
+  nothing is retried on its own. *Open output folder* and *Open last
+  output in viewer* (which starts `gelb-view` on the `.nc` of the
+  last run that wrote one; a failed run does not change it) complete
+  the view. Constant values containing `'` or `!` are refused, so
+  that every run can also be written as a shell line.
+- **Other Diagnostics** — buttons for *Show Source Preview*,
+  *Lint Geometry* and *Show Problems* (focuses the Problems tab).
+- **Docs** — links to the reference manual, the homepage and
+  GitHub Discussions; collapsed at first.
+
+The same *Run* is a ▶ button next to the preview button in the
+editor title bar, and a CodeLens (*▶ Run* · *Run with...*) above
+`simulation_description(...)`; *Run with...* opens the Run view.
+
+### Outline & Go-to-Symbol
+The same structural parser feeds VSCode's built-in Outline pane,
+the breadcrumb bar at the top of the editor, the *Go to Symbol in
+Editor* picker (`⌘⇧O` / `Ctrl+Shift+O`), and *Go to Symbol in
+Workspace* (`⌘T` / `Ctrl+T`) — the last of which searches across
+every `.gelb` file in the workspace.
+
+### Commands (via `Cmd+Shift+P` / `Ctrl+Shift+P`)
+- **GeLB: Show Source Preview** — live geometry + stencil explorer.
+  2D: pan (Alt-drag), zoom (wheel), click cells to inspect. 3D: orbit
+  (drag), dolly (wheel), fly-through (WASD + Q/E), click cubes to select,
+  orientation gizmo bottom-left. Press **Space** on a selected cell to
+  play the blue-reads / red-writes stencil animation.
+- **GeLB: Lint Geometry** — run geometry-lint warnings and open the GeLB
+  output channel.
+- **GeLB: Run** — run the active `.gelb` file with `gelb-run`, using
+  the parameters of the sidebar's Run view (see above). **GeLB: Stop
+  Run** stops it; **GeLB: Show Run Log** opens the GeLB Run output.
+
+### Problems-panel diagnostics
+On open / save of a `.gelb` file the extension runs
+`gelbc --diagnostics-json` (frontend + midware only, no codegen) and
+publishes the resulting errors / warnings to VSCode's Problems panel with
+clickable source ranges. While there are any errors, the preview
+commands refuse to run and show a one-line toast pointing at the panel.
+
+### Settings
+The three command settings (`gelbcCommand`, `gelbViewCommand`,
+`gelbRunCommand`) are empty by default, and the extension finds the
+tools itself, looking from the `.gelb` file's folder and the
+workspace folders upwards:
+
+1. a GeLB source checkout (as cloned and set up with
+   `./scripts/gelb_bootstrap.sh`): its `scripts/gelb-run`, and
+   `gelbc` / `gelb-view` from its `.venv` (through
+   `uv run --project <checkout>` when there is no `.venv` yet);
+2. a GeLB installation, such as the macOS installer's `~/gelb`: its
+   `bin/` commands;
+3. otherwise `gelbc`, `gelb-view`, `gelb-run` on the `PATH`, then
+   `~/gelb/bin`;
+4. for `gelb-run` only, finally the bare name, which the Run view
+   then runs through VS Code's task shell (`cd '<folder>' &&
+   'gelb-run' ...`), whose `PATH` can be longer than VS Code's own
+   (`terminal.integrated.env.*`, what the shell reads when it
+   starts). A `gelb-run` found as a path runs without a shell, with
+   VS Code's environment (taken from your login shell when VS Code
+   starts) plus `terminal.integrated.env.*`.
+
+When `gelbc` or `gelb-view` is not found, the command says so and
+offers to open the setting; when the task shell cannot find
+`gelb-run` either (exit status 127), the Run view says so too. A
+value in a setting always wins. The settings
+accept a path with spaces: quote it with `'...'`
+or `"..."` in the first two (they may carry arguments, such as
+`uv run gelbc`), and write it plainly in `gelbRunCommand` (a single
+executable). Inside double quotes a backslash escapes only `"`, `\`,
+`$` and a backquote, so `"C:\Program Files\GeLB\gelbc.exe"` keeps
+its backslashes.
+
+| Setting | Default | Purpose |
+|---------|---------|---------|
+| `gelb.gelbcCommand` | `""` (found) | Command that runs `gelbc` for Problems-panel diagnostics, e.g. `"uv run gelbc"`. |
+| `gelb.gelbViewCommand` | `""` (found) | Command that runs `gelb-view` for the previews, Lint Geometry and the Run view's viewer. |
+| `gelb.gelbRunCommand` | `""` (found) | Name or path of `gelb-run` for the Run view: one executable, no arguments; a relative path such as `./scripts/gelb-run` is taken from the workspace folder. The macOS installer writes `~/gelb/bin/gelb-run`. |
+| `gelb.runOutputFolder` | `""` | Folder the Run view runs in (where the `.nc` lands); empty means next to the source file. Relative to the workspace folder; `~` and `${workspaceFolder}` expanded; created if missing. Per workspace folder. |
+| `gelb.runDefaultTimeSteps` | `1000` | Time steps a file starts with in the Run view. |
+| `gelb.runDefaultWriteEvery` | `100` | Output interval a file starts with in the Run view. |
+| `gelb.lintOnOpen` | `true` | Run diagnostics when a `.gelb` file is opened. |
+| `gelb.lintOnSave` | `true` | Re-run diagnostics when a `.gelb` file is saved. |
+| `gelb.refreshOnSave` | `true` | Re-render the active preview on save. |
+| `gelb.stencilAnimationDurationMs` | `3000` | Total duration of the Space-triggered stencil animation in the source preview, split into four equal phases (reads-in / out, writes-in / out). |
+
 ## Installation
 
+### Quick Install
+Copy the `vscode-gelb/` directory to your VSCode extensions folder and restart VSCode:
+- **macOS / Linux**: `~/.vscode/extensions/`
+- **Windows**: `%USERPROFILE%\.vscode\extensions\`
+
+For rapid iteration during development, use the helper script:
+```bash
+./scripts/install-vscode-ext.sh
+```
+
 ### From VSIX Package
-1. Download the `.vsix` file from the releases
+1. Package the extension: `npm install -g vsce && vsce package`
 2. Open VS Code
 3. Go to Extensions view (Cmd+Shift+X or Ctrl+Shift+X)
 4. Click on the "..." menu and select "Install from VSIX..."
-5. Select the downloaded `.vsix` file
+5. Select the generated `.vsix` file
 
-### From Source
-1. Clone the repository
-2. Navigate to `vscode-gelb/` directory
-3. Run `npm install` to install dependencies
-4. Open the folder in VS Code
-5. Press F5 to launch a new VS Code window with the extension loaded
+### Development Mode
+1. Navigate to `vscode-gelb/` and run `npm install`
+2. Open the folder in VS Code
+3. Press F5 to launch an Extension Development Host window with the extension loaded
 
 ## Usage
 
-The extension automatically activates when you open a `.gelb` file. Features include:
+The extension activates automatically when a `.gelb` file is opened.
 
-### Creating a New GeLB File
-1. Create a new file with `.gelb` extension
-2. Type `gelb-program` and press Tab to insert a complete program template
-3. Use Tab to navigate through the template placeholders
-
-### Using Snippets
-Type the snippet prefix and press Tab:
-- `lattice` → Lattice declaration
-- `const` → Constant declaration
-- `dynamic` → Dynamic block
-- And more...
-
-### Example GeLB Program
-
-```gelb
-simulation_description("2D Flow Simulation");
-
-global_constants {
-    const int Nx = 128;
-    const int Ny = 128;
-    const real TAU = 0.6;
-}
-
-lattices {
-    lattice f(d=2, q=9, df_type=real);
-}
-
-initializer Init {
-    f.out[x,y|:] = 0.0;
-}
-
-dynamic Update {
-    real rho = sum(f.in[x,y|:]);
-    f.out[x,y|:] = f.in[x,y|:] + (1.0/TAU) * delta;
-}
-
-gauge Output(out = {real density;}) {
-    density = sum(f.in[x,y|:]);
-}
-
-node_classes {
-    node_class BULK(Init, Update, Output);
-}
-
-geometry {
-    set_grid_size({Nx, Ny});
-    set_grid_periodicity({true, true});
-    nodes[:,:] = BULK;
-}
-```
-
-## Language Reference
-
-### Keywords
-- Structure: `simulation_description`, `global_constants`, `lattices`, `node_classes`, `geometry`
-- Blocks: `lattice`, `initializer`, `dynamic`, `gauge`, `node_class`
-- Geometry: `set_grid_size`, `set_grid_periodicity`, `nodes`
-- Modifiers: `const`, `in`, `out`
-
-### Data Types
-- `int` - Integer type
-- `real` - Floating-point type
-- `bool` - Boolean type
-
-### Built-in Functions
-- `sum(array)` - Sum all elements of an array
-- `dot_prod(array1, array2)` - Compute dot product
-
-### Special Variables
-- `x`, `y`, `z` - Coordinate variables (automatically available in context)
+Type a snippet prefix and press Tab to expand:
+- `function` → user-defined function block with named results
+- `upstream` → `upstream_dfs(f, x, y, {EX, EY})`
+- `masked` → `node_class SOLID() masked;`
+- `destruct` → `{rho, ux, uy} = Macro(fIn);`
+- And all the other snippets listed above.
 
 ## Testing
 
-To run the grammar tests:
 ```bash
 cd vscode-gelb
 npm install
 npm test
 ```
 
-## Contributing
-
-Contributions are welcome! Please feel free to submit issues or pull requests to improve the extension.
-
 ## License
 
 This extension is licensed under the Mozilla Public License 2.0 (MPL-2.0).
-
-## More Information
-
-- [GeLB Language Documentation](https://gelb-lang.org)
-- [GeLB GitHub Repository](https://github.com/dchirila/gelb)
-- [Report Issues](https://github.com/dchirila/gelb/issues)

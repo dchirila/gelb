@@ -1,0 +1,134 @@
+{
+  "schema_version": 1,
+  "cases": {
+    "lid_cavity_2d": {
+      "gelb_file": "examples/lbm/2d/lid_driven_cavity_2d_bgk.gelb",
+      "steps": 5000,
+      "defines": {
+        "N": "512"
+      }
+    },
+    "poiseuille_2d": {
+      "gelb_file": "examples/lbm/2d/poiseuille_flow_2d_mrt.gelb",
+      "steps": 10000,
+      "defines": {
+        "NY": "256",
+        "NX": "256"
+      }
+    },
+    "tgv_2d": {
+      "gelb_file": "examples/lbm/2d/taylor_green_vortex_2d_bgk.gelb",
+      "steps": 5000,
+      "defines": {
+        "N": "512"
+      }
+    }
+  },
+  "results": {
+    "cpu_serial": {
+      "lid_cavity_2d": {
+        "mlups_samples": [
+          199.3,
+          197.9,
+          196.8
+        ],
+        "median": 197.9,
+        "machine": "Apple M4 reference (Darwin / arm)",
+        "commit_sha": "ae90214",
+        "timestamp": "2026-04-24T18:17:39.739887+00:00"
+      },
+      "poiseuille_2d": {
+        "mlups_samples": [
+          65.3,
+          65.2,
+          64.7
+        ],
+        "median": 65.2,
+        "machine": "Apple M4 reference (Darwin / arm)",
+        "commit_sha": "ae90214",
+        "timestamp": "2026-04-24T18:17:39.739887+00:00"
+      },
+      "tgv_2d": {
+        "mlups_samples": [
+          100.1,
+          99.0,
+          98.9
+        ],
+        "median": 99.0,
+        "machine": "Apple M4 reference (Darwin / arm)",
+        "commit_sha": "ae90214",
+        "timestamp": "2026-04-24T18:17:39.739887+00:00"
+      }
+    },
+    "cpu_openmp": {
+      "lid_cavity_2d": {
+        "mlups_samples": [
+          323.7,
+          327.8,
+          326.4
+        ],
+        "median": 326.4,
+        "machine": "Apple M4 reference (Darwin / arm)",
+        "commit_sha": "ae90214",
+        "timestamp": "2026-04-24T18:19:58.222018+00:00"
+      },
+      "poiseuille_2d": {
+        "mlups_samples": [
+          177.9,
+          177.9,
+          177.9
+        ],
+        "median": 177.9,
+        "machine": "Apple M4 reference (Darwin / arm)",
+        "commit_sha": "ae90214",
+        "timestamp": "2026-04-24T18:19:58.222018+00:00"
+      },
+      "tgv_2d": {
+        "mlups_samples": [
+          399.7,
+          384.6,
+          391.7
+        ],
+        "median": 391.7,
+        "machine": "Apple M4 reference (Darwin / arm)",
+        "commit_sha": "ae90214",
+        "timestamp": "2026-04-24T18:19:58.222018+00:00"
+      }
+    },
+    "cuda": {
+      "lid_cavity_2d": {
+        "mlups_samples": [
+          1642.4,
+          1780.9,
+          1712.4
+        ],
+        "median": 1712.4,
+        "machine": "Zen 4 AVX-512 reference (Linux / x86_64)",
+        "commit_sha": "501a2e6",
+        "timestamp": "2026-04-24T19:25:32.040779+00:00"
+      },
+      "poiseuille_2d": {
+        "mlups_samples": [
+          1071.0,
+          1070.9,
+          1070.6
+        ],
+        "median": 1070.9,
+        "machine": "Zen 4 AVX-512 reference (Linux / x86_64)",
+        "commit_sha": "501a2e6",
+        "timestamp": "2026-04-24T19:25:32.040779+00:00"
+      },
+      "tgv_2d": {
+        "mlups_samples": [
+          1858.8,
+          1849.3,
+          1847.8
+        ],
+        "median": 1849.3,
+        "machine": "Zen 4 AVX-512 reference (Linux / x86_64)",
+        "commit_sha": "501a2e6",
+        "timestamp": "2026-04-24T19:25:32.040779+00:00"
+      }
+    }
+  }
+}

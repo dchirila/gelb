@@ -59,11 +59,15 @@
       "patterns": [
         {
           "name": "keyword.control.gelb",
-          "match": "\\b(simulation_description|global_constants|lattices|lattice|initializer|dynamic|gauge|node_classes|node_class|geometry|nodes|set_grid_size|set_grid_periodicity)\\b"
+          "match": "\\b(simulation_description|global_constants|lattices|lattice|initializer|dynamic|gauge|node_classes|node_class|geometry|nodes|border|where|function|masked)\\b"
         },
         {
           "name": "keyword.other.gelb",
           "match": "\\b(in|out|const)\\b"
+        },
+        {
+          "name": "keyword.reserved.gelb",
+          "match": "\\b(enter|leave|reduce|reduction|update|global_variables|transition|zone)\\b"
         }
       ]
     },
@@ -71,7 +75,7 @@
       "patterns": [
         {
           "name": "storage.type.gelb",
-          "match": "\\b(int|real|bool)\\b"
+          "match": "\\b(int|int8|int16|int32|int64|real|real16|real32|real64|bool|array)\\b"
         }
       ]
     },
@@ -91,15 +95,15 @@
       "patterns": [
         {
           "name": "support.function.builtin.gelb",
-          "match": "\\b(sum|dot_prod)\\b"
+          "match": "\\b(sum|dot_prod|sin|cos|tan|tanh|sqrt|exp|log|abs|min|max|mod|atan2|random|matmul|transpose|inverse|determinant|upstream_dfs|bounce_back_dfs)\\b"
         }
       ]
     },
     "operators": {
       "patterns": [
         {
-          "name": "keyword.operator.assignment.gelb",
-          "match": "="
+          "name": "keyword.operator.return-type.gelb",
+          "match": "->"
         },
         {
           "name": "keyword.operator.arithmetic.gelb",
@@ -108,6 +112,10 @@
         {
           "name": "keyword.operator.comparison.gelb",
           "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.assignment.gelb",
+          "match": "="
         },
         {
           "name": "keyword.operator.logical.gelb",
