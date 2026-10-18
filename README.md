@@ -342,6 +342,26 @@ See the [LICENSE](https://github.com/dchirila/gelb/blob/main/LICENSE) file for d
 
 GeLB was created to make LBM simulations more accessible and productive for researchers. The framework represents years of experience with lattice Boltzmann implementations and lessons learned from the challenges of high-performance computing.
 
+GeLB is written and maintained by Dragos-Bogdan Chirila.
+
+The core ideas behind this project were produced by the author during his
+PhD studies, along with the initial language specification and the first
+prototypes. Transforming those initial efforts into a product that is
+suitable for a wider audience took many years of intermittent work after
+that (who would have thought that creating a programming language is
+hard?). For the final stages of the implementation, AI agents from
+Anthropic (Claude Code), OpenAI (Codex) and Google (Gemini) were used,
+always with a human at the helm.
+
+### About this history
+
+The commits up to 8 August 2025 are the author's original development
+history, kept unchanged. The commits after that are a condensed timeline:
+each one gathers the work on one area into a single milestone, dated near
+the time that work was done, with its files in their released form. They
+show how GeLB grew rather than record every change, so bisecting or
+blaming inside that range points to a milestone, not to a day.
+
 ## Contact
 
 - Website: [gelb-lang.org](https://gelb-lang.org)
