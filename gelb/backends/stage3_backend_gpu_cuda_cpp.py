@@ -24,9 +24,9 @@ from gelb.midware.ast_eval import get_max_dim, is_periodic
 
 # Default threads per CUDA block.  256 = 8 warps; modern NVIDIA
 # (sm_75+, including Ada sm_89) typically peaks between 128-256
-# threads/block for memory-bound kernels.  CUDA Fortran defaults
-# to 32 (one warp); we prefer 256 since it gives better occupancy
-# for streaming workloads on Ada.  Override via
+# threads/block for memory-bound kernels.  A one-warp block (32)
+# is the other common choice; 256 gives better occupancy for
+# streaming workloads on Ada.  Override via
 # ``--cuda-block-size``.
 _CUDA_BLOCK_SIZE = 256
 

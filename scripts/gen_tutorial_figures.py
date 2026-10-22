@@ -622,7 +622,7 @@ def _render_09_rb_temperature_rolls(out_dir: pathlib.Path) -> None:
 
 
 def _render_16_mlups_backend_comparison(out_dir: pathlib.Path) -> None:
-    """Chapter 16: cross-backend MLUPS bar chart (CPU-serial/OpenMP/CUDA).
+    """Chapter 16: cross-backend MLUPS bar chart (the three backends).
 
     Reads ``docs/user/figures/data/16_mlups_backend_comparison.json``
     (populated by ``scripts/benchmark_backends.py`` across one or more

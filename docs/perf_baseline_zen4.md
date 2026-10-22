@@ -13,11 +13,6 @@ this file keeps the reusable conclusions.
 - Samples: 3 per anchor, median reported
 - Metric: compute MLUPS, excluding initialization and I/O
 
-The historical `cpu_fortran_serial` comparison column was captured when
-the Fortran backend still emitted OpenMP directives. Current
-`cpu_fortran_serial` is strictly single-threaded, so those old speedups
-should not be treated as current backend-to-backend ratios.
-
 ## Six-Anchor Summary
 
 | Anchor | Size | `cpu_highway` MLUPS | Interpretation |

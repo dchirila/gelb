@@ -322,7 +322,8 @@ uv run python scripts/find_ra_critical.py
 The driver uses `scripts/gelb-run`, compiles and runs the example
 once per Ra value with the CUDA C++ backend, and prints a summary
 table plus a Ra_c bracket.  Pass `--backend cpu` to fall back to
-CPU serial (with OpenMP) if no NVIDIA GPU is available; expect
+the serial CPU backend (`cpu_fortran_serial`) if no NVIDIA GPU is
+available; expect
 ~10× slower wall times.
 
 

@@ -3,7 +3,7 @@
 
 Reproduces the Fortran reference Ra_cr_1 study
 (``rb_{2,3}d/runs__Ra_cr_1/Pr_0_71__Ny_41__Gamma_2__MaxMach_0_1/Ra_{1685..1730}``)
-using GeLB's CUDA Fortran (or CPU-OpenMP) backend.  For each Ra value,
+using GeLB's ``gpu_cuda_cpp`` (or ``cpu_fortran_serial``) backend.  For each Ra value,
 this script compiles and runs the GeLB example at the Fortran-matching
 grid (Gamma ~= 2.0158, Ny=41 fluid rows) via ``scripts/gelb-run``, then
 classifies the late-time state of the vertical velocity field as
@@ -295,7 +295,7 @@ def pick_backend(requested: str) -> str:
     ``auto`` always targets the CUDA backend.  If the CUDA toolchain
     is unavailable, gelb-run reports a clear error on the first run
     and the sweep aborts.  Use ``--backend cpu`` to force the
-    CPU-OpenMP path.
+    ``cpu_fortran_serial`` backend.
     """
     if requested == 'cpu':
         return 'cpu_fortran_serial'

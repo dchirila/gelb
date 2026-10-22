@@ -39,7 +39,7 @@ Usage (from the project root):
     uv run python scripts/measure_loc_savings.py --tsv loc.tsv
 
 Requires ``uv``, a working GeLB install, and -- for ``--backend gpu`` or
-``both`` -- a gelbc capable of emitting CUDA Fortran (no nvcc
+``both`` -- a gelbc capable of emitting CUDA C++ (no nvcc
 needed; we only count the generated source).
 """
 
@@ -229,7 +229,7 @@ def print_report(rows, do_cpu, do_gpu, out=sys.stdout):
              f"**{_fmt_reduction(exp)} shorter** than the equivalent CPU source.")
     if do_gpu:
         exp = _expansion(sum_g_sloc, sum_p_sloc)
-        emit(f"* **CUDA Fortran** — backend expansion {_fmt_ratio(exp)}. "
+        emit(f"* **CUDA C++** — backend expansion {_fmt_ratio(exp)}. "
              f"A GeLB program is **{_fmt_reduction(exp)} shorter** than "
              f"the equivalent CUDA source.")
     emit()
@@ -237,7 +237,7 @@ def print_report(rows, do_cpu, do_gpu, out=sys.stdout):
     # ----- size-weighted table -----
     emit("## Size-weighted totals")
     emit()
-    cols = ["Metric"] + (["CPU (f90)"] if do_cpu else []) + (["GPU (cuf)"] if do_gpu else [])
+    cols = ["Metric"] + (["CPU (f90)"] if do_cpu else []) + (["GPU (CUDA C++)"] if do_gpu else [])
     emit("| " + " | ".join(cols) + " |")
     emit("|" + "|".join(["---"] * len(cols)) + "|")
 
@@ -268,7 +268,7 @@ def print_report(rows, do_cpu, do_gpu, out=sys.stdout):
     # ----- per-example averages -----
     emit("## Per-example averages")
     emit()
-    cols = ["Metric"] + (["CPU (f90)"] if do_cpu else []) + (["GPU (cuf)"] if do_gpu else [])
+    cols = ["Metric"] + (["CPU (f90)"] if do_cpu else []) + (["GPU (CUDA C++)"] if do_gpu else [])
     emit("| " + " | ".join(cols) + " |")
     emit("|" + "|".join(["---"] * len(cols)) + "|")
 

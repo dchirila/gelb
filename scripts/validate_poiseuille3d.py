@@ -161,7 +161,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Validate 3D Poiseuille flow against analytical solution")
     parser.add_argument('--gpu', action='store_true',
-                        help="Also test GPU (CUDA Fortran) backend")
+                        help="Also test the GPU backend (gpu_cuda_cpp)")
     args = parser.parse_args()
 
     backends = ['cpu']

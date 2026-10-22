@@ -181,7 +181,7 @@ def resolve_geometry(ast, validate_continuity: bool = True) -> ResolvedGeometry:
     _DIM_LABELS = ('x', 'y', 'z')
     paint_ops = []
 
-    # --- Phase 1: apply paint statements ---
+    # --- Step 1: apply paint statements ---
     for stmt in ast.geometry.stmts:
         if isinstance(stmt, PaintNodesStmt_N):
             nc_name = stmt.rhs.name
@@ -263,7 +263,7 @@ def resolve_geometry(ast, validate_continuity: bool = True) -> ResolvedGeometry:
     # border() repaints are recorded separately, in application order.
     border_corrections = []
 
-    # --- Phase 2: apply border() statements ---
+    # --- Step 2: apply border() statements ---
     all_coords = list(itertools.product(*(range(s) for s in sizes)))
     periodic_flags = tuple(
         is_periodic(lattice_info, i) for i in range(ndim))
@@ -297,7 +297,7 @@ def resolve_geometry(ast, validate_continuity: bool = True) -> ResolvedGeometry:
                 nc_map_flat[flat_idx] = tgt
                 border_corrections.append((coords, tgt))
 
-    # --- Phase 3: verify full coverage ---
+    # --- Step 3: verify full coverage ---
     for idx in range(total):
         if nc_map_flat[idx] is None:
             coords = _coords_from_flat(idx)
@@ -320,7 +320,7 @@ def resolve_geometry(ast, validate_continuity: bool = True) -> ResolvedGeometry:
                 source_end_line=(geom_range.stop_line
                                  if geom_range is not None else None))
 
-    # --- Phase 4: build ordered NC list and integer map ---
+    # --- Step 4: build ordered NC list and integer map ---
     seen = set()
     nc_order = []
     for stmt in ast.geometry.stmts:
@@ -343,7 +343,7 @@ def resolve_geometry(ast, validate_continuity: bool = True) -> ResolvedGeometry:
         [nc_ids[nc_map_flat[i]] for i in range(total)],
         dtype=np.int32).reshape(sizes)
 
-    # --- Phase 5: per-NC metadata ---
+    # --- Step 5: per-NC metadata ---
     nc_info = {}
     for nc_name in nc_order:
         nc_stmt = _find_node_class(ast, nc_name)
@@ -372,7 +372,7 @@ def resolve_geometry(ast, validate_continuity: bool = True) -> ResolvedGeometry:
             info.bbox_dense = (int(mask.sum()) == expected_count)
         nc_info[nc_name] = info
 
-    # --- Phase 6: boundary contacts ---
+    # --- Step 6: boundary contacts ---
     boundary_contacts: dict[str, dict[int, set[str]]] = {}
     for dim_idx in range(ndim):
         if is_periodic(lattice_info, dim_idx):
