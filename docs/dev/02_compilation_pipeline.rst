@@ -12,11 +12,28 @@ enum.  Every pass is followed by ``record(name)``, so
 ``CompilationResult.pass_names`` is the executed sequence, and
 :source:`gelb/tests/unit/test_compiler_pipeline.py` asserts it per
 profile.  The frontend passes are wrapped by the functions of
-:source:`gelb/frontend/stage1_frontend.py`, the midware passes by
-those of :source:`gelb/midware/stage2_midware.py`; the visitor behind
-each wrapper is named below, under the names ``record`` uses.  Two
-sanity checks, ``validate_ast_root`` and ``validate_midware_input``,
-only confirm that the root is a ``Program_N``.
+:source:`gelb/frontend/stage1_frontend.py` and the midware checks by
+those of :source:`gelb/midware/stage2_midware.py`;
+``apply_constant_overrides``, ``sequence_draws``, ``inline_functions``,
+``hoist_intrinsic_args``, the three rewrites and ``resolve_geometry``
+are imported straight from their own modules.  The module behind each
+pass is named below, under the names ``record`` uses.  Two sanity
+checks: ``validate_ast_root`` confirms that the root is a
+``Program_N``, and ``validate_midware_input`` confirms that again and
+that the root carries the seven block attributes
+(``global_constants`` through ``geometry``).
+
+Not every pass runs in every profile: ``detect_function_recursion``
+and the midware passes from ``validate_streaming_intrinsic_args`` to
+``slice_df_expansion`` run under ``CODEGEN`` and ``DIAGNOSTICS`` only;
+``extract_stencils`` and the checks after it run only with
+``PipelineOptions.require_stencils``, the map-based checks only with
+``require_geometry``, and ``geometry_lint`` not under
+``--no-geometry-lint``; ``PROGRAM_ANALYSIS`` runs ``resolve_geometry``
+(with ``require_geometry``) and then ``extract_stencils`` (with
+``require_stencils``) and none of the coverage, wall,
+write-destination or lint checks
+(:source:`gelb/tests/unit/test_compiler_pipeline.py`).
 
 Frontend
 ========
@@ -45,13 +62,19 @@ Frontend
    program and to each block, after the wrapper has checked every
    lattice's grid-size rank against its ``d``; then
    :source:`gelb/frontend/ImplicitsDefsClashPreventerVisitor.py`: no
-   user symbol is named like an implicit one.
+   user symbol is named like an implicit one that applies in its block
+   (``reserved_definition_names_for_block`` in
+   :source:`gelb/frontend/implicit_symbols.py`; a function may name a
+   local ``x`` or ``t``, but not ``Nx``).
 ``detect_function_recursion``
    in ``stage1_frontend.py`` itself: a depth-first search over the
-   user-function call graph (``CODEGEN`` and ``DIAGNOSTICS`` only).
+   user-function call graph.
 ``add_implicit_symbols``
-   :source:`gelb/frontend/ImplicitSymbolsAdderVisitor.py` adds ``Nx``,
-   ``Ny``, ``Nz``, ``x``, ``y``, ``z`` and ``t`` to the tables.
+   :source:`gelb/frontend/ImplicitSymbolsAdderVisitor.py` adds the
+   dimension constants (``Nx``, and ``Ny``, ``Nz`` as the dimensionality
+   allows) to the program's table and the coordinates and ``t`` to each
+   initializer, dynamic and gauge; the geometry block gets the
+   coordinates but not ``t``.
 ``validate_fixed_geometry``, ``apply_constant_overrides``
    :source:`gelb/frontend/GeometryDependencyValidator.py`: paints
    depend only on coordinates and constants; then
@@ -129,11 +152,13 @@ Midware
 How a diagnostic is produced
 ============================
 
-Every error is a subclass of ``GeLBException`` in
-:source:`gelb/utils/exceptions.py`, constructed with an ``error`` and a
-``hint``; twelve of its twenty-five subclasses also take the
-offending node or token and return its line and column from
-``_source_location``.  The constructor prints the exception at once:
+Every error is a subclass of ``GeLBException``
+(:source:`gelb/utils/exceptions.py`; one more subclass sits in
+:source:`gelb/frontend/LatticeConsistencyValidator.py`), constructed
+with an ``error`` and a ``hint``; twelve of the twenty-five subclasses
+in ``exceptions.py`` also carry a source location (the offending node
+or token, or a source line) that ``_source_location`` returns as a
+line and column.  The constructor prints the exception at once:
 ``__str__`` calls ``show_error_in_src`` from
 :source:`gelb/utils/error_utils.py`, which prints the source lines
 around the location (``GELB_ERROR_CONTEXT = 2`` in
@@ -148,9 +173,12 @@ follows.  Warnings go to stderr with a ``[Warning]`` label.
 Under pytest and in diagnostics mode, ``_suppress_print_and_exit``
 in ``exceptions.py`` suppresses the printing and the exit.
 ``_run_diagnostics`` in :source:`gelb/gelbc.py` sets
-``config.DIAGNOSTICS_MODE``, runs the ``DIAGNOSTICS`` profile,
-converts the one caught exception with ``resolve_error_location``
-(``error_utils.py``) into a 0-based range, appends the warnings that
+``config.DIAGNOSTICS_MODE``, runs the ``DIAGNOSTICS`` profile with
+stencils and geometry required, locates the one ``GeLBException`` it
+catches with ``resolve_error_location`` (``error_utils.py``, 1-based
+lines) and turns that into a 0-based range with ``_diag_range`` (any
+other exception becomes a file-level ``(internal)`` error), appends
+the warnings that
 ``warning_with_hint_to_term`` collected in
 ``config.DIAGNOSTICS_WARNINGS``, writes one JSON document
 ``{"diagnostics": [...]}`` to stdout and exits 1 when an error is

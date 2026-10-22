@@ -21,10 +21,12 @@ passes may do: ``1*x``, ``-1*x``, ``x/1``, ``-(-x)``, the zero
 identities only where the sign of a zero cannot change, sign moves
 that IEEE 754 defines, literal folding in the expression's width,
 and sharing of identical *ordered* subtrees.  Nothing re-associates.
-The payoff is the first column of *What must agree*: a default and a
-plain build give the same bits, which
+The payoff is the *Default vs plain build* column of *What must
+agree*: a default and a plain build give the same bits (on CUDA, with
+nvcc's fusion off), which
 :source:`gelb/tests/numeric/test_generated_runtime.py` checks on every
-backend.  A rewrite that is "close enough" belongs behind a flag, not
+backend by holding both builds to an independently compiled C++ oracle
+at zero ULP; its CUDA build passes ``--fmad=false``.  A rewrite that is "close enough" belongs behind a flag, not
 in the default passes.
 
 **The collinearity rewrite is off by default.**
@@ -32,9 +34,9 @@ in the default passes.
 Y)`` into ``(1-C)*X + C*Y``, a re-association without a general error
 bound.  ``PipelineOptions.enable_collinearity_rewrite`` in
 :source:`gelb/compiler_pipeline.py` defaults to ``False`` and
-:source:`gelb/gelbc.py` always passes ``False``; the
-``--no-collinearity-rewrite`` option is accepted so that existing
-command lines keep working.
+:source:`gelb/gelbc.py` always passes ``False`` and accepts
+``--no-collinearity-rewrite`` without acting on it; the pass is never
+enabled from the command line.
 :source:`gelb/tests/unit/test_compiler_pipeline.py` asserts that the
 pass runs only when enabled.
 
@@ -62,9 +64,12 @@ backend emits it.
 **The native compiler fuses nothing on the CPU; a strict build fuses
 nothing anywhere.**  The default ``GELB_FFLAGS`` and ``GELB_CXXFLAGS``
 of :source:`gelb/scripts/gelb-run` carry ``-ffp-contract=off``; the one
-fusion GeLB decides itself is ``gelb_mul_add`` in
-:source:`gelb/backends/cpu_highway_runtime.hpp`, selected once by
-``GELB_STRICT_FP``.  A default CUDA build keeps nvcc's fusion;
+fusion GeLB decides itself is ``gelb_mul_add``: the scalar helper in
+:source:`gelb/backends/cpp_runtime_common.hpp` (``std::fma`` where the
+including header defines ``GELB_FMA_NATIVE``: ``HWY_NATIVE_FMA`` in the
+Highway header, ``1`` in the CUDA one) and its vector overload in
+:source:`gelb/backends/cpu_highway_runtime.hpp`, both switched off once
+by ``GELB_STRICT_FP``.  A default CUDA build keeps nvcc's fusion;
 ``--strict-fp`` adds ``-fmad=false``.
 :source:`gelb/tests/integration/test_real_width_contract.py` checks
 the flags and the fusion probe.
@@ -86,8 +91,10 @@ draw per element, left to right.
 
 **A diagnostic is an exception that prints itself and exits.**
 ``GeLBException`` in :source:`gelb/utils/exceptions.py` prints the
-source excerpt, the problem and the hint in its constructor and calls
-``os._exit(1)``, except under pytest and in ``--diagnostics-json``
+problem and the hint, with the source excerpt when the subclass
+supplies a location (``_source_location``), and calls ``os._exit(1)``;
+both happen in ``__str__``, which the constructor triggers with
+``print(self)``, except under pytest and in ``--diagnostics-json``
 mode (``_suppress_print_and_exit``).  A pass reports a problem by
 raising, never by printing, so the JSON contract of the VS Code
 extension holds.

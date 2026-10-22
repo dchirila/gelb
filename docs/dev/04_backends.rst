@@ -72,9 +72,11 @@ separate multiply and add instead of ``hn::MulAdd``.
 How ``gelb-run`` compiles the generated code
 =============================================
 
-:source:`gelb/scripts/gelb-run` translates with ``gelbc`` (``uv run
---project <checkout> gelbc``, or ``$GELB_PYTHON -m gelb.gelbc`` when
-``GELB_PYTHON`` is set), compiles with the ``compile_src`` of the
+:source:`gelb/scripts/gelb-run` translates with ``gelbc`` (``env
+VIRTUAL_ENV= uv run --project <checkout> gelbc``, or ``$GELB_PYTHON -m
+gelb.gelbc`` when ``GELB_PYTHON`` is set, which the script does itself
+from the checkout's ``.venv/bin/python`` when ``uv`` is not found),
+compiles with the ``compile_src`` of the
 chosen backend's ``case`` branch, runs the executable (behind
 :source:`gelb/visualization/progress_monitor.py` when a NetCDF run has
 more than one time step) and removes the intermediates unless
@@ -90,7 +92,8 @@ more than one time step) and removes the intermediates unless
   OpenMP runtime from ``GELB_OMP_ROOT`` or Homebrew's ``libomp``) with
   ``GELB_CXXFLAGS`` (default ``-std=c++17 -O3 -march=native
   -ffp-contract=off -fno-trapping-math -fno-unroll-loops -DNDEBUG``,
-  OpenMP flags appended), ``-I`` for ``third_party/highway`` and
+  with ``-mcpu=native`` in place of ``-march=native`` for Apple clang
+  on arm64; OpenMP flags appended), ``-I`` for ``third_party/highway`` and
   ``gelb/backends``, four Highway support ``.cc`` files compiled in,
   and NetCDF-C from ``GELB_NETCDF_C_ROOT`` or ``GELB_NETCDF_C_INC``
   and ``GELB_NETCDF_C_LIB`` (``nc-config`` when unset).  At run time
@@ -122,7 +125,8 @@ independent C++ oracle: ``cases.py`` generates the corpus,
 :source:`gelb/tests/numeric/conftest.py` compiles the oracle with
 ``-O0 -fno-fast-math -ffp-contract=off``,
 ``test_generated_constants.py`` checks the folded constants, and
-``test_generated_runtime.py`` builds every case on all three backends
+``test_generated_runtime.py`` builds every runtime case (those not
+marked ``runtime=False`` in ``cases.py``) on all three backends
 through ``gelb-run`` in an ``optimized`` and a ``plain`` mode
 (``MODES``) and compares bit for bit (``checks.py``).
 :source:`gelb/tests/integration/test_real_width_contract.py`,

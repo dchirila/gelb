@@ -70,13 +70,16 @@ Top-level directories
    The VS Code extension: the TextMate grammar
    :source:`vscode-gelb/syntaxes/gelb.tmLanguage.json`, the snippets
    :source:`vscode-gelb/snippets/gelb.json`, the TypeScript sources
-   under :source:`vscode-gelb/src/` and the Node tests under
-   :source:`vscode-gelb/test/` (``npm test``).  ``extension.ts`` calls
+   under :source:`vscode-gelb/src/` and the tests under
+   :source:`vscode-gelb/test/`: the Node tests run with ``npm test``,
+   the VS Code-hosted ones in ``test/suite/`` with ``npm run
+   test:vscode``.  ``extension.ts`` calls
    ``gelbc --diagnostics-json`` to fill the Problems panel.
 
 ``third_party/``
    ``highway/`` is the Google Highway SIMD library, a git submodule
-   (:source:`.gitmodules`) that ``gelb-run`` puts on the include path.
+   (:source:`.gitmodules`) that ``gelb-run`` puts on the include path
+   when it compiles for the ``cpu_highway`` backend.
 
 Top-level files
 ===============
@@ -97,22 +100,28 @@ console entry points: ``gelbc = "gelb.gelbc:cli"``,
 ``gelb-run = "gelb.run_cli:main"`` and
 ``gelb-view = "gelb.visualization.gelb_view:cli"``.  ``gelbc`` and
 ``gelb-view`` are ``click`` commands; ``gelb-view`` is a group whose
-subcommands are ``data`` (the default, a NetCDF output file), ``algo``
-(the stencils of a program), ``geo`` (its node-class map) and
-``source``.  ``gelb-run`` is a bash script, the runner
+subcommands are ``data`` (a NetCDF output file), ``algo`` (the
+stencils of a program), ``geo`` (its node-class map) and ``source``; a
+first argument that is not a subcommand name is routed to ``source``
+when it ends in ``.gelb`` and to ``data`` otherwise, and with no
+arguments the group opens the GUI.  ``gelb-run`` is a bash script, the runner
 :source:`gelb/scripts/gelb-run`, shipped as package data:
 :source:`gelb/run_cli.py` replaces its own process with that script
 (``os.execv``), passing the arguments and the environment through
 unchanged, so that the command is the same plain word in a checkout
 and in a packaged installation.  :source:`scripts/gelb-run` is a
-ten-line shim that ``exec``\ s the packaged copy, kept for the macOS
-bundle's ``bin/gelb-run`` wrapper and for the test suite, which call
-it by that path.  The runner starts ``gelbc`` through ``uv run
---project <checkout>`` or through the interpreter named by
-``GELB_PYTHON``, compiles the result with the native compiler of the
+ten-line shim that ``exec``\ s the runner of the tree it sits in,
+``<checkout>/gelb/scripts/gelb-run``; the macOS bundle's ``gelb-run``
+wrapper and the test suite call it by that path.  The runner starts
+``gelbc`` through the interpreter named by ``GELB_PYTHON`` (``python
+-m gelb.gelbc``), otherwise through ``uv run --project <checkout>``
+and, when ``uv`` is not installed either, through the checkout's
+``.venv/bin/python``; it compiles the result with the native compiler of the
 chosen backend, runs the executable and, with ``--view``, hands the
 output to ``gelb-view`` (:doc:`04_backends`).  ``uv sync`` installs
 the three commands in ``.venv/bin``; :source:`scripts/gelb_bootstrap.sh`
 ends by calling :source:`scripts/gelb-shell-setup` with that
-directory, which appends one ``PATH`` line (and a marker comment) to
-the startup file of each of the user's shells, once.
+directory, which appends a marker comment and one ``PATH`` line to
+the startup file of each of the user's shells (for bash on Linux, to
+``~/.bashrc`` and also to the login file when that does not already
+source ``~/.bashrc``), and never a second time.

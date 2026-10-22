@@ -8,8 +8,8 @@ The test tree
 Everything is under :source:`gelb/tests/`: ``unit/`` (grouped by
 stage: ``lexing``, ``parsing``, ``ast_building``, ``symbols``,
 ``data_types``, ``type_inference``, ``type_promotion``,
-``type_validation``, ``validation``, ``midware``, plus top-level
-modules such as :source:`gelb/tests/unit/test_compiler_pipeline.py`),
+``type_validation``, ``validation``, ``midware``, and an empty
+``debugging`` package, plus top-level modules such as :source:`gelb/tests/unit/test_compiler_pipeline.py`),
 ``integration/`` (end-to-end runs through ``gelbc`` and ``gelb-run``),
 ``numeric/`` (the conformance battery, :doc:`04_backends`),
 ``fixtures/`` (``.gelb`` programs for the regression and hardening
@@ -24,20 +24,25 @@ Running the suite
 
 ``uv run pytest`` from the repository root collects all of
 ``gelb/tests``; ``uv run pytest -q gelb/tests/unit`` is the fast
-subset.  Integration and numeric tests that need a native toolchain
-skip themselves: ``requires_compiler`` (gfortran and NetCDF-Fortran),
+subset.  Tests that need a native toolchain skip themselves:
+``requires_compiler`` (gfortran and NetCDF-Fortran),
 ``requires_cpp_highway_compiler`` (g++, NetCDF-C and the Highway
 submodule) and ``requires_gpu_cuda_cpp_compiler`` in
-:source:`gelb/tests/integration/_toolchain.py`, and the
+:source:`gelb/tests/integration/_toolchain.py`; the numeric runtime
+test and :source:`gelb/tests/integration/test_real_width_contract.py`
+gate their Fortran cases on gfortran and NetCDF-C instead; and the
 ``numeric_oracle`` fixture in :source:`gelb/tests/numeric/conftest.py`
-(a C++17 compiler); ``uv run pytest -rs`` prints the reasons.
+needs a C++17 compiler.  ``uv run pytest -rs`` prints the reasons.
 
 Markers and options
 ===================
 
 - ``gpu`` is registered in ``[tool.pytest.ini_options]`` of
-  :source:`pyproject.toml` and marks the CUDA cases, which also carry
-  ``requires_gpu_cuda_cpp_compiler``.
+  :source:`pyproject.toml` and marks the CUDA cases of the numeric
+  suite, :source:`gelb/tests/integration/test_real_width_contract.py`
+  and :source:`gelb/tests/integration/test_reproducibility.py`, which
+  also carry ``requires_gpu_cuda_cpp_compiler``; the smoke test's CUDA
+  case carries neither and skips through its own toolchain check.
 - ``smoke`` is registered in
   :source:`gelb/tests/integration/conftest.py`, which also adds
   ``--run-smoke``, ``--smoke-iters`` (default 10) and
@@ -52,15 +57,16 @@ The emission snapshot
 
 :source:`scripts/emission_snapshot.py` compiles every example under
 ``examples/`` with the three backends (``--num-timesteps 10
---write-every 10 --nc-output out.nc --seed 42``) and stores the
-generated sources with a ``MANIFEST.json`` that records which
-examples fail to compile::
+--write-every 10 --nc-output out.nc --seed 42``), stores the
+generated sources and writes a ``MANIFEST.json`` (the snapshot's own
+index) that records which examples fail to compile::
 
    uv run python scripts/emission_snapshot.py snapshot -o /tmp/emis
    # ... change the compiler ...
    uv run python scripts/emission_snapshot.py compare  -o /tmp/emis
 
-``compare`` exits 1 on any byte difference, new failure or new pass;
+``compare`` exits 1 on any byte difference, new failure, new pass or
+emission missing from the baseline;
 ``diff-backends`` needs no baseline and reports examples whose
 outcome differs between backends.  :source:`CONTRIBUTING.md` requires
 the snapshot to be identical for any backend work whose change to

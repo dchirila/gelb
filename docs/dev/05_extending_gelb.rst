@@ -27,9 +27,13 @@ Adding an intrinsic
    checker (``_check_streaming_dfs_arguments``) and the return-type
    computer (``_compute_streaming_dfs_return_type``);
    ``TypeInferenceVisitor.visitIntrinsicFunctionCall_N`` looks the
-   entry up and ``TypePromotionVisitor.visitIntrinsicFunctionCall_N``
-   converts the arguments.  A scalar intrinsic also goes into
-   ``SCALAR_INTRINSICS`` and ``intrinsic_result_type`` of
+   entry up (a streaming intrinsic also goes into the
+   ``_STREAMING_INTRINSICS`` set of that method, which skips the
+   lattice-name argument and fixes the ``array[real, q]`` result) and
+   ``TypePromotionVisitor.visitIntrinsicFunctionCall_N`` converts the
+   arguments.  A scalar intrinsic also goes into ``SCALAR_INTRINSICS``,
+   ``intrinsic_argument_types`` (the conversions
+   ``TypePromotionVisitor`` applies) and ``intrinsic_result_type`` of
    :source:`gelb/frontend/type_rules.py`.
 4. **Constant folding.**  ``_try_evaluate_intrinsic`` in
    :source:`gelb/midware/ConstantFoldingVisitor.py` dispatches to
@@ -51,20 +55,27 @@ Adding an intrinsic
    Highway: ``_emit_intrinsic_call`` and
    ``_emit_intrinsic_bounce_back_dfs`` in
    :source:`gelb/backends/highway/expr.py`,
+   ``_collect_bounce_back_dfs_keys`` and
    ``_emit_bounce_back_dfs_tables`` in
-   :source:`gelb/backends/highway/statements.py` and the SIMD case in
-   :source:`gelb/backends/highway/simd.py`.  CUDA inherits these
+   :source:`gelb/backends/highway/statements.py`, the table cache, the
+   call of the tables emitter and the eligibility walk in
+   :source:`gelb/backends/stage3_backend_cpu_highway.py`, and the SIMD
+   case in :source:`gelb/backends/highway/simd.py`.  CUDA inherits these
    (nothing under :source:`gelb/backends/cuda/` names the intrinsic).
 7. **Tests.**  :source:`gelb/tests/unit/parsing/test_parse_intrinsic_functions.py`,
    :source:`gelb/tests/unit/type_inference/test_intrinsic_function_type_inference.py`,
    :source:`gelb/tests/unit/midware/test_intrinsic_folding.py`,
    :source:`gelb/tests/unit/midware/test_stencil_arg_validation.py`,
+   :source:`gelb/tests/unit/midware/test_streaming_intrinsic_stencils.py`,
+   :source:`gelb/tests/unit/midware/test_slice_df_expansion.py`,
    :source:`gelb/tests/unit/midware/test_bounce_back_dfs.py` and
    :source:`gelb/tests/integration/test_bounce_back_dfs.py` (every
    backend, through ``gelb-run``).
 8. **Documentation.**  The section *Built-in intrinsics* of
-   :source:`docs/user/03_gelb_in_10_minutes.rst`, the
-   ``INTRINSIC_FUNCTIONS`` tuple of :source:`docs/_ext/gelb_lexer.py`
+   :source:`docs/user/03_gelb_in_10_minutes.rst`, the matching section
+   of :source:`docs/LANGUAGE_DESIGN.md` (*Lattice operations* for the
+   streaming ones), the ``INTRINSIC_FUNCTIONS`` tuple of
+   :source:`docs/_ext/gelb_lexer.py`
    (syntax highlighting in the manual) and, if the numerical
    semantics change, :source:`docs/user/19_numerical_semantics.rst`.
 9. **VS Code.**  The ``intrinsic-functions`` pattern of
@@ -102,9 +113,13 @@ Adding a backend
 ================
 
 1. ``gelb/backends/stage3_backend_<name>.py`` with a
-   ``generate_<name>(ast, ..., backend_context=...)`` returning the
-   program text; a runtime header next to the others is shipped by
-   the ``package-data`` entry of :source:`pyproject.toml`.
+   ``generate_...(ast, ..., backend_context=...)`` function returning
+   the program text (``generate_fortran``, ``generate_cpu_highway`` and
+   ``generate_cuda_cpp`` are the existing ones; ``gelbc`` imports each
+   by name); a runtime header next to the others is shipped by the
+   ``package-data`` globs of :source:`pyproject.toml` (``*.hpp`` and
+   ``*.cuh`` under ``gelb.backends``), so a header with another
+   extension needs its own glob there.
 2. The ``click.Choice`` of ``--backend`` and the dispatch branch in
    :source:`gelb/gelbc.py`.
 3. A ``case`` branch in :source:`gelb/scripts/gelb-run` (``EXT`` and
@@ -112,8 +127,10 @@ Adding a backend
    ``_die_unknown_backend``.
 4. ``BACKENDS`` in :source:`scripts/emission_snapshot.py`; a toolchain
    guard in :source:`gelb/tests/integration/_toolchain.py`; the backend
-   lists of :source:`gelb/tests/integration/test_examples_smoke.py`
-   (and ``--smoke-backends``),
+   list of :source:`gelb/tests/integration/test_examples_smoke.py` (its
+   own names: ``serial`` stands for ``cpu_fortran_serial``) and the
+   ``--smoke-backends`` option of
+   :source:`gelb/tests/integration/conftest.py`; the backend lists of
    :source:`gelb/tests/integration/test_tutorial_regressions.py` and
    :source:`gelb/tests/numeric/test_generated_runtime.py`, so that the
    numeric contract is enforced on it.
@@ -121,3 +138,6 @@ Adding a backend
    agree* table of :source:`docs/user/19_numerical_semantics.rst`, the
    toolchain list in :source:`CONTRIBUTING.md` and, if CI is to build
    it, the ``apt`` line of :source:`.github/workflows/release-health.yml`.
+6. **VS Code.**  The ``Backend`` type and the ``BACKENDS`` picker list
+   of :source:`vscode-gelb/src/runCommand.ts`, and
+   :source:`vscode-gelb/test/runCommand.test.js`.
