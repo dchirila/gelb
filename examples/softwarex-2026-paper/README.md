@@ -14,21 +14,28 @@ All commands below are run from the repo root.
 
 | File | Used for |
 |------|----------|
-| `taylor_green_vortex_2d_bgk.gelb` | convergence figure (BGK rows), performance table rows, appendix listing |
+| `taylor_green_vortex_2d_bgk.gelb` | convergence figure (BGK rows), performance table rows, TGV-2D row of the lbmpy table, appendix listing |
 | `taylor_green_vortex_2d_mrt.gelb` | convergence figure (MRT rows) |
 | `poiseuille_flow_2d_mrt.gelb` | convergence figure (Poiseuille rows) |
-| `lid_driven_cavity_2d_bgk.gelb` | performance table rows |
+| `lid_driven_cavity_2d_bgk.gelb` | performance table rows, LDC-2D row of the lbmpy table (the benchmarked program is the canonical `examples/lbm/2d/` file, which has the same code as this copy with the `Hydro` gauge placed before the wall dynamics and different comments) |
 
 ```sh
 # convergence data (writes the L2-error table the figure is drawn from):
 uv run python scripts/validate_analytical.py \
     --cases taylor_green_bgk taylor_green_mrt poiseuille \
     --resolutions 16 32 64 128 256
+# lbmpy table: the lbmpy rows run with the interpreter of the venv that
+# scripts/install_lbmpy.sh creates, the GeLB rows with the backend harness
+# (conditions and order of the commands: docs/benchmarks/lbmpy_reproduction.md).
+~/Soft/lbmpy/venv/bin/python scripts/benchmark_lbmpy_tgv.py
+~/Soft/lbmpy/venv/bin/python scripts/benchmark_lbmpy_ldc.py
+uv run python scripts/benchmark_backends.py --backend cpu_highway
 ```
 
-Note: the harness script above resolves the canonical paths under
+Note: the harness scripts above resolve the canonical paths under
 `examples/lbm/2d/`; the copies here are archival pins (pinned 2026-08-16,
-identical up to ASCII-normalized punctuation in comments).
+identical up to ASCII-normalized punctuation in comments, except for the
+lid-driven cavity as noted in the table).
 
 The `terse/` subfolder holds print-compact twins of the programs the
 paper actually typesets (comments/whitespace condensed, code
