@@ -229,22 +229,14 @@ def _run_exe(exe: pathlib.Path, cwd: pathlib.Path,
 
     For OpenMP builds (cpu_highway only -- cpu_fortran_serial is
     strictly single-threaded, gpu_cuda_cpp runs on the GPU), lift
-    the main-thread stack limit before exec as a safety belt.  The
-    original motivation (gfortran's ``-fopenmp`` implies
-    ``-frecursive``, putting all locals on the 8 MB main-thread
-    stack and overflowing on 3D / multi-lattice programs) no
-    longer applies -- Fortran is always serial.  For cpu_highway
-    with ``g++ -fopenmp``: per-cell arrays in the dyn body go on
+    the main-thread stack limit before exec as a safety belt.  With
+    ``g++ -fopenmp`` the per-cell arrays in the dyn body go on
     worker-thread stacks (sized via ``OMP_STACKSIZE``, default
     4 MB on libgomp) and our arrays are only a few KB, so the
     unlimited main stack is defence in depth rather than strictly
-    required.
-
-    TODO: re-run the smoke matrix without the ``ulimit -s``
-    branch to confirm cpu_highway still passes 78/78; if so,
-    drop the conditional entirely.  Kept for now to insulate the
-    smoke suite from libgomp / glibc version drift while the fix
-    is unverified.
+    required; it insulates the smoke suite from libgomp / glibc
+    version drift.  The branch can go once the smoke matrix passes
+    without it.
     """
     if openmp:
         cmd = f"ulimit -s unlimited 2>/dev/null || ulimit -s hard; exec {exe}"

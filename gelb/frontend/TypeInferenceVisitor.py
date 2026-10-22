@@ -786,7 +786,7 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
                 sizes.append(size)
             return sizes
         else:
-            # Handle legacy cases or single dimension
+            # A single dimension
             size = self._evaluate_size_expression(shape, ast_root_node)
             return [size]
 

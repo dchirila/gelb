@@ -3,9 +3,9 @@
 promotion), one test per row.
 
 The first half checks the table in ``gelb.frontend.type_rules``
-directly; the second half checks that the three passes that used to
-carry their own copy -- type inference, type promotion and the
-intrinsic table -- give a program the same types, with the argument
+directly; the second half checks that the three passes that read it
+-- type inference, type promotion and the intrinsic table -- give a
+program the same types, with the argument
 conversions the rule implies inserted.  ``real16`` is not in this
 version: every spelling is rejected where the parser builds it.
 """

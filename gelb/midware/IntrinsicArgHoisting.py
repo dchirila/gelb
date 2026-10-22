@@ -13,7 +13,7 @@ User code like::
     real k_20 = dot_prod(fIn, cx * cx);
 
 violates that restriction (the second arg is a ``Mul_N``, not an
-``Identifier_N``) and previously produced a backend
+``Identifier_N``) and would otherwise reach the backend as a
 ``NotImplementedError`` deep in codegen with no source-line context.
 
 This pass rewrites such call sites by hoisting the non-identifier

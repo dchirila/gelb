@@ -106,7 +106,7 @@ def inline_functions(ast):
             block.stmts.elements = _inline_block_stmts(
                 block.stmts.elements, func_map, counter)
 
-    # Remove function definitions -- they are now fully inlined
+    # Remove function definitions -- they are fully inlined
     ast.functions = None
 
     return ast
@@ -387,8 +387,8 @@ def _subst_stmt(stmt, subst):
         return result
 
     if isinstance(stmt, ConstantDefinitionStmt_N):
-        # Inline as a VariableDeclarationStmt_N (no longer truly const
-        # in Fortran sense; backends emit it as an assignment anyway)
+        # Inline as a VariableDeclarationStmt_N (not a Fortran parameter:
+        # the backends emit it as an assignment)
         new_name_id = _subst_identifier(stmt.name, subst)
         new_value = _subst_expr(stmt.value, subst)
         result = VariableDeclarationStmt_N(
@@ -440,7 +440,8 @@ def _subst_expr(expr, subst):
         # A call inside a function body passes the body's names on
         # (``Inner(p)`` in ``Outer``): substitute its arguments, so
         # that the later inlining of this call sees the caller's
-        # values and not a parameter name that no longer exists.
+        # values and not a parameter name, which does not exist after
+        # inlining.
         result = copy.copy(expr)
         new_args = List_N(expr.arguments.code_range)
         for arg in expr.arguments:

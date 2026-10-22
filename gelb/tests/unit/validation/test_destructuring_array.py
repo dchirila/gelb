@@ -2,10 +2,9 @@
 """
 Tests for array-RHS destructuring assignment.
 
-GeLB's destructuring syntax `{a, b, c} = expr;` was originally
-restricted to multi-output function calls.  This test file covers the
-generalized form where the RHS can be any 1D-array expression
-(literal, variable, slice).
+GeLB's destructuring syntax `{a, b, c} = expr;` accepts any 1D-array
+expression on the right-hand side (literal, variable, slice), not only
+a multi-output function call.  This test file covers the array forms.
 """
 
 import pytest

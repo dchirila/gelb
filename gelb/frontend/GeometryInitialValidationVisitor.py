@@ -12,7 +12,7 @@ class GeometryInitialValidationVisitor(ASTBaseVisitor):
     Concrete visitor for initial validation of the GeometryBlock_N.
 
     The main concern at this stage is to ensure that all of the node-classes
-    referenced within the GeometryBlock_N were previously defined
+    referenced within the GeometryBlock_N are defined
     (inside the NodeClassesBlock_N).
     """
     def visitProgram_N(

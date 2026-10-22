@@ -4,7 +4,7 @@
 #
 # The script itself lives in the Python package, gelb/scripts/gelb-run,
 # so that the installed command ``gelb-run`` (next to ``gelbc`` and
-# ``gelb-view``) carries it.  This shim keeps the historical path
-# working: the macOS bundle's bin/gelb-run wrapper and the test suite
-# call scripts/gelb-run.
+# ``gelb-view``) carries it.  This shim keeps scripts/gelb-run
+# callable: the macOS bundle's bin/gelb-run wrapper and the test suite
+# call it.
 exec "$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/gelb/scripts/gelb-run" "$@"

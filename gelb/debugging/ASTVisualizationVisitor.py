@@ -273,7 +273,7 @@ class ASTVisualizationVisitor(ASTBaseVisitor):
     
     def visit(self, node, ast_root_node):
         """
-        Legacy visit method for compatibility with base class.
+        The base class's entry point; runs the depth-tracked traversal.
         """
         self._visit_with_depth(node, 0)
         return node

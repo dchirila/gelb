@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Golden-emission snapshot/compare harness for backend refactoring.
+"""Golden-emission snapshot/compare harness for backend work.
 
 Generates the backend source emitted for every public example across
 all three backends and either stores it as a snapshot directory or
 byte-compares a fresh generation against an existing snapshot.  The
-refactoring contract for backend-modularity work is *byte-identical
-emission*: any diff is either a bug or a deliberate, explained change.
+contract for backend work is *byte-identical emission*: any diff is
+either a bug or a deliberate, explained change.
 
 Usage:
     uv run python scripts/emission_snapshot.py snapshot -o /tmp/emissions_baseline
@@ -13,8 +13,8 @@ Usage:
     uv run python scripts/emission_snapshot.py diff-backends [--json report.json]
 
 Exit code 0 when a compare finds no differences; 1 otherwise.  Examples
-that fail to compile are recorded in the snapshot manifest -- a refactor
-must not change *which* examples fail either.
+that fail to compile are recorded in the snapshot manifest -- a change
+must not alter *which* examples fail either.
 
 ``diff-backends`` needs no baseline: it compiles every example with every
 backend and reports the examples whose outcome differs between backends

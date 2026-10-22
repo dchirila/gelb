@@ -3,7 +3,7 @@
 
 A global constant is a compile-time value: the resolver substitutes it
 into its uses and the folder evaluates it.  Two calls the parser accepts
-have no compile-time value and used to reach the native compiler as an
+have no compile-time value and would reach the native compiler as an
 undefined function:
 
 * ``random()``, which draws at run time (user manual, Numerical

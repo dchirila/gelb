@@ -97,29 +97,18 @@ integer type, despite their different narrow-integer promotion rules.
 
 ## Known defects
 
-None are recorded. `known_failures.py` recorded, on 2026-09-25, the cases
-that first exposed two defects; both were fixed the same day and the entries
-removed:
-
-| Defect | Reproducer | Problem, fixed |
-|---|---|---|
-| Integer conversion rebuilt as real arithmetic | `u * (x + 16777217LL)`, float u=0.5; `u * (x + 9007199254740993LL)`, double u=0.5 | The optimized slice rebuilt the integer sum as real arithmetic, rounding the literal before the addition. The SymPy bridge now keeps a promotion that changes a composite's numeric kind whole. |
-| Integer division rebuilt as real arithmetic | `u * ((x - 7LL) / 2LL)`, float u=0.5 | The optimized slice replaced integer division with real arithmetic (-1.75 instead of -1.5 at x=0). An integer division is now opaque to the bridge. |
-| Fortran int64 literal without its kind | The 2^53 integer case on Fortran | An unsuffixed 9007199254740993 literal prevented native compilation. The Fortran backend spells a literal outside the default kind with `_8`. |
-
-The mechanism stays. `known_failures.py` records only diagnosed cases, by
+None are recorded. `known_failures.py` records only diagnosed cases, by
 case name, expression, input, backend, mode and form, with `strict=True`; new
 seeds/compositions are never marked automatically. A numerical expected
 failure accepts only `NumericMismatch`, so a build failure cannot masquerade
 as a known value error, and an unexpected pass fails the suite until the
-obsolete entry is removed. The default matrix has no expected failures; all
-available CPU checks pass on the development Mac. The generated tests are
-included in the Linux release-health workflow; that workflow has not been run
-as part of this local validation.
+obsolete entry is removed. The default matrix has no expected failures. The
+generated tests are part of the Linux release-health workflow.
 
 C++17 is required for the oracle. Backend tests additionally need their compiler
 and NetCDF-C; existing toolchain guards skip unavailable backends. CUDA tests
-also need a GPU and driver, and were not executed on this Mac. This corpus does
-not cover real16, integer overflow/wrapping, NaNs/infinities, undefined C++
-operations, arbitrary intrinsics, SIMD beyond the 67-cell cases, long simulations or periodic addressing.
+also need a GPU and driver. This corpus does not cover real16, integer
+overflow/wrapping, NaNs/infinities, undefined C++ operations, arbitrary
+intrinsics, SIMD beyond the 67-cell cases, long simulations or periodic
+addressing.
 Those need their own generators and existing targeted integration tests.

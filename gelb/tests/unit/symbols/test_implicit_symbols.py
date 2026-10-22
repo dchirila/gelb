@@ -443,7 +443,7 @@ geometry {
     ast = build_symbols_tables(ast)
     ast = add_implicit_symbols(ast)
     
-    # Verify dimension constants were added to Program level (new hierarchy)
+    # Verify dimension constants were added to Program level
     assert ast.symbol_defs is not None, "Program should have symbol_defs"
     assert ast.symbol_defs.contains("Nx"), "Nx should be in Program symbol table"
     assert not ast.symbol_defs.contains("Ny"), "Ny should NOT be in 1D program"

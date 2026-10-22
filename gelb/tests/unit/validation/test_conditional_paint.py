@@ -310,9 +310,9 @@ class TestEvaluator:
         assert _cells(geo, 'SOLID') == {(x, 0) for x in range(1, 10)}
 
     def test_promotions_apply_before_a_predicate_is_folded(self):
-        # The folder used to read a promoted operand's
-        # raw value, and to propagate a real constant written as an
-        # integer as an integer.  Every cell of row 0 is expected.
+        # A folder that reads a promoted operand's raw value, or
+        # propagates a real constant written as an integer as an
+        # integer, gets these wrong.  Every cell of row 0 is expected.
         row = {(x, 0) for x in range(10)}
         for constants, predicate in (
             ("", "16777217 == real32(16777216)"),
@@ -441,8 +441,8 @@ class TestRejections:
         # codegen and diagnostics: the program-wide recursion check fires first
         with pytest.raises(GeLBExFunctionRecursion):
             _resolve(code)
-        # the analysis profile (gelb-view) has no such pass, and used to
-        # reach the evaluator (Python RecursionError); it must report the cycle
+        # the analysis profile (gelb-view) has no such pass; the evaluator
+        # must report the cycle rather than recurse (Python RecursionError)
         path = tmp_path / "loop.gelb"
         path.write_text(code)
         with pytest.raises(GeLBExTypeError) as info:

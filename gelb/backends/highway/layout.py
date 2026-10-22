@@ -74,8 +74,8 @@ class StorageLayoutMixin:
                     f'[({x_str}) % {_CBT_TILE}]')
         spatial = ''.join(f'[({c}) + 1]' for c in reversed(coord_strs))
         if df_idx_str is None:
-            # Legacy entry point: caller will prepend the DF index.
-            # Equivalent to SoA spatial portion only.
+            # Called without a DF index: the caller prepends it.
+            # This is the SoA spatial portion only.
             return spatial
         if self._use_aos.get(lattice_name, False):
             return f'{spatial}[{df_idx_str}]'
@@ -120,10 +120,9 @@ class StorageLayoutMixin:
         # ``Lanes(d) < _CBT_TILE`` on every Highway target we ship
         # to (NEON Lanes=2, AVX-2 Lanes=4), and the cross-tile
         # shuffle via ``hn::TwoTablesLookupLanes`` with 8-element
-        # indices produces wrong results.  AVX-2 was previously
-        # auto-CBT for 3D -- the gate is intentionally tightened here
-        # pending a TILE=2 native-NEON layout.  Manual override
-        # via ``--storage-layout cbt`` still works on AVX-512.
+        # indices produces wrong results, so AVX-2 and NEON get SoA
+        # until there is a TILE=2 layout for them.  Manual override
+        # via ``--storage-layout cbt`` works on AVX-512.
         return 'cbt' if _detect_avx512_available() else 'soa'
 
     def _resolve_storage_layout(self) -> str:
@@ -145,8 +144,7 @@ class StorageLayoutMixin:
         populated alongside this method's return value -- see
         ``_decide_storage_layout_cbt``.
 
-        ``'auto'`` resolves through ``_auto_layout_choice`` (since
-        May 2026 -- previously hard-wired to SoA): an ISA- and
+        ``'auto'`` resolves through ``_auto_layout_choice``: an ISA- and
         dimension-aware rule that fits both AVX-512 and AVX2
         measurements.  See ``_auto_layout_choice`` for the rule.
 

@@ -60,8 +60,8 @@ class ParsingError(ErrorListener):
             return (
                 "A predicate paint is written "
                 "`nodes[where F(x, y, ...)] = CLASS;`: the condition is an "
-                "expression over the coordinates x, y, z. The placeholder "
-                "form `nodes[F(:, :, ...)] = CLASS;` is no longer accepted."
+                "expression over the coordinates x, y, z. The "
+                "form `nodes[F(:, :, ...)] = CLASS;` is not accepted."
             )
         # f.out used as an expression (RHS): grammar only allows f.in there
         if ("'out'" in msg and "'in'" in msg

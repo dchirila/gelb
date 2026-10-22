@@ -19,10 +19,9 @@ the source for the SASS-level analysis).
 The pass shares the identical *ordered* subtrees of a run's
 right-hand sides as hoisted temporaries
 (``ast_simplify.hoist_common_subtrees``).  Two divisions by ``rho``
-stay two divisions, as written: the earlier SymPy version rewrote
-them into a reciprocal and two products, which the source does not
-say and which rounds differently (user manual, Numerical semantics:
-What the optimizer promises).
+stay two divisions, as written: a reciprocal and two products is
+not what the source says, and rounds differently (user manual,
+Numerical semantics: What the optimizer promises).
 
 Pipeline position: AFTER ``hoist_intrinsic_args`` and
 ``collinearity_rewrite``, BEFORE ``expand_slice_dfs``.  Runs on the

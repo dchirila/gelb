@@ -235,8 +235,8 @@ class ImplicitsRefsClashPreventerVisitor(ASTBaseVisitor):
             node: GeometryBlock_N,
             ast_root_node: Program_N
     ):
-        # Geometry block no longer has grid_size and grid_periodicity
-        # These are now part of lattice instantiation statements.
+        # Grid size and periodicity belong to the lattice declarations,
+        # not to the geometry block.
         # The block, not the statement, decides what is allowed: the
         # coordinates are legal inside `where` predicates here.
         for stmt in node.stmts:

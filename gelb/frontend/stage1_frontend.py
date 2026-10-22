@@ -371,9 +371,3 @@ def validate_constant_assignments(ast):
     ast_visitor = ConstantAssignmentValidationVisitor()
     ast_visitor.visit(ast, ast)
     return ast
-
-
-# def validate_ast(ast):
-#     ast_visitor = ASTInitialValidationVisitor()
-#     ast_visitor.visit(ast, ast)
-# Note: ASTInitialValidationVisitor removed - validation happens in other stages

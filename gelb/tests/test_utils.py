@@ -322,11 +322,9 @@ def minimal_gelb_program_3d(
     """
 
 
-# Legacy alias for backward compatibility
 def minimal_gelb_program(global_constants_content="", initializer_content="", with_array_support=False):
     """
-    Legacy function for backward compatibility.
-    Redirects to minimal_gelb_program_1d.
+    Alias of minimal_gelb_program_1d.
     """
     return minimal_gelb_program_1d(
         global_constants_content=global_constants_content,
@@ -813,7 +811,7 @@ def get_data_type_test_data():
         ("scalar", "scalar_data_type", "real32", "(ArrayDataType real32 (List ))"),
         ("scalar", "scalar_data_type", "real", "(ArrayDataType real (List ))"),
         
-        # Array data types for "data_type" rule (element_dtype is now a string)
+        # Array data types for "data_type" rule (element_dtype is a string)
         ("array", "data_type", "array[int64, 3]", "(ArrayDataType int64 (IntLiteral 3))"),
         ("array", "data_type", "array[real64, {2, 3}]", "(ArrayDataType real64 (ArrayLiteral1D (IntLiteral 2) (IntLiteral 3)))"),
         

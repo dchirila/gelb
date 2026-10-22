@@ -29,8 +29,8 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor, SymbolTableUtilityMixin):
             self.implicit_symbols = [symbol_to_ignore_for_testing]
         else:
             self.implicit_symbols = []
-        # NOTE: No longer need to store global constants symbol table
-        # All blocks now use Program.symbol_defs as parent for hierarchical lookup
+        # Every block's symbol table has Program.symbol_defs as its parent for
+        # hierarchical lookup, so the global constants need no table here.
 
     def check_for_undef_or_ref_before_def_symbols(self, node, ast_root=None):
         """

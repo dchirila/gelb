@@ -481,13 +481,13 @@ class StatementEmitMixin:
         # Why: in MRT examples the codegen emits 2 matmuls per cell
         # (forward M = 9 rows, inverse M_INV = 9 rows), each with
         # a 9-deep dot-product per row.  Routing those 18 calls
-        # per cell through ``gelb_dot_prod_const`` regressed
-        # TGV-2D MRT N=512 by ~5pp in paired interleaved bench.
+        # per cell through ``gelb_dot_prod_const`` costs ~5pp on
+        # TGV-2D MRT N=512 in a paired interleaved bench.
         # The helpers also (correctly) cause TGV-3D BGK and RB-2D
         # BGK to *gain* 4-5pp -- those routes are kept on multi-acc
         # via ``_emit_intrinsic_call`` for ``sum`` / ``dot_prod``.
         #
-        # The matmul-specific regression is unexplained at the
+        # The matmul-specific loss is unexplained at the
         # codegen level (assembly insn-counts and code-size look
         # comparable).  Leaving the matmul dispatch on the inline
         # ``+`` chain keeps MRT inside the +/-5 % bar without giving
@@ -825,8 +825,8 @@ class StatementEmitMixin:
             # already hoisting 9-direction temp arrays into
             # registers, and unrolling just bloats the
             # multi-NC peeled emit's code footprint.
-            # (Re-tested 2026-04-30 post-halo-refactor:
-            # lowering to Q=9 STILL regresses single-NC
+            # (Measured 2026-04-30 with hidden-halo storage:
+            # lowering to Q=9 regresses single-NC
             # programs, e.g. TGV-2D BGK N=128 16T 1198 ->
             # 1105 (-7.8 %), N=128 1T 397 -> 360 (-9.3 %),
             # though LDC-2D is unchanged.  The I-cache

@@ -1,17 +1,16 @@
 """Large-grid storage regression tests.
 
-Lattice ping-pong storage used to be emitted as ``static`` arrays
-(``.bss``): host-side ``alignas(64) static double g_<l>_storage[...]``
-in ``cpu_highway``, ``__device__ double g_<l>_storage[...]`` in
-``gpu_cuda_cpp``.  Past ~2 GB of static data the link step fails with
-cryptic relocation errors (``relocation truncated to fit:
-R_X86_64_PC32 against .bss`` from g++; ``failed to convert GOTPCREL
-relocation; relink with --no-relax`` from nvcc) -- a first-time user
-with a production-sized grid hit a wall with no actionable message.
-
-Storage is now heap-allocated (``gelb_alloc`` on the CPU,
-``cudaMalloc`` + ``__device__`` base pointer on the GPU).  Two layers
-of guard:
+Lattice ping-pong storage is heap-allocated (``gelb_alloc`` on the
+CPU, ``cudaMalloc`` + ``__device__`` base pointer on the GPU), never
+a ``static`` array (``.bss``) such as host-side
+``alignas(64) static double g_<l>_storage[...]`` in ``cpu_highway`` or
+``__device__ double g_<l>_storage[...]`` in ``gpu_cuda_cpp``: past
+~2 GB of static data the link step fails with cryptic relocation
+errors (``relocation truncated to fit: R_X86_64_PC32 against .bss``
+from g++; ``failed to convert GOTPCREL relocation; relink with
+--no-relax`` from nvcc), and a first-time user with a production-sized
+grid would hit a wall with no actionable message.  Two layers of
+guard:
 
 * **Emission-shape tests** (always run, no toolchain needed): generate
   a >2 GB-storage program and assert the heap-allocation shape is

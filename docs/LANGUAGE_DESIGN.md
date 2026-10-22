@@ -262,11 +262,11 @@ avoiding repeated evaluation of the expression.
 
 **Result**: 
 - Files are called "GeLB programs" stored in "GeLB files" with `.gelb` extension
-- All mentions of "GD" have been replaced with "GeLB"
+- The name is "GeLB" throughout the language, its files and its documentation; "GD" does not appear
 
 ### Simulation name from filename
 
-**Decision**: The `simulation_name` statement is no longer required.
+**Decision**: There is no `simulation_name` statement.
 
 **Rationale**:
 - The filename is used as the simulation name automatically
@@ -278,7 +278,7 @@ avoiding repeated evaluation of the expression.
 
 ### No gelb_version statement
 
-**Decision**: Programs no longer need to include a `gelb_version` statement.
+**Decision**: There is no `gelb_version` statement.
 
 **Rationale**:
 - No plans to remove features from the language (backward compatibility)
@@ -312,10 +312,8 @@ on one map.
 **Rationale**:
 - `where` keeps the predicate distinct from a point paint in every
   dimensionality, and the expression form is the one that can later
-  take `t`, lattice values and global variables without new syntax.
-  The pre-release placeholder form
-  `nodes[F(:, :, ...)]` had nowhere to put them and was removed before
-  the initial release.
+  take `t`, lattice values and global variables without new syntax;
+  a form such as `nodes[F(:, :, ...)]` would have nowhere to put them.
 - In this version the geometry is fixed for the whole run.
 
 **Reserved words**: `enter`, `leave`, `reduce`, `reduction`, `update`,
@@ -483,7 +481,6 @@ geometry {
 - This is a breaking change from the older PhD-thesis syntax
 - Programs that still use `set_grid_size` or `set_grid_periodicity` should move
   those values into the `lattice` declaration
-- The compiler will need significant refactoring (grammar, AST, visitors)
 - For GeLB v1, all lattices must have identical grid_size and periodicity
 
 ## Lattice Access Separator (`|`)
@@ -766,9 +763,7 @@ const array[int, {2, 2}] I = {{1, 0}, {0, 1}};
 
 ### Block naming consistency
 
-**Current state**: Some blocks use `_block` suffix (e.g., `global_constants_block`, `lattices_block`) while others don't (e.g., `initializer`, `dynamic`, `gauge`).
-
-**Note**: This inconsistency exists for historical reasons and may be addressed in future versions for better consistency.
+**Current state**: Every block's grammar rule carries the `_block` suffix (`global_constants_block`, `lattices_block`, `function_block`, `initializer_block`, `dynamic_block`, `gauge_block`, `node_classes_block`, `geometry_block`); the keyword a program writes is the name without the suffix.
 
 ## Block order flexibility
 

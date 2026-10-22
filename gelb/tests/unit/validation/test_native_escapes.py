@@ -3,7 +3,7 @@
 
 The programs here once passed ``gelbc`` with empty diagnostics and then
 failed in gfortran, g++ or nvcc.  Each family below is an input the
-language does not support, so each is now a source-located ``gelbc``
+language does not support, so each is a source-located ``gelbc``
 error.  Each family has two checks:
 
 * the diagnostic, through ``gelbc --diagnostics-json`` as the editor
@@ -11,9 +11,7 @@ error.  Each family has two checks:
   manual's wording;
 * the runner, through ``scripts/gelb-run``, the path the user takes:
   the run must stop at the ``gelbc`` step with the ``[Problem]`` block,
-  before any native compiler is invoked.  An emitted-text assertion
-  or an empty ``--diagnostics-json`` passed on every one of these
-  programs before the fix.
+  before any native compiler is invoked.
 """
 
 import json

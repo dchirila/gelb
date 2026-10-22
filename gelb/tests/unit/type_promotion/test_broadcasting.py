@@ -333,17 +333,16 @@ class TestArrayArithmeticShapePreservation:
     """Regression guard: TypePromotionVisitor must preserve the array
     shape computed by TypeInferenceVisitor for arithmetic operations.
 
-    Before the fix, ``_handle_arithmetic_binary_op`` unconditionally
-    overwrote the inferred shape with an empty (scalar) List_N, which
-    caused valid programs like
+    If ``_handle_arithmetic_binary_op`` overwrote the inferred shape
+    with an empty (scalar) List_N, valid programs like
 
         const array[real, 9] EX = {...};
         const array[real, 9] EX_EX = EX * EX;
 
-    to be rejected by the type validator with a misleading "declared
-    as 'real' but initialized with 'real'" error -- because the shape
-    had been clobbered from ``array[real, 9]`` to ``scalar real``,
-    even though the element type was correct.
+    would be rejected by the type validator with a misleading "declared
+    as 'real' but initialized with 'real'" error -- the shape clobbered
+    from ``array[real, 9]`` to ``scalar real`` while the element type
+    is correct.
     """
 
     @staticmethod
@@ -434,8 +433,7 @@ class TestArrayArithmeticShapePreservation:
         assert rhs.inferred_type.shape.value == 9
 
     def test_array_times_scalar_still_works(self):
-        """Regression guard: ``array * scalar`` was already working,
-        make sure the fix didn't break it."""
+        """Regression guard: ``array * scalar`` keeps its shape too."""
         src = """
         simulation_description("array * scalar");
         global_constants {

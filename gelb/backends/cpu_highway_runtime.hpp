@@ -221,9 +221,8 @@ inline void gelb_free(void* p) {
     std::free(p);
 }
 
-// (Removed in the CappedTag<8> swap, 2026-05-05.)  Callers should
-// now use ``hn::Lanes(d)`` (constexpr) at the call site instead of
-// a header-level constant -- that way the value tracks the active
+// The lane count is ``hn::Lanes(d)`` (constexpr) at the call site,
+// not a header-level constant, so that the value tracks the active
 // ``D`` automatically across ISAs.
 
 // ----------------------------------------------------------------

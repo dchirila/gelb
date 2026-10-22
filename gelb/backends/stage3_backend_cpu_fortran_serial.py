@@ -456,11 +456,9 @@ class FortranCodeGenerator:
     # A real literal is spelled in the width the type pass gave it: a
     # plain literal is `real`, double precision (the manual's contract:
     # `real` is an alias for `real64`, in a real32 program too), a folded
-    # real32 constant is real(4).  The backend used to pick a dominant
-    # real kind per program and spell every literal and every `real`
-    # conversion in it, which made `real` single precision in a real32
-    # program; every numeric kind must reach the emitted code as the
-    # type pass gave it.
+    # real32 constant is real(4).  Every numeric kind reaches the
+    # emitted code as the type pass gave it; a per-program dominant
+    # real kind would make `real` single precision in a real32 program.
     _REAL_KINDS = ('real', 'real16', 'real32', 'real64')
 
     @classmethod
@@ -548,7 +546,7 @@ class FortranCodeGenerator:
         self._border_corrections = geo.border_corrections
         self._paint_ops = geo.paint_ops
 
-        # 1D with contiguous regions: use the old tight-loop approach
+        # 1D with contiguous regions: use the tight-loop form
         # (no nc_map, each region gets its own do-loop bounds).
         if geo.ndim == 1 and all(
                 info.bbox_dense for info in geo.nc_info.values()):

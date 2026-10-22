@@ -278,10 +278,9 @@ class TestConstantFoldingWithPipeline:
         """Regression test: ``const int X = N / 2`` must
         fold to an ``IntLiteral_N``, not a ``RealLiteral_N``.
 
-        Before the fix, ``_evaluate_div`` always used Python's true
-        division (``/``), producing a Python float and wrapping it as a
-        ``RealLiteral_N`` even when both operands were ints.  The
-        backend then emitted code like
+        A fold through Python's true division (``/``) would produce a
+        Python float wrapped as a ``RealLiteral_N`` even when both
+        operands are ints, and the backend would then emit
         ``integer(8), parameter :: g_x = 32.0d0`` -- a type mismatch
         that gfortran silently narrows but warns about.
         """
@@ -441,9 +440,9 @@ class TestConstantFoldingGeometryPaints:
     (geometry holds no locally-declared symbols), so ``visitIdentifier_N``
     must NOT early-out on a falsy ``symbol_table`` -- it must follow the
     hierarchical lookup into the parent table to resolve global constants
-    like NY. Previously, ``if symbol_table:`` short-circuited because
-    SymbolsTable.__len__ counts only LOCAL symbols, leaving NY-1
-    unfolded and causing StencilExtractionVisitor to record the paint
+    like NY. ``if symbol_table:`` would short-circuit, because
+    SymbolsTable.__len__ counts only LOCAL symbols, leave NY-1
+    unfolded and make StencilExtractionVisitor record the paint
     as a full-grid range.
     """
 
@@ -618,7 +617,7 @@ class TestDeclaredWidths:
 
     def test_a_real_constant_written_as_an_integer_is_a_real(self):
         # P and Q are reals, so P / Q is 3.5: propagating them as integer
-        # literals used to fold an integer division (3)
+        # literals would fold an integer division (3)
         c = self._folded()
         assert isinstance(c['R'], RealLiteral_N) and c['R'].value == 3.5
 

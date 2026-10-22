@@ -243,7 +243,7 @@ class CudaCppCodeGenerator(
 
         # Programs that read the implicit ``t`` symbol need it as
         # a ``__device__`` int instead of a kernel argument: under
-        # ``--cuda-graphs`` (the default since 2026-05-08) the
+        # ``--cuda-graphs`` (the default) the
         # captured kernel-arg list freezes the value of
         # ``gelb_timestep`` at capture time, so every replay would
         # see ``t = 0``.  Mirroring the device-side ping-pong-index

@@ -210,14 +210,13 @@ Options:
                           2D all-periodic, single dense NC/lattice)
   --no-cuda-graphs        gpu_cuda_cpp: disable the cudaGraph_t capture
                           + replay of the per-iteration kernel sequence.
+                          Graphs are the default; programs using
+                          random() or with no dynamic NC fall back to
+                          no-graphs automatically.
   --poison-uninit         debugging aid (all backends): fill lattice
                           storage with NaN at startup so reads of
                           never-written cells surface as NaN in the
-                          output instead of hiding behind benign zeros
-                          Default is ON (since 2026-05-08); pass this
-                          flag to opt out.  Programs using random() or
-                          with no dynamic NC fall back to no-graphs
-                          automatically.
+                          output instead of hiding behind benign zeros.
   -D, --define NAME=VALUE Override a global constant (repeatable)
   -s, --seed N            Fixed integer seed for the PRNG (reproducible runs)
   -h, --help              Show this help

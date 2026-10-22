@@ -888,7 +888,7 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         if hasattr(node, 'periodicity') and node.periodicity is not None:
             self.visit(node.periodicity, ast_root_node)
         
-        # Note: Lattice parameter validation is now done in ConstantsResolverVisitor
+        # Note: Lattice parameter validation is done in ConstantsResolverVisitor
         # after constants are resolved
         
         return node

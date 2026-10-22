@@ -1429,9 +1429,9 @@ class HighwayCodeGenerator(
             f"non-dense bbox; expected rect decomposition upstream")
 
     def _emit_spatial_loop_close(self) -> None:
-        # No-op now that the per-cell gelb_nc_map guard has been
-        # removed.  Kept for symmetry with _emit_spatial_loops_open in
-        # case a future dispatch variant re-introduces a guard scope.
+        # No-op: the spatial loops open no per-cell guard scope.  Kept
+        # for symmetry with _emit_spatial_loops_open, for a dispatch
+        # variant that needs one.
         pass
         # Close via _emit_axis_loop_close (not raw brace emit) so any
         # axis-singleton bindings pushed by _emit_spatial_loop_open

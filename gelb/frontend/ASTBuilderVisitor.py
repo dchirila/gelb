@@ -723,7 +723,7 @@ class ASTBuilderVisitor(GeLBVisitor):
             # Element type is a 0D array, extract the scalar string
             scalar_type = element_type_node.element_dtype
         else:
-            # Legacy fallback
+            # A scalar type string
             scalar_type = element_type_node
         
         return ArrayDataType_N(

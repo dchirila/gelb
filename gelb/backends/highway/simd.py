@@ -431,13 +431,13 @@ class SimdEmitMixin:
         A node yields Vec8q when:
           * it is int-typed (per ``inferred_type``), AND
           * it contains a bool->Vec8q-producing subtree somewhere
-            (a comparison/bool-op, which we now lower as
+            (a comparison/bool-op, which is lowered as
             ``select(mask, Vec8q(1), Vec8q(0))``).
 
         Without the second clause, plain scalar int loop counters
         (e.g. the outer ``g_y`` of a 2-D SIMD body) would also pass
         the int-typed check and erroneously trigger
-        ``to_double(g_y)`` -- a regression at TGV-2D BGK init's
+        ``to_double(g_y)`` -- wrong for TGV-2D BGK init's
         ``y + 0.5`` formula.  In that case the expression has no
         comparison, so the result is a plain scalar int that
         ``static_cast<double>`` handles correctly (and the
@@ -651,10 +651,10 @@ class SimdEmitMixin:
         ``_wrap_safe_axes`` (so cross-axis reads can drop the
         modulo) -- it does NOT gate SIMD vectorisation along x.
 
-        This was previously a perf bug: at a y- or z-boundary row
-        the entire inner-x range was emitted as a single scalar
-        loop, leaving ~6 % of cells (TGV-3D N=64) running scalar
-        despite having a 62-cell-wide SIMD-eligible interior."""
+        Gating on the outer axes would emit the entire inner-x range
+        of a y- or z-boundary row as a single scalar loop, leaving
+        ~6 % of cells (TGV-3D N=64) running scalar despite a
+        62-cell-wide SIMD-eligible interior."""
         dblock = block  # alias kept for readability in the body
         d = self._d
         sizes = self._grid_sizes()

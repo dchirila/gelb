@@ -20,7 +20,7 @@ def test_closed_cavity_mass_and_lid_motion(tmp_path, backend, collision):
     source = re.sub(r"const real U_LID = [\d.]+;", "const real U_LID = 0.05;", source)
     source = re.sub(r"const real TAU = [^;]+;", "const real TAU = 0.8;", source)
     # A density pulse next to the stationary side wall must remain in
-    # the closed fluid/link system; the old fixed wall reservoir loses it.
+    # the closed fluid/link system; a fixed wall reservoir would lose it.
     source = source.replace(
         "f.out[x, y | :] = W;",
         "f.out[x, y | :] = W * (1.0 + 0.01 * real(x == 1 && y == 10));",

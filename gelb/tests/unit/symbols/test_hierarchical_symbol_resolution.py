@@ -268,7 +268,7 @@ geometry {
         
         # Verify the parent table structure
         # Geometry should have program's symbol table as parent (to access global constants and node classes)
-        # Program.symbol_defs is now the root table containing global constants
+        # Program.symbol_defs is the root table containing global constants
         assert ast.geometry.symbol_defs.parent_table is ast.symbol_defs
         assert ast.symbol_defs.parent_table is None  # Program.symbol_defs is the root
     

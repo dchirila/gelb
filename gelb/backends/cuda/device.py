@@ -88,9 +88,9 @@ class CudaDeviceStateMixin:
 
         Runs once at the top of ``main()``, before any kernel launch
         and before cudaGraph capture, so the pointer is constant for
-        the whole run (capture-safe).  ``cudaMemset`` zero-fills to
-        match the zero-initialization the old static ``__device__``
-        arrays provided.
+        the whole run (capture-safe).  ``cudaMemset`` fills the storage
+        (zero, or the poison byte under ``--poison-uninit``), so a
+        never-written cell holds a defined value.
         """
         fill_byte = '0xFF' if self._poison_uninit else '0'
         if self._poison_uninit:

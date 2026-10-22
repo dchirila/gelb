@@ -366,7 +366,7 @@ class TestGeneralCodeStructure:
 
 
 class TestHiddenHaloStorage:
-    """Codegen-shape regression tests for the hidden-halo refactor.
+    """Codegen-shape tests for the hidden-halo storage.
 
     The cpu_fortran backend stores each lattice with a 1-cell halo on
     every spatial axis (`-1:N` per axis), filled by a per-lattice
@@ -443,8 +443,8 @@ class TestHiddenHaloStorage:
             if not line.lstrip().startswith('!'))
         assert 'modulo(' not in non_comment, (
             'expected zero modulo() calls in non-comment generated '
-            'Fortran for a fully-periodic program after the hidden-'
-            'halo refactor')
+            'Fortran for a fully-periodic program with hidden-halo '
+            'storage')
 
     def test_no_halo_update_for_non_periodic(self):
         """A program with no periodic axes (all walls) must NOT emit
@@ -912,8 +912,8 @@ class TestExplicitPrecisionReal32:
         assert 'real(4), parameter :: g__t_a_u = real(0.6d0)' in code
 
     def test_real_literal_stays_double_precision_in_a_real32_program(self):
-        # The backend used to pick a "dominant" real kind per program and
-        # spell every literal in it, making `real` single precision here.
+        # Every literal keeps the width the type pass gave it; a per-program
+        # "dominant" real kind would make `real` single precision here.
         code = _generate(_real32_2d_program())
         assert '1.0d0' in code
         assert '1.0e0' not in code and '0.6e0' not in code
@@ -1184,13 +1184,13 @@ def test_no_line_exceeds_132_chars_mrt():
 
 class TestGeometryPaintOutOfBounds:
     """Regression guards for the backend out-of-bounds paint-range
-    check.  Before the fix, a paint statement whose upper bound equals
-    the grid size (e.g. ``nodes[:, NY-K:NY]`` instead of the correct
-    ``nodes[:, NY-K:NY-1]``) produced an opaque Python
-    ``IndexError: list assignment index out of range`` with no source
-    location.  The backend must now raise a ``GeLBExStencilError``
+    check.  A paint statement whose upper bound equals the grid size
+    (e.g. ``nodes[:, NY-K:NY]`` instead of the correct
+    ``nodes[:, NY-K:NY-1]``) must raise a ``GeLBExStencilError``
     whose message clearly identifies the offending range and cites the
-    source line.
+    source line, not an opaque Python
+    ``IndexError: list assignment index out of range`` with no source
+    location.
     """
 
     _OOB_PROGRAM = """
@@ -1288,17 +1288,17 @@ class TestUpstreamDfsBoundaryClamping:
     """Regression guards for the boundary-aware clamping of
     ``upstream_dfs`` reads.
 
-    Before the fix, a 1D Neumann BC at the left wall would emit
+    Unclamped, a 1D Neumann BC at the left wall would emit
 
         g_f_in = (/g_f(0, g_x, ...), g_f(1, (g_x - 1), ...), ...) /)
 
     inside a ``do g_x = 0, 0`` loop, and gfortran's static bounds
     check would flag ``(g_x - 1) = -1`` as out of bounds.  The read
-    was dead in practice (the user immediately overwrote f_1 via the
-    BC formula) but it was undefined behaviour and cluttered gfortran
+    is dead in practice (the user immediately overwrites f_1 via the
+    BC formula) but it is undefined behaviour and clutters gfortran
     output with warnings.
 
-    The backend now records which dimension sides each node class is
+    The backend records which dimension sides each node class is
     painted at (``_nc_boundary_dims``) and wraps the non-periodic
     upstream-read indices in ``max(0, ...)`` / ``min(N - 1, ...)`` on
     the sides where the current node class touches the boundary.

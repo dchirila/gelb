@@ -8,8 +8,8 @@ lattices, run on both CPU backends through ``scripts/gelb-run``:
 * ``real`` widening: ``u + 1.0 - u`` with u = 2^24 in real32 is 1.0
   when the addition is double precision (2^24 + 1 is exact there) and
   0.0 when it is single precision (2^24 + 1 rounds to 2^24).  The
-  Fortran backend used to pick a "dominant" real kind per program and
-  spell ``real`` as real(4) in a real32 program, giving 0.0.
+  Fortran backend spells ``real`` as real(8) in a real32 program too;
+  a per-program "dominant" kind, real(4) there, would give 0.0.
 * ``real32`` narrowness: ``(u * w) * w`` in real32 is rounded after each
   product; a backend that spells the real32 constant as a C++ double
   literal evaluates the chain in double and rounds once.  The pair
@@ -128,7 +128,7 @@ geometry { nodes[:] = B; }
 # An integer sum converted to real32 is added in integers and
 # converted once; rebuilt as real32 arithmetic, 16777217 rounds to 2^24
 # before the addition.  An integer division truncates before
-# the product; SymPy's exact division would give 0.5*x - 3.5.
+# the product; an exact symbolic division would give 0.5*x - 3.5.
 _SLICE_INTEGER_SUM = """simulation_description("slice integer conversion");
 lattices { lattice u(1, 9, real32, 4, false); }
 initializer I { u.out[x | :] = 0.5; }
@@ -922,8 +922,8 @@ def test_a_strict_build_accepts_safe_nvcc_option_values(tmp_path):
 # ``mod``, ``abs`` and the library functions follow the promotion
 # table), run on three backends and compared with the value the table
 # gives.  Each program
-# also discriminates: the value the old rule gave (``sqrt`` and ``min``
-# typed ``real``, ``abs`` typed ``real``) is asserted to differ.
+# also discriminates: the value of a rule that types ``sqrt`` and
+# ``min`` as ``real`` and ``abs`` as ``real`` is asserted to differ.
 
 _SQRT32 = """simulation_description("sqrt of a real32 is real32");
 global_constants { const real32 C = 0.3; }
@@ -936,7 +936,7 @@ geometry { nodes[:] = B; }
 """
 # sqrt in binary32, then a binary32 product (each rounds to its type) ...
 _SQRT32_EXPECTED = float(np.float32(np.sqrt(np.float32(3.0))) * np.float32(0.3))
-# ... not a binary32 sqrt widened into a binary64 product (the old rule)
+# ... not a binary32 sqrt widened into a binary64 product (sqrt typed real)
 _SQRT32_OLD = float(np.float32(np.sqrt(np.float32(3.0)))) * float(np.float32(0.3))
 
 _MIN32 = """simulation_description("min of a real32 and an integer is real32");
@@ -961,7 +961,7 @@ geometry { nodes[:] = B; }
 """
 # |x - 3| for x = 0..6 is 3 2 1 0 1 2 3; a truncating integer quotient ...
 _ABS_INT_EXPECTED = [1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0]
-# ... not a real one (the old rule typed abs(int) as real)
+# ... not a real one (abs(int) typed real)
 _ABS_INT_OLD = [1.5, 1.0, 0.5, 0.0, 0.5, 1.0, 1.5]
 
 
@@ -1006,7 +1006,7 @@ def test_real16_is_not_in_this_version(tmp_path):
 # powers, the host's library functions at the argument's width) and
 # makes an integer overflow or an out-of-range conversion an error; the
 # folded literal then has to survive each backend's emission.  Each
-# program also pins what the old folder gave.
+# program also pins the values Python's own arithmetic would give.
 
 _FOLDED_INTEGERS = """simulation_description("folded mod and powers");
 lattices { lattice f(1, 1, real, 4, false); }

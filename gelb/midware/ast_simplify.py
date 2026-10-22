@@ -1,12 +1,13 @@
 """Exact simplification and structural CSE on ordered expression trees.
 
-``SliceDFExpansionVisitor`` and ``ScalarBlockCSEVisitor`` used to lower
-expressions into SymPy, whose ``Add``/``Mul`` canonicalisation flattens,
-sorts and combines terms: ``(u + 16777217) - 16777216`` became
-``u + 1``, ``(u + a) - a`` became ``u``, and every sum was re-associated
+A computer-algebra canonicalisation (SymPy's ``Add``/``Mul``) flattens,
+sorts and combines terms: ``(u + 16777217) - 16777216`` becomes
+``u + 1``, ``(u + a) - a`` becomes ``u``, and every sum is re-associated
 into canonical order.  None of that is within the accuracy the manual
 promises (user manual, Numerical semantics: What the optimizer
-promises).  This module does only what cannot change a result, signed
+promises), which is why ``SliceDFExpansionVisitor`` and
+``ScalarBlockCSEVisitor`` simplify here instead.  This module does only
+what cannot change a result, signed
 zeros, infinities and NaNs included (a NaN's sign and payload, which
 IEEE 754 leaves unspecified, aside):
 
@@ -390,8 +391,8 @@ def hoist_common_subtrees(exprs, name_for):
     the ``i``-th temporary.  A subtree is shared when it is an
     algebraic node, other than a bare negation and other than one
     containing a stateful call, that occurs at least twice; shared
-    subtrees inside a shared subtree are hoisted first,
-    as ``sympy.cse`` ordered its output.  ``([], exprs)`` when nothing
+    subtrees inside a shared subtree are hoisted first.  ``([], exprs)``
+    when nothing
     is shared.  The trees are rewritten in place."""
     counts = {}
 

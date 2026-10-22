@@ -126,14 +126,13 @@ def _process_alive(pid):
 def monitor(nc_path, total_records, pid):
     """Poll the NetCDF file and display progress until the process exits.
 
-    Short runs (<= ~2 s) are where the progress bar used to feel
-    dishonest -- the monitor's own startup cost was eating most of
-    the runtime, so the first poll typically saw the process
-    already dead and snapped the bar straight from 0% to 100%.
-    The fixes here: a tight poll cadence and an immediate first
-    observation (no pre-sleep), plus a distinct code path for the
-    "monitor attached after the sim already finished" case so we
-    don't pretend we tracked progress we couldn't see.
+    Short runs (<= ~2 s) are where a progress bar feels dishonest:
+    the monitor's own startup cost eats most of the runtime, so a
+    late first poll sees the process already dead and snaps the bar
+    straight from 0% to 100%.  Hence a tight poll cadence and an
+    immediate first observation (no pre-sleep), plus a distinct code
+    path for the "monitor attached after the sim already finished"
+    case so we don't pretend we tracked progress we couldn't see.
     """
     start_time = time.monotonic()
     existence_poll_interval = 0.1   # while waiting for the NC file

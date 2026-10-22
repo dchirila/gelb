@@ -252,9 +252,9 @@ class TestMidwareIntegration:
     def test_intrinsic_function_through_full_pipeline(self):
         """Test that intrinsic functions (sum, dot_prod) work through the full pipeline.
 
-        Previously, visitIntrinsicFunctionCall_N was missing from TypePromotionVisitor,
-        TypeValidationVisitor, ConstantFoldingVisitor, and DivisionByZeroValidator,
-        causing GeLBExMissingASTVisitationMethod errors in downstream stages.
+        TypePromotionVisitor, TypeValidationVisitor, ConstantFoldingVisitor and
+        DivisionByZeroValidator each need a visitIntrinsicFunctionCall_N; a missing
+        one raises GeLBExMissingASTVisitationMethod in a downstream stage.
         """
         gelb_code = '''
         simulation_description("Intrinsic function pipeline test");
@@ -304,7 +304,7 @@ class TestMidwareIntegration:
         ast = validate_types(ast)
         ast = validate_constant_assignments(ast)
 
-        # Process through full midware pipeline -- this is where it used to crash
+        # Process through the full midware pipeline
         validate_midware_input(ast)
         folded_ast = fold_constants(ast)
         validated_ast = validate_division_by_zero(folded_ast)
