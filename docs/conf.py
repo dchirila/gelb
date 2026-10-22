@@ -1,10 +1,11 @@
-"""Sphinx configuration for the GeLB manual.
+"""Sphinx configuration for the GeLB manuals.
 
-Builds one "book" from this Sphinx project:
+Builds two "books" from this Sphinx project:
 
     usrman.rst   →  GeLB User Tutorial (docs/user/)
+    devman.rst   →  GeLB Developer Manual (docs/dev/)
 
-It is reachable from `index.rst` and uses this config. The site
+Both are reachable from `index.rst` and use this config. The site
 eventually lives on ReadTheDocs (`gelb.readthedocs.io`); the
 `.readthedocs.yaml` at the repo root consumes this file unchanged.
 
@@ -211,14 +212,16 @@ copybutton_prompt_is_regexp = True
 
 # -- LaTeX / PDF output ------------------------------------------------
 
-# One PDF from ``make latexpdf``: the user tutorial, rooted at its
-# own ``usrman.rst`` so the PDF contains exactly its chapters.  The
-# tuple is ``(source_start_file, target_filename, title, author,
-# doctype)``; the ``manual`` doctype produces a chapter-level
-# structure (vs ``howto``'s section-level).
+# Two PDFs from ``make latexpdf``: the user tutorial and the
+# developer manual, each rooted at its own ``*.rst`` so that each PDF
+# contains exactly its chapters.  The tuple is ``(source_start_file,
+# target_filename, title, author, doctype)``; the ``manual`` doctype
+# produces a chapter-level structure (vs ``howto``'s section-level).
 latex_documents = [
     ("usrman", "gelb-usrman.tex",
      "GeLB User Tutorial", author, "manual"),
+    ("devman", "gelb-devman.tex",
+     "GeLB Developer Manual", author, "manual"),
 ]
 
 # Engine: ``xelatex``.  The chapters use Unicode characters (≥, →,

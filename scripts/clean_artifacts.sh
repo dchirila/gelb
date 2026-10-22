@@ -66,8 +66,9 @@ done
 # --- Stray ANTLR output in the grammars directory (wrong location) ---
 remove gelb/antlr_part/grammars/.antlr
 
-# --- Regenerable manual PDF (release artifact; rebuilt for a release) ---
+# --- Regenerable manual PDFs (release artifacts; rebuilt for a release) ---
 remove GeLB_User_Tutorial.pdf
+remove GeLB_Developer_Manual.pdf
 
 # --- Simulation NetCDF outputs ---
 # Only files git already ignores (tracked fixtures and deliberate

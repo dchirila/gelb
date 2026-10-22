@@ -43,9 +43,10 @@ results_for_phd_thesis__Nov_2017/
 # Other reference PDFs (books I bought, etc.)
 refs/
 
-# Release manual PDF. It is generated from docs/ and attached to
+# Release manual PDFs. They are generated from docs/ and attached to
 # releases, not tracked during normal development.
 /GeLB_User_Tutorial.pdf
+/GeLB_Developer_Manual.pdf
 .DS_Store
 
 # VSCode extension build artifacts

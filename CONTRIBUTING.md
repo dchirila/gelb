@@ -66,7 +66,10 @@ covers the language itself.
 
 ## Documentation
 
-- The manual lives under `docs/` (Sphinx, reStructuredText). Build with
+- The manuals live under `docs/` (Sphinx, reStructuredText): the user
+  tutorial under `docs/user/` and the developer manual under
+  `docs/dev/`, the place to start when working on the compiler
+  itself. Build with
   `uv run sphinx-build -b html -W --keep-going docs docs/_build/html`;
   warnings are errors, as in CI.
 - Document the language as it is today. `docs/LANGUAGE_DESIGN.md`

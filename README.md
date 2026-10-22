@@ -328,16 +328,19 @@ If you use GeLB for your research, please cite:
 
 We'd love to hear about your use cases and feature requests!
 
-## Release Manual PDF
+## Release Manual PDFs
 
-The user tutorial PDF is a generated release artifact, not a tracked
-source file. To regenerate it from a source checkout:
+The user tutorial and the developer manual PDFs are generated release
+artifacts, not tracked source files. To regenerate them from a source
+checkout:
 
 ```bash
-uv run python scripts/build_manual_pdfs.py
+uv run python scripts/build_manual_pdfs.py --manual user
+uv run python scripts/build_manual_pdfs.py --manual dev
 ```
 
-The command writes `GeLB_User_Tutorial.pdf` in the repository root.
+The commands write `GeLB_User_Tutorial.pdf` and
+`GeLB_Developer_Manual.pdf` in the repository root.
 
 ## License
 
