@@ -1,5 +1,4 @@
 // ============================================================
-// STATUS: EXPERIMENTAL
 // Reference: Sukop & Thorne (2006), Sec. 5.1.3.
 // ============================================================
 // 2D pressure-driven Poiseuille flow in a slit -- D2Q9 BGK.
@@ -13,16 +12,19 @@
 //
 //   $u(y) = (G^* / (2\nu)) y_{eff} (H - y_{eff})$,   $G^* = \Delta\rho c_s^2 / L$
 //
-// where H = NY - 2 is the effective half-way-BB channel height,
-// L = NX - 1 is the channel length, and y_eff is the distance
-// from the bottom wall's half-way position.
+// where H = NY - 2 is the effective channel height (no-slip planes
+// at y = 1/2 and y = NY - 3/2), L = NX - 1 is the channel length
+// (rho is imposed on the nodes x = 0 and x = NX - 1), and
+// y_eff = y - 1/2 is the distance from the bottom no-slip plane.
 //
 // Two BC ingredients:
 //
-//   1. **Half-way bounce-back walls** at top and bottom
-//      (y = 0 and y = NY-1), delivered by the wall cell reading
-//      the adjacent fluid cell's outgoing DFs into the opposite
-//      (bounced) slots -- the same pattern used in
+//   1. **Full-way bounce-back walls** (the wall midway between the
+//      nodes) at top and bottom (y = 0 and y = NY-1), delivered by
+//      the wall cell reading the adjacent fluid cell's outgoing DFs
+//      into the opposite (bounced) slots -- entries 2, 5, 6 (bottom)
+//      and 4, 7, 8 (top) of bounce_back_dfs(f, x, y, {EX, EY}),
+//      written out per link as in
 //      `examples/lbm/2d/poiseuille_flow_2d_mrt.gelb` and
 //      `examples/lbm/2d/reduced_gravity_2d_sw_d2q9.gelb`.
 //
@@ -34,7 +36,10 @@
 //      1 (E), 5 (NE), 8 (SE); at the east boundary cell they are
 //      3 (W), 6 (NW), 7 (SW).  The reconstruction uses mass,
 //      x-momentum, y-momentum, and the non-equilibrium bounceback
-//      closure on the wall-normal DF.
+//      closure on the wall-normal DF; the node then collides (BGK)
+//      like a bulk node (Zou & He 1997).  The corner cells bounce
+//      back the DF that the Zou-He cell beside them pulls from them
+//      (2 at the bottom, 4 at the top).
 //
 //      Note: Sukop's pseudocode for the west/south pressure form
 //      contains a sign error in u_x.  The formulas below were
@@ -48,8 +53,10 @@
 //   0: rest     1: E      2: N      3: W      4: S
 //   5: NE       6: NW     7: SW     8: SE
 //
-// Verification: centerline u(y) after ~30 000 steps matches the
-// analytical parabola $u(y) = (\Delta\rho c_s^2) / (2 \nu L) * y_{eff} (H - y_{eff})$.
+// Verification: steady after ~5 000 steps; the mid-channel profile
+// u(y) at x = NX/2 matches the analytical parabola
+// $u(y) = (\Delta\rho c_s^2) / (2 \nu L) * y_{eff} (H - y_{eff})$
+// to a relative L2 error of 8e-4 (defaults, 10 000 steps).
 
 simulation_description("2D Poiseuille flow (BGK + Zou-He pressure BCs, D2Q9) [Sukop 5.1.3]");
 
@@ -141,6 +148,11 @@ dynamic WallTopDynamic {
 //   non-eq closure on normal:  $f_1 = f_3 + (2/3) \rho u_x$
 //   $f_5 = f_7 + (1/6) \rho u_x + 0.5 (f_4 - f_2)$
 //   $f_8 = f_6 + (1/6) \rho u_x + 0.5 (f_2 - f_4)$
+//
+// The reconstructed set has $\rho$ = RHO_IN, $u_y = 0$ and the $u_x$ above,
+// and collides like a bulk node.  Written out uncollided, DFs 0, 2
+// and 4 would never relax: 0 keeps its initial 4/9, and 2 and 4
+// only travel along the boundary column.
 dynamic ZouHeWest {
     real f0 = f.in[x,     y     | 0];
     real f2 = f.in[x,     y - 1 | 2];
@@ -155,15 +167,8 @@ dynamic ZouHeWest {
     real f5 = f7 + (1.0 / 6.0) * RHO_IN * ux + 0.5 * (f4 - f2);
     real f8 = f6 + (1.0 / 6.0) * RHO_IN * ux + 0.5 * (f2 - f4);
 
-    f.out[x, y | 0] = f0;
-    f.out[x, y | 1] = f1;
-    f.out[x, y | 2] = f2;
-    f.out[x, y | 3] = f3;
-    f.out[x, y | 4] = f4;
-    f.out[x, y | 5] = f5;
-    f.out[x, y | 6] = f6;
-    f.out[x, y | 7] = f7;
-    f.out[x, y | 8] = f8;
+    array[real, 9] fIn = {f0, f1, f2, f3, f4, f5, f6, f7, f8};
+    f.out[x, y | :] = fIn - OMEGA * (fIn - FeqBGK(RHO_IN, ux, 0.0));
 }
 
 // ---------- East outlet: Zou-He pressure BC ($\rho$ = RHO_OUT) ----------
@@ -175,6 +180,8 @@ dynamic ZouHeWest {
 //   $f_3 = f_1 - (2/3) \rho u_x$
 //   $f_6 = f_8 - (1/6) \rho u_x + 0.5 (f_4 - f_2)$
 //   $f_7 = f_5 - (1/6) \rho u_x + 0.5 (f_2 - f_4)$
+//
+// Then BGK collision, as at the west inlet.
 dynamic ZouHeEast {
     real f0 = f.in[x,     y     | 0];
     real f1 = f.in[x - 1, y     | 1];
@@ -189,29 +196,26 @@ dynamic ZouHeEast {
     real f6 = f8 - (1.0 / 6.0) * RHO_OUT * ux + 0.5 * (f4 - f2);
     real f7 = f5 - (1.0 / 6.0) * RHO_OUT * ux + 0.5 * (f2 - f4);
 
-    f.out[x, y | 0] = f0;
-    f.out[x, y | 1] = f1;
-    f.out[x, y | 2] = f2;
-    f.out[x, y | 3] = f3;
-    f.out[x, y | 4] = f4;
-    f.out[x, y | 5] = f5;
-    f.out[x, y | 6] = f6;
-    f.out[x, y | 7] = f7;
-    f.out[x, y | 8] = f8;
+    array[real, 9] fIn = {f0, f1, f2, f3, f4, f5, f6, f7, f8};
+    f.out[x, y | :] = fIn - OMEGA * (fIn - FeqBGK(RHO_OUT, ux, 0.0));
 }
 
-// ---------- Corners: half-way bounce-back diagonal readers ----------
+// ---------- Corners: bounce-back for the two cells they feed ----------
 //
-// Each corner has exactly one diagonal fluid neighbor and only
-// needs to populate the one diagonal slot that neighbor consumes.
-// This is a small physical inconsistency with the pressure BCs
-// (corners enforce no-slip, not $\Delta\rho$) but it is localized to a
-// single cell per corner and does not reach the centerline.
+// Each corner feeds two cells: its diagonal fluid neighbor, which
+// pulls one diagonal slot, and the Zou-He cell next to it on the
+// inlet/outlet column, which pulls the wall-normal slot (2 at the
+// bottom, 4 at the top) as one of its knowns.  Both slots carry the
+// neighbor's own DF bounced back, as at the walls (the entries of
+// bounce_back_dfs).  A 0 in the wall-normal slot hides part of
+// the density from the Zou-He mass balance, which then raises u_x
+// at the inlet and lowers it at the outlet: mass flows in at both
+// ends.
 
-dynamic CornerBL {     // (0, 0): fluid (1, 1) pulls slot 5 from here
+dynamic CornerBL {     // (0, 0): slot 5 -> fluid (1, 1), 2 -> Zou-He (0, 1)
     f.out[x, y | 0] = 0.0;
     f.out[x, y | 1] = 0.0;
-    f.out[x, y | 2] = 0.0;
+    f.out[x, y | 2] = f.in[x, y + 1 | 4];
     f.out[x, y | 3] = 0.0;
     f.out[x, y | 4] = 0.0;
     f.out[x, y | 5] = f.in[x + 1, y + 1 | 7];
@@ -220,10 +224,10 @@ dynamic CornerBL {     // (0, 0): fluid (1, 1) pulls slot 5 from here
     f.out[x, y | 8] = 0.0;
 }
 
-dynamic CornerBR {     // (NX-1, 0): fluid (NX-2, 1) pulls slot 6
+dynamic CornerBR {     // (NX-1, 0): slot 6 -> (NX-2, 1), 2 -> (NX-1, 1)
     f.out[x, y | 0] = 0.0;
     f.out[x, y | 1] = 0.0;
-    f.out[x, y | 2] = 0.0;
+    f.out[x, y | 2] = f.in[x, y + 1 | 4];
     f.out[x, y | 3] = 0.0;
     f.out[x, y | 4] = 0.0;
     f.out[x, y | 5] = 0.0;
@@ -232,24 +236,24 @@ dynamic CornerBR {     // (NX-1, 0): fluid (NX-2, 1) pulls slot 6
     f.out[x, y | 8] = 0.0;
 }
 
-dynamic CornerTL {     // (0, NY-1): fluid (1, NY-2) pulls slot 8
+dynamic CornerTL {     // (0, NY-1): slot 8 -> (1, NY-2), 4 -> (0, NY-2)
     f.out[x, y | 0] = 0.0;
     f.out[x, y | 1] = 0.0;
     f.out[x, y | 2] = 0.0;
     f.out[x, y | 3] = 0.0;
-    f.out[x, y | 4] = 0.0;
+    f.out[x, y | 4] = f.in[x, y - 1 | 2];
     f.out[x, y | 5] = 0.0;
     f.out[x, y | 6] = 0.0;
     f.out[x, y | 7] = 0.0;
     f.out[x, y | 8] = f.in[x + 1, y - 1 | 6];
 }
 
-dynamic CornerTR {     // (NX-1, NY-1): fluid (NX-2, NY-2) pulls slot 7
+dynamic CornerTR {     // (NX-1, NY-1): slot 7 -> (NX-2, NY-2), 4 -> (NX-1, NY-2)
     f.out[x, y | 0] = 0.0;
     f.out[x, y | 1] = 0.0;
     f.out[x, y | 2] = 0.0;
     f.out[x, y | 3] = 0.0;
-    f.out[x, y | 4] = 0.0;
+    f.out[x, y | 4] = f.in[x, y - 1 | 2];
     f.out[x, y | 5] = 0.0;
     f.out[x, y | 6] = 0.0;
     f.out[x, y | 7] = f.in[x - 1, y - 1 | 5];
