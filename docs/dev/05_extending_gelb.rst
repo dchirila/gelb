@@ -107,7 +107,7 @@ Adding a backend
    the ``package-data`` entry of :source:`pyproject.toml`.
 2. The ``click.Choice`` of ``--backend`` and the dispatch branch in
    :source:`gelb/gelbc.py`.
-3. A ``case`` branch in :source:`scripts/gelb-run` (``EXT`` and
+3. A ``case`` branch in :source:`gelb/scripts/gelb-run` (``EXT`` and
    ``compile_src``), its validation list and the text of
    ``_die_unknown_backend``.
 4. ``BACKENDS`` in :source:`scripts/emission_snapshot.py`; a toolchain

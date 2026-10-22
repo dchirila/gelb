@@ -61,7 +61,7 @@ backend emits it.
 
 **The native compiler fuses nothing on the CPU; a strict build fuses
 nothing anywhere.**  The default ``GELB_FFLAGS`` and ``GELB_CXXFLAGS``
-of :source:`scripts/gelb-run` carry ``-ffp-contract=off``; the one
+of :source:`gelb/scripts/gelb-run` carry ``-ffp-contract=off``; the one
 fusion GeLB decides itself is ``gelb_mul_add`` in
 :source:`gelb/backends/cpu_highway_runtime.hpp`, selected once by
 ``GELB_STRICT_FP``.  A default CUDA build keeps nvcc's fusion;

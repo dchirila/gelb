@@ -10,8 +10,10 @@ Top-level directories
 
 ``gelb/``
    The compiler package.  :source:`gelb/gelbc.py` is the ``gelbc``
-   driver and :source:`gelb/compiler_pipeline.py` orders the passes
-   (:doc:`02_compilation_pipeline`).  The sub-packages follow the
+   driver, :source:`gelb/compiler_pipeline.py` orders the passes
+   (:doc:`02_compilation_pipeline`) and :source:`gelb/run_cli.py` is
+   the ``gelb-run`` entry point, which hands over to the runner
+   :source:`gelb/scripts/gelb-run`.  The sub-packages follow the
    three stages: :source:`gelb/frontend/` (parse tree to AST, symbol
    tables, types), :source:`gelb/midware/` (constant folding,
    stencils, geometry, the rewrites) and :source:`gelb/backends/` (the
@@ -25,7 +27,8 @@ Top-level directories
    (:doc:`06_testing`).  In :source:`pyproject.toml`,
    ``[tool.setuptools.packages.find]`` keeps ``gelb.tests*`` out of
    the wheel and ``package-data`` ships the ``*.hpp`` and ``*.cuh``
-   runtime headers with it.
+   runtime headers and the ``gelb-run`` runner
+   :source:`gelb/scripts/gelb-run` with it.
 
 ``examples/``
    The ``.gelb`` programs, in ``basic/``, ``fd/``, ``lbm/`` (``1d``,
@@ -48,11 +51,14 @@ Top-level directories
 
 ``scripts/``
    Developer tools.  This manual relies on :source:`scripts/gelb-run`
-   (compile and run a program, :doc:`04_backends`),
+   (a shim for the ``gelb-run`` runner :source:`gelb/scripts/gelb-run`,
+   which compiles and runs a program, :doc:`04_backends`),
    :source:`scripts/emission_snapshot.py` (byte-compare the generated
    code of every example), :source:`scripts/regenerate_antlr.sh`
    (rebuild the parser), :source:`scripts/gelb_bootstrap.sh` (create
-   the ``uv`` environment), :source:`scripts/build_manual_pdfs.py`
+   the ``uv`` environment and, through
+   :source:`scripts/gelb-shell-setup`, put its ``.venv/bin`` on
+   ``PATH``), :source:`scripts/build_manual_pdfs.py`
    with :source:`scripts/build_usrman_pdf.py` and
    :source:`scripts/build_devman_pdf.py` (the release PDFs),
    :source:`scripts/clean_artifacts.sh` (remove build output) and
@@ -86,15 +92,27 @@ workflow (:doc:`06_testing`).
 The three commands
 ==================
 
-``[project.scripts]`` in :source:`pyproject.toml` defines two console
-entry points: ``gelbc = "gelb.gelbc:cli"`` and
-``gelb-view = "gelb.visualization.gelb_view:cli"``.  Both are
-``click`` commands; ``gelb-view`` is a group whose subcommands are
-``data`` (the default, a NetCDF output file), ``algo`` (the stencils
-of a program), ``geo`` (its node-class map) and ``source``.
-``gelb-run`` is the bash script :source:`scripts/gelb-run`, not a
-Python entry point: it runs ``gelbc`` through ``uv run --project
-<checkout>`` or through the interpreter named by ``GELB_PYTHON``,
-compiles the result with the native compiler of the chosen backend,
-runs the executable and, with ``--view``, hands the output to
-``gelb-view`` (:doc:`04_backends`).
+``[project.scripts]`` in :source:`pyproject.toml` defines three
+console entry points: ``gelbc = "gelb.gelbc:cli"``,
+``gelb-run = "gelb.run_cli:main"`` and
+``gelb-view = "gelb.visualization.gelb_view:cli"``.  ``gelbc`` and
+``gelb-view`` are ``click`` commands; ``gelb-view`` is a group whose
+subcommands are ``data`` (the default, a NetCDF output file), ``algo``
+(the stencils of a program), ``geo`` (its node-class map) and
+``source``.  ``gelb-run`` is a bash script, the runner
+:source:`gelb/scripts/gelb-run`, shipped as package data:
+:source:`gelb/run_cli.py` replaces its own process with that script
+(``os.execv``), passing the arguments and the environment through
+unchanged, so that the command is the same plain word in a checkout
+and in a packaged installation.  :source:`scripts/gelb-run` is a
+ten-line shim that ``exec``\ s the packaged copy, kept for the macOS
+bundle's ``bin/gelb-run`` wrapper and for the test suite, which call
+it by that path.  The runner starts ``gelbc`` through ``uv run
+--project <checkout>`` or through the interpreter named by
+``GELB_PYTHON``, compiles the result with the native compiler of the
+chosen backend, runs the executable and, with ``--view``, hands the
+output to ``gelb-view`` (:doc:`04_backends`).  ``uv sync`` installs
+the three commands in ``.venv/bin``; :source:`scripts/gelb_bootstrap.sh`
+ends by calling :source:`scripts/gelb-shell-setup` with that
+directory, which appends one ``PATH`` line (and a marker comment) to
+the startup file of each of the user's shells, once.

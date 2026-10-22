@@ -22,7 +22,7 @@ The three generators
    :source:`gelb/backends/fortran/line_formatter.py` splits lines
    longer than 132 characters at token boundaries.  This is the only
    backend that supports ``--output-mode stdout`` (checked in
-   ``gelbc.py`` and in ``scripts/gelb-run``).
+   ``gelbc.py`` and in ``gelb/scripts/gelb-run``).
 
 ``cpu_highway``
    ``generate_cpu_highway`` and ``HighwayCodeGenerator`` in
@@ -72,7 +72,7 @@ separate multiply and add instead of ``hn::MulAdd``.
 How ``gelb-run`` compiles the generated code
 =============================================
 
-:source:`scripts/gelb-run` translates with ``gelbc`` (``uv run
+:source:`gelb/scripts/gelb-run` translates with ``gelbc`` (``uv run
 --project <checkout> gelbc``, or ``$GELB_PYTHON -m gelb.gelbc`` when
 ``GELB_PYTHON`` is set), compiles with the ``compile_src`` of the
 chosen backend's ``case`` branch, runs the executable (behind
