@@ -298,7 +298,7 @@ Running it
 
 .. code-block:: bash
 
-    ./scripts/gelb-run -n 250000 -w 500 \
+    gelb-run -n 250000 -w 500 \
         examples/sukop/karman_vortex_street_2d_bgk.gelb
 
 In VS Code (:ref:`working-in-vscode`), set *Time steps* to 250000 and
@@ -320,7 +320,7 @@ A wider channel driven twice as hard gets there within the run:
 
 .. code-block:: bash
 
-    ./scripts/gelb-run -b gpu_cuda_cpp -n 300000 -w 2000 \
+    gelb-run -b gpu_cuda_cpp -n 300000 -w 2000 \
         -D NY=256 -D G=4.0e-7 \
         examples/sukop/karman_vortex_street_2d_bgk.gelb
 

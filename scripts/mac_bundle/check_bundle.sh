@@ -213,7 +213,8 @@ for f in START_HERE.md VERSION LICENSE README.md CITATION.cff CHANGELOG.md \
          bin/gelb-env.sh bin/gelb-run bin/gelbc bin/gelb-view \
          python/bin/python3.12 lib/libomp.dylib lib/libnetcdf.dylib lib/libhdf5.dylib \
          include/omp.h include/netcdf.h include/netcdf_meta.h \
-         scripts/gelb-run gelb/backends/cpu_highway_runtime.hpp gelb/backends/cpp_runtime_common.hpp \
+         scripts/gelb-run scripts/gelb-shell-setup gelb/scripts/gelb-run \
+         gelb/backends/cpu_highway_runtime.hpp gelb/backends/cpp_runtime_common.hpp \
          third_party/highway/hwy/highway.h third_party/highway/hwy/aligned_allocator.cc \
          third_party/highway/hwy/per_target.cc third_party/highway/hwy/targets.cc \
          third_party/highway/hwy/abort.cc third_party/highway/LICENSE \
@@ -221,7 +222,7 @@ for f in START_HERE.md VERSION LICENSE README.md CITATION.cff CHANGELOG.md \
     if [[ -e "$STAGE/$f" ]]; then n=$((n + 1)); else bad "missing: $f"; fi
 done
 ls "$STAGE"/vscode-gelb/*.vsix >/dev/null 2>&1 || bad "missing: vscode-gelb/*.vsix"
-for f in bin/gelb-run bin/gelbc bin/gelb-view scripts/gelb-run python/bin/python3.12; do
+for f in bin/gelb-run bin/gelbc bin/gelb-view scripts/gelb-run scripts/gelb-shell-setup gelb/scripts/gelb-run python/bin/python3.12; do
     [[ -x "$STAGE/$f" ]] || bad "not executable: $f"
 done
 for d in share cmake lib/cmake lib/pkgconfig lib/libhdf5.settings lib/libnetcdf.settings docs/html/_sources install.sh; do

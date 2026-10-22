@@ -362,7 +362,7 @@ From the repository root, or in VS Code with *Time steps* 10000 and
 
 .. code-block:: bash
 
-    ./scripts/gelb-run -n 10000 -w 100 \
+    gelb-run -n 10000 -w 100 \
         examples/lbm/1d/heat_diffusion_1d_dirichlet.gelb
 
 Ten thousand timesteps writing a gauge snapshot every 100 steps
@@ -464,7 +464,7 @@ print its stencil analysis:
 
 .. code-block:: bash
 
-    uv run gelbc \
+    gelbc \
         examples/lbm/1d/heat_diffusion_1d_dirichlet.gelb \
         --stencils
 

@@ -1,0 +1,143 @@
+#!/bin/sh
+#
+# gelb-shell-setup -- put a GeLB bin directory on the PATH of the user's
+# shells, once, by appending one PATH line to each shell's startup file.
+#
+# Usage:
+#   gelb-shell-setup BIN_DIR [SHELL ...]
+#
+# BIN_DIR is the directory holding gelbc, gelb-run and gelb-view: the
+# checkout's .venv/bin (what scripts/gelb_bootstrap.sh passes) or an
+# installation's bin/ (what the macOS installer passes).  SHELL names are
+# zsh, bash, tcsh, csh or fish; named shells are set up whether or not
+# they are installed (the installer's choice page names them).  Without
+# names, the login shell ($SHELL) is set up, plus every other supported
+# shell that is installed and already has a startup file in $HOME (a
+# shell the user never opened gets no new file).
+#
+# Each file gets a marker comment and the PATH line, appended at the end,
+# and only when the PATH line is not already there: running this again
+# never adds a second line.  One line per file is printed, saying what
+# happened, in the form "<shell>: added to <file>:  <line>" or
+# "<shell>: <file> already had the GeLB PATH line".
+#
+# Which file each shell reads:
+#   zsh    macOS: ~/.zprofile (Terminal opens login shells, and
+#          /etc/zprofile's path_helper rebuilds PATH after ~/.zshenv);
+#          elsewhere: ~/.zshenv, read by every zsh, login or not.
+#          Both honour ZDOTDIR.
+#   bash   macOS: ~/.bash_profile, or ~/.bash_login or ~/.profile when
+#          one of those exists and ~/.bash_profile does not (bash reads
+#          only the first of the three; creating ~/.bash_profile would
+#          hide an existing ~/.profile).  Elsewhere: ~/.bashrc, which every
+#          interactive bash reads; the login file (same choice as on
+#          macOS, created as ~/.profile when none exists) gets the line
+#          too unless it already sources ~/.bashrc, as the distributions'
+#          default profiles do, so that login shells see it as well.
+#   tcsh   ~/.tcshrc, or ~/.cshrc when that exists and ~/.tcshrc does not
+#          (tcsh reads ~/.tcshrc and, only when that is absent, ~/.cshrc).
+#   csh    ~/.cshrc.
+#   fish   ~/.config/fish/config.fish (under $XDG_CONFIG_HOME when set).
+set -u
+
+BIN_DIR="${1:-}"
+if [ -z "$BIN_DIR" ]; then
+    echo "usage: gelb-shell-setup BIN_DIR [zsh|bash|tcsh|csh|fish ...]" >&2
+    exit 2
+fi
+shift
+case "$BIN_DIR" in
+    /*) ;;
+    *)  echo "gelb-shell-setup: BIN_DIR must be an absolute path: $BIN_DIR" >&2; exit 2 ;;
+esac
+[ -d "$BIN_DIR" ] || { echo "gelb-shell-setup: no such directory: $BIN_DIR" >&2; exit 2; }
+[ -n "${HOME:-}" ] || { echo "gelb-shell-setup: HOME is not set" >&2; exit 2; }
+
+MARKER="# GeLB: added by gelb-shell-setup; delete this line and the next to uninstall"
+SH_LINE="export PATH=\"$BIN_DIR:\$PATH\""
+CSH_LINE="setenv PATH \"$BIN_DIR:\$PATH\""
+FISH_LINE="set -gx PATH \"$BIN_DIR\" \$PATH"
+ZDIR="${ZDOTDIR:-$HOME}"
+case "$(uname -s 2>/dev/null)" in Darwin) MACOS=1 ;; *) MACOS=0 ;; esac
+DONE=0
+
+# add SHELL FILE LINE: append MARKER + LINE to FILE unless LINE is there.
+add() {
+    if [ -f "$2" ] && grep -qF -- "$3" "$2"; then
+        echo "$1: $2 already had the GeLB PATH line"
+    else
+        mkdir -p "$(dirname "$2")"
+        printf '\n%s\n%s\n' "$MARKER" "$3" >> "$2"
+        echo "$1: added to $2:  $3"
+    fi
+    DONE=1
+}
+
+# The file bash reads when it is a login shell (see the header).
+bash_login_file() {
+    if [ -f "$HOME/.bash_profile" ]; then echo "$HOME/.bash_profile"
+    elif [ -f "$HOME/.bash_login" ]; then echo "$HOME/.bash_login"
+    elif [ -f "$HOME/.profile" ]; then echo "$HOME/.profile"
+    elif [ "$MACOS" = 1 ]; then echo "$HOME/.bash_profile"
+    else echo "$HOME/.profile"
+    fi
+}
+
+setup() {
+    case "$1" in
+        zsh)
+            if [ "$MACOS" = 1 ]; then add zsh "$ZDIR/.zprofile" "$SH_LINE"
+            else add zsh "$ZDIR/.zshenv" "$SH_LINE"; fi ;;
+        bash)
+            if [ "$MACOS" = 1 ]; then
+                add bash "$(bash_login_file)" "$SH_LINE"
+            else
+                add bash "$HOME/.bashrc" "$SH_LINE"
+                lf="$(bash_login_file)"
+                if ! { [ -f "$lf" ] && grep -q '\.bashrc' "$lf"; }; then
+                    add bash "$lf" "$SH_LINE"
+                fi
+            fi ;;
+        tcsh)
+            if [ ! -f "$HOME/.tcshrc" ] && [ -f "$HOME/.cshrc" ]; then add tcsh "$HOME/.cshrc" "$CSH_LINE"
+            else add tcsh "$HOME/.tcshrc" "$CSH_LINE"; fi ;;
+        csh)
+            add csh "$HOME/.cshrc" "$CSH_LINE" ;;
+        fish)
+            add fish "${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish" "$FISH_LINE" ;;
+        *)
+            echo "gelb-shell-setup: unsupported shell '$1' (zsh, bash, tcsh, csh, fish)" >&2
+            return 1 ;;
+    esac
+}
+
+# Does the user have this shell: installed, and with a startup file already.
+has_startup_file() {
+    case "$1" in
+        zsh)  [ -f "$ZDIR/.zshenv" ] || [ -f "$ZDIR/.zprofile" ] || [ -f "$ZDIR/.zshrc" ] || [ -f "$ZDIR/.zlogin" ] ;;
+        bash) [ -f "$HOME/.bashrc" ] || [ -f "$HOME/.bash_profile" ] || [ -f "$HOME/.bash_login" ] || [ -f "$HOME/.profile" ] ;;
+        tcsh) [ -f "$HOME/.tcshrc" ] || [ -f "$HOME/.cshrc" ] ;;
+        csh)  [ -f "$HOME/.cshrc" ] ;;
+        fish) [ -d "${XDG_CONFIG_HOME:-$HOME/.config}/fish" ] ;;
+        *)    false ;;
+    esac
+}
+
+STATUS=0
+if [ $# -gt 0 ]; then
+    for sh in "$@"; do setup "$sh" || STATUS=1; done
+else
+    login="$(basename -- "${SHELL:-}")"
+    case "$login" in zsh|bash|tcsh|csh|fish) ;; *) login="" ;; esac
+    [ -n "$login" ] && setup "$login"
+    for sh in zsh bash tcsh csh fish; do
+        [ "$sh" = "$login" ] && continue
+        if command -v "$sh" >/dev/null 2>&1 && has_startup_file "$sh"; then setup "$sh"; fi
+    done
+    if [ "$DONE" = 0 ]; then
+        echo "gelb-shell-setup: no supported shell found (zsh, bash, tcsh, csh, fish); add this to your shell's startup file yourself:" >&2
+        echo "  $SH_LINE" >&2
+        STATUS=1
+    fi
+fi
+exit $STATUS

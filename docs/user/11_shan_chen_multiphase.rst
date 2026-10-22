@@ -249,11 +249,11 @@ Running it
 .. code-block:: bash
 
     # Small grid for quick iteration
-    ./scripts/gelb-run --seed 42 -D N=256 -n 10000 -w 100 \
+    gelb-run --seed 42 -D N=256 -n 10000 -w 100 \
         examples/sukop/shan_chen_2d.gelb
 
     # Full resolution from Sukop & Thorne (2006) §6.3 (N=1024)
-    ./scripts/gelb-run --seed 42 -n 10000 -w 100 \
+    gelb-run --seed 42 -n 10000 -w 100 \
         examples/sukop/shan_chen_2d.gelb
 
 In VS Code (:ref:`working-in-vscode`), set *Time steps* to 10000,

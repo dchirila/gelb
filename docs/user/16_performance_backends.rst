@@ -16,7 +16,7 @@ at compile time.  This is the production CPU backend.
 
 .. code-block:: bash
 
-    ./scripts/gelb-run -n 10000 examples/lbm/2d/poiseuille_flow_2d_mrt.gelb
+    gelb-run -n 10000 examples/lbm/2d/poiseuille_flow_2d_mrt.gelb
 
 **``gpu_cuda_cpp``** (CUDA C++).  Requires the CUDA toolkit
 (``nvcc``).  The compiler emits CUDA C++ kernels and links against
@@ -24,7 +24,7 @@ the same NetCDF-C library that ``cpu_highway`` already needs.
 
 .. code-block:: bash
 
-    ./scripts/gelb-run -b gpu_cuda_cpp -n 10000 \
+    gelb-run -b gpu_cuda_cpp -n 10000 \
         examples/lbm/2d/poiseuille_flow_2d_mrt.gelb
 
 **``cpu_fortran_serial``** (educational reference).  ``gelbc``
@@ -37,7 +37,7 @@ debugging, small grids, and reference runs; reach for
 
 .. code-block:: bash
 
-    ./scripts/gelb-run -b cpu_fortran_serial -n 10000 \
+    gelb-run -b cpu_fortran_serial -n 10000 \
         examples/lbm/2d/poiseuille_flow_2d_mrt.gelb
 
 When to use which
@@ -139,7 +139,7 @@ running (``gelb-run`` inherits your shell's limits):
 .. code-block:: bash
 
     ulimit -s unlimited    # or: ulimit -s hard
-    OMP_STACKSIZE=64M ./scripts/gelb-run -n 10000 program.gelb
+    OMP_STACKSIZE=64M gelb-run -n 10000 program.gelb
 
 **Reproducibility.**  Pass ``--seed N`` to ``gelbc`` or
 ``gelb-run`` to seed the PRNG deterministically.  Without

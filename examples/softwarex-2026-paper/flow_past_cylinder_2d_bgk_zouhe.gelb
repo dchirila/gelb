@@ -20,7 +20,7 @@
 // downstream 24 D.
 //
 // Run (from the gelb repo root; ~2-6 min on a modern multicore CPU):
-//   ./scripts/gelb-run -b cpu_highway -n 200000 -w 10000 \
+//   gelb-run -b cpu_highway -n 200000 -w 10000 \
 //       examples/softwarex-2026-paper/flow_past_cylinder_2d_bgk_zouhe.gelb
 //
 // Zou-He references:

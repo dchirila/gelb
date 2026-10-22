@@ -329,7 +329,7 @@ reproducible roll pattern:
 
 .. code-block:: bash
 
-    ./scripts/gelb-run --seed 42 -n 30000 -w 30000 \
+    gelb-run --seed 42 -n 30000 -w 30000 \
         examples/lbm/2d/rayleigh_benard_2d_mrt.gelb
 
 In VS Code (:ref:`working-in-vscode`), set *Time steps* and *Write

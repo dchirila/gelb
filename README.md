@@ -76,12 +76,14 @@ Key design principles:
 
 ## Installation
 
-GeLB requires Python 3.10+. The recommended public-release workflow is a
-source checkout managed with `uv`; the project still uses standard
+GeLB requires Python 3.10+. Release 1.0 is installed from a source
+checkout (`git clone`, then the bootstrap script below); packaged
+installers for macOS and Ubuntu, which install the same three commands
+without a checkout, follow in release 1.0.1. The project uses standard
 `pyproject.toml` metadata, so a conventional virtual environment plus
 `pip install -e .` also works for development.
 
-The native one-step runner (`./scripts/gelb-run`) currently assumes a source
+The native one-step runner (`gelb-run`) currently assumes a source
 checkout because it compiles generated Fortran/C++/CUDA code and uses the
 vendored Google Highway submodule. Use `git clone --recursive`, or run
 `git submodule update --init --recursive` after cloning.
@@ -117,7 +119,11 @@ The bootstrap script checks for these and refuses to run if any are missing:
    .\scripts\gelb_bootstrap.ps1
    ```
 
-2. **Activate the virtual environment**:
+2. **Open a new terminal**. The bootstrap adds one PATH line to your
+   shell's startup file (and prints it), so that `gelbc`, `gelb-run` and
+   `gelb-view` are plain commands from any directory. Without that line,
+   activate the environment instead, or put `uv run` in front of each
+   command (`uv run gelb-run ...`) from inside the checkout:
    ```bash
    # On Unix/MacOS:
    source .venv/bin/activate
@@ -137,13 +143,13 @@ The bootstrap script checks for these and refuses to run if any are missing:
 4. **Compile and run a simulation**:
    ```bash
    # One-step compile & run (CPU):
-   ./scripts/gelb-run -n 1000 -w 100 examples/lbm/2d/taylor_green_vortex_2d_bgk.gelb
+   gelb-run -n 1000 -w 100 examples/lbm/2d/taylor_green_vortex_2d_bgk.gelb
    
    # One-step compile & run (GPU, requires nvcc):
-   ./scripts/gelb-run -b gpu_cuda_cpp -n 1000 -w 100 examples/lbm/2d/taylor_green_vortex_2d_bgk.gelb
+   gelb-run -b gpu_cuda_cpp -n 1000 -w 100 examples/lbm/2d/taylor_green_vortex_2d_bgk.gelb
    
    # Or compile only:
-   uv run gelbc examples/lbm/2d/taylor_green_vortex_2d_bgk.gelb -o output.f90 --num-timesteps 1000
+   gelbc examples/lbm/2d/taylor_green_vortex_2d_bgk.gelb -o output.f90 --num-timesteps 1000
    ```
 
 ### Optional: Clean Generated Files

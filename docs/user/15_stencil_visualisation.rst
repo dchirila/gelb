@@ -21,31 +21,31 @@ Quick start
 .. code-block:: bash
 
     # Geometry only (1D bar / 2D heatmap / 3D slices)
-    uv run gelb-view source examples/sukop/karman_vortex_street_2d_bgk.gelb \
+    gelb-view source examples/sukop/karman_vortex_street_2d_bgk.gelb \
         --show=geo -o geometry.png
 
     # Stencils only (per-block velocity-set diagrams)
-    uv run gelb-view source examples/sukop/karman_vortex_street_2d_bgk.gelb \
+    gelb-view source examples/sukop/karman_vortex_street_2d_bgk.gelb \
         --show=algo -o stencils.png
 
     # Side-by-side
-    uv run gelb-view source examples/sukop/karman_vortex_street_2d_bgk.gelb \
+    gelb-view source examples/sukop/karman_vortex_street_2d_bgk.gelb \
         --show=both -o both.png
 
     # Combined: geometry + arrows from one cell to its read neighbours
-    uv run gelb-view source examples/lbm/2d/rayleigh_benard_2d_mrt.gelb \
+    gelb-view source examples/lbm/2d/rayleigh_benard_2d_mrt.gelb \
         --show=combined --cell 64,1 -o combined.png
 
     # ASCII text mode (useful over SSH or in CI logs)
-    uv run gelb-view source examples/lbm/1d/heat_diffusion_1d_dirichlet.gelb \
+    gelb-view source examples/lbm/1d/heat_diffusion_1d_dirichlet.gelb \
         --text
 
     # Statistics table
-    uv run gelb-view source examples/sukop/karman_vortex_street_2d_bgk.gelb \
+    gelb-view source examples/sukop/karman_vortex_street_2d_bgk.gelb \
         --stats
 
     # JSON export (for tooling — used by the VSCode extension)
-    uv run gelb-view source examples/lbm/2d/rayleigh_benard_2d_mrt.gelb \
+    gelb-view source examples/lbm/2d/rayleigh_benard_2d_mrt.gelb \
         --export-json analysis.json
 
 You can also drop the subcommand entirely — ``gelb-view`` auto-detects
@@ -53,7 +53,7 @@ the file type and routes ``.gelb`` → ``source``, ``.nc`` → ``data``:
 
 .. code-block:: bash
 
-    uv run gelb-view examples/sukop/karman_vortex_street_2d_bgk.gelb
+    gelb-view examples/sukop/karman_vortex_street_2d_bgk.gelb
 
 Single-view subcommands
 =======================
@@ -87,7 +87,7 @@ resolved node-class map and flag common mistakes:
 
 .. code-block:: bash
 
-    uv run gelb-view source mygeometry.gelb --lint
+    gelb-view source mygeometry.gelb --lint
 
 Checks performed:
 

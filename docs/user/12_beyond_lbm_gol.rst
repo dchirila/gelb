@@ -166,7 +166,7 @@ Running it
 
 .. code-block:: bash
 
-    ./scripts/gelb-run -n 120 -w 1 \
+    gelb-run -n 120 -w 1 \
         examples/lgca/2d/game_of_life_glider.gelb
 
 In VS Code (:ref:`working-in-vscode`), set *Time steps* to 120 and

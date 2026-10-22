@@ -148,5 +148,19 @@ if [ -d "$ROOT_DIR/.git" ]; then
     ( cd "$ROOT_DIR" && git submodule update --init --recursive )
 fi
 
+# Put the commands on PATH: gelbc, gelb-run and gelb-view are installed
+# in .venv/bin, and one PATH line in the shell's startup file makes them
+# plain commands in every new terminal, the same as a packaged install.
+echo ""
+echo "Adding $VENV_PATH/bin to the PATH of your shell:"
+"$SCRIPT_DIR/gelb-shell-setup" "$VENV_PATH/bin" || true
+
+echo ""
 echo "GeLB development environment setup complete!"
-echo "To activate the environment, run: source .venv/bin/activate"
+echo "Open a new terminal, or apply the PATH line to this one with:"
+case "$(basename -- "${SHELL:-bash}")" in
+    tcsh|csh) echo "  setenv PATH \"$VENV_PATH/bin:\$PATH\"" ;;
+    fish)     echo "  set -gx PATH \"$VENV_PATH/bin\" \$PATH" ;;
+    *)        echo "  export PATH=\"$VENV_PATH/bin:\$PATH\"" ;;
+esac
+echo "Without the PATH line, the commands run as: uv run gelbc, uv run gelb-run, uv run gelb-view"

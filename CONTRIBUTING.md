@@ -11,14 +11,18 @@ covers the language itself.
   `scripts\gelb_bootstrap.ps1` (Windows) creates the `uv` virtual
   environment and installs the package with its `dev`, `docs`, and
   `gui` extras. Equivalent by hand: `uv sync --all-extras`.
-- Run Python commands through `uv run` (`uv run gelbc ...`,
-  `uv run pytest`) or activate `.venv` first.
+- The bootstrap adds `.venv/bin` to your shell's PATH (one line in
+  the shell's startup file, via `scripts/gelb-shell-setup`), so `gelbc`,
+  `gelb-run` and `gelb-view` are plain commands in a new terminal.  Run
+  the developer tools through `uv run` (`uv run pytest`,
+  `uv run sphinx-build`); without the PATH line, the three commands run
+  the same way (`uv run gelb-run ...`).
 - Running the generated programs needs a host compiler and NetCDF:
   `g++` with OpenMP for `cpu_highway` (the default backend), `gfortran`
   plus NetCDF-Fortran for `cpu_fortran_serial`, and `nvcc` for
   `gpu_cuda_cpp`. The README's *Prerequisites* section lists the
-  packages per platform. `scripts/gelb-run` compiles and runs a
-  `.gelb` program in one step.
+  packages per platform. `gelb-run` compiles and runs a `.gelb`
+  program in one step.
 
 ## Workflow
 
@@ -93,7 +97,7 @@ When in doubt, prefer the explicit, simpler construct.
 
 Open a GitHub issue with the `.gelb` program (or a reduced version),
 the exact command line, the backend, and the compiler and OS versions.
-The output of `uv run gelbc prog.gelb --diagnostics-json` is useful for
+The output of `gelbc prog.gelb --diagnostics-json` is useful for
 frontend problems.
 
 ## License

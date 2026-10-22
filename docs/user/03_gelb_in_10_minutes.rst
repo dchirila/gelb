@@ -516,8 +516,8 @@ time with ``-D NAME=VALUE``:
 
 .. code-block:: bash
 
-    uv run gelbc program.gelb -b cpu_fortran_serial -D N=128 -D tau=0.75 -o program.f90
-    ./scripts/gelb-run -D N=256 -n 1000 program.gelb
+    gelbc program.gelb -b cpu_fortran_serial -D N=128 -D tau=0.75 -o program.f90
+    gelb-run -D N=256 -n 1000 program.gelb
 
 This is how you do parameter sweeps without editing the source.
 

@@ -15,7 +15,10 @@ Installation
 GeLB is developed on Linux and macOS; Windows is supported via
 PowerShell scripts but less exercised.  All dependencies are
 installed into a self-contained virtual environment by a single
-bootstrap script.
+bootstrap script.  Release 1.0 is installed from a source checkout
+(``git clone``, then the bootstrap); packaged installers for macOS
+and Ubuntu, which install the same three commands without a
+checkout, follow in release 1.0.1.
 
 **Hard requirements** (the bootstrap script refuses to run without
 these):
@@ -65,6 +68,23 @@ The script installs ``uv`` if it is not already on your system,
 creates a ``.venv/`` directory, and pins dependencies from
 ``pyproject.toml``.  It takes about a minute on a warm cache.
 
+The three GeLB commands, ``gelbc``, ``gelb-run`` and ``gelb-view``,
+are installed in ``.venv/bin``.  To make them plain commands, the
+bootstrap ends by adding one PATH line to your shell's startup file
+(``~/.bashrc`` for bash on Linux, ``~/.bash_profile`` on macOS,
+``~/.zshenv`` or ``~/.zprofile`` for zsh, ``~/.tcshrc`` for tcsh,
+``~/.config/fish/config.fish`` for fish; it prints which file it
+changed, and running it again never adds a second line).  Open a new
+terminal, or paste the one-liner the bootstrap prints into the
+current one, and the commands work from any directory: every command
+in this tutorial is written that way, and a packaged installation
+uses the same words.  If you would rather keep your startup files as
+they are, delete that line and put ``uv run`` in front of each
+command instead (``uv run gelb-run ...``, and the same for ``gelbc``
+and ``gelb-view``); ``uv run`` must then be typed from inside the
+checkout.  The same line can be added for another shell with
+``scripts/gelb-shell-setup "$PWD/.venv/bin" zsh``.
+
 Optional components:
 
 - **Java** (any JDK ≥ 11) is needed *only* if you modify the grammar
@@ -79,10 +99,12 @@ Verify the install by running the GeLB compiler's ``--help``:
 
 .. code-block:: bash
 
-    uv run gelbc --help
+    gelbc --help
 
 You should see a long ``Usage: gelbc [OPTIONS] INPUT_FILE`` listing.
-If you do, the Python side of GeLB is up and ready.
+If you do, the Python side of GeLB is up and ready.  (``command not
+found`` means the PATH line is not in effect yet: open a new terminal,
+or put ``uv run`` in front of the command, from inside the checkout.)
 
 If you use Visual Studio Code, install the GeLB extension as well
 (`Working in VS Code`_ below): editing and running programs there is
@@ -106,7 +128,7 @@ typical invocation:
 
 .. code-block:: bash
 
-    uv run gelbc examples/basic/1d/ex0_int_vec_setto_one.gelb \
+    gelbc examples/basic/1d/ex0_int_vec_setto_one.gelb \
         -o /tmp/hello.cpp \
         --num-timesteps 10
 
@@ -133,7 +155,7 @@ compiler, execution and cleanup into one command, analogous to
 
 .. code-block:: bash
 
-    ./scripts/gelb-run -n 100 \
+    gelb-run -n 100 \
         examples/basic/1d/ex0_int_vec_setto_one.gelb
 
 That compiles the example, links it against NetCDF, runs it for 100
@@ -194,16 +216,16 @@ unless stated otherwise.
 .. code-block:: bash
 
     # View simulation output (NetCDF)
-    uv run gelb-view data out.nc
-    uv run gelb-view data out.nc --no-gui -o plot.png
+    gelb-view data out.nc
+    gelb-view data out.nc --no-gui -o plot.png
 
     # View geometry and/or stencil diagrams from a .gelb source file
-    uv run gelb-view source program.gelb
-    uv run gelb-view source program.gelb --show=both --no-gui -o preview.png
+    gelb-view source program.gelb
+    gelb-view source program.gelb --show=both --no-gui -o preview.png
 
     # Bare filename works too — .gelb routes to `source`, .nc routes to `data`
-    uv run gelb-view program.gelb
-    uv run gelb-view out.nc
+    gelb-view program.gelb
+    gelb-view out.nc
 
 The ``data`` subcommand opens an interactive window with a source/
 variable/plot tree pane, dockable plot panels, cross-section line
@@ -275,7 +297,7 @@ Compile and run in one step:
 
 .. code-block:: bash
 
-    ./scripts/gelb-run -b cpu_fortran_serial -n 10 -m stdout \
+    gelb-run -b cpu_fortran_serial -n 10 -m stdout \
         examples/basic/1d/ex0_int_vec_setto_one.gelb
 
 The ``-m stdout`` flag tells the Fortran reference backend to print
@@ -291,7 +313,7 @@ mode:
 
 .. code-block:: bash
 
-    ./scripts/gelb-run -n 100 \
+    gelb-run -n 100 \
         examples/basic/1d/ex0_int_vec_setto_one.gelb
 
 That writes an ``ex0_int_vec_setto_one.nc`` file to your current
@@ -299,7 +321,7 @@ directory.  Open it in ``gelb-view``:
 
 .. code-block:: bash
 
-    uv run gelb-view data ex0_int_vec_setto_one.nc
+    gelb-view data ex0_int_vec_setto_one.nc
 
 The GUI opens with a space-time heatmap of the ``state`` variable —
 ``0`` in the first row, ``1`` in the 100 rows after it, across all
@@ -311,7 +333,7 @@ If you want to see the generated code, pass ``-k`` to keep it:
 
 .. code-block:: bash
 
-    ./scripts/gelb-run -k -n 10 \
+    gelb-run -k -n 10 \
         examples/basic/1d/ex0_int_vec_setto_one.gelb
     # prints the path of the generated file, kept next to the binary
 
@@ -343,9 +365,10 @@ parser is out of date.
 
 **"warning: VIRTUAL_ENV=... does not match the project
 environment path"** — this is a harmless warning from ``uv`` when
-your shell has a different virtualenv active.  You can silence it
-by running ``deactivate`` first, or by using ``./scripts/gelb-run``
-which clears the outer ``VIRTUAL_ENV`` before invoking ``uv``.
+your shell has a different virtualenv active and you run the commands
+through ``uv run``.  You can silence it by running ``deactivate``
+first; ``gelb-run`` itself clears the outer ``VIRTUAL_ENV`` before it
+invokes ``uv``.
 
 .. _working-in-vscode:
 

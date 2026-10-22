@@ -12,6 +12,11 @@ compiler that comes with Xcode (or with the Command Line Tools).
 
 ## 1. Install
 
+Packaged installers for macOS and Ubuntu follow in release 1.0.1;
+release 1.0 is installed from a source checkout (`git clone`, then
+`scripts/gelb_bootstrap.sh`, which puts the same three commands on your
+PATH), and the rest of this page describes the package.
+
 Double-click `GeLB-0.9.0.pkg` and follow the installer. It needs no
 administrator password: everything goes into `~/gelb`. If macOS says
 the package is from an unidentified developer, right-click (or

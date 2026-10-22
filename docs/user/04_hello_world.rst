@@ -250,7 +250,7 @@ From the repository root:
 
 .. code-block:: bash
 
-    ./scripts/gelb-run -n 10 \
+    gelb-run -n 10 \
         examples/basic/1d/ex0_int_vec_setto_one.gelb
 
 In VS Code (:ref:`working-in-vscode`), set *Time steps* to 10 and
@@ -271,7 +271,7 @@ time step).  Open it in the viewer:
 
 .. code-block:: bash
 
-    uv run gelb-view data ex0_int_vec_setto_one.nc
+    gelb-view data ex0_int_vec_setto_one.nc
 
 The viewer opens with a space-time heatmap of ``state``; right-click
 a variable in the file tree for other plot types.  You can also
@@ -279,7 +279,7 @@ render a headless snapshot to a PNG (the same heatmap):
 
 .. code-block:: bash
 
-    uv run gelb-view data ex0_int_vec_setto_one.nc \
+    gelb-view data ex0_int_vec_setto_one.nc \
         -o hello.png --no-gui
 
 .. figure:: figures/04_hello_world_spacetime.png
@@ -311,7 +311,7 @@ generated code was saved:
 
 .. code-block:: bash
 
-    ./scripts/gelb-run -k -n 10 \
+    gelb-run -k -n 10 \
         examples/basic/1d/ex0_int_vec_setto_one.gelb
 
 You don't need to read the generated code — GeLB's whole point is
@@ -331,7 +331,7 @@ read/write pattern is:
 
 .. code-block:: bash
 
-    uv run gelbc examples/basic/1d/ex0_int_vec_setto_one.gelb \
+    gelbc examples/basic/1d/ex0_int_vec_setto_one.gelb \
         --stencils
 
 That prints a stencil report for every dynamic block — which DFs

@@ -49,6 +49,7 @@ dev = [
 
 [project.scripts]
 gelbc = "gelb.gelbc:cli"
+gelb-run = "gelb.run_cli:main"
 gelb-view = "gelb.visualization.gelb_view:cli"
 
 [tool.pytest.ini_options]
@@ -62,6 +63,7 @@ include = ["gelb*"]
 exclude = ["gelb.tests*"]
 
 [tool.setuptools.package-data]
+"gelb" = ["scripts/gelb-run"]
 "gelb.backends" = ["*.hpp", "*.cuh"]
 
 [tool.setuptools.dynamic]

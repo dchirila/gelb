@@ -406,11 +406,11 @@ Running it
 .. code-block:: bash
 
     # Default: cpu_highway (portable-SIMD C++ + OpenMP)
-    ./scripts/gelb-run -n 8000 -w 8000 \
+    gelb-run -n 8000 -w 8000 \
         examples/lbm/2d/lid_driven_cavity_2d_bgk_re1000.gelb
 
     # Single-threaded Fortran reference — same source, no code changes
-    ./scripts/gelb-run -b cpu_fortran_serial -n 8000 -w 8000 \
+    gelb-run -b cpu_fortran_serial -n 8000 -w 8000 \
         examples/lbm/2d/lid_driven_cavity_2d_bgk_re1000.gelb
 
 The ``-w 8000`` flag instructs the gauge to write only at the final

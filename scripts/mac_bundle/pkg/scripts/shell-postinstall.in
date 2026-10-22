@@ -17,33 +17,9 @@ HOME_DIR="$(dirname "$DEST")"
 REPORT="$DEST/INSTALL_REPORT.txt"
 say() { printf '%s\n' "$*" >> "$REPORT" 2>/dev/null || true; }
 
-case "@SHELL@" in
-    zsh)
-        FILE="$HOME_DIR/.zprofile"
-        LINE="export PATH=\"$DEST/bin:\$PATH\"" ;;
-    bash)
-        # bash reads the first of .bash_profile, .bash_login, .profile;
-        # creating .bash_profile would hide an existing .profile.
-        FILE="$HOME_DIR/.bash_profile"
-        if [[ ! -f "$FILE" ]]; then
-            if [[ -f "$HOME_DIR/.bash_login" ]]; then FILE="$HOME_DIR/.bash_login"
-            elif [[ -f "$HOME_DIR/.profile" ]]; then FILE="$HOME_DIR/.profile"
-            fi
-        fi
-        LINE="export PATH=\"$DEST/bin:\$PATH\"" ;;
-    tcsh)
-        # tcsh reads ~/.tcshrc and, only when that is absent, ~/.cshrc;
-        # creating ~/.tcshrc would silence an existing ~/.cshrc.
-        FILE="$HOME_DIR/.tcshrc"
-        if [[ ! -f "$FILE" && -f "$HOME_DIR/.cshrc" ]]; then FILE="$HOME_DIR/.cshrc"; fi
-        LINE="setenv PATH \"$DEST/bin:\$PATH\"" ;;
-    *)  exit 0 ;;
-esac
-
-if [[ -f "$FILE" ]] && grep -qF -- "$LINE" "$FILE"; then
-    say "@SHELL@: $FILE already had the GeLB PATH line"
-else
-    printf '\n# GeLB, added by the installer (delete this line and the next to uninstall)\n%s\n' "$LINE" >> "$FILE"
-    say "@SHELL@: added to $FILE:  $LINE"
-fi
+# scripts/gelb-shell-setup picks the startup file @SHELL@ reads and
+# appends the marker line and the PATH line once; it prints one line
+# saying what it did, which goes into the report.  The installer runs
+# this with $HOME not necessarily the user's, hence HOME from $2.
+HOME="$HOME_DIR" "$DEST/scripts/gelb-shell-setup" "$DEST/bin" @SHELL@ >> "$REPORT" 2>/dev/null || true
 exit 0

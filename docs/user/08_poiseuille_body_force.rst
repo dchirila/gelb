@@ -415,13 +415,13 @@ Running it
 .. code-block:: bash
 
     # Single run, default resolution NY=32
-    ./scripts/gelb-run -n 300000 -w 300000 \
+    gelb-run -n 300000 -w 300000 \
         examples/lbm/2d/poiseuille_flow_2d_mrt.gelb
 
     # Convergence sweep — override NY on the command line
     for NY in 16 32 64 128; do
         N_STEPS=$((5 * (NY-2) * (NY-2) * 75))   # ≈ 5 * H^2 / nu
-        ./scripts/gelb-run -D NY=$NY -n $N_STEPS -w $N_STEPS \
+        gelb-run -D NY=$NY -n $N_STEPS -w $N_STEPS \
             examples/lbm/2d/poiseuille_flow_2d_mrt.gelb
     done
 

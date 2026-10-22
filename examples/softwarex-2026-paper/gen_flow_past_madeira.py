@@ -36,7 +36,7 @@ Pipeline:
 
     python3 gen_flow_past_madeira.py   # -> flow_past_madeira_2d_bgk_zouhe.gelb
     cd <gelb-repo>
-    ./scripts/gelb-run -b cpu_highway -n 250000 -w 10000 \
+    gelb-run -b cpu_highway -n 250000 -w 10000 \
         examples/softwarex-2026-paper/flow_past_madeira_2d_bgk_zouhe.gelb
 """
 
@@ -165,7 +165,7 @@ program = f"""// 2D flow past the island of Madeira -- D2Q9 BGK, Zou-He open bou
 // flow_past_cylinder_2d_bgk_zouhe.gelb (the validation anchor).
 //
 // Run (from the gelb repo root; ~4-10 min on a modern multicore CPU):
-//   ./scripts/gelb-run -b cpu_highway -n 250000 -w 10000 \\
+//   gelb-run -b cpu_highway -n 250000 -w 10000 \\
 //       examples/softwarex-2026-paper/flow_past_madeira_2d_bgk_zouhe.gelb
 //
 // D2Q9 velocity index convention:

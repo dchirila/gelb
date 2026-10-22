@@ -357,7 +357,7 @@ phase_python() {
     # be too long: sh runs the '''exec' line with the interpreter next to
     # the script, while Python reads lines 2-3 as one triple-quoted
     # string and moves on.  Every launcher is then run once.
-    rm -f "$STAGE/python/bin/gelbc" "$STAGE/python/bin/gelb-view"
+    rm -f "$STAGE/python/bin/gelbc" "$STAGE/python/bin/gelb-run" "$STAGE/python/bin/gelb-view"
     local f
     for f in "$STAGE"/python/bin/*; do
         [[ -f "$f" && ! -L "$f" ]] || continue
@@ -436,11 +436,15 @@ PYTEST
 phase_assemble() {
     local hwy_src="$REPO_ROOT/third_party/highway" hwy_dst="$STAGE/third_party/highway"
 
-    log "Wrappers, gelb-run, runtime headers"
-    mkdir -p "$STAGE/bin" "$STAGE/scripts" "$STAGE/gelb/backends"
+    log "Wrappers, gelb-run, gelb-shell-setup, runtime headers"
+    mkdir -p "$STAGE/bin" "$STAGE/scripts" "$STAGE/gelb/scripts" "$STAGE/gelb/backends"
     rm -f "$STAGE"/bin/nc-config "$STAGE"/bin/h5*        # leftovers of the library builds
     install -m 755 "$SCRIPT_DIR"/wrappers/* "$STAGE/bin/"
+    # scripts/gelb-run is the shim the wrapper calls; the runner itself is
+    # the package's gelb/scripts/gelb-run, which the shim execs.
     install -m 755 "$REPO_ROOT/scripts/gelb-run" "$STAGE/scripts/gelb-run"
+    install -m 755 "$REPO_ROOT/gelb/scripts/gelb-run" "$STAGE/gelb/scripts/gelb-run"
+    install -m 755 "$REPO_ROOT/scripts/gelb-shell-setup" "$STAGE/scripts/gelb-shell-setup"
     install -m 644 "$REPO_ROOT"/gelb/backends/*.hpp "$STAGE/gelb/backends/"
 
     log "Highway headers + the four support sources gelb-run compiles"

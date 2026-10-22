@@ -269,7 +269,7 @@ Running it
 
 .. code-block:: bash
 
-    ./scripts/gelb-run -n 100000 -w 1000 \
+    gelb-run -n 100000 -w 1000 \
         examples/lbm/2d/reduced_gravity_2d_sw_d2q9.gelb
 
 In VS Code (:ref:`working-in-vscode`), set *Time steps* to 100000 and
