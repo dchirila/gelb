@@ -51,7 +51,7 @@ are byte-identical to those.
 
 ```sh
 # snapshot figure data (Ra = 1e4, six convection cells):
-./scripts/gelb-run -b cpu_highway -n 400000 -w 100000 \
+gelb-run -b cpu_highway -n 400000 -w 100000 \
     examples/softwarex-2026-paper/rayleigh_benard_2d_mrt.gelb
 # critical-Rayleigh bracketing:
 uv run python scripts/find_ra_critical.py --backend cpu
@@ -74,9 +74,9 @@ physics rationale (atmospheric vs. oceanic wake, Reynolds numbers).
 | `gen_flow_past_madeira.py` | regenerates the Madeira program from ETOPO 2022 bathymetry |
 
 ```sh
-./scripts/gelb-run -b cpu_highway -n 200000 -w 10000 \
+gelb-run -b cpu_highway -n 200000 -w 10000 \
     examples/softwarex-2026-paper/flow_past_cylinder_2d_bgk_zouhe.gelb
-./scripts/gelb-run -b cpu_highway -n 250000 -w 10000 \
+gelb-run -b cpu_highway -n 250000 -w 10000 \
     examples/softwarex-2026-paper/flow_past_madeira_2d_bgk_zouhe.gelb
 ```
 
