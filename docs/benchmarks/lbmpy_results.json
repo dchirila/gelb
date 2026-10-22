@@ -1,0 +1,133 @@
+{
+  "schema_version": 1,
+  "case": {
+    "label": "lid_cavity_2d",
+    "domain_size": 512,
+    "num_steps": 5000,
+    "tau": 0.689,
+    "u_lid": 0.1,
+    "warmup_steps": 100
+  },
+  "results": {
+    "lbmpy_cpu_openmp": {
+      "mlups_samples": [
+        3981.6,
+        4144.8,
+        4293.8
+      ],
+      "median": 4144.8,
+      "machine": "zen4-7945hx-16c",
+      "commit_sha": "051a3e6",
+      "timestamp": "2026-10-22T22:19:28Z",
+      "lbmpy_version": "1.4",
+      "pystencils_version": "1.4",
+      "cpu_openmp": true,
+      "omp_num_threads": "16"
+    },
+    "lbmpy_tgv_cpu_openmp": {
+      "case": "tgv_periodic",
+      "domain_size": 512,
+      "num_steps": 5000,
+      "tau": 0.689,
+      "amp": 0.05,
+      "mlups_samples": [
+        2234.8,
+        1983.0,
+        1972.1
+      ],
+      "median": 1983.0,
+      "machine": "zen4-7945hx-16c",
+      "commit_sha": "051a3e6",
+      "timestamp": "2026-10-22T22:19:28Z",
+      "lbmpy_version": "1.4",
+      "pystencils_version": "1.4",
+      "cpu_openmp": true,
+      "omp_num_threads": "16"
+    },
+    "gelb_cpu_highway": {
+      "ldc_2d_N512": {
+        "mlups_samples": [
+          3269.6,
+          3322.9,
+          3328.4
+        ],
+        "median": 3322.9,
+        "gelb_file": "examples/lbm/2d/lid_driven_cavity_2d_bgk.gelb",
+        "defines": {
+          "N": "512"
+        },
+        "num_steps": 5000,
+        "machine": "zen4-7945hx-16c",
+        "commit_sha": "051a3e6",
+        "timestamp": "2026-10-22T22:19:28Z",
+        "omp_num_threads": "16"
+      },
+      "tgv_2d_N512": {
+        "mlups_samples": [
+          3688.5,
+          3669.3,
+          3651.2
+        ],
+        "median": 3669.3,
+        "gelb_file": "examples/lbm/2d/taylor_green_vortex_2d_bgk.gelb",
+        "defines": {
+          "N": "512",
+          "NU": "0.063"
+        },
+        "num_steps": 5000,
+        "machine": "zen4-7945hx-16c",
+        "commit_sha": "051a3e6",
+        "timestamp": "2026-10-22T22:19:28Z",
+        "omp_num_threads": "16"
+      }
+    }
+  },
+  "table": {
+    "measured": "2026-10-23",
+    "description": "GeLB/lbmpy ratio of median compute MLUPS (values above 1: GeLB faster); 5000 time steps, 3 samples, OMP_NUM_THREADS=16 OMP_PROC_BIND=close OMP_PLACES=cores, g++ -O3 -march=native; lbmpy 1.4, pystencils 1.4, Python 3.12.13 in the lbmpy venv; the generated code of the measured tree is byte-identical to this commit's.",
+    "rows": [
+      {
+        "problem": "Taylor-Green vortex 2D (periodic)",
+        "gelb_file": "examples/lbm/2d/taylor_green_vortex_2d_bgk.gelb",
+        "sizes": {
+          "128": {
+            "gelb_mlups": 1924.8,
+            "lbmpy_mlups": 1617.7,
+            "ratio": 1.19
+          },
+          "256": {
+            "gelb_mlups": 3704.4,
+            "lbmpy_mlups": 2105.4,
+            "ratio": 1.76
+          },
+          "512": {
+            "gelb_mlups": 3669.3,
+            "lbmpy_mlups": 1983.0,
+            "ratio": 1.85
+          }
+        }
+      },
+      {
+        "problem": "Lid-driven cavity 2D (walls)",
+        "gelb_file": "examples/lbm/2d/lid_driven_cavity_2d_bgk.gelb",
+        "sizes": {
+          "128": {
+            "gelb_mlups": 1059.4,
+            "lbmpy_mlups": 1185.3,
+            "ratio": 0.89
+          },
+          "256": {
+            "gelb_mlups": 2487.9,
+            "lbmpy_mlups": 3073.7,
+            "ratio": 0.81
+          },
+          "512": {
+            "gelb_mlups": 3322.9,
+            "lbmpy_mlups": 4144.8,
+            "ratio": 0.8
+          }
+        }
+      }
+    ]
+  }
+}
