@@ -23,6 +23,15 @@ Two Google Colab notebooks install GeLB 1.0.0 and run a complete simulation, wit
 - [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dchirila/gelb/blob/main/colab/gelb_gpu_3d.ipynb)
   3-D Rayleigh–Bénard convection on a free T4 GPU runtime, coupled D3Q19 and D3Q7 lattices with MRT collision (a few minutes).
 
+Three more notebooks reproduce the simulations of the SoftwareX paper's Section 3 ("Illustrative examples") with the programs in [examples/softwarex-2026-paper/](examples/softwarex-2026-paper/):
+
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dchirila/gelb/blob/main/colab/paper_s3_1_convergence.ipynb)
+  §3.1, grid convergence of the Taylor–Green vortex (BGK and MRT) and Poiseuille flow, against the paper's values (CPU, 5–10 minutes).
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dchirila/gelb/blob/main/colab/paper_s3_2_rayleigh_benard.ipynb)
+  §3.2, Rayleigh–Bénard convection at Ra = 10⁴, MRT and BGK (CPU, 3–6 minutes).
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dchirila/gelb/blob/main/colab/paper_s3_3_karman_streets.ipynb)
+  §3.3, Kármán vortex streets behind a cylinder and behind Madeira (T4 GPU, 15–20 minutes).
+
 ## Features
 
 - **Easy to learn**: Intuitive syntax designed for LBM researchers and practitioners
