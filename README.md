@@ -1,6 +1,7 @@
 ![GitHub all releases](https://img.shields.io/github/downloads/dchirila/gelb/total?logo=GitHub&style=flat-square)
 [![Website](https://img.shields.io/website?logo=Read%20The%20Docs&style=flat-square&url=https%3A%2F%2Fgelb-lang.org)](https://gelb-lang.org)
 [![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-d97706?style=flat-square)](./LICENSE)
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.23592922-1682d4?style=flat-square)](https://doi.org/10.5281/zenodo.23592922)
 
 <p align="center">
     <img
@@ -321,10 +322,16 @@ Detailed priorities are tracked in the project's GitHub issues.
 
 ## Using GeLB in Your Work
 
-If you use GeLB for your research, please cite:
-```
-[Paper citation to be added upon publication]
-```
+If you use GeLB for your research, please cite the software release:
+
+> Chirila, D.-B. and Lohmann, G. (2026). *GeLB: A Domain-Specific
+> Language and Compiler for Lattice Boltzmann Simulations* (version
+> 1.0.0) [Software]. Zenodo. https://doi.org/10.5281/zenodo.23592922
+
+The paper describing GeLB has been submitted to *SoftwareX*; its
+citation will be added here once it is published. `CITATION.cff` holds
+the same information in machine-readable form (GitHub's "Cite this
+repository" button).
 
 We'd love to hear about your use cases and feature requests!
 

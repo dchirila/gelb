@@ -5,12 +5,20 @@ type: software
 version: "1.0.0"
 date-released: "2026-10-23"
 license: MPL-2.0
+doi: "10.5281/zenodo.23592922"
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.23592922"
+    description: "Zenodo archive of release 1.0.0"
 repository-code: "https://github.com/dchirila/gelb"
 url: "https://github.com/dchirila/gelb"
 authors:
   - family-names: Chirila
     given-names: Dragoș B.
     orcid: "https://orcid.org/0000-0002-6394-4688"
+  - family-names: Lohmann
+    given-names: Gerrit
+    orcid: "https://orcid.org/0000-0003-2089-733X"
 keywords:
   - lattice-boltzmann
   - domain-specific-language
