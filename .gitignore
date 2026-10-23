@@ -43,8 +43,8 @@ results_for_phd_thesis__Nov_2017/
 # Other reference PDFs (books I bought, etc.)
 refs/
 
-# Release manual PDFs. They are generated from docs/ and attached to
-# releases, not tracked during normal development.
+# Local builds of the manual PDFs. The release copies are committed
+# under docs/pdf/.
 /GeLB_User_Tutorial.pdf
 /GeLB_Developer_Manual.pdf
 .DS_Store

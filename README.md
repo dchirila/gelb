@@ -330,9 +330,12 @@ We'd love to hear about your use cases and feature requests!
 
 ## Release Manual PDFs
 
-The user tutorial and the developer manual PDFs are generated release
-artifacts, not tracked source files. To regenerate them from a source
-checkout:
+The user tutorial and the developer manual of this release are in the
+repository as PDFs:
+[docs/pdf/GeLB_User_Tutorial.pdf](docs/pdf/GeLB_User_Tutorial.pdf) and
+[docs/pdf/GeLB_Developer_Manual.pdf](docs/pdf/GeLB_Developer_Manual.pdf).
+They are built from the Sphinx sources in `docs/` and rebuilt for every
+release. To build them yourself from a source checkout:
 
 ```bash
 uv run python scripts/build_manual_pdfs.py --manual user
