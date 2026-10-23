@@ -62,9 +62,9 @@ compiler as shipped.
   U = 0.05: relative L2 of the centreline profiles 0.5 % (u) and 2.4 %
   (v) at Re = 100, 1.5 % and 2.2 % at Re = 1000, for BGK, MRT and the
   incompressible model alike.
-- The cavity examples report the prescribed density and velocity on
-  their wall and lid cells; the fluid gauge sums populations only where
-  the fluid is.
+- The cavity examples and the Poiseuille MRT example report the
+  prescribed density and velocity on their wall and lid cells; the fluid
+  gauge sums populations only where the fluid is.
 - The D3Q19 MRT examples (Taylor–Green, Poiseuille, Rayleigh–Bénard in
   3-D) use the orthogonal moment matrix: three ghost-moment rows had
   sign errors that made the transform non-orthogonal and the runs

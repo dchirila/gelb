@@ -187,10 +187,17 @@ gauge Hydro -> (real rho, real ux, real uy) {
     {rho, ux, uy} = Macro(f.in[x, y | :]);
 }
 
+// Display the prescribed wall density and velocity.
+gauge BoundaryHydro -> (real rho, real ux, real uy) {
+    rho = 1.0;
+    ux = 0.0;
+    uy = 0.0;
+}
+
 node_classes {
     node_class FLUID(InitFluid, MRTCollStream, Hydro);
-    node_class WALL_BOT(InitFluid, BounceBackBot, Hydro);
-    node_class WALL_TOP(InitFluid, BounceBackTop, Hydro);
+    node_class WALL_BOT(InitFluid, BounceBackBot, BoundaryHydro);
+    node_class WALL_TOP(InitFluid, BounceBackTop, BoundaryHydro);
 }
 
 geometry {
