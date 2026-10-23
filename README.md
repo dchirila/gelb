@@ -14,6 +14,15 @@
 
 GeLB is a domain-specific programming language (DSL) and compiler framework for creating high-performance numerical simulations based on the Lattice Boltzmann Method (LBM) and finite differences (FD).
 
+## Try it in the browser
+
+Two Google Colab notebooks install GeLB 1.0.0 and run a complete simulation, with nothing to install locally:
+
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dchirila/gelb/blob/main/colab/gelb_intro_2d.ipynb)
+  2-D Taylor–Green vortex on a free CPU runtime, checked against the analytical energy decay (about 2 minutes).
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dchirila/gelb/blob/main/colab/gelb_gpu_3d.ipynb)
+  3-D Rayleigh–Bénard convection on a free T4 GPU runtime, coupled D3Q19 and D3Q7 lattices with MRT collision (a few minutes).
+
 ## Features
 
 - **Easy to learn**: Intuitive syntax designed for LBM researchers and practitioners
