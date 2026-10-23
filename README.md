@@ -365,7 +365,7 @@ always with a human at the helm.
 ### About this history
 
 The commits up to 8 August 2025 are the author's original development
-history, kept unchanged. The commits after that are a condensed timeline:
+history, kept unchanged. The commits after that, up to 18 October 2026, are a condensed timeline:
 each one gathers the work on one area into a single milestone, dated near
 the time that work was done, with its files in their released form. They
 show how GeLB grew rather than record every change, so bisecting or

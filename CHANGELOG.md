@@ -4,6 +4,120 @@ All notable changes to GeLB are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] — 2026-10-23
+
+The release that accompanies the SoftwareX paper. Since 0.9.0 the
+language, the numerics and the backends were settled, and a user
+tutorial was written and reviewed chapter by chapter against the
+compiler as shipped.
+
+### Language
+
+- **Multi-lattice programs.** A program declares as many lattices as it
+  needs; the thermal examples couple a D2Q9 fluid with a D2Q5
+  temperature lattice.
+- **Functions and gauges with named outputs**, `function F(real z) ->
+  (real y)` and `gauge G -> (real rho, real ux)`, with destructuring
+  assignment from multi-output functions.
+- **Predicate paints**, `nodes[where condition] = CLASS;`, and reserved
+  words with "not in this version" diagnostics.
+- **`bounce_back_dfs(f, x, y, {EX, EY})`**: a bounce-back wall in one
+  line. Entry i is the population of the neighbour in direction i that
+  points back at the cell, so the wall sends every arriving population
+  back along its link (full-way bounce-back, the wall midway between the
+  nodes). Allowed on the grid edge, where a link pointing outside yields
+  the cell's own population.
+- **`border()` inspects every neighbour**: the cells one step away along
+  an axis or a diagonal (8 in 2D, 26 in 3D), wrapping across periodic
+  seams. A wall layer painted by one `border()` rule now covers every
+  link a fluid cell can follow.
+
+### Numerics
+
+- **A numerical-semantics contract** (user manual, *Numerical
+  semantics*): what the three backends promise, the same answer to the
+  last bit where the contract says so, documented as unspecified
+  elsewhere. Constant folding is defined, including transcendentals of
+  constants; division by zero and undefined reads are compile errors.
+- **No population is ever read undefined**: a cross-node-class coverage
+  check proves at compile time that every distribution function a block
+  reads was written at that cell in that phase.
+- Periodic reads more than one cell away wrap their index; ghost cells
+  are refreshed before gauges that read neighbours; the wall check runs
+  on the resolved class map on every compilation path.
+
+### Backends
+
+- `cpu_fortran_serial`: single-threaded by design, the source-level
+  reference and the bitwise reference for the other two.
+- `cpu_highway` (default): Google Highway portable SIMD, OpenMP across
+  cores, cell-block tiling.
+- `gpu_cuda_cpp`: CUDA C++ with device-side node-class maps and CUDA
+  graph replay.
+- Retired: `cpu_cpp_vcl`, OpenMP in the Fortran backend, CUDA Fortran.
+
+### Validation shipped with the examples
+
+- Lid-driven cavity against Ghia, Ghia & Shin (1982) at N = 129,
+  U = 0.05: relative L2 of the centreline profiles 0.5 % (u) and 2.4 %
+  (v) at Re = 100, 1.5 % and 2.2 % at Re = 1000, for BGK, MRT and the
+  incompressible model alike.
+- The cavity examples report the prescribed density and velocity on
+  their wall and lid cells; the fluid gauge sums populations only where
+  the fluid is.
+- The D3Q19 MRT examples (Taylor–Green, Poiseuille, Rayleigh–Bénard in
+  3-D) use the orthogonal moment matrix: three ghost-moment rows had
+  sign errors that made the transform non-orthogonal and the runs
+  unstable. The Sukop Zou–He Poiseuille example collides its Zou–He
+  cells and bounces back the corner links; its profile matches the
+  parabola to 8e-4.
+- Poiseuille (MRT, Strang-split forcing) at second order; Couette BGK
+  exact to round-off; Taylor–Green decay at second order; the critical
+  Rayleigh number of Rayleigh–Bénard convection within 0.02 % of linear
+  stability theory.
+
+### Tutorial and tooling
+
+- **The GeLB User Tutorial**, 18 chapters from installation to a
+  reduced-gravity ocean model, every example run on the three backends,
+  with a boundary-condition cookbook, a validation chapter and a
+  numerical-semantics chapter.
+- **The commands are `gelbc`, `gelb-run` and `gelb-view`** wherever GeLB
+  is installed: `gelb-run` is an installed command of the package, and
+  the bootstrap puts the checkout's commands on PATH with one line in
+  the shell's startup file (`scripts/gelb-shell-setup`: zsh, bash,
+  tcsh/csh, fish), so the tutorial's commands work as written.
+- `gelb-run`: `-D NAME=VALUE`, `--strict-fp`, `-k` to keep the build,
+  `--view` to open the result.
+- **A developer manual** (`docs/dev/`): the repository map, the
+  compilation pipeline pass by pass, the AST and its visitors, the
+  three backends, checklists for adding an intrinsic, a validation pass
+  or a backend, the test suites, and the design decisions a contributor
+  must not undo.
+- `docs/benchmarks/lbmpy_reproduction.md` and
+  `docs/benchmarks/lbmpy_results.json`: how the paper's lbmpy table is
+  measured and the numbers measured on 2026-10-23, with the scripts that
+  reproduce them.
+- Release 1.0 is installed from a source checkout (git clone and the
+  bootstrap); packaged installers for macOS and Ubuntu follow in 1.0.1.
+- VS Code extension 0.6.3: Run as a task the extension owns, with a
+  "GeLB Run" output channel; diagnostics as you type; geometry preview;
+  highlighting and snippets for every intrinsic.
+
+### Known limitations
+
+- The forced periodic Kármán example in the tutorial is a demonstration
+  of obstacle geometry; its vortex street appears only with the wider,
+  harder-driven settings the chapter gives.
+- Couette with MRT collision converges at about order 1.5, the Zou–He
+  variant at order 1; the cause is open.
+- The TRT Poiseuille example counts its body force twice and sits 9.6 %
+  above the parabola.
+- Some legal programs still fail in the native compiler rather than in
+  `gelbc` (Boolean comparisons on the Fortran backend, an apostrophe in
+  a description string, a local name reused with another type in a
+  second block).
+
 ## [0.9.0] — 2026-04-20
 
 The first public release of GeLB.

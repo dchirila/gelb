@@ -1,4 +1,4 @@
-# GeLB 0.9.0 on your Mac: start here
+# GeLB 1.0.0 on your Mac: start here
 
 This folder is a complete GeLB installation for macOS on Apple Silicon:
 the compiler (`gelbc`), the compile-and-run wrapper (`gelb-run`), the
@@ -17,7 +17,7 @@ release 1.0 is installed from a source checkout (`git clone`, then
 `scripts/gelb_bootstrap.sh`, which puts the same three commands on your
 PATH), and the rest of this page describes the package.
 
-Double-click `GeLB-0.9.0.pkg` and follow the installer. It needs no
+Double-click `GeLB-1.0.0.pkg` and follow the installer. It needs no
 administrator password: everything goes into `~/gelb`. If macOS says
 the package is from an unidentified developer, right-click (or
 Control-click) it, choose *Open*, and confirm; the package is not
@@ -41,7 +41,7 @@ whether to install the VS Code extension. The installer
 
 From Terminal instead (configures your login shell):
 
-    installer -pkg GeLB-0.9.0.pkg -target CurrentUserHomeDirectory
+    installer -pkg GeLB-1.0.0.pkg -target CurrentUserHomeDirectory
 
 `installer -pkg ... -showChoicesXML` lists the choices and
 `-applyChoiceChangesXML file.xml` changes them.
