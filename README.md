@@ -290,12 +290,10 @@ The following are reserved and cannot be used as identifiers:
 
 ## Documentation
 
-For comprehensive documentation, visit [gelb-lang.org](https://gelb-lang.org).
-
-Key documentation:
-- [Language Tutorial](https://gelb-lang.org/tutorial)
-- [Language Reference](https://gelb-lang.org/reference)
-- [API Documentation](https://gelb-lang.org/api)
+- [GeLB User Tutorial](docs/pdf/GeLB_User_Tutorial.pdf) (PDF): from installation to a reduced-gravity ocean model, with a boundary-condition cookbook, a validation chapter and the numerical-semantics contract; the sources are in [docs/user/](docs/user/).
+- [Language design decisions](docs/LANGUAGE_DESIGN.md): why the language works the way it does.
+- [Examples](examples/) and their [analytical validation](examples/VALIDATION.md).
+- [Developer manual](docs/pdf/GeLB_Developer_Manual.pdf) (PDF): the compiler's structure, for contributors; the sources are in [docs/dev/](docs/dev/).
 
 ## Contributing
 
