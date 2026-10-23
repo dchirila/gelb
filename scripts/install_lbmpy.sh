@@ -13,14 +13,14 @@
 # The venv is built from a uv-managed Python, which ships the headers
 # that pystencils' run-time kernel compilation needs.
 #
-# The packages are installed unpinned.  By default the install prefix
-# is wiped and recreated, so the venv holds exactly one version of
-# each package; the benchmark scripts record the lbmpy and pystencils
-# versions they ran with in their results file.
+# The packages are installed unpinned; the benchmark scripts record the
+# lbmpy and pystencils versions they ran with in their results file.
+# The script never deletes anything: an existing prefix is an error
+# unless --keep asks to install into it.
 #
 # Usage:
-#   ./scripts/install_lbmpy.sh                  # default: wipe + install
-#   ./scripts/install_lbmpy.sh --keep           # install on top of existing
+#   ./scripts/install_lbmpy.sh                  # into $HOME/Soft/lbmpy (must not exist)
+#   ./scripts/install_lbmpy.sh --keep           # into an existing prefix
 #   ./scripts/install_lbmpy.sh --prefix /opt/lbmpy
 #   ./scripts/install_lbmpy.sh --python 3.13
 #
@@ -48,8 +48,9 @@ Options:
   --prefix PATH   Install dir (default: \$HOME/Soft/lbmpy or
                   \$LBMPY_PREFIX env var if set)
   --python VER    Python version to provision via uv (default: 3.12)
-  --keep          Skip the rm -rf if PATH exists; install on top.
-                  Useful to refresh package versions without rebuild.
+  --keep          Install into PATH although it already exists (the
+                  packages are refreshed in place). Without it an
+                  existing PATH is an error: nothing is ever deleted.
   -h, --help      Show this help.
 
 Requires: uv (https://docs.astral.sh/uv/)
@@ -85,9 +86,8 @@ if ! command -v uv >/dev/null 2>&1; then
     exit 1
 fi
 
-# Refuse a few obviously wrong prefix values: the wipe path below
-# runs rm -rf on $PREFIX, so a mistyped --prefix must not be able to
-# remove the home directory.
+# Refuse a few obviously wrong prefix values, so that --keep cannot
+# install a venv into the home directory itself.
 case "$PREFIX" in
     ""|/|/home|/home/*/|"$HOME"|"$HOME/")
         echo "Error: refusing to operate on prefix='$PREFIX'." >&2
@@ -106,7 +106,7 @@ echo "==> Platform: $PLATFORM, target prefix: $PREFIX"
 
 VENV_DIR="$PREFIX/venv"
 
-# --- Wipe + recreate ----------------------------------------------
+# --- Prefix ---------------------------------------------------------
 
 if [ -e "$PREFIX" ] && [ ! -d "$PREFIX" ]; then
     echo "Error: $PREFIX exists and is not a directory." >&2
@@ -117,8 +117,10 @@ if [ -d "$PREFIX" ]; then
     if [ "$KEEP_EXISTING" -eq 1 ]; then
         echo "==> --keep: leaving existing $PREFIX in place"
     else
-        echo "==> Removing existing $PREFIX..."
-        rm -rf -- "$PREFIX"
+        echo "Error: $PREFIX already exists; nothing was changed." >&2
+        echo "       Use --keep to install into it, or --prefix DIR (or LBMPY_PREFIX)" >&2
+        echo "       for a fresh location. This script never deletes a directory." >&2
+        exit 1
     fi
 fi
 
@@ -129,8 +131,8 @@ mkdir -p "$PREFIX"
 echo "==> Ensuring Python $PYTHON_VERSION is available (via uv)..."
 uv python install "$PYTHON_VERSION"
 
-# `uv venv` will overwrite an existing venv directory, so this
-# works under both the wipe and --keep paths.
+# `uv venv` replaces an existing venv directory, which is what --keep
+# means: the packages are refreshed in place.
 echo "==> Creating venv at $VENV_DIR..."
 uv venv --python "$PYTHON_VERSION" "$VENV_DIR"
 

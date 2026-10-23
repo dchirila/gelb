@@ -60,7 +60,8 @@
         "machine": "zen4-7945hx-16c",
         "commit_sha": "051a3e6",
         "timestamp": "2026-10-22T22:19:28Z",
-        "omp_num_threads": "16"
+        "omp_num_threads": "16",
+        "gelb_flags": "-F"
       },
       "tgv_2d_N512": {
         "mlups_samples": [
@@ -78,13 +79,14 @@
         "machine": "zen4-7945hx-16c",
         "commit_sha": "051a3e6",
         "timestamp": "2026-10-22T22:19:28Z",
-        "omp_num_threads": "16"
+        "omp_num_threads": "16",
+        "gelb_flags": "-F"
       }
     }
   },
   "table": {
     "measured": "2026-10-23",
-    "description": "GeLB/lbmpy ratio of median compute MLUPS (values above 1: GeLB faster); 5000 time steps, 3 samples, OMP_NUM_THREADS=16 OMP_PROC_BIND=close OMP_PLACES=cores, g++ -O3 -march=native; lbmpy 1.4, pystencils 1.4, Python 3.12.13 in the lbmpy venv; the generated code of the measured tree is byte-identical to this commit's.",
+    "description": "GeLB/lbmpy ratio of median compute MLUPS (values above 1: GeLB faster); 5000 time steps, 3 samples, OMP_NUM_THREADS=16 OMP_PROC_BIND=close OMP_PLACES=cores, both sides with fast-math (gelb-run -F; pystencils -Ofast), g++ -march=native; lbmpy 1.4, pystencils 1.4, Python 3.12.13 in the lbmpy venv; the generated code of the measured tree is byte-identical to this commit's.",
     "rows": [
       {
         "problem": "Taylor-Green vortex 2D (periodic)",
@@ -129,5 +131,9 @@
         }
       }
     ]
+  },
+  "builds": {
+    "gelb": "gelb-run -b cpu_highway -F (fast-math: -O3 -march=native -ffast-math)",
+    "lbmpy": "pystencils default: -Ofast -DNDEBUG -fPIC -march=native -fopenmp"
   }
 }

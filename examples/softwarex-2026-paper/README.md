@@ -24,12 +24,13 @@ All commands below are run from the repo root.
 uv run python scripts/validate_analytical.py \
     --cases taylor_green_bgk taylor_green_mrt poiseuille \
     --resolutions 16 32 64 128 256
-# lbmpy table: the lbmpy rows run with the interpreter of the venv that
-# scripts/install_lbmpy.sh creates, the GeLB rows with the backend harness
-# (conditions and order of the commands: docs/benchmarks/lbmpy_reproduction.md).
-~/Soft/lbmpy/venv/bin/python scripts/benchmark_lbmpy_tgv.py
-~/Soft/lbmpy/venv/bin/python scripts/benchmark_lbmpy_ldc.py
-uv run python scripts/benchmark_backends.py --backend cpu_highway
+# lbmpy table: see docs/benchmarks/lbmpy_reproduction.md for the full recipe
+# (three grid sizes, fast-math on both sides); in short:
+scripts/install_lbmpy.sh --prefix <dir>
+<dir>/venv/bin/python scripts/benchmark_lbmpy_tgv.py --domain-size 512
+<dir>/venv/bin/python scripts/benchmark_lbmpy_ldc.py --domain-size 512
+gelb-run -b cpu_highway -F -n 5000 -w 5000 -D N=512 -D NU=0.063 taylor_green_vortex_2d_bgk.gelb
+gelb-run -b cpu_highway -F -n 5000 -w 5000 -D N=512 lid_driven_cavity_2d_bgk.gelb
 ```
 
 Note: the harness scripts above resolve the canonical paths under
