@@ -1,0 +1,28 @@
+# Dependency updates as one grouped pull request per ecosystem and month,
+# so that CI (release-health.yml) checks each batch before it is merged.
+# Security fixes for known advisories are opened as soon as they appear.
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    groups:
+      python:
+        patterns: ["*"]
+
+  - package-ecosystem: "npm"
+    directory: "/vscode-gelb"
+    schedule:
+      interval: "monthly"
+    groups:
+      vscode-extension:
+        patterns: ["*"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    groups:
+      actions:
+        patterns: ["*"]
