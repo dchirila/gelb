@@ -23,6 +23,9 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      # @types/vscode must not be newer than engines.vscode in package.json
+      # (vsce refuses to package otherwise); it moves when that minimum does.
+      - dependency-name: "@types/vscode"
     groups:
       vscode-extension:
         patterns: ["*"]

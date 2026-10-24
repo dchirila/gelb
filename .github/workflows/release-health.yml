@@ -79,3 +79,6 @@ jobs:
 
       - name: Run the extension's tests
         run: npm test
+
+      - name: Package the extension
+        run: npx --yes @vscode/vsce@4.0.0 package --no-dependencies -o "$RUNNER_TEMP/gelb.vsix"
