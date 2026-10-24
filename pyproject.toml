@@ -17,10 +17,10 @@ dependencies = [
     "click>=8.1.7",
     "colorama>=0.4.6",
     "Jinja2>=3.1.4",
-    "numpy>=1.26.4",
+    "numpy>=2.4.6",
     "sympy>=1.12",
-    "matplotlib>=3.8.0",
-    "netcdf4>=1.6.5",
+    "matplotlib>=3.11.2",
+    "netcdf4>=1.7.5",
     "scipy>=1.10",
 ]
 dynamic = ["version"]
@@ -35,15 +35,15 @@ docs = [
     "sphinx-copybutton>=0.5.2",
 ]
 dev = [
-    "pytest>=9.0.3",
+    "pytest>=9.1.1",
     "setuptools>=70.0.0",
-    "packaging>=24.0",
-    "pluggy>=1.5.0",
-    "iniconfig>=2.0.0",
+    "packaging>=26.3",
+    "pluggy>=1.7.0",
+    "iniconfig>=2.3.1",
     "install-jdk>=1.1.0",
     "MarkupSafe>=2.1.5",
     "docutils>=0.21.2",
-    "pygments>=2.19.1",
+    "pygments>=2.21.0",
     "watchdog>=6.0.0",
 ]
 
@@ -71,15 +71,15 @@ version = { attr = "gelb.__version__" }
 
 [dependency-groups]
 dev = [
-    "pytest>=9.0.3",
+    "pytest>=9.1.1",
     "setuptools>=70.0.0",
-    "packaging>=24.0",
-    "pluggy>=1.5.0",
-    "iniconfig>=2.0.0",
+    "packaging>=26.3",
+    "pluggy>=1.7.0",
+    "iniconfig>=2.3.1",
     "install-jdk>=1.1.0",
     "MarkupSafe>=2.1.5",
     "docutils>=0.21.2",
-    "pygments>=2.19.1",
+    "pygments>=2.21.0",
     "watchdog>=6.0.0",
     "sphinx>=7.4.7",
     "rich>=15.0.0",
