@@ -210,8 +210,9 @@ See [vscode-gelb/README.md](vscode-gelb/README.md) for more details.
 
 ## Example GeLB Program
 
-```gelb
-simulation_description("2D Lid-driven cavity flow");
+<!-- GitHub has no highlighter for GeLB; Rust's colours its syntax closely. -->
+```rust
+simulation_description("2D Taylor-Green vortex (LBM-BGK, D2Q9)");
 
 global_constants {
     const int N = 64;
