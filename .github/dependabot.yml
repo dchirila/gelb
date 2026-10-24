@@ -1,12 +1,17 @@
 # Dependency updates as one grouped pull request per ecosystem and month,
 # so that CI (release-health.yml) checks each batch before it is merged.
 # Security fixes for known advisories are opened as soon as they appear.
+# Python updates move uv.lock only: the minimum versions in pyproject.toml
+# stay where they are, so users with older packages can still install
+# GeLB. The extension gets minor and patch updates; major versions
+# (TypeScript, mocha, the TextMate engine, ...) are upgraded by hand.
 version: 2
 updates:
   - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "monthly"
+    versioning-strategy: "lockfile-only"
     groups:
       python:
         patterns: ["*"]
@@ -15,9 +20,13 @@ updates:
     directory: "/vscode-gelb"
     schedule:
       interval: "monthly"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       vscode-extension:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: "github-actions"
     directory: "/"

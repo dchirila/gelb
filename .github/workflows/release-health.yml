@@ -53,3 +53,29 @@ jobs:
 
       - name: Build documentation with warnings as errors
         run: uv run sphinx-build -b html -W --keep-going docs /tmp/gelb-docs
+
+  vscode-extension:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vscode-gelb
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: vscode-gelb/package-lock.json
+
+      - name: Install the extension's dependencies
+        run: npm ci
+
+      - name: Compile the extension
+        run: npm run compile
+
+      - name: Run the extension's tests
+        run: npm test
