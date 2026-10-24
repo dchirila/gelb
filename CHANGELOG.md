@@ -4,6 +4,18 @@ All notable changes to GeLB are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Python 3.11 or newer is required** (was 3.10). Python 3.10 reaches
+  its end of life in October 2026, and the fixed releases of Pillow, which
+  matplotlib uses, no longer support it.
+- Dependency updates for published security advisories: Pillow 13.0.0,
+  certifi 2026.10.23 and setuptools 84.2.1 in `uv.lock`; the VS Code
+  extension's test tooling pins serialize-javascript 7.1.3 or newer.
+  GeLB itself never opens untrusted image files.
+
 ## [1.0.0] — 2026-10-23
 
 The release that accompanies the SoftwareX paper. Since 0.9.0 the

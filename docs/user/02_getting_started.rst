@@ -23,7 +23,7 @@ checkout, follow in release 1.0.1.
 **Hard requirements** (the bootstrap script refuses to run without
 these):
 
-- Python ≥ 3.10
+- Python ≥ 3.11
 - ``git``
 - ``curl`` (used to fetch ``uv``, which manages the Python environment)
 - An internet connection for the initial dependency download

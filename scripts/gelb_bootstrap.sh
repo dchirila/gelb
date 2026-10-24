@@ -3,7 +3,7 @@
 # Bootstrap script for GeLB development environment
 # Removes existing venv, creates a new one, and installs requirements using uv.
 #
-# Checks system prerequisites (Python >= 3.10, git, curl, gcc, gfortran) and
+# Checks system prerequisites (Python >= 3.11, git, curl, gcc, gfortran) and
 # fails fast with actionable hints when anything is missing. Java is NOT
 # required at bootstrap time -- it's only needed by ./scripts/regenerate_antlr.sh
 # (and only when the ANTLR4 generated_code/ files are missing or out of date).
@@ -23,7 +23,7 @@ VENV_PATH="$ROOT_DIR/.venv"
 #
 # We treat git and curl as hard requirements (the script literally cannot
 # run without them -- git for the project, curl to fetch the uv installer
-# if uv itself is missing). Python >= 3.10 is also hard (matches the
+# if uv itself is missing). Python >= 3.11 is also hard (matches the
 # `requires-python` in pyproject.toml). gcc and gfortran are soft: missing
 # them doesn't break the bootstrap itself, but the user will hit cryptic
 # errors later when gelb-run tries to compile generated Fortran, so we
@@ -38,9 +38,9 @@ check_prereqs() {
     # Hard: curl (used below if uv needs to be installed)
     command -v curl >/dev/null 2>&1 || missing_hard+=("curl")
 
-    # Hard: python >= 3.10
+    # Hard: python >= 3.11
     if ! command -v python3 >/dev/null 2>&1; then
-        missing_hard+=("python3 (>= 3.10)")
+        missing_hard+=("python3 (>= 3.11)")
     else
         local pyver
         pyver=$(python3 -c 'import sys; print("{}.{}".format(*sys.version_info[:2]))' 2>/dev/null || echo "0.0")
@@ -48,8 +48,8 @@ check_prereqs() {
         local pymaj pymin
         pymaj=${pyver%%.*}
         pymin=${pyver#*.}
-        if (( pymaj < 3 || (pymaj == 3 && pymin < 10) )); then
-            missing_hard+=("python3 >= 3.10 (found $pyver)")
+        if (( pymaj < 3 || (pymaj == 3 && pymin < 11) )); then
+            missing_hard+=("python3 >= 3.11 (found $pyver)")
         fi
     fi
 

@@ -1,7 +1,7 @@
 # Bootstrap script for GeLB development environment
 # Removes existing venv, creates a new one, and installs requirements using uv.
 #
-# Checks system prerequisites (Python >= 3.10, git) and fails fast with
+# Checks system prerequisites (Python >= 3.11, git) and fails fast with
 # actionable hints when anything is missing. Java is NOT required at
 # bootstrap time -- it's only needed by .\scripts\regenerate_antlr.ps1
 # (and only when the ANTLR4 generated_code/ files are missing or out of date).
@@ -19,7 +19,7 @@ $venvPath = Join-Path $rootDir ".venv"
 # --- Prerequisite checks ---
 #
 # git is a hard requirement (the project itself is a git repo). Python
-# >= 3.10 is also hard (matches `requires-python` in pyproject.toml).
+# >= 3.11 is also hard (matches `requires-python` in pyproject.toml).
 # A C/Fortran toolchain is NOT checked here on Windows because the GeLB
 # CPU backend on Windows typically uses MinGW/MSYS2 or WSL -- which path
 # the user takes is up to them, and we don't want to second-guess it.
@@ -30,7 +30,7 @@ function Test-Prereqs {
     try { $null = Get-Command git -ErrorAction Stop }
     catch { $missingHard += "git" }
 
-    # Hard: python >= 3.10
+    # Hard: python >= 3.11
     $pythonCmd = $null
     foreach ($candidate in @("python3", "python", "py")) {
         try {
@@ -40,15 +40,15 @@ function Test-Prereqs {
         } catch { }
     }
     if (-not $pythonCmd) {
-        $missingHard += "python (>= 3.10)"
+        $missingHard += "python (>= 3.11)"
     } else {
         try {
             $pyver = & $pythonCmd -c "import sys; print('{}.{}'.format(*sys.version_info[:2]))" 2>$null
             $parts = $pyver -split '\.'
             $pymaj = [int]$parts[0]
             $pymin = [int]$parts[1]
-            if ($pymaj -lt 3 -or ($pymaj -eq 3 -and $pymin -lt 10)) {
-                $missingHard += "python >= 3.10 (found $pyver)"
+            if ($pymaj -lt 3 -or ($pymaj -eq 3 -and $pymin -lt 11)) {
+                $missingHard += "python >= 3.11 (found $pyver)"
             }
         } catch {
             $missingHard += "python (version check failed)"

@@ -95,7 +95,7 @@ Key design principles:
 
 ## Installation
 
-GeLB requires Python 3.10+. Release 1.0 is installed from a source
+GeLB requires Python 3.11+. Release 1.0 is installed from a source
 checkout (`git clone`, then the bootstrap script below); packaged
 installers for macOS and Ubuntu, which install the same three commands
 without a checkout, follow in release 1.0.1. The project uses standard
@@ -111,7 +111,7 @@ vendored Google Highway submodule. Use `git clone --recursive`, or run
 
 The bootstrap script checks for these and refuses to run if any are missing:
 
-- **Hard**: Python ≥ 3.10, `git`, `curl`, an internet connection
+- **Hard**: Python ≥ 3.11, `git`, `curl`, an internet connection
 - **Soft** (warns if missing, but you'll need them later): a C compiler
   (`gcc` on Linux, Xcode CLT on macOS, MSVC/MinGW on Windows), `gfortran`
   for the reference Fortran backend, and `g++` with OpenMP support for the
