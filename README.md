@@ -16,21 +16,20 @@ GeLB is a domain-specific programming language (DSL) and compiler framework for 
 
 ## Try it in the browser
 
-Two Google Colab notebooks install GeLB 1.0.0 and run a complete simulation, with nothing to install locally:
+These Google Colab notebooks install GeLB 1.0.0 and run complete simulations, with nothing to install locally. Click a picture or a badge to open one.
 
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dchirila/gelb/blob/main/colab/gelb_intro_2d.ipynb)
-  2-D Taylor–Green vortex on a free CPU runtime, checked against the analytical energy decay (about 2 minutes).
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dchirila/gelb/blob/main/colab/gelb_gpu_3d.ipynb)
-  3-D Rayleigh–Bénard convection on a free T4 GPU runtime, coupled D3Q19 and D3Q7 lattices with MRT collision (a few minutes).
+| Preview | Getting started |
+|:---:|:---|
+| <a href="https://colab.research.google.com/github/dchirila/gelb/blob/main/colab/gelb_intro_2d.ipynb"><img src="docs/figs/colab/colab_taylor_green.png" width="180" alt="Taylor–Green vortex velocity field"></a> | **Taylor–Green vortex, 2-D**<br>Write, compile and run a 70-line program; check it against the analytical energy decay.<br>CPU · about 2 min<br>[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dchirila/gelb/blob/main/colab/gelb_intro_2d.ipynb) |
+| <a href="https://colab.research.google.com/github/dchirila/gelb/blob/main/colab/gelb_gpu_3d.ipynb"><img src="docs/figs/colab/colab_rb_3d.png" width="180" alt="3-D Rayleigh–Bénard convection, temperature cross-section"></a> | **Rayleigh–Bénard convection, 3-D**<br>Coupled D3Q19 and D3Q7 lattices with MRT collision, compiled to CUDA.<br>T4 GPU · a few min<br>[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dchirila/gelb/blob/main/colab/gelb_gpu_3d.ipynb) |
 
-Three more notebooks reproduce the simulations of the SoftwareX paper's Section 3 ("Illustrative examples") with the programs in [examples/softwarex-2026-paper/](examples/softwarex-2026-paper/):
+The SoftwareX paper's Section 3 ("Illustrative examples"), run with the programs in [examples/softwarex-2026-paper/](examples/softwarex-2026-paper/):
 
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dchirila/gelb/blob/main/colab/paper_s3_1_convergence.ipynb)
-  §3.1, grid convergence of the Taylor–Green vortex (BGK and MRT) and Poiseuille flow, against the paper's values (CPU, 5–10 minutes).
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dchirila/gelb/blob/main/colab/paper_s3_2_rayleigh_benard.ipynb)
-  §3.2, Rayleigh–Bénard convection at Ra = 10⁴, MRT and BGK (CPU, 3–6 minutes).
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dchirila/gelb/blob/main/colab/paper_s3_3_karman_streets.ipynb)
-  §3.3, Kármán vortex streets behind a cylinder and behind Madeira (T4 GPU, 15–20 minutes).
+| Preview | Reproduce the paper |
+|:---:|:---|
+| <a href="https://colab.research.google.com/github/dchirila/gelb/blob/main/colab/paper_s3_1_convergence.ipynb"><img src="docs/figs/colab/colab_convergence.png" width="180" alt="Grid-convergence plot, second order"></a> | **§3.1 Grid convergence**<br>Taylor–Green (BGK, MRT) and Poiseuille flow, plotted with the paper's values.<br>CPU · 5–10 min<br>[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dchirila/gelb/blob/main/colab/paper_s3_1_convergence.ipynb) |
+| <a href="https://colab.research.google.com/github/dchirila/gelb/blob/main/colab/paper_s3_2_rayleigh_benard.ipynb"><img src="docs/figs/colab/colab_rb_2d.png" width="180" alt="2-D Rayleigh–Bénard convection rolls with streamlines"></a> | **§3.2 Rayleigh–Bénard, 2-D**<br>Convection at Ra = 10⁴ with the MRT and BGK programs.<br>CPU · 3–6 min<br>[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dchirila/gelb/blob/main/colab/paper_s3_2_rayleigh_benard.ipynb) |
+| <a href="https://colab.research.google.com/github/dchirila/gelb/blob/main/colab/paper_s3_3_karman_streets.ipynb"><img src="docs/figs/colab/colab_karman.png" width="180" alt="Kármán vortex streets behind a cylinder and behind Madeira"></a> | **§3.3 Kármán vortex streets**<br>Behind a cylinder (Re = 150) and behind Madeira (Re = 300).<br>T4 GPU · 15–20 min<br>[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dchirila/gelb/blob/main/colab/paper_s3_3_karman_streets.ipynb) |
 
 ## Features
 
