@@ -176,27 +176,40 @@ its backslashes.
 
 ## Installation
 
-### Quick Install
-Copy the `vscode-gelb/` directory to your VSCode extensions folder and restart VSCode:
-- **macOS / Linux**: `~/.vscode/extensions/`
-- **Windows**: `%USERPROFILE%\.vscode\extensions\`
+### From a source checkout
 
-For rapid iteration during development, use the helper script:
+From the repository root, with Node.js and npm installed:
+
 ```bash
 ./scripts/install-vscode-ext.sh
 ```
 
-### From VSIX Package
-1. Package the extension: `npm install -g vsce && vsce package`
-2. Open VS Code
-3. Go to Extensions view (Cmd+Shift+X or Ctrl+Shift+X)
-4. Click on the "..." menu and select "Install from VSIX..."
-5. Select the generated `.vsix` file
+The script builds the extension and copies what VS Code needs (without
+`node_modules`, `src/` and `test/`) into `~/.vscode/extensions` on macOS
+and Linux; `--extensions-dir DIR` targets another folder, `--check`
+compares the installed and the source versions. Reload VS Code afterwards
+(*Developer: Reload Window* in the Command Palette). On Windows, run
+`npm ci && npm run compile` in `vscode-gelb/` and copy the folder, without
+`node_modules`, into `%USERPROFILE%\.vscode\extensions\`.
 
-### Development Mode
-1. Navigate to `vscode-gelb/` and run `npm install`
-2. Open the folder in VS Code
-3. Press F5 to launch an Extension Development Host window with the extension loaded
+### From a VSIX package
+
+With Node.js 22 or newer (the packager needs it):
+
+```bash
+cd vscode-gelb && npm ci && npm run compile
+npx @vscode/vsce package --no-dependencies
+```
+
+writes `gelb-lang-<version>.vsix`. In VS Code, open the Extensions view
+(`Ctrl+Shift+X` / `Cmd+Shift+X`), choose *Install from VSIX...* from its
+`...` menu and pick the file. The macOS bundle installs the extension this
+way.
+
+### Development mode
+
+Run `npm ci` in `vscode-gelb/`, open that folder in VS Code and press F5:
+an Extension Development Host window starts with the extension loaded.
 
 ## Usage
 

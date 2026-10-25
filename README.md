@@ -179,34 +179,27 @@ The bootstrap script checks for these and refuses to run if any are missing:
 .\scripts\cleanup_repo.ps1
 ```
 
-### VSCode Extension
+### VS Code extension
 
-GeLB comes with a VSCode extension for enhanced development experience:
+From the repository root, with Node.js and npm installed:
 
-1. **Install the extension**:
-   ```bash
-   # Build the extension TypeScript (one-off)
-   (cd vscode-gelb && npm install && npm run compile)
+```bash
+./scripts/install-vscode-ext.sh
+```
 
-   # Copy extension to VSCode extensions directory
-   cp -r vscode-gelb ~/.vscode/extensions/gelb-lang.gelb-lang-0.5.0
+The script builds the extension and copies it into `~/.vscode/extensions`
+(macOS and Linux). Then reload VS Code (*Developer: Reload Window* in the
+Command Palette) and open the repository folder: the extension finds
+`gelbc`, `gelb-run` and `gelb-view` in the checkout by itself. On Windows,
+build it with `cd vscode-gelb && npm ci && npm run compile` and copy the
+folder, without `node_modules`, into `%USERPROFILE%\.vscode\extensions\`.
 
-   # Or on Windows:
-   # xcopy vscode-gelb %USERPROFILE%\.vscode\extensions\gelb-lang.gelb-lang-0.5.0\ /E
-   ```
-
-2. **Features**:
-   - Syntax highlighting for all GeLB constructs
-   - Code snippets (type `gelb-program` for a complete template)
-   - Automatic bracket matching and indentation
-   - GeLB sidebar (activity bar) with a live Program Structure outline, a Run view, Other Diagnostics and Docs
-   - Outline pane, breadcrumbs, and Go-to-Symbol (`⌘⇧O` / `⌘T`) driven by the same structural parser
-   - **Interactive source preview** (`GeLB: Show Source Preview`) — live geometry + stencil explorer with pan/zoom (2D) or orbit/WASD fly-through (3D), per-cell selection, and a Space-triggered stencil animation
-   - **Problems-panel diagnostics** driven by `gelbc --diagnostics-json` on open / save of a `.gelb` file — click an entry to jump to the source range; the preview refuses to run while errors exist
-
-3. **Restart VSCode** and open any `.gelb` file to see the extension in action
-
-See [vscode-gelb/README.md](vscode-gelb/README.md) for more details.
+The extension highlights the language, lists the compiler's errors in the
+Problems panel when you save, draws the geometry and stencils of a program,
+and runs it from a Run view, opening the result in `gelb-view`. Chapter 2
+of the [tutorial](docs/pdf/GeLB_User_Tutorial.pdf) walks through it;
+[vscode-gelb/README.md](vscode-gelb/README.md) lists every feature and
+setting.
 
 ## Example GeLB Program
 
