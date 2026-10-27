@@ -282,6 +282,8 @@ Reductions and linear algebra:
 ``inverse(A)``     Compile-time-only — the argument must be a
                    compile-time constant.  Used for precomputed MRT
                    collision matrices.
+``determinant(A)`` Compile-time-only, like ``inverse``: the determinant
+                   of a constant square matrix.
 ================== =====================================================
 
 Random numbers:
