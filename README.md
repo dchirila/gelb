@@ -69,7 +69,7 @@ Key design principles:
 
 ## Implementation
 
-### ✅ Frontend
+### Frontend
 - ANTLR4-based parser with full grammar support
 - Complete AST construction with visitor pattern
 - Sophisticated type inference system
@@ -78,13 +78,13 @@ Key design principles:
 - Range resolution and validation
 - Rich set of intrinsic functions: math (`sin`, `cos`, `exp`, `log`, `sqrt`, `abs`, `min`, `max`, `mod`, `atan2`, `tan`, `tanh`), array (`sum`, `dot_prod`, `matmul`, `transpose`, `inverse`), LBM-specific (`upstream_dfs`, `bounce_back_dfs`), and `random`
 
-### ✅ Midware
+### Midware
 - AST optimization passes
 - Constant folding and propagation
 - Division by zero validation
 - AST validation for backend consumption
 
-### ✅ Backends
+### Backends
 - **CPU Serial Fortran** (`cpu_fortran_serial`, gfortran): strictly single-threaded by design — educational source-level reference + bit-equivalence correctness anchor; 1D/2D/3D grids, multi-node-class geometry, periodic BCs, bounce-back walls, NetCDF + stdout output, automatic MLUPS measurement
 - **CPU Portable SIMD** (`cpu_highway`, default; g++ + Google Highway + OpenMP): cross-platform vectorized backend (x86 AVX-512 / AVX2 / SSE; ARM NEON), the multi-threaded performance backend
 - **GPU CUDA C++** (`gpu_cuda_cpp`, nvcc): CUDA backend for NVIDIA GPUs with device kernels, device-side node-class maps, multi-lattice examples, cuRAND support for `random()`, SoA layout, and optional captured `cudaGraph_t` execution. See the backend documentation and example smoke tests for the currently validated feature set.
