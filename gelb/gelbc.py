@@ -191,7 +191,9 @@ def _run_diagnostics(input_file, define, show_traceback, no_geometry_lint):
     "--output", "-o",
     type=click.STRING,
     default=None,
-    help="Output file for generated code (default: <input_basename>.f90)"
+    help="Output file for generated code (default: <input_basename> with"
+         " .cpp for cpu_highway, .f90 for cpu_fortran_serial, .cu for"
+         " gpu_cuda_cpp; -o never selects the backend)"
 )
 @click.option(
     "--num-timesteps", "-n",
