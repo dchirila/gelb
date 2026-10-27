@@ -2,8 +2,7 @@
 // 2D Rayleigh-Benard convection -- bit-faithful port of the
 // reference Fortran solver in `rb_2d/runs__*/Pr_*/Ra_*/`.
 //
-// Reference: `MrtSolverBoussinesq2D_class.f90` (CUDA Fortran)
-// in `lbm2d_mrt_rb_v2` and `refs/rb_2d_lbm_mrt_for_piml-master/`.
+// Reference: `MrtSolverBoussinesq2D_class.f90` (CUDA Fortran).
 //
 // This file matches the reference algorithm line by line:
 //
