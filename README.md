@@ -90,7 +90,7 @@ Key design principles:
 - **GPU CUDA C++** (`gpu_cuda_cpp`, nvcc): CUDA backend for NVIDIA GPUs with device kernels, device-side node-class maps, multi-lattice examples, cuRAND support for `random()`, SoA layout, and optional captured `cudaGraph_t` execution. See the backend documentation and example smoke tests for the currently validated feature set.
 - **Explicit-width FP types**: `real32` / `real64` with precision-aware literal emission (no implicit FP64 promotion)
 - **CLI constant overrides**: `-D NAME=VALUE` to override `global_constants` without editing source
-- **User-defined functions**: Single-output (Fortran `function`) and multi-output (Fortran `subroutine`) with destructuring assignment
+- **User-defined functions**: pure functions with one or more named outputs (`function F(real z) -> (real y)`), multi-output calls by destructuring assignment; every call is inlined at compile time
 
 ## Installation
 
