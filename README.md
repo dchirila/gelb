@@ -76,7 +76,7 @@ Key design principles:
 - Hierarchical symbol tables with scoping
 - Compile-time constant folding and validation
 - Range resolution and validation
-- Rich set of intrinsic functions: math (`sin`, `cos`, `exp`, `log`, `sqrt`, `abs`, `min`, `max`, `mod`, `atan2`, `tan`, `tanh`), array (`sum`, `dot_prod`, `matmul`, `transpose`, `inverse`), LBM-specific (`upstream_dfs`, `bounce_back_dfs`), and `random`
+- Rich set of intrinsic functions: math (`sin`, `cos`, `exp`, `log`, `sqrt`, `abs`, `min`, `max`, `mod`, `atan2`, `tan`, `tanh`), array (`sum`, `dot_prod`, `matmul`, `transpose`, `inverse`, `determinant`), LBM-specific (`upstream_dfs`, `bounce_back_dfs`), and `random`
 
 ### Midware
 - AST optimization passes
@@ -280,7 +280,7 @@ GeLB intentionally restricts certain features to enable automatic parallelizatio
 - **No user-defined types**: Built-in types only (int, real, bool)
 
 ### Supported Alternatives
-- **Intrinsic functions**: `sum`, `dot_prod`, `matmul`, `transpose`, `inverse`, `upstream_dfs`, `bounce_back_dfs`, `random`, `sin`, `cos`, `tan`, `tanh`, `sqrt`, `exp`, `log`, `abs`, `min`, `max`, `mod`, `atan2`
+- **Intrinsic functions**: `sum`, `dot_prod`, `matmul`, `transpose`, `inverse`, `determinant`, `upstream_dfs`, `bounce_back_dfs`, `random`, `sin`, `cos`, `tan`, `tanh`, `sqrt`, `exp`, `log`, `abs`, `min`, `max`, `mod`, `atan2`
 - **Node classes**: Different behavior for different spatial regions
 - **Pure functions**: Mathematical functions without side effects
 - **Compile-time computation**: Constants and ranges resolved at compile time
