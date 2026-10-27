@@ -487,9 +487,11 @@ Each type name doubles as an explicit cast intrinsic:
 Expressions and control flow
 =============================
 
-GeLB expressions support the usual arithmetic (``+ - * / **``),
-comparison (``< <= == != >= >``), and logical (``&& || !``)
-operators, with C-style precedence.  Array arithmetic is
+GeLB expressions support the usual arithmetic (``+ - * /``, and ``^``
+for powers), comparison (``< <= == != >= >``), and logical
+(``&& || !``) operators, with C-style precedence.  ``^`` is
+right-associative and binds tighter than unary minus, so ``-x^2`` is
+``-(x^2)`` and ``2^3^2`` is ``2^9``.  Array arithmetic is
 element-wise by default; ``matmul`` and ``dot_prod`` are the
 explicit tensor operations.
 

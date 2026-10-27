@@ -275,6 +275,10 @@ def _folded_constant(decl, name="R"):
     ("const int R = (-2)^3;", IntLiteral_N, -8),
     ("const int R = 1^(-5);", IntLiteral_N, 1),
     ("const int R = (-1)^(-3);", IntLiteral_N, -1),
+    ("const int R = 2^3^2;", IntLiteral_N, 512),
+    ("const int R = (2^3)^2;", IntLiteral_N, 64),
+    ("const int R = -2^2;", IntLiteral_N, -4),
+    ("const real R = -3.0^2.0;", RealLiteral_N, -9.0),
     ("const int R = int(-3.9);", IntLiteral_N, -3),
     ("const int8 R = int8(300);", IntLiteral_N, 44),
     ("const int R = min(3, 5);", IntLiteral_N, 3),
@@ -345,6 +349,8 @@ def test_the_geometry_evaluator_agrees():
     assert eval_const_expr(get_ast("expr", "mod(x - 7, 2)"), {"x": 1}) == 0
     assert eval_const_expr(get_ast("expr", "2^(-1)")) == 0
     assert eval_const_expr(get_ast("expr", "(-2)^3")) == -8
+    assert eval_const_expr(get_ast("expr", "2^3^2")) == 512
+    assert eval_const_expr(get_ast("expr", "-2^2")) == -4
     assert eval_const_expr(get_ast("expr", "int(-3.9)")) == -3
     with pytest.raises(IntegerOverflow):
         eval_const_expr(get_ast("expr", "x + 1"), {"x": 2 ** 63 - 1})

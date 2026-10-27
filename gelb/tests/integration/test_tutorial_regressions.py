@@ -1,5 +1,6 @@
 """Compile and run compiler regressions on every backend: logical negation,
-boolean locals, and node classes that use different gauges on one lattice."""
+boolean locals, node classes that use different gauges on one lattice, and
+the grouping of the power operator."""
 
 import os
 from pathlib import Path
@@ -137,3 +138,32 @@ geometry { nodes[:] = C1; nodes[17:33] = C2; }
         field = (expected * factor).astype(float)
         field[:, absent] = np.nan
         np.testing.assert_array_equal(data[name], field)
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_power_precedence(tmp_path, backend):
+    # ``^`` is right-associative and binds tighter than unary minus (tutorial,
+    # "Expressions and control flow").  The operands are lattice values, so
+    # nothing folds: the emitted code must group the operations itself.
+    data = run_source(tmp_path, backend, """
+simulation_description("power operator precedence");
+lattices { lattice f(1, 3, real, 17, false); }
+initializer I { f.out[x | :] = {2.0, 3.0, 2.0}; }
+dynamic D { f.out[x | :] = f.in[x | :]; }
+gauge G -> (real chained, real left_grouped, real right_grouped,
+            real neg_power, real power_of_neg) {
+    real a = f.in[x | 0];
+    real b = f.in[x | 1];
+    real c = f.in[x | 2];
+    chained = a^b^c;
+    left_grouped = (a^b)^c;
+    right_grouped = a^(b^c);
+    neg_power = -b^c;
+    power_of_neg = (-b)^c;
+}
+node_classes { node_class B(I, D, G); }
+geometry { nodes[:] = B; }
+""")
+    for name, value in {"chained": 512, "left_grouped": 64, "right_grouped": 512,
+                        "neg_power": -9, "power_of_neg": 9}.items():
+        np.testing.assert_array_equal(data[name], np.full((2, 17), value), err_msg=name)
