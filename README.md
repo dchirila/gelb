@@ -167,17 +167,8 @@ The bootstrap script checks for these and refuses to run if any are missing:
    gelb-run -b gpu_cuda_cpp -n 1000 -w 100 examples/lbm/2d/taylor_green_vortex_2d_bgk.gelb
    
    # Or compile only:
-   gelbc examples/lbm/2d/taylor_green_vortex_2d_bgk.gelb -o output.f90 --num-timesteps 1000
+   gelbc examples/lbm/2d/taylor_green_vortex_2d_bgk.gelb -o output.cpp --num-timesteps 1000
    ```
-
-### Optional: Clean Generated Files
-```bash
-# On Unix/MacOS:
-./scripts/cleanup_repo.sh
-
-# On Windows:
-.\scripts\cleanup_repo.ps1
-```
 
 ### VS Code extension
 
