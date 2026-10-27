@@ -349,8 +349,11 @@ on output count:
         u = {dot_prod(dfs, EX) / rho, dot_prod(dfs, EY) / rho};
     }
 
-    // Later: destructuring inside a dynamic block
-    {real rho, array[real, 2] u} = ComputeMacros(fIn);
+    // Later: destructuring inside a dynamic block.  Declare the
+    // targets first; a destructuring target carries no type.
+    real rho;
+    array[real, 2] u;
+    {rho, u} = ComputeMacros(fIn);
 
 Functions can call other functions, but **not recursively** (the
 compiler detects direct and indirect recursion and rejects it).  A
