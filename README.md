@@ -327,7 +327,7 @@ collected in [CONTRIBUTING.md](CONTRIBUTING.md).
 - Mesh refinement support
 - Interactive simulation monitoring
 
-Detailed priorities are tracked in the project's GitHub issues.
+Bug reports and questions are welcome as GitHub issues or in Discussions.
 
 ## Using GeLB in Your Work
 
