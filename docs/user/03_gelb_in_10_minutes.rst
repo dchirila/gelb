@@ -262,7 +262,7 @@ one scalar per component (``-> (real ux, real uy)``).
 Built-in intrinsics
 ===================
 
-Math intrinsics (element-wise on arrays where applicable):
+Math intrinsics (scalar arguments only in this version):
 
 .. code-block:: gelb
 
