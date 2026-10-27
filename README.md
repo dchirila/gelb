@@ -88,7 +88,7 @@ Key design principles:
 - **CPU Serial Fortran** (`cpu_fortran_serial`, gfortran): strictly single-threaded by design — educational source-level reference + bit-equivalence correctness anchor; 1D/2D/3D grids, multi-node-class geometry, periodic BCs, bounce-back walls, NetCDF + stdout output, automatic MLUPS measurement
 - **CPU Portable SIMD** (`cpu_highway`, default; g++ + Google Highway + OpenMP): cross-platform vectorized backend (x86 AVX-512 / AVX2 / SSE; ARM NEON), the multi-threaded performance backend
 - **GPU CUDA C++** (`gpu_cuda_cpp`, nvcc): CUDA backend for NVIDIA GPUs with device kernels, device-side node-class maps, multi-lattice examples, cuRAND support for `random()`, SoA layout, and optional captured `cudaGraph_t` execution. See the backend documentation and example smoke tests for the currently validated feature set.
-- **Explicit-width FP types**: `real32` / `real64` with precision-aware literal emission (no implicit FP64 promotion)
+- **Explicit-width FP types**: `real32` / `real64`, with every operation rounded to its type; bare real literals are `real` (binary64), and single-precision literals are written as explicit casts such as `real32(1.0)` or as `real32` constants
 - **CLI constant overrides**: `-D NAME=VALUE` to override `global_constants` without editing source
 - **User-defined functions**: pure functions with one or more named outputs (`function F(real z) -> (real y)`), multi-output calls by destructuring assignment; every call is inlined at compile time
 
