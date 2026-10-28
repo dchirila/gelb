@@ -122,7 +122,9 @@ class StorageLayoutMixin:
         # shuffle via ``hn::TwoTablesLookupLanes`` with 8-element
         # indices produces wrong results, so AVX-2 and NEON get SoA
         # until there is a TILE=2 layout for them.  Manual override
-        # via ``--storage-layout cbt`` works on AVX-512.
+        # via ``--storage-layout cbt`` works on AVX-512 only: gelbc
+        # rejects it elsewhere, and the emitted static_assert stops a
+        # CBT program from building for a narrower target.
         return 'cbt' if _detect_avx512_available() else 'soa'
 
     def _resolve_storage_layout(self) -> str:

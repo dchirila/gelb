@@ -411,18 +411,23 @@ def _run_diagnostics(input_file, define, show_traceback, no_geometry_lint):
         "Lattice storage layout for the cpu_highway backend."
         " 'auto' (default): ISA- and dimension-aware rule fitted to"
         " cross-machine measurements (May 2026). 1D → SoA;"
-        " 2D and 3D → CBT on AVX-512 hosts, SoA otherwise"
-        " (override the AVX-512 detection via the"
-        " GELB_HAS_AVX512 env var when needed)."
+        " 2D and 3D → CBT where the program is compiled for AVX-512,"
+        " SoA otherwise.  AVX-512 is detected from ${GELB_CXX:-g++}"
+        " with GELB_CXXFLAGS, or with -march=native when that is unset"
+        " or empty; the GELB_HAS_AVX512 env var (1 or 0) overrides the"
+        " detection."
         " 'soa': force SoA `[buf][df][...y][x]`."
         " 'aos': force AoS `[buf][...y][x][df]` — per-cell cache"
         " locality but disables across-cell SIMD (scalar inner loop)."
         " 'cbt': cell-block-tiled `[buf][...y][x_tile][df][x_within]`"
         " (x_within = 8 = AVX-512 lane count).  Combines per-cell DF"
-        " locality with across-cell SIMD inside each tile."
+        " locality with across-cell SIMD inside each tile.  It needs"
+        " AVX-512: gelbc rejects it when AVX-512 is not detected, and a"
+        " CBT program does not compile for a target without it."
         " Every layout gives bitwise identical output (numerical"
         " semantics chapter; tested across layouts and thread counts)."
-        "  The cpu_fortran_serial backend ignores this flag."
+        "  The cpu_fortran_serial and gpu_cuda_cpp backends ignore this"
+        " flag."
     )
 )
 def cli(
@@ -512,6 +517,18 @@ def cli(
             "--backend cpu_fortran_serial, or keep --output-mode netcdf "
             f"with backend {backend}."
         )
+
+    if backend == 'cpu_highway' and storage_layout == 'cbt':
+        from gelb.backends.highway.common import _detect_avx512_available
+        if not _detect_avx512_available():
+            raise click.ClickException(
+                "--storage-layout cbt needs AVX-512 (eight double lanes),"
+                " and gelbc could not confirm that Highway compiles for"
+                " it with ${GELB_CXX:-g++} and GELB_CXXFLAGS (or"
+                " -march=native when that is unset or empty).  Use"
+                " --storage-layout auto or soa; when the program will be"
+                " compiled for AVX-512 elsewhere, set GELB_HAS_AVX512=1."
+            )
 
     nc_filename = nc_output or \
         os.path.splitext(os.path.basename(input_file))[0] + '.nc'

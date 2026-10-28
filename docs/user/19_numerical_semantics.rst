@@ -346,7 +346,9 @@ the run is configured, except where this chapter says so:
 - **Threads and storage layouts.** On ``cpu_highway`` the same bits
   are produced with 1, 2 or 4 OpenMP threads and with each of the
   ``soa``, ``aos`` and ``cbt`` storage layouts, in default and strict
-  builds alike.
+  builds alike.  ``cbt`` exists only where the program is compiled for
+  AVX-512: elsewhere ``gelbc`` rejects it, and a ``cbt`` program does
+  not compile.
 - **CUDA launch configuration.** In a strict build the same bits are
   produced with any block size, with ``--cuda-coarsening 4`` and with
   ``--cuda-tiled``.  In a default build, which keeps nvcc's fusion, the

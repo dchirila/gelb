@@ -24,8 +24,9 @@ streaming step so that the CUDA tiled path has a stencil to tile:
   taken (the coarsening loop, the shared-memory tile).
 
 On ``cpu_highway`` each is run with 1, 2 and 4 OpenMP threads and the
-``soa``, ``aos`` and ``cbt`` storage layouts, in a default and in a
-strict build; on ``gpu_cuda_cpp`` with two block sizes, thread
+``soa``, ``aos`` and ``cbt`` storage layouts (``cbt`` only where the
+host compiles for AVX-512, as gelbc rejects it elsewhere), in a default
+and in a strict build; on ``gpu_cuda_cpp`` with two block sizes, thread
 coarsening 4 and shared-memory tiling, in strict builds, and with the
 two block sizes in a default build.  Within one build mode every
 configuration must give the same bits; for the sensitive programs every
@@ -47,6 +48,7 @@ import itertools
 import numpy as np
 import pytest
 
+from gelb.backends.highway.common import _detect_avx512_available
 from gelb.tests.integration.test_real_width_contract import (
     _FUSION_PROBE_COEFF_4, _FUSION_PROBE_INPUT_4, _FUSION_PROBE_UNFUSED, _generated, _run,
     requires_cpp_highway_compiler, requires_gpu_cuda_cpp_compiler)
@@ -198,7 +200,8 @@ def _dynamic_kernel(code):
 
 # --- cpu_highway: threads x layouts x build mode ----------------------------
 
-_HIGHWAY_RUNS = list(itertools.product((1, 2, 4), ("soa", "aos", "cbt")))
+_HIGHWAY_LAYOUTS = ("soa", "aos") + (("cbt",) if _detect_avx512_available() else ())
+_HIGHWAY_RUNS = list(itertools.product((1, 2, 4), _HIGHWAY_LAYOUTS))
 
 
 @requires_cpp_highway_compiler
@@ -218,7 +221,7 @@ def test_highway_threads_and_layouts_give_the_same_bits(tmp_path, strict, progra
     _check_cells(program, reference, strict)
     # a multi-threaded run really ran the loop in parallel: the generated
     # code carries the OpenMP directive
-    assert "omp parallel" in _generated(tmp_path / "t4_cbt", "cpu_highway")
+    assert "omp parallel" in _generated(tmp_path / "t4_soa", "cpu_highway")
 
 
 # --- gpu_cuda_cpp: block sizes x coarsening x tiling -----------------------

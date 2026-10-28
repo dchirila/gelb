@@ -963,9 +963,9 @@ class SimdEmitMixin:
                     # native-NEON layout is the planned replacement.
                     # Until then the auto-layout
                     # selector gates CBT on AVX-512 (see
-                    # ``_auto_layout_choice``); manual
-                    # ``--storage-layout cbt`` on NEON is unsupported
-                    # and rejected at codegen time.
+                    # ``_auto_layout_choice``), gelbc rejects
+                    # ``--storage-layout cbt`` without AVX-512, and
+                    # every CBT program static_asserts eight lanes.
                     self._emit(f'V gelb_xv = hn::Iota(d, '
                                f'static_cast<double>(g_x));')
                     old_mode, old_axes = (self._simd_mode,
