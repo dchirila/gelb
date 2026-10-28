@@ -25,8 +25,9 @@ terrain contour at inversion height, and the Reynolds number is a
 laboratory-scale stand-in (Re = 300) for the effective large-eddy Re of
 the real flow.
 
-Bathymetry input: madeira_etopo2022.tif, searched for next to this
-script, in the CWD, and in the paper repo's figs-prep directory.
+Bathymetry input: madeira_etopo2022.tif, taken from the path in the
+environment variable GELB_MADEIRA_TIF if set, otherwise searched for next
+to this script and in the CWD.
 To (re-)download (~4 MB, ETOPO 2022 via NOAA NCEI):
 
     curl "https://gis.ngdc.noaa.gov/arcgis/rest/services/DEM_mosaics/DEM_all/ImageServer/exportImage?bbox=-17.60,32.30,-16.50,33.20&bboxSR=4326&size=1056,864&format=tiff&pixelType=F32&noData=&interpolation=RSP_BilinearInterpolation&f=image" \
@@ -62,10 +63,9 @@ U_INY = -U_IN * math.cos(math.radians(AZ_DEG))   # southward component
 # ---------------- locate the bathymetry cutout ----------------
 _here = os.path.dirname(os.path.abspath(__file__))
 _candidates = [
+    os.environ.get("GELB_MADEIRA_TIF", ""),
     os.path.join(_here, "madeira_etopo2022.tif"),
     "madeira_etopo2022.tif",
-    os.path.expanduser(
-        "~/Research/gelb/paper/figs-prep/figs/island_wake/madeira_etopo2022.tif"),
 ]
 TIF = next((p for p in _candidates if os.path.exists(p)), None)
 if TIF is None:

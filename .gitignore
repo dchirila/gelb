@@ -33,6 +33,8 @@ gelb/antlr_part/generated_code/*.tokens
 rb_sweep_results_*/
 rb_2d/
 rb_3d/
+# scripts/validate_analytical.py writes its plot into the CWD by default
+validation_convergence.png
 
 # Claude Code workspace state
 .claude/

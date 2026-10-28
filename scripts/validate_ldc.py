@@ -29,12 +29,13 @@ import argparse
 import datetime as dt
 import json
 import os
-import platform
 import subprocess
 import sys
 from pathlib import Path
 
 import numpy as np
+
+from bench_common import machine_tag
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GELB_RUN = REPO_ROOT / "scripts" / "gelb-run"
@@ -308,9 +309,9 @@ def main() -> int:
         sys.stderr.write("No results — nothing to write.\n")
         return 1
 
-    machine = (f"{platform.node() or 'unknown'} "
-               f"({platform.system() or '?'} / "
-               f"{platform.processor() or platform.machine() or '?'})")
+    # The host name never goes into this tracked file; set
+    # GELB_BENCH_MACHINE for a curated label (scripts/bench_common.py).
+    machine = machine_tag()
     try:
         sha = subprocess.check_output(
             ["git", "rev-parse", "--short", "HEAD"],
