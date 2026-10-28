@@ -303,6 +303,9 @@ def compile_source(
             record("slice_df_expansion")
             capture(ast, "slice_df_expansion")
 
+        # The tree as the backends receive it (gelbc --ast-stage midware).
+        capture(ast, "midware")
+
     stencil_result = None
     geometry = None
 

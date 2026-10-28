@@ -176,6 +176,7 @@ def test_pipeline_ast_capture_callback_receives_named_stages(tmp_path):
         "constant_folding",
         "function_inlining",
         "intrinsic_arg_hoisting",
+        "midware",
     ]
 
 

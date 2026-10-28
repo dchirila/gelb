@@ -29,6 +29,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   that finds no AVX-512 target (`GELB_HAS_AVX512=1` overrides it, for
   cross-compiling); and a program in this layout no longer compiles for
   a narrower target.
+- `gelbc --visualize-ast --ast-stage midware` drew nothing; it now draws
+  the tree after the midware passes.
 
 ## [1.0.0] — 2026-10-23
 
