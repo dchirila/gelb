@@ -647,16 +647,22 @@ def _render_16_mlups_backend_comparison(out_dir: pathlib.Path) -> None:
         doc = _json.load(f)
 
     cases = list(doc["cases"].keys())  # preserves JSON insertion order
-    backends = ["cpu_serial", "cpu_openmp", "cuda"]
+    # benchmark_backends.py records the multi-threaded CPU backend as
+    # "cpu_highway"; the tracked JSON from 1.0 still has the older key
+    # "cpu_openmp" for the same backend.  Plot whichever is present.
+    cpu_mt = "cpu_highway" if doc["results"].get("cpu_highway") else "cpu_openmp"
+    backends = ["cpu_serial", cpu_mt, "cuda"]
     backend_labels = {
         "cpu_serial": "CPU serial",
         "cpu_openmp": "CPU OpenMP",
+        "cpu_highway": "CPU OpenMP",
         "cuda": "CUDA",
     }
     # Colour-blind-safer palette (blue / orange / green) distinct from
     # the matplotlib default wheel used elsewhere in the tutorial.
     colours = {"cpu_serial": "#4C72B0",
                "cpu_openmp": "#DD8452",
+               "cpu_highway": "#DD8452",
                "cuda": "#55A868"}
 
     n_cases = len(cases)
@@ -722,7 +728,7 @@ def _render_16_mlups_backend_comparison(out_dir: pathlib.Path) -> None:
     ax.set_axisbelow(True)
 
     # Host-attribution caption under the figure.
-    cpu_host = machines.get("cpu_openmp") or machines.get("cpu_serial")
+    cpu_host = machines.get(cpu_mt) or machines.get("cpu_serial")
     gpu_host = machines.get("cuda")
     host_bits = []
     if cpu_host:
