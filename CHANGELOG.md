@@ -16,6 +16,20 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   extension's test tooling pins serialize-javascript 7.1.3 or newer.
   GeLB itself never opens untrusted image files.
 
+### Fixed
+
+- **The cell-block-tiled storage layout off AVX-512.** A `cpu_highway`
+  program in this layout that was built for a target with fewer than
+  eight double lanes (AVX2, NEON, or a generic x86 build) ran and gave
+  wrong results, and `--storage-layout auto` could choose the layout
+  there: its AVX-512 probe looked for `__AVX512F__` alone and ignored
+  `GELB_CXXFLAGS`. Now `auto` asks Highway's own target detection,
+  using `GELB_CXX` (default `g++`) and `GELB_CXXFLAGS` (default
+  `-march=native`); `gelbc` rejects `--storage-layout cbt` when
+  that finds no AVX-512 target (`GELB_HAS_AVX512=1` overrides it, for
+  cross-compiling); and a program in this layout no longer compiles for
+  a narrower target.
+
 ## [1.0.0] — 2026-10-23
 
 The release that accompanies the SoftwareX paper. Since 0.9.0 the

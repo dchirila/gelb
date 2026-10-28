@@ -11,6 +11,7 @@ machinery (L3 detection + env overrides), the AVX-512 probe behind the
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 
 # ----------------------------------------------------------------------
@@ -138,16 +139,38 @@ def _detect_l3_size_bytes() -> int:
     return 32 * 1024 * 1024
 
 
+# Preprocessed with the build's compiler and flags, this fails
+# unless Highway's static target is one of its 512-bit x86 targets
+# (AVX3, AVX3_DL, AVX3_ZEN4, AVX3_SPR, AVX10_2: the bits up to HWY_AVX3,
+# third_party/highway/hwy/detect_targets.h), the ones that give
+# CappedTag<double, 8> eight lanes.  Predefined AVX-512 macros are not
+# enough: Highway also gates these targets on its SSE4 baseline, which
+# needs AES and PCLMUL, so GCC's -march=x86-64-v4 and -mavx512f get the
+# two-lane SSSE3 target.
+_AVX3_PROBE = b'''#include "hwy/detect_targets.h"
+#if (HWY_STATIC_TARGET & (HWY_AVX3 | (HWY_AVX3 - 1))) == 0
+#error not a 512-bit Highway target
+#endif
+'''
+
+
 def _detect_avx512_available() -> bool:
-    """Return True iff the host's compiler defines ``__AVX512F__``
-    under ``-march=native``.
+    """Return True iff ``GELB_CXX`` (default ``g++``) with
+    ``GELB_CXXFLAGS`` (default ``-march=native``) compiles Highway for
+    AVX-512 (eight double lanes).
+
+    This predicts the build gelb-run makes with the same settings, not
+    every build: gelb-run's own compiler choice on macOS and its extra
+    build options are not passed to the probe.  A False therefore does
+    not prove that another build could not use CBT.
 
     Used by the ``auto`` storage-layout heuristic
     (``_decide_storage_layout``) to decide whether to default to CBT
     (AVX-512 only -- single-instruction ``valignq`` for cross-tile lane
-    shifts wins over SoA's plain load) or to SoA (AVX2 and NEON only --
-    multi-instruction emulation of the cross-lane shuffle cancels CBT's
-    locality benefit in the measured portability sweep).
+    shifts wins over SoA's plain load) or to SoA, and by gelbc to
+    reject ``--storage-layout cbt`` where CBT cannot work: its
+    cross-tile shuffles assume eight lanes and give wrong results
+    with fewer.
 
     Detection order (mirrors ``_detect_l3_size_bytes``):
 
@@ -156,16 +179,22 @@ def _detect_avx512_available() -> bool:
          For testing and for cross-compilation scenarios where the
          build host's compiler doesn't reflect the deploy host's
          capabilities.
-      2. Probe via ``${GELB_CXX:-g++} -march=native -E -dM``: scan
-         the predefined-macro dump for ``__AVX512F__``.  Cached.
+      2. Probe: preprocess ``_AVX3_PROBE`` with that compiler and
+         those flags against the vendored Highway headers.  It
+         succeeds iff Highway's static target has eight double lanes.
       3. Conservative fallback: assume **no** AVX-512 (returns
-         False) if the probe fails.  CBT-on-AVX-2 still works after
-         the ``blend8`` codegen fix, so a wrong
-         False is at most a missed-optimisation in 2D, never a
-         correctness issue.
+         False) if the probe fails or times out, or the Highway
+         headers are missing (an installed wheel).  A wrong False is
+         at most a missed optimisation (SoA instead of CBT), never a
+         wrong result.
 
-    Cached on the first call (the result is fixed per-process,
-    re-detection adds nothing).
+    Neither answer is trusted for correctness: every CBT program
+    carries a ``static_assert`` on the lane count, so a CBT program
+    compiled for a narrower target fails to compile instead of
+    running wrongly.
+
+    The first answer, including a failed probe, is cached for the
+    process; a later change to the environment is not seen.
     """
     import subprocess
 
@@ -186,17 +215,23 @@ def _detect_avx512_available() -> bool:
         # Other / garbage values fall through.
 
     # 2. Compiler probe.
-    cxx = os.environ.get('GELB_CXX', 'g++')
-    try:
-        out = subprocess.check_output(
-            [cxx, '-march=native', '-E', '-dM', '-x', 'c++', '-'],
-            input=b'',
-            stderr=subprocess.DEVNULL, timeout=10).decode()
-        result = '__AVX512F__' in out
-        _detect_avx512_available._cached = result
-        return result
-    except (OSError, subprocess.SubprocessError):
-        pass
+    # As in gelb-run: an empty GELB_CXX or GELB_CXXFLAGS counts as
+    # unset, and the flags are split on whitespace.
+    cxx = os.environ.get('GELB_CXX') or 'g++'
+    highway = Path(__file__).resolve().parents[3] / 'third_party' / 'highway'
+    if (highway / 'hwy' / 'detect_targets.h').is_file():
+        try:
+            flags = (os.environ.get('GELB_CXXFLAGS') or '-march=native').split()
+            probe = subprocess.run(
+                [cxx, *flags, f'-I{highway}', '-x', 'c++', '-E',
+                 '-o', os.devnull, '-'],
+                input=_AVX3_PROBE, stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL, timeout=10)
+            result = probe.returncode == 0
+            _detect_avx512_available._cached = result
+            return result
+        except (OSError, subprocess.SubprocessError, ValueError):
+            pass
 
     # 3. Conservative fallback.
     _detect_avx512_available._cached = False

@@ -466,6 +466,19 @@ class HighwayCodeGenerator(
             self._emit('#define GELB_STRICT_FP 1')
         self._emit(f'#include "{self.runtime_header}"')
         self._emit('')
+        if self._any_cbt_lattice():
+            # The CBT tile and its cross-tile shuffles assume eight
+            # double lanes; built for a narrower target the program
+            # would run and give wrong results, so it must not build.
+            # On a scalable target (SVE, RVV) MaxLanes is only an upper
+            # bound, so those are excluded as well.
+            self._emit('static_assert(!HWY_HAVE_SCALABLE'
+                       ' && ::gelb_simd::d.MaxLanes() == 8,')
+            self._emit('              "the cell-block-tiled storage layout'
+                       ' needs AVX-512 (eight double lanes): compile for'
+                       ' AVX-512, or regenerate with --storage-layout'
+                       ' soa");')
+            self._emit('')
         self._emit('using namespace gelb;')
         self._emit('')
 

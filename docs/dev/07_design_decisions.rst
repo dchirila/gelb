@@ -43,12 +43,23 @@ pass runs only when enabled.
 **The storage layout is chosen per instruction set.**
 ``_auto_layout_choice`` in :source:`gelb/backends/highway/layout.py`
 resolves ``--storage-layout auto``: SoA in 1D; in 2D and 3D the
-cell-block-tiled layout when the host compiler defines
-``__AVX512F__`` under ``-march=native`` (``_detect_avx512_available``
-in :source:`gelb/backends/highway/common.py`, overridable with
+cell-block-tiled layout (CBT) when Highway, preprocessed by the C++
+compiler with ``GELB_CXXFLAGS`` or else ``-march=native``, selects
+one of its 512-bit targets (``_detect_avx512_available`` in
+:source:`gelb/backends/highway/common.py`, overridable with
 ``GELB_HAS_AVX512``), SoA otherwise, because the tile shuffle assumes
-eight lanes.  The CUDA generator fixes ``storage_layout='soa'``.
-Every layout gives the same bits, which
+eight lanes and gives wrong results with fewer.  The AVX-512 macros
+alone are not enough: Highway's default target selection also requires
+AES and PCLMUL, so GCC's bare ``-march=x86-64-v4`` selects two-lane
+SSSE3.  The probe predicts gelb-run's build only when both use the
+same compiler and flags.  Where they differ, a wrong yes stops at the
+assert below, and a wrong no costs only speed.
+The same probe makes
+``gelbc`` reject ``--storage-layout cbt``, and every CBT program
+carries a ``static_assert`` on the lane count, so a CBT program built
+for a narrower target fails to compile instead of running wrongly;
+do not remove either guard.  The CUDA generator fixes
+``storage_layout='soa'``.  Every layout gives the same bits, which
 :source:`gelb/tests/integration/test_reproducibility.py` checks.
 
 **The three backends must agree.**  The table *What must agree* in
