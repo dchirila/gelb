@@ -85,7 +85,7 @@ def count_loc_gelb(path):
 
 
 def count_loc_fortran(path):
-    """Return (raw, sloc) for a Fortran (.f90/.cuf) source file.
+    """Return (raw, sloc) for a Fortran (.f90) source file.
 
     SLOC strips everything after ``!`` on each line and then drops
     blanks. Generated backend code has no ``!`` inside string
@@ -441,9 +441,10 @@ def main(argv=None):
                 else:
                     print(f"  ! CPU compile failed", file=sys.stderr)
             if do_gpu:
-                out = os.path.join(tmp, f"{base}.cuf")
+                out = os.path.join(tmp, f"{base}.cu")
                 if compile_example(gelb, "gpu", out, args.num_timesteps):
-                    p_raw, p_sloc = count_loc_fortran(out)
+                    # CUDA C++ comments are // and /* */, as in GeLB.
+                    p_raw, p_sloc = count_loc_gelb(out)
                 else:
                     print(f"  ! GPU compile failed", file=sys.stderr)
 
