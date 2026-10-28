@@ -29,6 +29,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   that finds no AVX-512 target (`GELB_HAS_AVX512=1` overrides it, for
   cross-compiling); and a program in this layout no longer compiles for
   a narrower target.
+- **Tutorial chapter 3 and README.** The chapter listed `**` as the power
+  operator (it is `^`), called the math intrinsics element-wise (they take
+  scalars), destructured into typed targets (a syntax error) and left
+  `determinant` out of its intrinsics table. The README's Quick Start wrote
+  C++ into a file named `output.f90`, recommended a cleanup script that
+  deletes tracked parser files, and described functions and literals
+  wrongly.
 - **Help texts.** `gelbc --help` no longer claims that `-o` defaults to
   `.f90` for every backend; `gelb-run --help` lists `GELB_NVCC`,
   `GELB_NVCC_ARCH`, `GELB_NVCC_FLAGS` and `GELBC_EXTRA`.
