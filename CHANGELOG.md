@@ -2,7 +2,10 @@
 
 All notable changes to GeLB are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions
-follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The
+compatibility promise covers the GeLB language and the command-line
+interface of `gelbc`, `gelb-run` and `gelb-view`; the supported Python
+versions follow upstream end of life and can change in any release.
 
 ## [Unreleased]
 
