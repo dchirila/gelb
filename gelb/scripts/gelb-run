@@ -231,7 +231,8 @@ Examples:
 Environment variables:
   GELB_FC           Fortran compiler (default: gfortran)
   GELB_FFLAGS       Fortran compiler flags (default: '-O3 -march=native
-                    -ffp-contract=off -ffree-line-length-none')
+                    -ffp-contract=off -fno-range-check
+                    -ffree-line-length-none')
   GELB_NETCDF_INC   NetCDF-Fortran include flags (auto-detected if unset)
   GELB_NETCDF_LIB   NetCDF-Fortran linker flags (auto-detected if unset)
   GELB_NETCDF_C_INC NetCDF-C include flags for the C++ SIMD / CUDA C++
@@ -251,6 +252,13 @@ Environment variables:
   GELB_PYTHON       Interpreter that can 'import gelb'; when set, gelbc, the
                     progress bar and gelb-view run through it and uv is unused
                     (unset and without uv: the checkout's .venv/bin/python)
+  GELB_NVCC         CUDA compiler for gpu_cuda_cpp (default: nvcc)
+  GELB_NVCC_ARCH    GPU architecture flag (default: -arch=sm_89)
+  GELB_NVCC_FLAGS   nvcc flags; replaces every default, the architecture
+                    included (default: '-O3 $GELB_NVCC_ARCH -std=c++17
+                    --expt-relaxed-constexpr -DNDEBUG -diag-suppress=177')
+  GELBC_EXTRA       extra gelbc options, space-separated, e.g.
+                    '--storage-layout soa'
 EOF
     exit 0
 }

@@ -29,6 +29,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   that finds no AVX-512 target (`GELB_HAS_AVX512=1` overrides it, for
   cross-compiling); and a program in this layout no longer compiles for
   a narrower target.
+- **Help texts.** `gelbc --help` no longer claims that `-o` defaults to
+  `.f90` for every backend; `gelb-run --help` lists `GELB_NVCC`,
+  `GELB_NVCC_ARCH`, `GELB_NVCC_FLAGS` and `GELBC_EXTRA`.
 - `gelbc --visualize-ast --ast-stage midware` drew nothing; it now draws
   the tree after the midware passes.
 
