@@ -7,7 +7,6 @@ Each PlotDockWidget contains:
   - Control widgets (timestep slider, colormap, etc.)
 """
 
-import numpy as np
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qtagg import (
     FigureCanvasQTAgg,
@@ -175,13 +174,12 @@ class PlotDockWidget(QDockWidget):
         data = self._dataset.get_variable_at_timestep(self._var_name, ts)
         x = self._dataset.get_coord('x')
 
-        # Compute global Y range across all timesteps (once)
+        # Global Y range across all timesteps (cached by the dataset)
         if self._global_ymin is None:
-            all_data = self._dataset.get_variable(self._var_name)
-            self._global_ymin = float(np.nanmin(all_data))
-            self._global_ymax = float(np.nanmax(all_data))
+            self._global_ymin, self._global_ymax = \
+                self._dataset.get_variable_range(self._var_name)
 
-        self._ax.clear()
+        self._clear_plot()
         self._line, = self._ax.plot(x, data, marker='o', markersize=3)
         self._ax.set_xlabel('x')
         self._ax.set_ylabel(self._var_name)
@@ -219,13 +217,12 @@ class PlotDockWidget(QDockWidget):
         plot_axis = remaining[0] if remaining else 'x'
         x = self._dataset.get_coord(plot_axis)
 
-        # Compute global Y range across all timesteps (once)
+        # Global Y range across all timesteps (cached by the dataset)
         if self._global_ymin is None:
-            all_data = self._dataset.get_variable(self._var_name)
-            self._global_ymin = float(np.nanmin(all_data))
-            self._global_ymax = float(np.nanmax(all_data))
+            self._global_ymin, self._global_ymax = \
+                self._dataset.get_variable_range(self._var_name)
 
-        self._ax.clear()
+        self._clear_plot()
         self._line, = self._ax.plot(x, line_data, marker='o', markersize=3)
         self._ax.set_xlabel(plot_axis)
         self._ax.set_ylabel(self._var_name)
@@ -246,8 +243,7 @@ class PlotDockWidget(QDockWidget):
         x = self._dataset.get_coord('x')
         cmap = self._current_cmap()
 
-        self._ax.clear()
-        self._colorbar = None
+        self._clear_plot()
         self._im = self._ax.imshow(
             data, aspect='auto', origin='lower',
             extent=[x[0], x[-1], 0, data.shape[0] - 1],
@@ -268,8 +264,7 @@ class PlotDockWidget(QDockWidget):
             self._global_vmin, self._global_vmax = \
                 self._dataset.get_variable_range(self._var_name)
 
-        self._ax.clear()
-        self._colorbar = None
+        self._clear_plot()
         self._im = self._ax.imshow(
             data, origin='lower', aspect='equal', cmap=cmap,
             vmin=self._global_vmin, vmax=self._global_vmax)
@@ -300,10 +295,15 @@ class PlotDockWidget(QDockWidget):
         slicer[ax_idx] = slice_idx
         slice_data = data[tuple(slicer)]
 
-        self._ax.clear()
-        self._colorbar = None
+        # One colour range for every record and slice, as in 2D.
+        if self._global_vmin is None:
+            self._global_vmin, self._global_vmax = \
+                self._dataset.get_variable_range(self._var_name)
+
+        self._clear_plot()
         self._im = self._ax.imshow(
-            slice_data, origin='lower', aspect='equal', cmap=cmap)
+            slice_data, origin='lower', aspect='equal', cmap=cmap,
+            vmin=self._global_vmin, vmax=self._global_vmax)
         self._ax.set_xlabel(remaining[1])
         self._ax.set_ylabel(remaining[0])
         self._ax.set_title(
@@ -311,7 +311,7 @@ class PlotDockWidget(QDockWidget):
         self._colorbar = self._fig.colorbar(self._im, ax=self._ax)
 
     # ------------------------------------------------------------------
-    # Update methods (in-place, no full replot)
+    # Updates from time, slice and colormap controls
     # ------------------------------------------------------------------
 
     def _on_timestep_change(self, ts):
@@ -387,6 +387,19 @@ class PlotDockWidget(QDockWidget):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _clear_plot(self):
+        """Clear the axes for a full re-render, removing the old colour bar.
+
+        ``Axes.clear`` leaves the colour bar's own axes in the figure, so
+        without the removal every re-render (a 3D slider step) adds one.
+        Remove it first: ``Colorbar.remove`` finds the parent axes through
+        the image, which ``Axes.clear`` detaches.
+        """
+        if self._colorbar is not None:
+            self._colorbar.remove()
+            self._colorbar = None
+        self._ax.clear()
 
     def _current_timestep(self):
         if self._anim_controls:

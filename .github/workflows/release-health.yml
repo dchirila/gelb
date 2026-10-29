@@ -26,6 +26,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y g++ gfortran libnetcdf-dev libnetcdff-dev
+          # Qt (the gelb-view tests, offscreen) loads the GL libraries
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1
 
       - name: Install project
         run: uv sync --all-extras
@@ -48,6 +50,7 @@ jobs:
             gelb/tests/integration/test_example_diagnostics.py \
             gelb/tests/integration/test_geometry_lint.py \
             gelb/tests/integration/test_cbt_guard.py \
+            gelb/tests/integration/test_view_colorbar.py \
             gelb/tests/unit/midware/test_periodic_continuity_validator.py \
             gelb/tests/numeric \
             -q
