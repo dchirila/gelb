@@ -44,6 +44,12 @@ versions follow upstream end of life and can change in any release.
   `GELB_NVCC_ARCH`, `GELB_NVCC_FLAGS` and `GELBC_EXTRA`.
 - `gelbc --visualize-ast --ast-stage midware` drew nothing; it now draws
   the tree after the midware passes.
+- **The gelb-view window, 3D data.** Every step of the time slider or the
+  slice controls added another colour bar, so the plot shrank step by
+  step. A 3D slice now keeps one colour bar and, as a 2D heatmap does, one
+  colour range: the variable's minimum and maximum over all records. The
+  viewer now reads such ranges one record at a time, also for the
+  *Sources* tree, so opening a large 3D output needs much less memory.
 
 ## [1.0.0] — 2026-10-23
 

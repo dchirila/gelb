@@ -71,8 +71,7 @@ class SourceTreeWidget(QTreeWidget):
             dtype_str = _netcdf_dtype_label(var)
             shape_str = 'x'.join(str(s) for s in var.shape)
             try:
-                data = var[:]
-                vmin, vmax = float(np.nanmin(data)), float(np.nanmax(data))
+                vmin, vmax = dataset.get_variable_range(var_name)
                 info = f'{dtype_str}  {shape_str}  [{vmin:.4g} .. {vmax:.4g}]'
             except Exception:
                 info = f'{dtype_str}  {shape_str}'

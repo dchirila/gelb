@@ -5,6 +5,8 @@ Reads .nc files produced by GeLB-compiled simulations, auto-detects
 the spatial dimensionality, and produces appropriate plots.
 """
 
+import warnings
+
 import netCDF4 as nc
 import numpy as np
 import matplotlib.pyplot as plt
@@ -49,13 +51,31 @@ class GeLBDataset:
         return self.ds.variables[name][timestep, ...]
 
     def get_variable_range(self, name):
-        """Return (min, max) across all timesteps, cached after first call."""
+        """Return (min, max) across all timesteps, ignoring NaN and masked
+        values, cached after first call.
+
+        Reads one record at a time, so that a large 3D output need not fit
+        in memory at once.
+        """
         if not hasattr(self, '_range_cache'):
             self._range_cache = {}
         if name not in self._range_cache:
             var = self.ds.variables[name]
-            self._range_cache[name] = (float(np.nanmin(var[:])),
-                                       float(np.nanmax(var[:])))
+            if var.dimensions[:1] == ('time',):
+                records = (var[r, ...] for r in range(var.shape[0]))
+            else:
+                records = [var[:]]
+            lows, highs = [], []
+            with warnings.catch_warnings():
+                # An all-NaN record has no range; the other records decide.
+                warnings.simplefilter('ignore', RuntimeWarning)
+                for record in records:
+                    record = np.ma.filled(
+                        np.ma.asarray(record, dtype=float), np.nan)
+                    lows.append(np.nanmin(record))
+                    highs.append(np.nanmax(record))
+            self._range_cache[name] = (float(np.nanmin(lows)),
+                                       float(np.nanmax(highs)))
         return self._range_cache[name]
 
     def get_coord(self, name):
