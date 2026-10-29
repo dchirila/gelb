@@ -17,11 +17,15 @@ RECORDS = 3
 # index), so a colour range taken from the record or slice on screen would
 # differ at every move.  One NaN cell stands for a masked node class.  A
 # Qt slot's exception goes to sys.excepthook, so it is collected and fails
-# the next check instead of passing unseen.
+# the next check instead of passing unseen; the hook still prints every
+# traceback, so a failed check or import shows up in the test's output.
 SCRIPT = '''
 import sys
 errors = []
-sys.excepthook = lambda kind, value, tb: errors.append((kind.__name__, str(value)))
+def collect(kind, value, tb):
+    errors.append((kind.__name__, str(value)))
+    sys.__excepthook__(kind, value, tb)
+sys.excepthook = collect
 from PySide6.QtWidgets import QApplication
 from gelb.visualization.data_viewer import GeLBDataset
 from gelb.visualization.gui.plot_panel import PlotDockWidget
