@@ -83,17 +83,20 @@ more than one time step) and removes the intermediates unless
 ``--keep`` is given.  The native compilers and their defaults:
 
 - ``cpu_fortran_serial``: ``GELB_FC`` (default ``gfortran``) with
-  ``GELB_FFLAGS`` (default ``-O3 -march=native -ffp-contract=off
-  -fno-range-check -ffree-line-length-none``) and the NetCDF-Fortran
+  ``GELB_FFLAGS`` (default ``-O3 -march=native -fno-range-check
+  -ffree-line-length-none``, always preceded by ``-ffp-contract=off``)
+  and the NetCDF-Fortran
   flags ``GELB_NETCDF_INC`` and ``GELB_NETCDF_LIB`` (detected with
   ``nf-config`` and ``nc-config`` when unset).
 - ``cpu_highway``: ``GELB_CXX`` (default ``g++`` on Linux; on macOS
   the first of ``g++-16`` to ``g++-13``, else ``clang++`` with the
   OpenMP runtime from ``GELB_OMP_ROOT`` or Homebrew's ``libomp``) with
   ``GELB_CXXFLAGS`` (default ``-std=c++17 -O3 -march=native
-  -ffp-contract=off -fno-trapping-math -fno-unroll-loops -DNDEBUG``,
-  with ``-mcpu=native`` in place of ``-march=native`` for Apple clang
-  on arm64; OpenMP flags appended), ``-I`` for ``third_party/highway`` and
+  -fno-trapping-math -fno-unroll-loops -DNDEBUG``, with ``-mcpu=native``
+  in place of ``-march=native`` for Apple clang on arm64; always
+  preceded by ``-ffp-contract=off``, so that an override keeps
+  contraction off unless it says ``-ffp-contract=fast`` itself; OpenMP
+  flags appended), ``-I`` for ``third_party/highway`` and
   ``gelb/backends``, four Highway support ``.cc`` files compiled in,
   and NetCDF-C from ``GELB_NETCDF_C_ROOT`` or ``GELB_NETCDF_C_INC``
   and ``GELB_NETCDF_C_LIB`` (``nc-config`` when unset).  At run time
