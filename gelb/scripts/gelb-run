@@ -836,6 +836,9 @@ esac
 # -- Working directory ------------------------------------------------
 BASENAME=$(basename "${GELB_FILE%.gelb}")
 NC_FILE="${BASENAME}.nc"
+if [[ "$OUTPUT_MODE" == "netcdf" && -e "$NC_FILE" && ! -w "$NC_FILE" ]]; then
+    die "$NC_FILE is read-only; move it away or run in another directory"
+fi
 
 if $KEEP; then
     WORK_DIR="."
@@ -850,6 +853,11 @@ EXECUTABLE="$WORK_DIR/${BASENAME}"
 
 # -- Step 1: GeLB -> target source -----------------------------------
 info "Translating $GELB_FILE → $GEN_SRC ..."
+# Under -k, $GEN_SRC is in the CWD and may still hold the previous run's
+# source.  Remove it now: if gelbc writes nothing (a report-only option
+# such as --stencils in GELBC_EXTRA), the check below must find no file,
+# not that stale one.
+rm -f "$GEN_SRC"
 # Unset VIRTUAL_ENV to suppress uv's env-mismatch warning, and run
 # gelbc directly (no pipe) so that ANSI colors are preserved and
 # non-zero exit codes propagate immediately.
@@ -904,6 +912,8 @@ fi
     "${GELBC_EXTRA_ARGS[@]+"${GELBC_EXTRA_ARGS[@]}"}" \
     "${DEFINE_ARGS[@]+"${DEFINE_ARGS[@]}"}" \
     -o "$GEN_SRC"
+# A report-only option in GELBC_EXTRA (--stencils, ...) writes no source.
+[[ -s "$GEN_SRC" ]] || die "gelbc wrote no $GEN_SRC; no simulation ran"
 
 # -- Step 2: Compile target source -----------------------------------
 compile_src
@@ -954,18 +964,20 @@ if [[ "$BACKEND" == "cpu_highway" ]]; then
     fi
 fi
 
+# The program truncates the .nc when it opens it, a few ms after it
+# starts; clear the file now, after a successful build, so that neither
+# a run that fails before that point nor the progress monitor's first
+# poll can show an earlier run's file as this run's result.  Not when
+# GELBC_EXTRA names another output file (--nc-output): then the basename
+# file is not this run's.
+if [[ "$OUTPUT_MODE" == "netcdf" && " ${GELBC_EXTRA:-} " != *" --nc-output"* ]]; then
+    rm -f "$NC_FILE"
+fi
+SIM_RC=0
 # For NetCDF mode with multiple timesteps, show a progress bar
 if [[ "$OUTPUT_MODE" == "netcdf" && "$NUM_TIMESTEPS" -gt 1 ]]; then
-    TOTAL_RECORDS=$(( (NUM_TIMESTEPS / WRITE_EVERY) + 1 ))
-
-    # Clear any leftover .nc file from a prior run. The Fortran
-    # backend calls nf90_create(NF90_CLOBBER) which truncates on
-    # open, but truncation happens a few ms after the simulation
-    # starts -- long enough for the progress monitor to catch a
-    # first poll against the *old* file and briefly report 100%
-    # before the record count resets to 0 on the next poll.
-    # Pre-clearing removes that phantom entirely.
-    rm -f "$NC_FILE"
+    # t = 0, every WRITE_EVERY-th step, and the last step.
+    TOTAL_RECORDS=$(( NUM_TIMESTEPS / WRITE_EVERY + 1 + (NUM_TIMESTEPS % WRITE_EVERY != 0) ))
 
     # Buffer the simulation's stdout (MLUPS report, banners) into
     # a temp file for the duration of the progress bar. If we let
@@ -1013,10 +1025,20 @@ if [[ "$OUTPUT_MODE" == "netcdf" && "$NUM_TIMESTEPS" -gt 1 ]]; then
 
     # Wait for simulation to finish and capture exit code, then
     # replay the buffered stdout below the progress bar.
-    wait "$SIM_PID"
+    wait "$SIM_PID" || SIM_RC=$?
     cat "$SIM_STDOUT_BUF"
 else
-    "$EXECUTABLE" "${PROG_ARGS[@]+"${PROG_ARGS[@]}"}"
+    "$EXECUTABLE" "${PROG_ARGS[@]+"${PROG_ARGS[@]}"}" || SIM_RC=$?
+fi
+if (( SIM_RC != 0 )); then
+    msg="the simulation exited with status $SIM_RC"
+    if [[ "$OUTPUT_MODE" == "netcdf" ]]; then
+        [[ -f "$NC_FILE" ]] && msg+="; $NC_FILE is incomplete" \
+            || msg+="; it wrote no $NC_FILE"
+    fi
+    $KEEP || msg+=" (rerun with -k to keep the generated source)"
+    echo "gelb-run: error: $msg" >&2
+    exit "$SIM_RC"
 fi
 
 # -- Step 4: Visualize (optional) ------------------------------------

@@ -146,7 +146,7 @@ def monitor(nc_path, total_records, pid):
         if not _process_alive(pid):
             elapsed = time.monotonic() - start_time
             sys.stderr.write(
-                f'\rSimulation completed in {_format_time(elapsed)} '
+                f'\rSimulation ended after {_format_time(elapsed)} '
                 f'(too fast to track incrementally).\n')
             sys.stderr.flush()
             return
@@ -211,8 +211,6 @@ def monitor(nc_path, total_records, pid):
             count_final = _get_record_count(nc_path)
             if count_final >= 0:
                 count = count_final
-            if count <= 0 and total_records > 0:
-                count = total_records
             size = _get_file_size(nc_path)
             elapsed = time.monotonic() - start_time
             fraction = (min(count / total_records, 1.0)
@@ -223,7 +221,7 @@ def monitor(nc_path, total_records, pid):
                 f'{count}/{total_records} records  '
                 f'{_format_size(size)}  '
                 f'elapsed {_format_time(elapsed)}  '
-                f'done'
+                f'ended'
             )
             sys.stderr.write(f'{status:<100}\n')
             sys.stderr.flush()
