@@ -25,8 +25,15 @@ def create_figure(n_panels, title=None, figsize_per_panel=(6, 5)):
 
 
 def add_colorbar(fig, ax, im, label=None):
-    """Add a colorbar to a plot, optionally with a label."""
-    cbar = fig.colorbar(im, ax=ax)
+    """Add a colorbar beside ``ax``, as tall as the plot itself.
+
+    ``fig.colorbar(im, ax=ax)`` spans the axes box, which an equal-aspect
+    image does not fill; a divider axes follows the drawn image instead.
+    ``Colorbar.remove()`` removes that axes too.
+    """
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+    cax = make_axes_locatable(ax).append_axes('right', size='4%', pad=0.1)
+    cbar = fig.colorbar(im, cax=cax)
     if label:
         cbar.set_label(label)
     return cbar
