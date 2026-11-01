@@ -95,8 +95,10 @@ examples measured (:doc:`16_performance_backends`).
 **Fast math** (``gelb-run -F``).  The native compiler's fast-math mode
 (``-ffast-math``, nvcc ``--use_fast_math``): re-association, reciprocal
 approximations, no signed zeros, flushed subnormals, approximate
-transcendentals on CUDA.  Not reproducible and not covered by anything
-in this chapter.
+transcendentals on CUDA.  On CUDA this concerns ``real32`` operations
+(flush-to-zero, the approximate intrinsics); the binary64 programs
+measured did not change under it.  Not reproducible and not covered by
+anything in this chapter.
 
 Fusion rounds once instead of twice, so it is usually at least as
 accurate; what it gives up is reproducibility and some symmetries.  In

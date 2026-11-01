@@ -239,9 +239,9 @@ The ``random()`` intrinsic returns a uniform pseudo-random number in
    scalar density per cell.
 
 Pass ``--seed <N>`` to ``gelb-run`` for a deterministic initial
-perturbation; without ``--seed``, the runtime seeds the generator from
-entropy so each run produces a statistically independent droplet
-realisation.
+perturbation; without ``--seed``, every backend seeds the generator from
+the system clock, so each run produces a statistically independent
+droplet realisation.
 
 Running it
 ==========
