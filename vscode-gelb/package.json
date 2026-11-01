@@ -296,9 +296,9 @@
     "@types/node": "^18.0.0",
     "@types/vscode": "^1.74.0",
     "@vscode/test-electron": "^2.5.2",
-    "mocha": "^11.7.5",
-    "playwright-core": "~1.61.1",
-    "three": "^0.184.0",
+    "mocha": "^11.8.0",
+    "playwright-core": "~1.64.1",
+    "three": "^0.186.1",
     "typescript": "^5.4.0",
     "vscode-oniguruma": "^1.7.0",
     "vscode-textmate": "^8.0.0"
