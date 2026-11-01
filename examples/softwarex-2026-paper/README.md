@@ -20,20 +20,26 @@ All commands below are run from the repo root.
 | `lid_driven_cavity_2d_bgk.gelb` | performance table rows, LDC-2D row of the lbmpy table (the benchmarked program is the canonical `examples/lbm/2d/` file, which has the same code as this copy with the `Hydro` gauge placed before the wall dynamics and different comments) |
 
 ```sh
-# convergence data (writes the L2-error table the figure is drawn from):
-uv run python scripts/validate_analytical.py \
-    --cases taylor_green_bgk taylor_green_mrt poiseuille \
-    --resolutions 16 32 64 128 256
+# convergence data: prints the L2-error tables the figure is drawn from
+# and plots them (the figure's Taylor-Green rows stop at N = 128):
+uv run python scripts/validate_analytical.py -o tgv_convergence.png \
+    --cases taylor_green_bgk taylor_green_mrt --resolutions 16 32 64 128
+# the Poiseuille sweep is the long one: NY = 256 alone is 24 million steps,
+# about 6 minutes on 16 CPU cores and 18 on 4.
+uv run python scripts/validate_analytical.py -o poiseuille_convergence.png \
+    --cases poiseuille --resolutions 16 32 64 128 256
 # lbmpy table: see docs/benchmarks/lbmpy_reproduction.md for the full recipe
 # (three grid sizes, fast-math on both sides); in short:
 scripts/install_lbmpy.sh --prefix <dir>
 <dir>/venv/bin/python scripts/benchmark_lbmpy_tgv.py --domain-size 512
 <dir>/venv/bin/python scripts/benchmark_lbmpy_ldc.py --domain-size 512
-gelb-run -b cpu_highway -F -n 5000 -w 5000 -D N=512 -D NU=0.063 taylor_green_vortex_2d_bgk.gelb
-gelb-run -b cpu_highway -F -n 5000 -w 5000 -D N=512 lid_driven_cavity_2d_bgk.gelb
+gelb-run -b cpu_highway -F -n 5000 -w 5000 -D N=512 -D NU=0.063 \
+    examples/lbm/2d/taylor_green_vortex_2d_bgk.gelb
+gelb-run -b cpu_highway -F -n 5000 -w 5000 -D N=512 \
+    examples/lbm/2d/lid_driven_cavity_2d_bgk.gelb
 ```
 
-Note: the harness scripts above resolve the canonical paths under
+Note: the commands above run the canonical programs under
 `examples/lbm/2d/`; the copies here are archival pins (pinned 2026-08-16,
 identical up to ASCII-normalized punctuation in comments, except for the
 lid-driven cavity as noted in the table).
@@ -92,6 +98,8 @@ curl "https://gis.ngdc.noaa.gov/arcgis/rest/services/DEM_mosaics/DEM_all/ImageSe
 
 ## Figures
 
-The matplotlib scripts that turn these runs into the paper's figures
-live in the paper repository under `figs-prep/figs/` (each directory is
-self-contained: generator script + input data + `REPRODUCE` notes).
+The Colab notebooks in [`colab/`](../../colab/) reproduce the paper's
+Section 3 figures in the browser, from these programs and with the
+paper's step counts: `paper_s3_1_convergence.ipynb` (Section 3.1),
+`paper_s3_2_rayleigh_benard.ipynb` (3.2) and
+`paper_s3_3_karman_streets.ipynb` (3.3, on a GPU runtime).

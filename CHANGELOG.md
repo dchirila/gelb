@@ -51,6 +51,15 @@ versions follow upstream end of life and can change in any release.
   viewer now reads such ranges one record at a time, also for the
   *Sources* tree, so opening a large 3D output needs much less memory.
 
+- **The paper-examples README** (`examples/softwarex-2026-paper/`). Two
+  benchmark commands named programs that do not exist in the repo root,
+  and the convergence command needed an NVIDIA GPU and ran resolutions it
+  had not asked for: `scripts/validate_analytical.py` ignored
+  `--resolutions` for most cases, and its default backend was
+  `gpu_cuda_cpp`. The script now honours `--resolutions` for every case
+  and defaults to `cpu_highway`, as `gelb-run` does, and the README's
+  *Figures* section points at the Colab notebooks.
+
 ## [1.0.0] — 2026-10-23
 
 The release that accompanies the SoftwareX paper. Since 0.9.0 the
