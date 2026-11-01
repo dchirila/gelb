@@ -63,6 +63,7 @@ jobs:
             gelb/tests/integration/test_view_colorbar.py \
             gelb/tests/integration/test_view_context_menu.py \
             gelb/tests/integration/test_view_layout.py \
+            gelb/tests/integration/test_view_composite_cmap.py \
             gelb/tests/integration/test_gelb_run_guards.py \
             gelb/tests/integration/test_cli_entry_points.py \
             gelb/tests/integration/test_gelbc_output_paths.py \

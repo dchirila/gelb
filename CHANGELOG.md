@@ -115,6 +115,10 @@ versions follow upstream end of life and can change in any release.
   name. Every colour bar, headless or in the window, is now as tall as
   the image it belongs to; it used to span the whole axes box, which an
   equal-aspect image of a non-square grid leaves largely empty.
+- **gelb-view's vorticity plot forgot the chosen colormap.** It redrew
+  with its own diverging colormap on every animation frame or time step,
+  whatever the *cmap* box said. The box now starts at that colormap
+  (`RdBu_r`) and the plot keeps the user's choice.
 - **The gelb-view *Sources* menu, 3D data.** It offered "New
   Cross-Section" and, for a multi-variable selection, the composite plots
   (Vector Field, Streamlines, Magnitude, Particle Animation,

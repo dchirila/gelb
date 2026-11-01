@@ -103,6 +103,9 @@ class CompositePlotDockWidget(QDockWidget):
 
         if self._plot_type in ('Magnitude', 'Vorticity', 'Side-by-Side'):
             self._cmap_selector = ColormapSelector(self)
+            if self._plot_type == 'Vorticity':
+                # Diverging by default; the user's later choice sticks.
+                self._cmap_selector.set_value('RdBu_r')
             self._cmap_selector.colormap_changed.connect(
                 self._on_colormap_change)
             layout.addWidget(self._cmap_selector)
@@ -333,7 +336,7 @@ class CompositePlotDockWidget(QDockWidget):
         self._colorbars = []
 
         ts = self._current_timestep()
-        cmap = 'RdBu_r'  # diverging colormap for vorticity
+        cmap = self._current_cmap()
 
         vx = self._dataset.get_variable_at_timestep(self._var_names[0], ts)
         vy = self._dataset.get_variable_at_timestep(self._var_names[1], ts)
