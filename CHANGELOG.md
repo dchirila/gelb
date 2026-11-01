@@ -50,7 +50,13 @@ versions follow upstream end of life and can change in any release.
   colour range: the variable's minimum and maximum over all records. The
   viewer now reads such ranges one record at a time, also for the
   *Sources* tree, so opening a large 3D output needs much less memory.
-
+- **The gelb-view *Sources* menu, 3D data.** It offered "New
+  Cross-Section" and, for a multi-variable selection, the composite plots
+  (Vector Field, Streamlines, Magnitude, Particle Animation,
+  Side-by-Side) for 3D variables too, and choosing one opened no plot
+  (the traceback went to the terminal). A 3D variable now gets the plots
+  that open, heatmap and animation, which show one slice at a time, and
+  the menu says "Use ParaView for 3D visualizations".
 - **The paper-examples README** (`examples/softwarex-2026-paper/`). Two
   benchmark commands named programs that do not exist in the repo root,
   and the convergence command needed an NVIDIA GPU and ran resolutions it
