@@ -32,6 +32,17 @@ versions follow upstream end of life and can change in any release.
   zero means decimal, and anything else is an error before any step
   runs; `gelbc` applies the same ranges. A later release will lift the
   cap on `-n`.
+- **A failed run looks failed.** When the program exits with a nonzero
+  status, `gelb-run` now exits with that status and says so (and with
+  `-n` above 1 its output is still shown; before, the message was lost
+  behind the progress bar and the run ended with status 0). The
+  previous run's `.nc` is removed only after a successful build, so a
+  failed translation or build keeps it, and a read-only `.nc` stops the
+  run before anything is generated. A `GELBC_EXTRA` option that writes
+  no source (`--stencils`) is an error instead of a run of a stale
+  program. The progress bar says "ended" rather than "done" when the
+  program stops, and no longer reports every record written when it
+  could not count them.
 - **The cell-block-tiled storage layout off AVX-512.** A `cpu_highway`
   program in this layout that was built for a target with fewer than
   eight double lanes (AVX2, NEON, or a generic x86 build) ran and gave
