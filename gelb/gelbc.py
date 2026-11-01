@@ -2,11 +2,17 @@
 
 import click
 import json
+import numpy as np
 import os
 import re
 import sys
 
 from gelb.utils.ast_visualization import generate_ast_visualization
+
+# The generated programs count steps in a C ``int`` / Fortran ``integer``
+# and the loop increments past the last step, so -n stays one below the
+# counter's maximum; gelb-run applies the same bounds.
+_STEP_COUNTER_MAX = int(np.iinfo(np.int32).max)
 from gelb.compiler_pipeline import (
     PipelineOptions, PipelineProfile, build_backend_context, compile_file,
     resolve_geometry_for_compile)
@@ -197,9 +203,10 @@ def _run_diagnostics(input_file, define, show_traceback, no_geometry_lint):
 )
 @click.option(
     "--num-timesteps", "-n",
-    type=click.INT,
+    type=click.IntRange(0, _STEP_COUNTER_MAX - 1),
     default=1,
-    help="Number of simulation time steps (default: 1)"
+    help="Number of simulation time steps (default: 1; at most "
+         f"{_STEP_COUNTER_MAX - 1}, a 32-bit step counter)"
 )
 @click.option(
     "--output-mode", "-m",
@@ -218,7 +225,7 @@ def _run_diagnostics(input_file, define, show_traceback, no_geometry_lint):
 )
 @click.option(
     "--write-every", "-w",
-    type=click.INT,
+    type=click.IntRange(1, _STEP_COUNTER_MAX),
     default=1,
     help="Write gauge output every N timesteps (default: 1, i.e. every timestep)"
 )

@@ -136,7 +136,9 @@ Useful flags:
 
 - ``-o FILE`` — where to write the generated source.
 - ``--num-timesteps N`` — number of simulation time steps to run.
-  Default 1; you almost always want to set this.
+  Default 1; you almost always want to set this.  The generated
+  programs count steps in a 32-bit integer, so ``N`` is at most
+  2 147 483 646; a later release will lift this cap.
 - ``--write-every N`` — write gauge output every ``N`` steps
   (default: every step).  Reduce this for long runs to save disk.
 - ``--backend`` — ``cpu_highway`` (default; portable-SIMD C++ via
