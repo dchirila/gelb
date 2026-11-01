@@ -66,6 +66,9 @@ class ColormapSelector(QWidget):
     def value(self):
         return self._combo.currentText()
 
+    def set_value(self, name):
+        self._combo.setCurrentText(name)
+
 
 class SliceControls(QWidget):
     """Axis and index selector for 3D slicing."""
