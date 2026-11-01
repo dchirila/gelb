@@ -22,11 +22,12 @@ uv run python scripts/validate_analytical.py --cases couette_bgk couette_mrt
 uv run python scripts/validate_analytical.py --cases couette_bgk_zouhe couette_mrt_zouhe poiseuille_zouhe
 ```
 
-The OpenMP-parallel CPU backend is also accepted (handy on machines
-without an NVIDIA GPU):
+The script uses gelb-run's default backend, `cpu_highway`; `--backend`
+selects another (`gpu_cuda_cpp` on an NVIDIA GPU), and `--resolutions`
+replaces every selected case's resolution sweep:
 
 ```bash
-uv run python scripts/validate_analytical.py --backend cpu_highway \
+uv run python scripts/validate_analytical.py --backend gpu_cuda_cpp \
     --cases couette_bgk_zouhe poiseuille_zouhe \
     --resolutions 16 32 64 128
 ```

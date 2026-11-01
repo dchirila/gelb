@@ -11,7 +11,7 @@ Usage (from the gelb/ project root):
     uv run python scripts/validate_analytical.py --cases poiseuille
     uv run python scripts/validate_analytical.py --cases taylor_green_bgk
     uv run python scripts/validate_analytical.py -o validation.png
-    uv run python scripts/validate_analytical.py --backend cpu_highway
+    uv run python scripts/validate_analytical.py --backend gpu_cuda_cpp
 
     # Ra_cr sweeps (not included in default -- expensive)
     uv run python scripts/validate_analytical.py --cases ra_critical_2d
@@ -19,9 +19,9 @@ Usage (from the gelb/ project root):
     uv run python scripts/validate_analytical.py --cases ra_critical_2d ra_critical_3d
 
 Requires: matplotlib, netCDF4, numpy, and the toolchain for the
-selected backend: nvcc + NetCDF-C (gpu_cuda_cpp, default),
-g++ + OpenMP + NetCDF-C (cpu_highway), or gfortran +
-NetCDF-Fortran (cpu_fortran_serial).
+selected backend: g++ + OpenMP + NetCDF-C (cpu_highway, default),
+nvcc + NetCDF-C (gpu_cuda_cpp), or gfortran + NetCDF-Fortran
+(cpu_fortran_serial).
 """
 
 import argparse
@@ -58,12 +58,12 @@ def parse_args():
                    choices=all_cases,
                    help='Which cases to run (default: convergence cases; '
                         'add ra_critical_2d/ra_critical_3d for Ra_cr sweeps)')
-    p.add_argument('--backend', default='gpu_cuda_cpp',
-                   choices=['gpu_cuda_cpp', 'cpu_highway',
+    p.add_argument('--backend', default='cpu_highway',
+                   choices=['cpu_highway', 'gpu_cuda_cpp',
                             'cpu_fortran_serial'],
-                   help='Compiler backend (default: gpu_cuda_cpp). '
-                        'cpu_highway is the OpenMP-parallel CPU choice '
-                        'for machines without an NVIDIA GPU.')
+                   help='Compiler backend (default: cpu_highway, as in '
+                        'gelb-run). gpu_cuda_cpp runs the cases on an '
+                        'NVIDIA GPU.')
     p.add_argument('--resolutions', nargs='+', type=int, default=None,
                    help='Override the default resolution sweep '
                         '(e.g. --resolutions 16 32 64 128).  '
@@ -263,13 +263,14 @@ def poiseuille_analytical(ny, tau, g):
     return y_fluid, u_ana
 
 
-def run_poiseuille(backend):
+def run_poiseuille(backend, resolutions=None):
     """Run Poiseuille flow at multiple resolutions and return errors."""
     gelb_path = os.path.join(EXAMPLES_2D, 'poiseuille_flow_2d_mrt.gelb')
     tau = _POISEUILLE_TAU
     nu = (tau - 0.5) / 3.0
 
-    resolutions = [16, 32, 64, 128, 256]
+    if resolutions is None:
+        resolutions = [16, 32, 64, 128, 256]
     errors = []
 
     print(f'Poiseuille flow (MRT): TAU={tau}, nu={nu:.6f}')
@@ -370,14 +371,15 @@ _POISEUILLE_3D_G_BASE = 0.00001
 _POISEUILLE_3D_NY_BASE = 32
 
 
-def run_poiseuille_3d(backend):
+def run_poiseuille_3d(backend, resolutions=None):
     """Run 3D Poiseuille flow at multiple resolutions and return errors."""
     gelb_path = os.path.join(EXAMPLES_3D, 'poiseuille_flow_3d_mrt.gelb')
     tau = _POISEUILLE_3D_TAU
     nu = (tau - 0.5) / 3.0
 
     # 3D is much heavier -- use smaller grids
-    resolutions = [16, 32, 64, 128]
+    if resolutions is None:
+        resolutions = [16, 32, 64, 128]
     errors = []
 
     print(f'\nPoiseuille 3D (MRT): TAU={tau}, nu={nu:.6f}')
@@ -430,7 +432,7 @@ def couette_analytical(ny, u_wall):
     return y_fluid, u_ana
 
 
-def run_couette(backend, variant='bgk'):
+def run_couette(backend, variant='bgk', resolutions=None):
     """Run Couette flow at multiple resolutions and return errors."""
     if variant == 'mrt':
         filename = 'couette_flow_2d_mrt.gelb'
@@ -444,7 +446,8 @@ def run_couette(backend, variant='bgk'):
     u_wall = _COUETTE_U_WALL
     nu = (tau - 0.5) / 3.0
 
-    resolutions = [16, 32, 64, 128, 256]
+    if resolutions is None:
+        resolutions = [16, 32, 64, 128, 256]
     errors = []
 
     print(f'\n{label}: TAU={tau}, U_WALL={u_wall}, nu={nu:.6f}')
@@ -556,7 +559,7 @@ def taylor_green_analytical(n, nu, u_max, t):
     return ux_ana, uy_ana
 
 
-def run_taylor_green(backend, variant='bgk'):
+def run_taylor_green(backend, variant='bgk', resolutions=None):
     """Run Taylor-Green vortex at multiple resolutions and return errors."""
     params = _TG_PARAMS[variant]
     nu = params['nu']
@@ -564,7 +567,8 @@ def run_taylor_green(backend, variant='bgk'):
     gelb_path = os.path.join(EXAMPLES_2D, params['file'])
     label = f'Taylor-Green ({variant.upper()})'
 
-    resolutions = [16, 32, 64, 128, 256, 512, 1024]
+    if resolutions is None:
+        resolutions = [16, 32, 64, 128, 256, 512, 1024]
     errors = []
 
     print(f'\n{label}: NU={nu:.6f}, U_MAX={u_max}')
@@ -932,7 +936,7 @@ def main():
     all_results = []
 
     if 'poiseuille' in args.cases:
-        result = run_poiseuille(backend)
+        result = run_poiseuille(backend, resolutions=args.resolutions)
         all_results.append(result)
 
     if 'poiseuille_zouhe' in args.cases:
@@ -940,15 +944,17 @@ def main():
         all_results.append(result)
 
     if 'poiseuille_3d' in args.cases:
-        result = run_poiseuille_3d(backend)
+        result = run_poiseuille_3d(backend, resolutions=args.resolutions)
         all_results.append(result)
 
     if 'couette_bgk' in args.cases:
-        result = run_couette(backend, variant='bgk')
+        result = run_couette(backend, variant='bgk',
+                             resolutions=args.resolutions)
         all_results.append(result)
 
     if 'couette_mrt' in args.cases:
-        result = run_couette(backend, variant='mrt')
+        result = run_couette(backend, variant='mrt',
+                             resolutions=args.resolutions)
         all_results.append(result)
 
     if 'couette_bgk_zouhe' in args.cases:
@@ -962,11 +968,13 @@ def main():
         all_results.append(result)
 
     if 'taylor_green_bgk' in args.cases:
-        result = run_taylor_green(backend, variant='bgk')
+        result = run_taylor_green(backend, variant='bgk',
+                                  resolutions=args.resolutions)
         all_results.append(result)
 
     if 'taylor_green_mrt' in args.cases:
-        result = run_taylor_green(backend, variant='mrt')
+        result = run_taylor_green(backend, variant='mrt',
+                                  resolutions=args.resolutions)
         all_results.append(result)
 
     if all_results:
