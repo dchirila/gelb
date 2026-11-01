@@ -112,9 +112,12 @@ unchanged, so that the command is the same plain word in a checkout
 and in a packaged installation.  :source:`scripts/gelb-run` is a
 ten-line shim that ``exec``\ s the runner of the tree it sits in,
 ``<checkout>/gelb/scripts/gelb-run``; the macOS bundle's ``gelb-run``
-wrapper and the test suite call it by that path.  The runner starts
-``gelbc`` through the interpreter named by ``GELB_PYTHON`` (``python
--m gelb.gelbc``), otherwise through ``uv run --project <checkout>``
+wrapper and the test suite call it by that path.  The installed
+``gelb-run`` command (:source:`gelb/run_cli.py`) also ``exec``\ s the
+runner, after naming its own interpreter in ``GELB_PYTHON``.  The
+runner starts ``gelbc`` through the interpreter named by
+``GELB_PYTHON`` (``python -m gelb.gelbc``), otherwise through ``uv run
+--project <checkout>``
 and, when ``uv`` is not installed either, through the checkout's
 ``.venv/bin/python``; it compiles the result with the native compiler of the
 chosen backend, runs the executable and, with ``--view``, hands the

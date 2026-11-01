@@ -9,6 +9,10 @@ versions follow upstream end of life and can change in any release.
 
 ## [Unreleased]
 
+### Added
+
+- `gelbc --version`.
+
 ### Changed
 
 - The packaged installers for macOS and Ubuntu that the 1.0.0 notes
@@ -71,6 +75,12 @@ versions follow upstream end of life and can change in any release.
   code is generated (an alias that only resolves at run time is not
   detected). Before, `gelbc prog.gelb -o prog.gelb` replaced the program
   with its translation.
+- **pip installations.** The installed `gelb-run` command needed `uv` on
+  the PATH or `GELB_PYTHON` set by hand to find `gelbc`; it now uses its
+  own interpreter. Selecting the default `cpu_highway` backend in such an
+  installation, which has no Highway sources, now stops with one line
+  saying so and naming `-b cpu_fortran_serial`, instead of advice about
+  a git submodule.
 - **The cell-block-tiled storage layout off AVX-512.** A `cpu_highway`
   program in this layout that was built for a target with fewer than
   eight double lanes (AVX2, NEON, or a generic x86 build) ran and gave

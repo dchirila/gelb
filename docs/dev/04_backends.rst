@@ -74,7 +74,8 @@ How ``gelb-run`` compiles the generated code
 
 :source:`gelb/scripts/gelb-run` translates with ``gelbc`` (``env
 VIRTUAL_ENV= uv run --project <checkout> gelbc``, or ``$GELB_PYTHON -m
-gelb.gelbc`` when ``GELB_PYTHON`` is set, which the script does itself
+gelb.gelbc`` when ``GELB_PYTHON`` is set: the installed ``gelb-run``
+command sets it to its own interpreter, and the script sets it itself
 from the checkout's ``.venv/bin/python`` when ``uv`` is not found),
 compiles with the ``compile_src`` of the
 chosen backend's ``case`` branch, runs the executable (behind
