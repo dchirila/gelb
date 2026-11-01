@@ -36,13 +36,23 @@ jobs:
         run: uv build --wheel --sdist
 
       - name: Smoke installed wheel
+        # As a user of a pip installation sees it: from a directory outside
+        # the checkout, with uv off the PATH and GELB_PYTHON unset.
         run: |
           python -m venv /tmp/gelb-wheel
           /tmp/gelb-wheel/bin/python -m pip install --upgrade pip
           /tmp/gelb-wheel/bin/python -m pip install dist/*.whl
-          /tmp/gelb-wheel/bin/gelbc \
-            examples/basic/1d/ex0_int_vec_setto_one.gelb \
-            --diagnostics-json
+          mkdir -p /tmp/gelb-smoke
+          cp examples/basic/1d/ex0_int_vec_setto_one.gelb /tmp/gelb-smoke/
+          cd /tmp/gelb-smoke
+          env -u GELB_PYTHON PATH=/usr/bin:/bin bash -eo pipefail -c '
+            /tmp/gelb-wheel/bin/python -c "import gelb; print(gelb.__file__)" | grep -F /tmp/gelb-wheel/
+            /tmp/gelb-wheel/bin/gelbc --version | grep -E "^gelbc [0-9]"
+            /tmp/gelb-wheel/bin/gelbc ex0_int_vec_setto_one.gelb --diagnostics-json
+            /tmp/gelb-wheel/bin/gelb-run -b cpu_fortran_serial -n 1 ex0_int_vec_setto_one.gelb
+            test -s ex0_int_vec_setto_one.nc
+            ! /tmp/gelb-wheel/bin/gelb-run -n 1 ex0_int_vec_setto_one.gelb 2> highway.err
+            grep -F "this installation has no Highway" highway.err'
 
       - name: Run focused tests
         run: |
@@ -53,6 +63,7 @@ jobs:
             gelb/tests/integration/test_view_colorbar.py \
             gelb/tests/integration/test_view_context_menu.py \
             gelb/tests/integration/test_gelb_run_guards.py \
+            gelb/tests/integration/test_cli_entry_points.py \
             gelb/tests/integration/test_gelbc_output_paths.py \
             gelb/tests/integration/test_gelb_run_flag_overrides.py \
             gelb/tests/integration/test_define_diagnostics.py \
