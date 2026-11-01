@@ -52,6 +52,7 @@ jobs:
             gelb/tests/integration/test_cbt_guard.py \
             gelb/tests/integration/test_view_colorbar.py \
             gelb/tests/integration/test_view_context_menu.py \
+            gelb/tests/integration/test_gelb_run_guards.py \
             gelb/tests/unit/midware/test_periodic_continuity_validator.py \
             gelb/tests/numeric \
             -q

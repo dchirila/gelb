@@ -24,6 +24,14 @@ versions follow upstream end of life and can change in any release.
 
 ### Fixed
 
+- **`gelb-run -n` and `-w` are validated.** `-w 0`, `-w 08` or a
+  negative `-n` made bash print an arithmetic error and exit 0 without
+  running anything, leaving the previous `.nc` in place. Both options
+  now take a whole number (`-n` from 0 to 2 147 483 646, `-w` from 1 to
+  2 147 483 647, the programs' step counters being 32-bit), a leading
+  zero means decimal, and anything else is an error before any step
+  runs; `gelbc` applies the same ranges. A later release will lift the
+  cap on `-n`.
 - **The cell-block-tiled storage layout off AVX-512.** A `cpu_highway`
   program in this layout that was built for a target with fewer than
   eight double lanes (AVX2, NEON, or a generic x86 build) ran and gave

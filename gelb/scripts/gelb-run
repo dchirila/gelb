@@ -182,7 +182,8 @@ Usage:
 
 Options:
   -b, --backend NAME      Backend (default: cpu_highway)
-  -n, --num-timesteps N   Number of simulation time steps (default: 1)
+  -n, --num-timesteps N   Number of simulation time steps (default: 1;
+                          at most 2147483646, a 32-bit step counter)
   -w, --write-every N     Write gauge output every N timesteps (default: 1)
   -m, --output-mode MODE  Gauge output: netcdf (default) or stdout
                           (stdout currently requires cpu_fortran_serial)
@@ -293,6 +294,23 @@ while [[ $# -gt 0 ]]; do
             GELB_FILE="$1"; shift ;;
     esac
 done
+
+# -n and -w are checked before any arithmetic: bash abandons a command
+# whose $(( )) fails (division by 0, "08" read as octal) and carries on,
+# and set -e does not stop it.  The programs count steps in a C int /
+# Fortran integer and the loop increments past the last step, so -n stays
+# one below that counter's maximum (gelbc applies the same bounds).  A
+# leading zero means decimal, as in gelbc.
+STEP_COUNTER_MAX=$(( (1 << 31) - 1 ))
+_count() {  # option value min max -> $COUNT
+    [[ "$2" =~ ^[0-9]+$ ]] || die "$1 expects a whole number, got '$2'"
+    local v="${2#"${2%%[!0]*}"}"
+    v="${v:-0}"
+    (( ${#v} <= 10 )) && COUNT=$((10#$v)) && (( COUNT >= $3 && COUNT <= $4 )) \
+        || die "$1 must be between $3 and $4, got $2"
+}
+_count -n "$NUM_TIMESTEPS" 0 $((STEP_COUNTER_MAX - 1)); NUM_TIMESTEPS=$COUNT
+_count -w "$WRITE_EVERY" 1 "$STEP_COUNTER_MAX"; WRITE_EVERY=$COUNT
 
 # A strict build fuses nothing and passes no value-changing flag, so it
 # cannot be combined with fast math (user manual, Numerical semantics: Build modes).
