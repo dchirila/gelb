@@ -43,6 +43,11 @@ versions follow upstream end of life and can change in any release.
   program. The progress bar says "ended" rather than "done" when the
   program stops, and no longer reports every record written when it
   could not count them.
+- **`gelbc` never overwrites the program.** `-o` and `--nc-output` reject
+  a name ending in `.gelb` and a path that is the input file, before any
+  code is generated (an alias that only resolves at run time is not
+  detected). Before, `gelbc prog.gelb -o prog.gelb` replaced the program
+  with its translation.
 - **The cell-block-tiled storage layout off AVX-512.** A `cpu_highway`
   program in this layout that was built for a target with fewer than
   eight double lanes (AVX2, NEON, or a generic x86 build) ran and gave
