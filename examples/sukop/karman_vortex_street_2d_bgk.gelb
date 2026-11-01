@@ -51,7 +51,10 @@
 // t = 250 000, with a period of about 6200 steps (St = f*D/u ~= 0.14
 // at Re ~= 90); the tutorial's figure is that run, 300 000 steps.
 // The x-periodic channel feeds the wake back in upstream, so this
-// is a demonstration, not a Strouhal benchmark.
+// is a demonstration, not a Strouhal benchmark.  To see the shedding
+// (tutorial chapter 10):
+//   gelb-run -n 300000 -w 2000 -D NY=256 -D G=4.0e-7 \
+//       examples/sukop/karman_vortex_street_2d_bgk.gelb
 
 simulation_description("2D Karman vortex street past a disk (BGK, D2Q9) [Sukop 5.3]");
 
