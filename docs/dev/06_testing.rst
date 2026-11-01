@@ -91,12 +91,16 @@ What CI runs
 :source:`.github/workflows/release-health.yml`, on every push and
 pull request, on ``ubuntu-latest``: installs ``g++``, ``gfortran``,
 ``libnetcdf-dev`` and ``libnetcdff-dev``; ``uv sync --all-extras``;
-``uv build --wheel --sdist``; installs the wheel into a fresh venv and
-runs ``gelbc examples/basic/1d/ex0_int_vec_setto_one.gelb
---diagnostics-json`` from it; then ``uv run pytest`` on
-:source:`gelb/tests/integration/test_example_diagnostics.py`,
-:source:`gelb/tests/integration/test_geometry_lint.py`,
+``uv build --wheel --sdist``; installs the wheel into a fresh venv and,
+from a directory outside the checkout with ``uv`` off the ``PATH`` and
+``GELB_PYTHON`` unset, checks that ``gelb`` imports from that venv,
+``gelbc --version``, ``gelbc --diagnostics-json`` on
+``examples/basic/1d/ex0_int_vec_setto_one.gelb``, a one-step
+``gelb-run -b cpu_fortran_serial`` that writes its ``.nc``, and that
+the default backend stops with the "no Highway" message; then ``uv run
+pytest`` on the focused list in the workflow (the example diagnostics,
+the geometry lint, the viewer and runner guards,
 :source:`gelb/tests/unit/midware/test_periodic_continuity_validator.py`
-and :source:`gelb/tests/numeric/`; and finally ``uv run sphinx-build
+and :source:`gelb/tests/numeric/`); and finally ``uv run sphinx-build
 -b html -W --keep-going docs /tmp/gelb-docs``, so a Sphinx warning
 fails the build.  CI has no GPU, so the ``gpu`` cases skip there.
