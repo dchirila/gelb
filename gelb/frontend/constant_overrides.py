@@ -183,6 +183,9 @@ def apply_constant_overrides(ast, overrides):
 
         element_dtype = target_stmt.data_type.element_dtype
         new_literal = _parse_value_to_literal(raw_value, element_dtype, name)
+        # The override stands where the declared value stood: a diagnostic
+        # on it (a division by the overridden constant, say) points there.
+        new_literal.code_range = target_stmt.value.code_range
         target_stmt.value = new_literal
 
     return ast
