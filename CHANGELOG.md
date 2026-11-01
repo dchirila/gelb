@@ -43,6 +43,13 @@ versions follow upstream end of life and can change in any release.
   program. The progress bar says "ended" rather than "done" when the
   program stops, and no longer reports every record written when it
   could not count them.
+- **Contraction stays off under a flag override.** `GELB_CXXFLAGS` or
+  `GELB_FFLAGS` without `-ffp-contract=off` (an `-O2` build, say, or the
+  default string plus `-g`) let the native compiler fuse multiplies and
+  additions, against the default build's contract: `sqrt(a*a - b*b)`
+  with `a == b` gave NaN in most cells. `gelb-run` now puts
+  `-ffp-contract=off` in front of the flags, default or override; an
+  explicit `-ffp-contract=fast` of your own still wins.
 - **`gelbc` never overwrites the program.** `-o` and `--nc-output` reject
   a name ending in `.gelb` and a path that is the input file, before any
   code is generated (an alias that only resolves at run time is not

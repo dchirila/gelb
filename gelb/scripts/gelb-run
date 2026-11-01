@@ -232,8 +232,8 @@ Examples:
 Environment variables:
   GELB_FC           Fortran compiler (default: gfortran)
   GELB_FFLAGS       Fortran compiler flags (default: '-O3 -march=native
-                    -ffp-contract=off -fno-range-check
-                    -ffree-line-length-none')
+                    -fno-range-check -ffree-line-length-none'); gelb-run
+                    puts -ffp-contract=off in front of them, default or not
   GELB_NETCDF_INC   NetCDF-Fortran include flags (auto-detected if unset)
   GELB_NETCDF_LIB   NetCDF-Fortran linker flags (auto-detected if unset)
   GELB_NETCDF_C_INC NetCDF-C include flags for the C++ SIMD / CUDA C++
@@ -245,9 +245,10 @@ Environment variables:
   GELB_CXX          C++ compiler for cpu_highway (default: Homebrew g++-16,
                     -15, -14 or -13 on macOS, else clang++; g++ on Linux)
   GELB_CXXFLAGS     C++ flags (default: '-std=c++17 -O3 -march=native
-                    -ffp-contract=off -fno-trapping-math -fno-unroll-loops
-                    -DNDEBUG', with
-                    -mcpu=native on Apple clang); OpenMP flags are appended
+                    -fno-trapping-math -fno-unroll-loops -DNDEBUG', with
+                    -mcpu=native on Apple clang); gelb-run puts
+                    -ffp-contract=off in front of them, default or not, and
+                    appends the OpenMP flags
   GELB_OMP_ROOT     OpenMP runtime for Apple clang: a directory holding
                     include/omp.h and lib/libomp.dylib (default: Homebrew libomp)
   GELB_PYTHON       Interpreter that can 'import gelb'; when set, gelbc, the
@@ -565,9 +566,11 @@ case "$BACKEND" in
         # literals (e.g. ``simulation_description("...")`` with non-ASCII
         # punctuation) that exceed the limit and otherwise fail compile
         # with ``-Werror=line-truncation`` (default in many distros).
-        # -ffp-contract=off in the default build: the native compiler
-        # must not fuse on its own (user manual, Numerical semantics: Build modes).
-        FFLAGS="${GELB_FFLAGS:--O3 -march=native -ffp-contract=off -fno-range-check -ffree-line-length-none}"
+        # -ffp-contract=off first, in every build: the native compiler
+        # must not fuse on its own (user manual, Numerical semantics: Build
+        # modes), also under a GELB_FFLAGS override that does not mention
+        # contraction.  A later -ffp-contract=fast in the override wins.
+        FFLAGS="-ffp-contract=off ${GELB_FFLAGS:--O3 -march=native -fno-range-check -ffree-line-length-none}"
         if $FAST_MATH; then
             FFLAGS="$FFLAGS -ffast-math"
         fi
@@ -686,10 +689,12 @@ Install GCC/G++ with OpenMP support, or set GELB_CXX to a compatible compiler."
         # either way).  The flag string is split on whitespace by
         # contract; everything derived from a path is kept in arrays so
         # a checkout or bundle whose path contains spaces still builds.
-        # -ffp-contract=off in the default build: the native compiler
-        # must not fuse on its own (Numerical semantics: Build modes); the one
-        # fusion GeLB decides lives in the runtime header.
-        CXXFLAGS="${GELB_CXXFLAGS:--std=c++17 -O3 $ARCH_FLAG -ffp-contract=off -fno-trapping-math -fno-unroll-loops -DNDEBUG}"
+        # -ffp-contract=off first, in every build: the native compiler
+        # must not fuse on its own (Numerical semantics: Build modes), also
+        # under a GELB_CXXFLAGS override that does not mention contraction;
+        # a later -ffp-contract=fast in the override wins.  The one fusion
+        # GeLB decides lives in the runtime header.
+        CXXFLAGS="-ffp-contract=off ${GELB_CXXFLAGS:--std=c++17 -O3 $ARCH_FLAG -fno-trapping-math -fno-unroll-loops -DNDEBUG}"
         if $FAST_MATH; then
             CXXFLAGS="$CXXFLAGS -ffast-math"
         fi

@@ -49,7 +49,10 @@ helpers may do to your program's floating-point arithmetic.
 **Default build.**  On the CPU backends (``cpu_highway``,
 ``cpu_fortran_serial``) the native compiler runs with contraction off
 (``-ffp-contract=off``), so it never fuses a multiply and an addition on
-its own: every ``+`` and ``*`` you wrote rounds once.  The one fusion
+its own: every ``+`` and ``*`` you wrote rounds once.  That holds under
+a ``GELB_CXXFLAGS`` or ``GELB_FFLAGS`` override too: ``gelb-run`` puts
+``-ffp-contract=off`` in front of your flags, so only an explicit
+``-ffp-contract=fast`` of your own turns contraction back on.  The one fusion
 GeLB decides itself is inside its reduction helper (``dot_prod`` with
 coefficients other than ±1), which uses a fused multiply-add on targets
 that have one, and then on every code path alike: the SIMD body, the
