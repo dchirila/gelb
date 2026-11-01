@@ -5,6 +5,7 @@ Reads .nc files produced by GeLB-compiled simulations, auto-detects
 the spatial dimensionality, and produces appropriate plots.
 """
 
+import os
 import warnings
 
 import netCDF4 as nc
@@ -129,7 +130,7 @@ def plot_1d(dataset, variables=None, output=None):
     """
     vars_to_plot = variables or list(dataset.variables.keys())
     n_timesteps = dataset.ntimesteps
-    fig, axes = create_figure(len(vars_to_plot), title=dataset.filepath)
+    fig, axes = create_figure(len(vars_to_plot), title=os.path.basename(dataset.filepath))
 
     for ax, varname in zip(axes, vars_to_plot):
         data = dataset.get_variable(varname)  # shape: (time, x)
@@ -170,7 +171,7 @@ def plot_2d(dataset, variables=None, timestep=-1, output=None, animate=False):
 
 def _snapshot_2d(dataset, vars_to_plot, timestep, output):
     """Single-timestep 2D heatmap."""
-    fig, axes = create_figure(len(vars_to_plot), title=dataset.filepath)
+    fig, axes = create_figure(len(vars_to_plot), title=os.path.basename(dataset.filepath))
 
     for ax, varname in zip(axes, vars_to_plot):
         data = dataset.get_variable(varname)  # (time, y, x)
@@ -198,7 +199,7 @@ def _animate_2d(dataset, vars_to_plot, output):
     ax.set_xlabel('x')
     ax.set_ylabel('y')
     title = ax.set_title(f'{varname} (t={dataset.timestep_value(0)})')
-    fig.colorbar(im, ax=ax)
+    add_colorbar(fig, ax, im)
 
     def update(frame):
         frame_data = data[frame, :, :]
@@ -225,7 +226,7 @@ def plot_3d(dataset, variables=None, timestep=-1,
             slice_axis='z', slice_index=None, output=None):
     """Slice views for 3D data at a given timestep."""
     vars_to_plot = variables or list(dataset.variables.keys())
-    fig, axes = create_figure(len(vars_to_plot), title=dataset.filepath)
+    fig, axes = create_figure(len(vars_to_plot), title=os.path.basename(dataset.filepath))
 
     # Python netCDF4 reverses Fortran dim order: (time, z, y, x)
     axis_map = {'x': 2, 'y': 1, 'z': 0}

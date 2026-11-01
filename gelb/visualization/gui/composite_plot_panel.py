@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QPushButton,
 )
 
+from gelb.visualization.common import add_colorbar
 from gelb.visualization.gui.plot_controllers import (
     TimestepSlider,
     ColormapSelector,
@@ -203,7 +204,7 @@ class CompositePlotDockWidget(QDockWidget):
                 im = ax.imshow(data, origin='lower', aspect='equal',
                                cmap=cmap, vmin=vmin, vmax=vmax)
                 self._images.append(im)
-                self._colorbars.append(self._fig.colorbar(im, ax=ax))
+                self._colorbars.append(add_colorbar(self._fig, ax, im))
                 ax.set_xlabel('x')
                 ax.set_ylabel('y')
 
@@ -240,7 +241,7 @@ class CompositePlotDockWidget(QDockWidget):
         ax.set_title(
             f'{self._var_names[0]}, {self._var_names[1]} '
             f'(t={self._dataset.timestep_value(ts)})')
-        self._fig.colorbar(self._quiver, ax=ax, label='speed')
+        add_colorbar(self._fig, ax, self._quiver, label='speed')
         self._canvas.draw_idle()
 
     def _render_streamlines(self):
@@ -281,7 +282,7 @@ class CompositePlotDockWidget(QDockWidget):
         ax.set_title(
             f'{self._var_names[0]}, {self._var_names[1]} '
             f'(t={self._dataset.timestep_value(ts)})')
-        self._fig.colorbar(self._streamplot.lines, ax=ax, label='speed')
+        add_colorbar(self._fig, ax, self._streamplot.lines, label='speed')
         self._canvas.draw_idle()
 
     def _render_magnitude(self):
@@ -322,7 +323,7 @@ class CompositePlotDockWidget(QDockWidget):
         label = ', '.join(self._var_names)
         ax.set_title(
             f'|({label})| (t={self._dataset.timestep_value(ts)})')
-        cb = self._fig.colorbar(im, ax=ax)
+        cb = add_colorbar(self._fig, ax, im)
         self._colorbars = [cb]
 
     def _render_vorticity(self):
@@ -368,7 +369,7 @@ class CompositePlotDockWidget(QDockWidget):
         label = ', '.join(self._var_names)
         ax.set_title(
             f'vorticity({label}) (t={self._dataset.timestep_value(ts)})')
-        cb = self._fig.colorbar(im, ax=ax)
+        cb = add_colorbar(self._fig, ax, im)
         self._colorbars = [cb]
 
     def _render_particles(self):

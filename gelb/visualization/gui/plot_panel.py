@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QDockWidget, QWidget, QVBoxLayout, QPushButton,
 )
 
+from gelb.visualization.common import add_colorbar
 from gelb.visualization.gui.plot_controllers import (
     TimestepSlider,
     ColormapSelector,
@@ -252,7 +253,7 @@ class PlotDockWidget(QDockWidget):
         self._ax.set_xlabel('x')
         self._ax.set_ylabel('timestep')
         self._ax.set_title(self._var_name)
-        self._colorbar = self._fig.colorbar(self._im, ax=self._ax)
+        self._colorbar = add_colorbar(self._fig, self._ax, self._im)
 
     def _render_2d_heatmap(self):
         """Render a 2D heatmap at a given timestep."""
@@ -271,7 +272,7 @@ class PlotDockWidget(QDockWidget):
         self._ax.set_xlabel('x')
         self._ax.set_ylabel('y')
         self._ax.set_title(f'{self._var_name} (t={self._dataset.timestep_value(ts)})')
-        self._colorbar = self._fig.colorbar(self._im, ax=self._ax)
+        self._colorbar = add_colorbar(self._fig, self._ax, self._im)
 
     def _render_3d_slice(self):
         """Render a 2D slice of 3D data."""
@@ -308,7 +309,7 @@ class PlotDockWidget(QDockWidget):
         self._ax.set_ylabel(remaining[0])
         self._ax.set_title(
             f'{self._var_name} ({axis_name}={slice_idx}, t={self._dataset.timestep_value(ts)})')
-        self._colorbar = self._fig.colorbar(self._im, ax=self._ax)
+        self._colorbar = add_colorbar(self._fig, self._ax, self._im)
 
     # ------------------------------------------------------------------
     # Updates from time, slice and colormap controls

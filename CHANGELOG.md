@@ -110,6 +110,11 @@ versions follow upstream end of life and can change in any release.
   colour range: the variable's minimum and maximum over all records. The
   viewer now reads such ranges one record at a time, also for the
   *Sources* tree, so opening a large 3D output needs much less memory.
+- **gelb-view's figures.** The headless viewer (`gelb-view data.nc -o
+  fig.png`) titled the figure with the file's full path; now with its
+  name. Every colour bar, headless or in the window, is now as tall as
+  the image it belongs to; it used to span the whole axes box, which an
+  equal-aspect image of a non-square grid leaves largely empty.
 - **The gelb-view *Sources* menu, 3D data.** It offered "New
   Cross-Section" and, for a multi-variable selection, the composite plots
   (Vector Field, Streamlines, Magnitude, Particle Animation,
