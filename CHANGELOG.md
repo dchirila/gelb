@@ -50,6 +50,14 @@ versions follow upstream end of life and can change in any release.
   with `a == b` gave NaN in most cells. `gelb-run` now puts
   `-ffp-contract=off` in front of the flags, default or override; an
   explicit `-ffp-contract=fast` of your own still wins.
+- **Small `gelb-run` guards.** `-s ""` (a script's unset seed variable)
+  ran clock-seeded as if `-s` had been omitted; a seed that is given must
+  now be an integer. Arguments after `--` were ignored, generated
+  programs taking none; they are now an error, and the usage line no
+  longer offers them. Python modules start with `python -P`, so a file
+  in the working directory (a `gelb/` directory, a stray `click.py`)
+  cannot shadow an installed package.
+  `--help` says that `GELBC_EXTRA` is for gelbc-only options.
 - **`gelbc` never overwrites the program.** `-o` and `--nc-output` reject
   a name ending in `.gelb` and a path that is the input file, before any
   code is generated (an alias that only resolves at run time is not

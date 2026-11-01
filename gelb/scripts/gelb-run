@@ -7,7 +7,7 @@
 # cleans up the intermediates automatically.
 #
 # Usage:
-#   gelb-run [options] <file.gelb> [-- program-args...]
+#   gelb-run [options] <file.gelb>
 #
 # Options:
 #   -b, --backend NAME      Backend (default: cpu_highway)
@@ -54,6 +54,7 @@ CUDA_GRAPHS=true
 POISON_UNINIT=false
 DEFINE_ARGS=()
 SEED=""
+SEED_GIVEN=false
 GELB_FILE=""
 PROG_ARGS=()
 
@@ -178,7 +179,7 @@ to a target language, compiles it, runs the resulting executable, and
 cleans up the intermediates automatically.
 
 Usage:
-  gelb-run [options] <file.gelb> [-- program-args...]
+  gelb-run [options] <file.gelb>
 
 Options:
   -b, --backend NAME      Backend (default: cpu_highway)
@@ -219,7 +220,8 @@ Options:
                           never-written cells surface as NaN in the
                           output instead of hiding behind benign zeros.
   -D, --define NAME=VALUE Override a global constant (repeatable)
-  -s, --seed N            Fixed integer seed for the PRNG (reproducible runs)
+  -s, --seed N            Fixed integer seed for the PRNG (reproducible runs);
+                          omitted: seeded from the system clock
   -h, --help              Show this help
 
 Examples:
@@ -260,7 +262,10 @@ Environment variables:
                     included (default: '-O3 $GELB_NVCC_ARCH -std=c++17
                     --expt-relaxed-constexpr -DNDEBUG -diag-suppress=177')
   GELBC_EXTRA       extra gelbc options, space-separated, e.g.
-                    '--storage-layout soa'
+                    '--storage-layout soa'. For gelbc-only options; the
+                    options gelb-run has itself (-n, -w, -D, -s, -b, -m,
+                    --nc-output's effect on the result file) are not
+                    supported there
 EOF
     exit 0
 }
@@ -287,7 +292,7 @@ while [[ $# -gt 0 ]]; do
         --no-cuda-graphs) CUDA_GRAPHS=false; shift ;;
         --poison-uninit)  POISON_UNINIT=true; shift ;;
         -D|--define)      DEFINE_ARGS+=(-D "$2"); shift 2 ;;
-        -s|--seed)        SEED="$2"; shift 2 ;;
+        -s|--seed)        SEED="$2"; SEED_GIVEN=true; shift 2 ;;
         --)              shift; PROG_ARGS=("$@"); break ;;
         -*)              die "unknown option: $1" ;;
         *)
@@ -312,6 +317,20 @@ _count() {  # option value min max -> $COUNT
 }
 _count -n "$NUM_TIMESTEPS" 0 $((STEP_COUNTER_MAX - 1)); NUM_TIMESTEPS=$COUNT
 _count -w "$WRITE_EVERY" 1 "$STEP_COUNTER_MAX"; WRITE_EVERY=$COUNT
+
+# A seed that was given must be an integer.  An empty one (a script's
+# unset $SEED) used to mean "no seed" and ran clock-seeded, which is the
+# one thing the caller was trying to avoid.
+if $SEED_GIVEN && [[ ! "$SEED" =~ ^-?[0-9]+$ ]]; then
+    die "-s expects an integer seed, got '$SEED' (omit -s to seed from the clock)"
+fi
+
+# Generated programs read no command-line arguments: everything is fixed
+# at translation time (-n, -w, -D, -s).
+if [[ ${#PROG_ARGS[@]} -gt 0 ]]; then
+    die "unexpected arguments after '--': ${PROG_ARGS[*]}
+Generated programs take no run-time arguments; use -n, -w, -D and -s."
+fi
 
 # A strict build fuses nothing and passes no value-changing flag, so it
 # cannot be combined with fast math (user manual, Numerical semantics: Build modes).
@@ -867,7 +886,7 @@ rm -f "$GEN_SRC"
 # gelbc directly (no pipe) so that ANSI colors are preserved and
 # non-zero exit codes propagate immediately.
 GELBC_EXTRA_ARGS=()
-if [[ -n "$SEED" ]]; then
+if $SEED_GIVEN; then
     GELBC_EXTRA_ARGS+=(--seed "$SEED")
 fi
 if [[ -n "$CUDA_BLOCK_SIZE" ]]; then
@@ -905,7 +924,7 @@ if [[ -n "${GELBC_EXTRA:-}" ]]; then
 fi
 
 if [[ -n "${GELB_PYTHON:-}" ]]; then
-    GELBC_CMD=("$GELB_PYTHON" -m gelb.gelbc)
+    GELBC_CMD=("$GELB_PYTHON" -P -m gelb.gelbc)
 else
     GELBC_CMD=("${UV_RUN[@]}" gelbc)
 fi
@@ -999,7 +1018,7 @@ if [[ "$OUTPUT_MODE" == "netcdf" && "$NUM_TIMESTEPS" -gt 1 ]]; then
     trap 'rm -f "$SIM_STDOUT_BUF"; $KEEP || rm -rf "$WORK_DIR"' EXIT
 
     # Launch simulation in background (stdout -> buffer file).
-    "$EXECUTABLE" "${PROG_ARGS[@]+"${PROG_ARGS[@]}"}" > "$SIM_STDOUT_BUF" &
+    "$EXECUTABLE" > "$SIM_STDOUT_BUF" &
     SIM_PID=$!
     # A background job of a script ignores SIGINT, so Ctrl-C would stop
     # the progress bar and leave the simulation running on its own. Pass
@@ -1018,13 +1037,13 @@ if [[ "$OUTPUT_MODE" == "netcdf" && "$NUM_TIMESTEPS" -gt 1 ]]; then
     # both.
     VENV_PY="$GELB_ROOT/.venv/bin/python"
     if [[ -n "${GELB_PYTHON:-}" ]]; then
-        "$GELB_PYTHON" -m gelb.visualization.progress_monitor \
+        "$GELB_PYTHON" -P -m gelb.visualization.progress_monitor \
             "$NC_FILE" "$TOTAL_RECORDS" "$SIM_PID" || true
     elif [[ -x "$VENV_PY" ]]; then
-        "$VENV_PY" -m gelb.visualization.progress_monitor \
+        "$VENV_PY" -P -m gelb.visualization.progress_monitor \
             "$NC_FILE" "$TOTAL_RECORDS" "$SIM_PID" || true
     else
-        "${UV_RUN[@]}" python -m gelb.visualization.progress_monitor \
+        "${UV_RUN[@]}" python -P -m gelb.visualization.progress_monitor \
             "$NC_FILE" "$TOTAL_RECORDS" "$SIM_PID" || true
     fi
 
@@ -1033,7 +1052,7 @@ if [[ "$OUTPUT_MODE" == "netcdf" && "$NUM_TIMESTEPS" -gt 1 ]]; then
     wait "$SIM_PID" || SIM_RC=$?
     cat "$SIM_STDOUT_BUF"
 else
-    "$EXECUTABLE" "${PROG_ARGS[@]+"${PROG_ARGS[@]}"}" || SIM_RC=$?
+    "$EXECUTABLE" || SIM_RC=$?
 fi
 if (( SIM_RC != 0 )); then
     msg="the simulation exited with status $SIM_RC"
@@ -1053,7 +1072,7 @@ if $VIEW; then
     elif [[ -f "$NC_FILE" ]]; then
         info "Launching visualization ..."
         if [[ -n "${GELB_PYTHON:-}" ]]; then
-            "$GELB_PYTHON" -m gelb.visualization.gelb_view "$NC_FILE"
+            "$GELB_PYTHON" -P -m gelb.visualization.gelb_view "$NC_FILE"
         else
             "${UV_RUN[@]}" gelb-view "$NC_FILE"
         fi
