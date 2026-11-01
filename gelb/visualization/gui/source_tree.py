@@ -21,6 +21,10 @@ _ROLE_VARNAME = Qt.ItemDataRole.UserRole + 2
 _ROLE_PLOT_ID = Qt.ItemDataRole.UserRole + 3
 _ROLE_NDIM = Qt.ItemDataRole.UserRole + 4
 
+# gelb-view draws 3D data one slice at a time (the heatmap and the
+# animation); every other plot needs 1D or 2D arrays.
+_HINT_3D = 'Use ParaView for 3D visualizations'
+
 
 class SourceTreeWidget(QTreeWidget):
     """Hierarchical tree showing open sources, their variables, and plots."""
@@ -159,34 +163,37 @@ class SourceTreeWidget(QTreeWidget):
                 all_names = [vn for _, vn, _ in selected_vars]
                 n_vars = len(all_names)
                 menu = QMenu(self)
-                menu.addAction(
-                    f'Side-by-Side ({n_vars} vars)',
-                    lambda: self.composite_plot_requested.emit(
-                        filepath, all_names, 'Side-by-Side'))
-                if n_vars == 2 and ndim >= 2:
+                if ndim == 3:
+                    menu.addAction(_HINT_3D).setEnabled(False)
+                else:
                     menu.addAction(
-                        'Vector Field',
+                        f'Side-by-Side ({n_vars} vars)',
                         lambda: self.composite_plot_requested.emit(
-                            filepath, all_names, 'Vector Field'))
-                    menu.addAction(
-                        'Streamlines',
-                        lambda: self.composite_plot_requested.emit(
-                            filepath, all_names, 'Streamlines'))
-                if n_vars in (2, 3):
-                    menu.addAction(
-                        'Magnitude',
-                        lambda: self.composite_plot_requested.emit(
-                            filepath, all_names, 'Magnitude'))
-                if n_vars == 2 and ndim == 2:
-                    menu.addAction(
-                        'Vorticity',
-                        lambda: self.composite_plot_requested.emit(
-                            filepath, all_names, 'Vorticity'))
-                if n_vars == 2 and ndim >= 2:
-                    menu.addAction(
-                        'Particle Animation',
-                        lambda: self.composite_plot_requested.emit(
-                            filepath, all_names, 'Particle Animation'))
+                            filepath, all_names, 'Side-by-Side'))
+                    if n_vars == 2 and ndim >= 2:
+                        menu.addAction(
+                            'Vector Field',
+                            lambda: self.composite_plot_requested.emit(
+                                filepath, all_names, 'Vector Field'))
+                        menu.addAction(
+                            'Streamlines',
+                            lambda: self.composite_plot_requested.emit(
+                                filepath, all_names, 'Streamlines'))
+                    if n_vars in (2, 3):
+                        menu.addAction(
+                            'Magnitude',
+                            lambda: self.composite_plot_requested.emit(
+                                filepath, all_names, 'Magnitude'))
+                    if n_vars == 2 and ndim == 2:
+                        menu.addAction(
+                            'Vorticity',
+                            lambda: self.composite_plot_requested.emit(
+                                filepath, all_names, 'Vorticity'))
+                    if n_vars == 2 and ndim >= 2:
+                        menu.addAction(
+                            'Particle Animation',
+                            lambda: self.composite_plot_requested.emit(
+                                filepath, all_names, 'Particle Animation'))
                 menu.exec(self.viewport().mapToGlobal(pos))
                 return
 
@@ -210,7 +217,7 @@ class SourceTreeWidget(QTreeWidget):
                     'New Line Plot',
                     lambda: self.plot_requested.emit(
                         filepath, var_name, 'Line Plot'))
-            if ndim >= 2:
+            if ndim == 2:
                 menu.addAction(
                     'New Cross-Section',
                     lambda: self.plot_requested.emit(
@@ -219,6 +226,9 @@ class SourceTreeWidget(QTreeWidget):
                 'New Animation',
                 lambda: self.plot_requested.emit(
                     filepath, var_name, 'Animation'))
+            if ndim == 3:
+                menu.addSeparator()
+                menu.addAction(_HINT_3D).setEnabled(False)
 
         elif item_type == 'plot':
             plot_id = item.data(0, _ROLE_PLOT_ID)
