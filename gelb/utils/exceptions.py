@@ -55,7 +55,12 @@ class GeLBException(Exception):
     def __str__(self):
         if _suppress_print_and_exit():
             return f"{self.error}: {self.hint}"
-        loc = self._source_location()
+        try:
+            loc = self._source_location()
+        except AttributeError:
+            # A node the compiler made itself carries no code_range; the
+            # error still shows, without a source line.
+            loc = None
         if loc is not None:
             show_error_in_src(loc[0], loc[1], self.error, self.hint)
         else:

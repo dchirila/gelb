@@ -58,6 +58,14 @@ versions follow upstream end of life and can change in any release.
   in the working directory (a `gelb/` directory, a stray `click.py`)
   cannot shadow an installed package.
   `--help` says that `GELBC_EXTRA` is for gelbc-only options.
+- **A diagnostic on a `-D` value no longer crashes `gelbc`.** An error
+  caused by an overridden constant (a division by it with `-D N=0`, a
+  grid size of 0) ended in `AttributeError: 'NoneType' object has no
+  attribute 'start_line'` in text mode, because the override carried no
+  source position. It now stands where the declared value stood: the
+  message points at the declaration line, in the terminal and in
+  `--diagnostics-json`, and a diagnostic on a node without a position
+  prints without a source excerpt instead of a traceback.
 - **`gelbc` never overwrites the program.** `-o` and `--nc-output` reject
   a name ending in `.gelb` and a path that is the input file, before any
   code is generated (an alias that only resolves at run time is not

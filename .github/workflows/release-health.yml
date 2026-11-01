@@ -55,6 +55,7 @@ jobs:
             gelb/tests/integration/test_gelb_run_guards.py \
             gelb/tests/integration/test_gelbc_output_paths.py \
             gelb/tests/integration/test_gelb_run_flag_overrides.py \
+            gelb/tests/integration/test_define_diagnostics.py \
             gelb/tests/unit/midware/test_periodic_continuity_validator.py \
             gelb/tests/numeric \
             -q
