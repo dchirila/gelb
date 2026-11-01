@@ -160,8 +160,9 @@ NetCDF-C prefix (``include/`` + ``lib/``) when ``nc-config`` is not
 on the PATH.  ``GELB_PYTHON`` names an
 interpreter that can ``import gelb``; when it is set, ``gelb-run``
 runs ``gelbc``, the progress bar and ``gelb-view`` through it and
-does not need ``uv`` (the relocatable macOS bundle built by
-``scripts/mac_bundle/build_bundle.sh`` works this way).
+does not need ``uv``.  The ``gelb-run`` command of a pip installation
+sets it to its own interpreter, and the relocatable macOS bundle built
+by ``scripts/mac_bundle/build_bundle.sh`` works the same way.
 ``OMP_NUM_THREADS`` defaults to the performance cores.
 
 Hand-tuning hot kernels

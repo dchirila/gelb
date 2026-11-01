@@ -7,6 +7,7 @@ import os
 import re
 import sys
 
+from gelb import __version__
 from gelb.utils.ast_visualization import generate_ast_visualization
 
 # The generated programs count steps in a C ``int`` / Fortran ``integer``
@@ -165,6 +166,8 @@ def _run_diagnostics(input_file, define, show_traceback, no_geometry_lint):
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
+@click.version_option(__version__, "--version", prog_name="gelbc",
+                      message="%(prog)s %(version)s")
 @click.option(
     "-t",
     is_flag=True,

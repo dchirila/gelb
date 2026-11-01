@@ -254,8 +254,10 @@ Environment variables:
   GELB_OMP_ROOT     OpenMP runtime for Apple clang: a directory holding
                     include/omp.h and lib/libomp.dylib (default: Homebrew libomp)
   GELB_PYTHON       Interpreter that can 'import gelb'; when set, gelbc, the
-                    progress bar and gelb-view run through it and uv is unused
-                    (unset and without uv: the checkout's .venv/bin/python)
+                    progress bar and gelb-view run through it and uv is unused.
+                    The installed 'gelb-run' command sets it to its own
+                    interpreter; the checkout's scripts/gelb-run leaves it
+                    unset (unset and without uv: the checkout's .venv/bin/python)
   GELB_NVCC         CUDA compiler for gpu_cuda_cpp (default: nvcc)
   GELB_NVCC_ARCH    GPU architecture flag (default: -arch=sm_89)
   GELB_NVCC_FLAGS   nvcc flags; replaces every default, the architecture
@@ -390,7 +392,9 @@ UV_PROJECT_DIR="$GELB_ROOT"
 # GELB_PYTHON names an interpreter that can ``import gelb`` (a venv's
 # python, or the bundled one in the relocatable macOS package).  When
 # it is set, gelbc, the progress monitor and gelb-view are launched
-# through it with ``python -m`` and uv is not needed at all.
+# through it with ``python -m`` and uv is not needed at all.  The
+# installed ``gelb-run`` entry point (gelb/run_cli.py) sets it to its
+# own interpreter before starting this script.
 if [[ -n "${GELB_PYTHON:-}" ]]; then
     [[ -x "$GELB_PYTHON" ]] || die "GELB_PYTHON=$GELB_PYTHON is not an executable"
     info "Python: $GELB_PYTHON (GELB_PYTHON)"
@@ -749,8 +753,14 @@ Install GCC/G++ with OpenMP support, or set GELB_CXX to a compatible compiler."
             "$REPO_ROOT/third_party/highway/hwy/targets.cc"
             "$REPO_ROOT/third_party/highway/hwy/abort.cc")
         if [[ ! -f "$REPO_ROOT/third_party/highway/hwy/highway.h" ]]; then
-            die "Highway not found at $REPO_ROOT/third_party/highway/.
+            if [[ -f "$REPO_ROOT/pyproject.toml" ]]; then
+                die "Highway not found at $REPO_ROOT/third_party/highway/.
 Run: git submodule update --init --recursive"
+            else
+                die "this installation has no Highway (the cpu_highway backend needs
+the third_party/highway sources, which a pip install does not carry).
+Use -b cpu_fortran_serial, or run gelb-run from a source checkout."
+            fi
         fi
         if [[ ! -f "$REPO_ROOT/gelb/backends/cpu_highway_runtime.hpp" ]]; then
             die "cpu_highway runtime header not found at $REPO_ROOT/gelb/backends/cpu_highway_runtime.hpp.

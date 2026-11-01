@@ -3,8 +3,10 @@
 The runner is the bash script ``gelb/scripts/gelb-run`` (package data).
 This module is what ``[project.scripts]`` points ``gelb-run`` at: it
 replaces the current process with that script, passing the arguments
-and the environment through unchanged, so that ``gelb-run`` is the same
-plain command in a source checkout as in a packaged installation.
+through unchanged, so that ``gelb-run`` is the same plain command in a
+source checkout as in a packaged installation.  Unless ``GELB_PYTHON`` is
+already set, it names this interpreter, the one that can ``import gelb``,
+so the script needs neither ``uv`` nor a checkout to run ``gelbc``.
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ SCRIPT = Path(__file__).resolve().parent / "scripts" / "gelb-run"
 def main() -> None:
     if not SCRIPT.is_file():
         sys.exit(f"gelb-run: the runner script is missing from this installation: {SCRIPT}")
+    os.environ.setdefault("GELB_PYTHON", sys.executable)
     argv = [str(SCRIPT), *sys.argv[1:]]
     try:
         os.execv(str(SCRIPT), argv)
