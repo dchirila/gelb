@@ -15,10 +15,10 @@ Installation
 GeLB is developed on Linux and macOS; Windows is supported via
 PowerShell scripts but less exercised.  All dependencies are
 installed into a self-contained virtual environment by a single
-bootstrap script.  Release 1.0 is installed from a source checkout
+bootstrap script.  The supported install is a source checkout
 (``git clone``, then the bootstrap); packaged installers for macOS
 and Ubuntu, which install the same three commands without a
-checkout, follow in release 1.0.1.
+checkout, are planned for a later release.
 
 **Hard requirements** (the bootstrap script refuses to run without
 these):

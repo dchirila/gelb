@@ -11,6 +11,9 @@ versions follow upstream end of life and can change in any release.
 
 ### Changed
 
+- The packaged installers for macOS and Ubuntu that the 1.0.0 notes
+  announced for 1.0.1 move to a later release; the source checkout plus
+  the bootstrap script remains the supported install.
 - **Python 3.11 or newer is required** (was 3.10). Python 3.10 reaches
   its end of life in October 2026, and the fixed releases of Pillow, which
   matplotlib uses, no longer support it.

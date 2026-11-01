@@ -12,8 +12,8 @@ compiler that comes with Xcode (or with the Command Line Tools).
 
 ## 1. Install
 
-Packaged installers for macOS and Ubuntu follow in release 1.0.1;
-release 1.0 is installed from a source checkout (`git clone`, then
+Packaged installers for macOS and Ubuntu are planned for a later
+release; the supported install is a source checkout (`git clone`, then
 `scripts/gelb_bootstrap.sh`, which puts the same three commands on your
 PATH), and the rest of this page describes the package.
 

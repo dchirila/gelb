@@ -94,12 +94,14 @@ Key design principles:
 
 ## Installation
 
-GeLB requires Python 3.11+. Release 1.0 is installed from a source
-checkout (`git clone`, then the bootstrap script below); packaged
-installers for macOS and Ubuntu, which install the same three commands
-without a checkout, follow in release 1.0.1. The project uses standard
+GeLB requires Python 3.11+. The supported install is a source checkout
+(`git clone`, then the bootstrap script below); packaged installers for
+macOS and Ubuntu, which install the same three commands without a
+checkout, are planned for a later release. The project uses standard
 `pyproject.toml` metadata, so a conventional virtual environment plus
-`pip install -e .` also works for development.
+`pip install -e .` also works for development. GeLB is developed on
+Linux and macOS; Windows is supported through the PowerShell scripts
+but is less exercised.
 
 The native one-step runner (`gelb-run`) currently assumes a source
 checkout because it compiles generated Fortran/C++/CUDA code and uses the
