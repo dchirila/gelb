@@ -7,7 +7,10 @@ other value is an error, and the previous run's ``.nc`` stays in place
 ranges. A program that exits with a nonzero status fails the run with
 that status, its output shown; the previous ``.nc`` is removed only after
 a successful build; a read-only ``.nc`` stops the run before anything is
-generated; a gelbc option that writes no source is an error.
+generated; a gelbc option that writes no source is an error. A seed that
+is given must be an integer (an empty one is not "no seed"); arguments
+after ``--`` are an error, since generated programs take none; and a
+file in the working directory does not shadow an installed package.
 
 Toolchain-free: a stand-in ``GELB_FC`` writes a shell "program" that
 prints one line and exits with ``$FAKE_RC``, so the tests need only bash,
@@ -122,3 +125,37 @@ def test_a_report_only_gelbc_option_runs_nothing(tmp_path, env, keep):
     result = run(tmp_path, env, '-n', '2', *keep)
     assert result.returncode == 1
     assert 'no simulation ran' in result.stderr
+
+
+@pytest.mark.parametrize('seed', ['', 'abc', '1.5'])
+def test_a_seed_that_is_given_must_be_an_integer(tmp_path, env, seed):
+    result = run(tmp_path, env, '-n', '2', '-s', seed)
+    assert result.returncode == 1
+    assert '-s expects an integer seed' in result.stderr
+    assert 'omit -s' in result.stderr
+
+
+@pytest.mark.parametrize('args', [['-s', '42'], ['-s', '-7'], []])
+def test_an_integer_seed_or_no_seed_runs(tmp_path, env, args):
+    result = run(tmp_path, env, '-n', '2', *args)
+    assert result.returncode == 0, result.stderr
+
+
+def test_arguments_after_the_separator_are_an_error(tmp_path, env):
+    result = subprocess.run(
+        [str(RUNNER), '-b', 'cpu_fortran_serial', '-n', '2', str(PROGRAM), '--', 'extra'],
+        cwd=tmp_path, env=env, text=True, capture_output=True, timeout=120)
+    assert result.returncode == 1
+    assert "unexpected arguments after '--': extra" in result.stderr
+    assert 'take no run-time arguments' in result.stderr
+
+
+def test_a_file_in_the_cwd_does_not_shadow_an_installed_package(tmp_path, env):
+    # python -m puts the CWD first on sys.path; python -P -m does not.
+    # (A gelb/ directory shadows the package in a pip installation; in an
+    # editable checkout the import hook finds gelb first, so a dependency
+    # is the module that can be shadowed in both.)
+    (tmp_path / 'click.py').write_text('raise ImportError("shadowed")\n')
+    result = run(tmp_path, env, '-n', '2')
+    assert result.returncode == 0, result.stderr
+    assert 'shadowed' not in result.stderr

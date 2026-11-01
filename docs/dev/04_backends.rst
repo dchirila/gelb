@@ -111,7 +111,12 @@ more than one time step) and removes the intermediates unless
 ``--strict-fp`` to ``gelbc``, appends ``-ffp-contract=off`` (CPU) or
 ``-fmad=false`` (nvcc), and rejects ``-F`` and any override carrying a
 value-changing flag (``reject_value_changing_flags``).
-``GELBC_EXTRA`` forwards extra ``gelbc`` options.  ``gelbc`` itself
+``GELBC_EXTRA`` forwards extra ``gelbc`` options; it is meant for
+options only ``gelbc`` has (``--storage-layout``, ``--no-*``, ``-t``),
+and the options ``gelb-run`` owns are not supported there.  The script
+starts every Python module with ``python -P``, so a file in the working
+directory (a ``gelb/`` directory, a stray ``click.py``) cannot shadow an
+installed package.  ``gelbc`` itself
 reads ``GELB_CXX``, ``GELB_CXXFLAGS`` and ``GELB_HAS_AVX512`` to detect
 AVX-512, which decides the ``cpu_highway`` storage layout
 (:doc:`07_design_decisions`).
