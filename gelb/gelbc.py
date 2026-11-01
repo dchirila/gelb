@@ -56,6 +56,27 @@ def _line_range(source_lines, line):
     return _diag_range(line, start, line, max(len(text.rstrip()), start + 1))
 
 
+def _check_output_path(option, path, input_file):
+    """No output may overwrite the program: not a ``.gelb`` name, and not
+    the input itself (checked by identity when the path exists; an alias
+    that only resolves at run time, a symlink made later, is not caught)."""
+    if path.endswith('.gelb'):
+        raise click.BadParameter(
+            f"{path} ends in .gelb; gelbc never writes a GeLB program",
+            param_hint=option)
+    if os.path.exists(path) and os.path.samefile(path, input_file):
+        raise click.BadParameter(
+            f"{path} is the input program", param_hint=option)
+
+
+def _write_output(output, code, input_file):
+    """The one place that writes generated code."""
+    _check_output_path("'-o' / '--output'", output, input_file)
+    with open(output, 'w') as f:
+        f.write(code)
+    click.echo(f"Generated: {output}")
+
+
 def _run_diagnostics(input_file, define, show_traceback, no_geometry_lint):
     """Frontend + midware only, no codegen. Collect every
     GeLBException plus any warnings (via config.DIAGNOSTICS_WARNINGS)
@@ -199,7 +220,8 @@ def _run_diagnostics(input_file, define, show_traceback, no_geometry_lint):
     default=None,
     help="Output file for generated code (default: <input_basename> with"
          " .cpp for cpu_highway, .f90 for cpu_fortran_serial, .cu for"
-         " gpu_cuda_cpp; -o never selects the backend)"
+         " gpu_cuda_cpp; -o never selects the backend, and never names"
+         " the input or a .gelb file)"
 )
 @click.option(
     "--num-timesteps", "-n",
@@ -221,7 +243,8 @@ def _run_diagnostics(input_file, define, show_traceback, no_geometry_lint):
     "--nc-output",
     type=click.STRING,
     default=None,
-    help="NetCDF output filename embedded in generated code (default: <input_basename>.nc)"
+    help="NetCDF output filename embedded in generated code (default:"
+         " <input_basename>.nc; never the input or a .gelb file)"
 )
 @click.option(
     "--write-every", "-w",
@@ -455,6 +478,12 @@ def cli(
     if not t:  # disable the traceback by default
         sys.tracebacklimit = 0
 
+    # Refuse to overwrite the program before any work is done.
+    if output is not None:
+        _check_output_path("'-o' / '--output'", output, input_file)
+    if nc_output is not None:
+        _check_output_path("'--nc-output'", nc_output, input_file)
+
     # Diagnostics mode: frontend + midware only, no codegen, errors &
     # warnings are collected and emitted as a single JSON document on
     # stdout. Called by the VSCode extension to populate the Problems
@@ -564,10 +593,7 @@ def cli(
 
         if output is None:
             output = os.path.splitext(input_file)[0] + '.f90'
-
-        with open(output, 'w') as f:
-            f.write(code)
-        click.echo(f"Generated: {output}")
+        _write_output(output, code, input_file)
 
     elif backend == 'cpu_highway':
         from gelb.backends.stage3_backend_cpu_highway import generate_cpu_highway
@@ -584,10 +610,7 @@ def cli(
 
         if output is None:
             output = os.path.splitext(input_file)[0] + '.cpp'
-
-        with open(output, 'w') as f:
-            f.write(code)
-        click.echo(f"Generated: {output}")
+        _write_output(output, code, input_file)
 
     elif backend == 'gpu_cuda_cpp':
         from gelb.backends.stage3_backend_gpu_cuda_cpp import generate_cuda_cpp
@@ -608,10 +631,7 @@ def cli(
 
         if output is None:
             output = os.path.splitext(input_file)[0] + '.cu'
-
-        with open(output, 'w') as f:
-            f.write(code)
-        click.echo(f"Generated: {output}")
+        _write_output(output, code, input_file)
 
 
 if __name__ == "__main__":
