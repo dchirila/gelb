@@ -387,7 +387,3 @@ blaming inside that range points to a milestone, not to a day.
 - GitHub: [github.com/dchirila/gelb](https://github.com/dchirila/gelb)
 - Discussions: [GitHub Discussions](https://github.com/dchirila/gelb/discussions)
 - Issues: [GitHub Issues](https://github.com/dchirila/gelb/issues)
-
----
-
-*"Making lattice Boltzmann simulations as easy to write as they are powerful to run."*
