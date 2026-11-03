@@ -144,8 +144,10 @@ class RangeResolverVisitor(ASTBaseVisitor, BinaryOperationMixin, ProgramTraversa
                 # by the constants resolver which runs before this pass)
                 q_val = self._get_lattice_q(ast_root_node, self.current_lattice_name)
                 node.high = IntLiteral_N(node.code_range, q_val - 1)
-                # Tag so type inference can distinguish `:` from e.g. `0` when q=1
-                node.is_full_df_range = True
+                # Tag so type inference can distinguish `:` from e.g. `0` when
+                # q=1.  An open end with a lower bound (`2:`) is not full.
+                node.is_full_df_range = (
+                    isinstance(node.low, IntLiteral_N) and node.low.value == 0)
             elif self.current_dimension is not None:
                 # For spatial dimensions, use Nx-1, Ny-1, or Nz-1
                 if self.current_dimension < len(DIMENSION_CONSTANT_NAMES):

@@ -197,6 +197,15 @@ spatial coordinates on the left, DF index on the right.
     f.in[x - 1, y | 3]     // DF 3 at the western neighbour
     f.in[x + 1, y + 1 | :] // all DFs at the north-east neighbour
 
+A slice ``| lo:hi`` is an array of ``hi - lo + 1`` elements whose
+element ``i`` is DF ``lo + i``: ``array[real, 4] v = f.in[x, y | 1:4];``
+reads DFs 1 to 4, and ``f.out[x, y | 1:4] = v;`` writes them.  An open
+end means the first or the last DF (``| 5:``, ``| :3``), and a range
+with equal bounds (``| 3:3``) is the single DF ``| 3``, a scalar.  The
+declared length must match the slice; the compiler reports a mismatch.
+The bounds are compile-time constants; a single index may be computed
+at run time (``| mod(x, 9)``) on the Fortran backend only.
+
 Each spatial index is relative to the current cell: its own
 coordinate plus or minus a constant integer (``x``, ``x + 2``, or
 an expression that simplifies to that form), with the coordinates

@@ -68,6 +68,8 @@ jobs:
             gelb/tests/integration/test_gelb_run_flag_overrides.py \
             gelb/tests/integration/test_define_diagnostics.py \
             gelb/tests/unit/midware/test_periodic_continuity_validator.py \
+            gelb/tests/unit/type_inference/test_partial_df_range_reads.py \
+            gelb/tests/integration/test_partial_df_ranges.py \
             gelb/tests/numeric \
             -q
 

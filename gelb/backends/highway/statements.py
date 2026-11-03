@@ -107,6 +107,31 @@ class StatementEmitMixin:
             f"cpu_highway: unsupported DF range type: {type(df).__name__}")
 
     @staticmethod
+    def _single_df_literal(df_node):
+        """The index of a single-DF access with a literal index (``| k``,
+        also spelled ``k:k``), else None."""
+        if isinstance(df_node, IntLiteral_N):
+            return df_node.value
+        if (isinstance(df_node, Range_N)
+                and isinstance(df_node.low, IntLiteral_N)
+                and isinstance(df_node.high, IntLiteral_N)
+                and df_node.low.value == df_node.high.value
+                and not getattr(df_node, 'is_full_df_range', False)):
+            return df_node.low.value
+        return None
+
+    @staticmethod
+    def _slice_low(df_node) -> int:
+        """The lower bound of a multi-DF slice with literal bounds; 0 for
+        a single index, a full range or anything unresolved."""
+        if (isinstance(df_node, Range_N)
+                and isinstance(df_node.low, IntLiteral_N)
+                and isinstance(df_node.high, IntLiteral_N)
+                and df_node.low.value < df_node.high.value):
+            return df_node.low.value
+        return 0
+
+    @staticmethod
     def _range_int(node) -> int:
         if isinstance(node, IntLiteral_N):
             return node.value
@@ -843,7 +868,7 @@ class StatementEmitMixin:
             rhs_for_loop = self._maybe_lift_matmul_arg(
                 stmt.rhs, df_lo, df_hi)
             if should_unroll:
-                for df in range(df_lo, df_hi + 1):
+                for df in range(0, n_slice):
                     lhs_addr = self._emit_lattice_out_lhs(
                         lhs, context, df_var=str(df))
                     rhs_expr = self._emit_expression(
@@ -862,8 +887,8 @@ class StatementEmitMixin:
                         self._emit(f'{lhs_addr} = '
                                    f'{rhs_expr};')
             else:
-                self._emit(f'for (int gelb_df = {df_lo}; '
-                           f'gelb_df <= {df_hi}; ++gelb_df) {{')
+                self._emit(f'for (int gelb_df = 0; '
+                           f'gelb_df <= {n_slice - 1}; ++gelb_df) {{')
                 self._indent += 1
                 lhs_addr = self._emit_lattice_out_lhs(
                     lhs, context, df_var='gelb_df')
@@ -1329,16 +1354,52 @@ class StatementEmitMixin:
         """Resolve the DF index portion of a lattice access.
 
         - If ``df_var`` is set, the caller is inside a ``for-df`` loop
-          and any df range maps to the loop variable.
+          and any df range maps to the loop variable.  ``df_var`` counts
+          from the start of the slice being assigned, so a slice with a
+          nonzero lower bound (``f.in[x, y | 2:5]``) adds it: element
+          ``i`` of that slice is DF ``2 + i``.
         - Otherwise the df range must be a single literal int.
         """
         if df_var is not None:
-            return df_var
+            # A single DF (``| k``) keeps its own index inside the loop:
+            # it is a scalar operand, broadcast over the slice.
+            single = self._single_df_literal(df_node)
+            if single is not None:
+                return str(single)
+            self._reject_runtime_df_index(df_node)
+            lo = self._slice_low(df_node)
+            if lo == 0:
+                return df_var
+            if df_var.lstrip('-').isdigit():
+                return str(int(df_var) + lo)
+            return f'({df_var} + {lo})'
         df_scalar = self._range_scalar(df_node)
         if isinstance(df_scalar, IntLiteral_N):
             return str(df_scalar.value)
+        self._reject_runtime_df_index(df_node)
         raise NotImplementedError(
             "cpu_highway: DF index must be a literal int outside a slice loop.")
+
+    @staticmethod
+    def _reject_runtime_df_index(df_node):
+        """A single DF whose index is computed at run time (``| mod(x, 9)``)
+        has no SIMD lowering here; the Fortran backend runs it.  Inside a
+        slice loop it used to be read at the loop index, silently."""
+        single = (df_node.low if isinstance(df_node, Range_N)
+                  and (df_node.low is df_node.high
+                       or (isinstance(df_node.low, Identifier_N)
+                           and isinstance(df_node.high, Identifier_N)
+                           and df_node.low.name == df_node.high.name))
+                  else df_node if not isinstance(df_node, Range_N) else None)
+        if single is not None and not isinstance(single, IntLiteral_N):
+            from gelb.utils.exceptions import GeLBExStencilError
+            cr = getattr(df_node, 'code_range', None)
+            raise GeLBExStencilError(
+                "A DF index computed at run time is not supported by the "
+                "cpu_highway and gpu_cuda_cpp backends",
+                "Give the DF index as a constant, select the DF with a node "
+                "class, or use -b cpu_fortran_serial, which runs it",
+                source_line=cr.start_line if cr is not None else None)
 
     def _collect_bounce_back_dfs_keys(self):
         """Walk the AST and collect every velocity-set tuple used in
