@@ -5,7 +5,7 @@ from gelb.frontend.implicit_symbols import DIMENSION_CONSTANT_NAMES
 from gelb.frontend.visitor_mixins import BinaryOperationMixin, ArrayLiteralProcessingMixin, ProgramTraversalMixin
 from gelb.gelb_ast.ASTNodes import *
 from gelb.frontend.type_rules import arithmetic_result_type
-from gelb.midware.ast_eval import collect_lattice_info, eval_const_expr
+from gelb.midware.ast_eval import _typed, collect_lattice_info, eval_const_expr, plain
 from gelb.utils.exceptions import *
 
 
@@ -928,6 +928,9 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         except (ValueError, TypeError, KeyError, IndexError,
                 ZeroDivisionError, OverflowError, AttributeError):
             return None
+        # A narrow constant (``const int32 K``) evaluates to a NumPy
+        # scalar; the literal stores the Python value it holds.
+        value = plain(value)
         if isinstance(value, bool) or not isinstance(value, int):
             return None
         return value
@@ -968,6 +971,7 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
                 ),
             ) from exc
 
+        value = plain(value)
         if isinstance(value, bool) or not isinstance(value, int):
             raise GeLBExTypeError(
                 expr,
@@ -1032,12 +1036,15 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
 
             value_expr = symbol_def.value.value
             try:
-                bindings[name] = eval_const_expr(
+                # The value as stored: a local constant has the width it
+                # is declared with (``const real P = 7`` is 7.0, so that
+                # ``P / 2`` is 3.5), as a global constant does.
+                bindings[name] = _typed(eval_const_expr(
                     value_expr,
                     bindings=bindings,
                     ast=ast_root_node,
                     lattice_info=self._lattice_info,
-                )
+                ), symbol_def.value.data_type)
             except (IndexError, TypeError, ValueError, ZeroDivisionError,
                     OverflowError):
                 # If this constant is actually used in a compile-time
