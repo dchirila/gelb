@@ -155,6 +155,22 @@ versions follow upstream end of life and can change in any release.
   `gpu_cuda_cpp`. The script now honours `--resolutions` for every case
   and defaults to `cpu_highway`, as `gelb-run` does, and the README's
   *Figures* section points at the Colab notebooks.
+- **A local constant that refers to another constant.** `const int START
+  = 2; const int END = START + 3;` inside an initializer, a dynamic or a
+  gauge was rejected on every backend with "You are using the implicit
+  variable x for initializing a constant", naming `x` or `y` at random,
+  as soon as the block used a coordinate anywhere: the check rejected
+  every symbol a local constant referred to, not only `x`, `y`, `z` and
+  `t`. A local constant may now refer to global and local constants; one
+  initialised from an implicit variable is still rejected, with a located
+  message that names that variable and suggests a variable instead.
+- **A local constant keeps its declared type at compile time.** When a
+  local constant was used in a DF index, a DF range or an array index
+  or slice, the compiler evaluated it with the type of its initializer
+  instead of its declared type: `const real P = 7;` made `(P / 2) * 2`
+  an integer division, so `f.in[x, y | int((P / 2) * 2)]` read DF 6
+  while the same expression computed at run time gave 7, on every
+  backend. Global constants were evaluated correctly.
 
 ## [1.0.0] — 2026-10-23
 

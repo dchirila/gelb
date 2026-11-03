@@ -17,12 +17,18 @@ from gelb.utils.exceptions import (
 )
 
 
+def _position(sref):
+    return (sref.code_range.start_line, sref.code_range.start_col)
+
+
 class ImplicitsRefsClashPreventerVisitor(ASTBaseVisitor):
     """
     Concrete visitor for preventing clashes with implicit constants &variables.
     """
     def check_node_symbol_refs(self, node):
-        for sref in node.get_referenced_symbols():
+        # In source order, so that the first problem in the block is the
+        # one reported, on every run.
+        for sref in sorted(node.get_referenced_symbols(), key=_position):
             self.check_ref_for_clashes(sref, node)
 
     def check_ref_for_clashes(self, ref, node):
@@ -80,35 +86,49 @@ class ImplicitsRefsClashPreventerVisitor(ASTBaseVisitor):
                 for stmt in node.stmts:
                     # check refs in value-field @ConstantDefinitionStmt_N
                     if isinstance(stmt, ConstantDefinitionStmt_N):
-                        error = (
-                            f"You are using the implicit variable "
-                            f"{click.style(name, underline=True) + Fore.RED}"
-                            f" for initializing a constant."
-                        )
-                        hint = (
-                            f"A constant can only be initialized with a"
-                            f" constant value."
-                        )
-                        for sref in stmt.value.get_referenced_symbols():
+                        # Only a reference to an implicit variable is a
+                        # clash: a local constant may refer to global and
+                        # local constants.  Report the first offending
+                        # reference in source order, so that the message
+                        # is the same on every run.
+                        for sref in sorted(
+                                stmt.value.get_referenced_symbols(),
+                                key=_position):
+                            if sref.name not in RUNTIME_IMPLICIT_SYMBOL_NAMES:
+                                continue
+                            error = (
+                                f"You are using the implicit variable "
+                                f"{click.style(sref.name, underline=True) + Fore.RED}"
+                                f" for initializing a constant."
+                            )
+                            hint = (
+                                f"A constant can only be initialized with a"
+                                f" constant value, and"
+                                f" {click.style(sref.name, underline=True) + Fore.GREEN}"
+                                f" changes from cell to cell or from step to"
+                                f" step. Declare"
+                                f" {click.style(stmt.name.name, underline=True) + Fore.GREEN}"
+                                f" as a variable instead (without const)."
+                            )
                             raise GeLBExSymbolNotAllowedHere(sref, error, hint)
                     # check lhs @VariableAssignmentStmt_N (s.t. we don't
                     # overwrite the implicit variables x, y, z)
                     elif isinstance(stmt, VariableAssignmentStmt_N):
+                        lhs = stmt.lhs.name
+                        if lhs not in RUNTIME_IMPLICIT_SYMBOL_NAMES:
+                            continue
                         error = (
                             f"You are trying to overwrite the implicit variable"
-                            f" {click.style(name, underline=True) + Fore.RED}"
-                            f" (representing the {name}-coordinate of a lattice"
+                            f" {click.style(lhs, underline=True) + Fore.RED}"
+                            f" (representing the {lhs}-coordinate of a lattice"
                             f" node)."
                         )
                         hint = (
-                            f"{click.style(name, underline=True) + Fore.GREEN}"
+                            f"{click.style(lhs, underline=True) + Fore.GREEN}"
                             f" is set automatically when each lattice node is"
                             f" processed. You are not allowed to write to it."
                         )
-                        if name == stmt.lhs.name:
-                            raise GeLBExSymbolNotAllowedHere(
-                                stmt.lhs, error, hint
-                            )
+                        raise GeLBExSymbolNotAllowedHere(stmt.lhs, error, hint)
                     # NOTE: other parts of the code ensure that we don't try
                     # to define a variable called "x".
         elif name in DIMENSION_CONSTANT_NAMES:
