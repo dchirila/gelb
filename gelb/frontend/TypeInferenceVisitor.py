@@ -687,9 +687,52 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         # The DF range is the last element in element_ranges
         df_range = node.element_ranges[-1] if node.element_ranges else None
         
-        # If DF range spans full DF dimension, result is 1D array of size q
-        # Otherwise, it's a scalar (0-dimensional array)
+        # Full DF selections yield a 1D array of size q.
+        # Multi-DF partial slices yield a 1D array of size hi - lo + 1.
+        # Single-DF selections are scalar; an explicit `:` remains an
+        # array even when q == 1.
         if df_range is not None and isinstance(df_range, Range_N):
+            # Fold a bound that is a constant or a constant expression
+            # (`| LO:HI`, `| 1+1:5`) to a literal, so that every later pass
+            # and backend sees literals.  A bound that is not constant
+            # (`| x`, `| mod(x, 3)`: a runtime DF index) stays as it is;
+            # the stencil pass decides what it may do.
+            for attr in ('low', 'high'):
+                bound = getattr(df_range, attr)
+                if bound is not None and not isinstance(bound, IntLiteral_N):
+                    value = self._try_eval_df_bound(bound, ast_root_node)
+                    if value is not None:
+                        setattr(df_range, attr, IntLiteral_N(bound.code_range, value))
+            # A range (two bounds) must be constant: its length is part of
+            # the type.  A single index that is computed at run time
+            # (`| mod(x, 9)`, the same expression as both bounds) is left
+            # to the stencil pass and the backends.
+            if (df_range.low is not df_range.high
+                    and not (isinstance(df_range.low, IntLiteral_N)
+                             and isinstance(df_range.high, IntLiteral_N))
+                    and not (isinstance(df_range.low, Identifier_N)
+                             and isinstance(df_range.high, Identifier_N)
+                             and df_range.low.name == df_range.high.name)):
+                raise GeLBExTypeError(
+                    node, "The bounds of a DF range must be compile-time "
+                    "constants", "Use literals or global constants for "
+                    "lo:hi; a single DF (| i) may be computed at run time")
+            # Every DF index must exist on the lattice, on both sides.
+            if (isinstance(df_range.low, IntLiteral_N)
+                    and isinstance(df_range.high, IntLiteral_N)
+                    and isinstance(lattice_def.q, IntLiteral_N)):
+                lo, hi, q = df_range.low.value, df_range.high.value, lattice_def.q.value
+                if lo > hi:
+                    raise GeLBExTypeError(
+                        node, f"DF range {lo}:{hi} is reversed",
+                        "The lower bound comes first: write "
+                        f"{lattice_name}.in[... | {hi}:{lo}] for DFs {hi} to {lo}")
+                if lo < 0 or hi >= q:
+                    which = f"{lo}:{hi}" if lo != hi else str(lo)
+                    raise GeLBExTypeError(
+                        node, f"DF index {which} is outside lattice "
+                        f"'{lattice_name}', which has q = {q} DFs (0 to {q - 1})",
+                        f"Use indices from 0 to {q - 1}, or | : for all DFs")
             # Check if this is a full DF range (0 to q-1)
             # This covers both explicit ranges like [0:q-1] and colon ranges [:]
             is_full_range = False
@@ -702,11 +745,36 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
             # Pattern 2: True colon range (low=None, high=None) -- before range resolution
             elif df_range.low is None and df_range.high is None:
                 is_full_range = True
-            
-            if is_full_range:
-                # Full DF selection: f.in[x,y|:] or f.in[x,y|0:q-1] returns array of size q
+
+            # Pattern 3: explicit literal bounds that cover 0..q-1.  Not for
+            # q = 1, where the single index `| 0` also arrives as 0:0 and
+            # must stay a scalar; there only `:` (pattern 1) is the array.
+            elif (isinstance(df_range.low, IntLiteral_N)
+                  and isinstance(df_range.high, IntLiteral_N)
+                  and isinstance(lattice_def.q, IntLiteral_N)
+                  and lattice_def.q.value > 1
+                  and df_range.low.value == 0
+                  and df_range.high.value == lattice_def.q.value - 1):
+                is_full_range = True
+
+            # A slice of several DFs, `| lo:hi` with literal bounds, is an
+            # array of hi-lo+1 elements; element i is DF lo+i (user manual,
+            # chapter 3, the `|` notation).  A single DF (low == high) is
+            # a scalar.
+            partial_len = None
+            if (not is_full_range
+                    and isinstance(df_range.low, IntLiteral_N)
+                    and isinstance(df_range.high, IntLiteral_N)
+                    and df_range.low.value < df_range.high.value):
+                partial_len = df_range.high.value - df_range.low.value + 1
+
+            if is_full_range or partial_len is not None:
+                # Array length is q for a full selection, or partial_len
+                # for a multi-DF partial slice.
                 q_value = lattice_def.q
-                if isinstance(q_value, IntLiteral_N):
+                if partial_len is not None:
+                    shape_elements = [IntLiteral_N(node.code_range, partial_len)]
+                elif isinstance(q_value, IntLiteral_N):
                     shape_elements = [IntLiteral_N(node.code_range, q_value.value)]
                 else:
                     # q is an expression, use it as-is
@@ -716,7 +784,7 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
                 shape.elements = shape_elements
                 node.inferred_type = ArrayDataType_N(node.code_range, base_type, shape)
             else:
-                # Partial DF selection: f.in[x,y|0] or f.in[x,y|1:3] returns scalar
+                # Single-DF selections such as | 0 or | 3:3 yield a scalar.
                 node.inferred_type = self._create_scalar_array_type(node.code_range, base_type)
         else:
             # No DF range specified, treat as scalar
@@ -846,6 +914,24 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
             # Invalid range
             return "partial_range", 1  # Fallback
     
+    def _try_eval_df_bound(self, expr, ast_root_node):
+        """The integer value of a DF-range bound that is a compile-time
+        constant, else None (without raising: a runtime index is legal
+        in a read)."""
+        try:
+            value = eval_const_expr(
+                expr,
+                bindings=self._compile_time_bindings(ast_root_node, None),
+                ast=ast_root_node,
+                lattice_info=self._lattice_info,
+            )
+        except (ValueError, TypeError, KeyError, IndexError,
+                ZeroDivisionError, OverflowError, AttributeError):
+            return None
+        if isinstance(value, bool) or not isinstance(value, int):
+            return None
+        return value
+
     def _evaluate_range_bound(self, expr, ast_root_node, array_dimensions=None):
         """Evaluate a range bound expression to get its integer value."""
         if expr is None:

@@ -338,8 +338,8 @@ class SliceDFExpansionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         # actual df-index.  Since slice df ranges always start at 0 in
         # practice (D2Q9 / D3Q19 share this convention), assert and
         # forward.
-        assert df_lo == 0, \
-            f"non-zero slice low {df_lo} is not supported"
+        if df_lo != 0:
+            return None  # the backend's per-DF loop handles the offset
         cse_temp_decls, ast_per_dir = self._build_q_simplified(
             core, q, arith_dtype, cr)
         result = list(cse_temp_decls)
@@ -530,8 +530,10 @@ class SliceDFExpansionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         if not is_slice:
             return node
         cr = node.code_range
+        # Element i of the slice ``lo:hi`` is DF lo + i.
+        lo = df_range.low.value if isinstance(df_range.low, IntLiteral_N) else 0
         node.element_ranges[-1] = Range_N(
-            cr, IntLiteral_N(cr, i), IntLiteral_N(cr, i))
+            cr, IntLiteral_N(cr, lo + i), IntLiteral_N(cr, lo + i))
         return node
 
     def _subst_array_elems(self, node: RectSelOfArrayElems_N, i: int):
@@ -734,9 +736,13 @@ def _scan_forced_whole(stmts) -> set:
             elif isinstance(stmt, LatticeOutSelectionAssignmentStmt_N):
                 if isinstance(stmt.lhs, RectSelOfLatticeOutDFs_N):
                     df_range = stmt.lhs.element_ranges[-1]
+                    # A slice with a nonzero lower bound is not expanded
+                    # (see _maybe_expand_lattice_out), so its whole-array
+                    # references must stay whole.
                     is_slice = (df_range.low is None or (
                         isinstance(df_range.low, IntLiteral_N) and
                         isinstance(df_range.high, IntLiteral_N) and
+                        df_range.low.value == 0 and
                         df_range.low.value != df_range.high.value))
                     if is_slice and not _is_opaque_only(stmt.rhs) \
                             and not _contains_known_array_intrinsic(

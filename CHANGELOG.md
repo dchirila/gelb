@@ -70,6 +70,27 @@ versions follow upstream end of life and can change in any release.
   message points at the declaration line, in the terminal and in
   `--diagnostics-json`, and a diagnostic on a node without a position
   prints without a source excerpt instead of a traceback.
+- **DF slices with a nonzero lower bound.** `array[real, 4] v =
+  f.in[x, y | 2:5]` gave different numbers per backend: Fortran read
+  DFs 2..5, Highway and CUDA read DFs 1..4, both silently, because the
+  frontend typed the slice as a scalar and the C++ emitters indexed it
+  from 0. A slice `| lo:hi` is now `array[T, hi-lo+1]` on both sides of
+  an assignment, element `i` being DF `lo+i`, with the declared length
+  checked; an open end with a lower bound (`| 2:`), which was typed as
+  the full set, is a slice of the remaining DFs; `sum` and arithmetic
+  take a slice directly, `dot_prod` takes it through a local array, as
+  for `| :` on the default backend. A single DF read inside a slice
+  expression (`f.in[x, y | 2:5] + f.in[x, y | 0]`) was read at the loop
+  index on Highway and CUDA; bounds that are constants (`| LO:HI`) are
+  folded; a DF index outside the lattice or a reversed range is a
+  located error, on both sides, and so is a range with run-time bounds.
+  A single DF index computed at run time (`| mod(x, 9)`) is rejected
+  with a located message on the C++ backends, which cannot vectorise it
+  (inside a slice it used to be read at the loop index, silently;
+  outside, it stopped with an internal error); the Fortran backend runs
+  it. Verified bit-for-bit across Fortran,
+  Highway (SoA and CBT) and CUDA on a probe that reads and writes such
+  slices; the emission of every example is unchanged, as none uses one.
 - **`gelbc` never overwrites the program.** `-o` and `--nc-output` reject
   a name ending in `.gelb` and a path that is the input file, before any
   code is generated (an alias that only resolves at run time is not

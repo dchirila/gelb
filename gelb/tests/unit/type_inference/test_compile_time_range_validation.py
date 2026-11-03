@@ -10,7 +10,8 @@ from gelb.gelb_ast.ASTNodes import *
 from gelb.utils.exceptions import GeLBException, GeLBExTypeError
 from gelb.tests.test_utils import (
     get_typed_ast,
-    minimal_gelb_program_1d
+    minimal_gelb_program_1d,
+    minimal_gelb_program_2d,
 )
 
 
@@ -491,10 +492,13 @@ class TestLatticeRangeValidation:
     """Test compile-time validation for lattice selection ranges."""
     
     def test_lattice_literal_ranges_allowed(self):
-        """Test that literal ranges in lattice selections are allowed."""
-        test_code = minimal_gelb_program_1d(
+        """Test that literal ranges in lattice selections are allowed.
+
+        On the 2-D program's q = 9 lattice: the 1-D one has a single DF,
+        where ``0:2`` names DFs that do not exist and is rejected."""
+        test_code = minimal_gelb_program_2d(
             initializer_content="""
-                f.out[x|0:2] = 1.0;
+                f.out[x, y|0:2] = 1.0;
             """
         )
         

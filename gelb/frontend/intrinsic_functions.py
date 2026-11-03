@@ -210,6 +210,9 @@ def _check_dot_prod_arguments(function_name, arguments, node):
     def get_shape_info(shape):
         """Helper to get dimensionality info from shape."""
         if isinstance(shape, List_N):
+            # A one-element shape list is a vector (a lattice slice's type).
+            if len(shape.elements) == 1 and isinstance(shape.elements[0], IntLiteral_N):
+                return ("1d", shape.elements[0].value)
             return ("multi", len(shape.elements))
         elif isinstance(shape, IntLiteral_N):
             return ("1d", shape.value)
