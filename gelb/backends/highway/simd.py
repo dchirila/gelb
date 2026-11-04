@@ -104,11 +104,25 @@ class SimdEmitMixin:
         """
         if info.bbox is None or not info.bbox_dense:
             return False
-        # Gauge stores currently use double-vector StoreU. Boolean output
-        # is a byte buffer and must take the scalar store path.
-        if any(getattr(decl.data_type, 'element_dtype', None) == 'bool'
-               for decl in getattr(block, 'outputs', ())):
+        # The vector gauge store writes a double vector into the
+        # output buffer, so a gauge whose output is not binary64 (an
+        # integer, a bool, a real32) takes the scalar path, where every
+        # cell converts its value to the output's type.  Gauges of
+        # different classes that share an output name fill one buffer,
+        # declared from the first-painted class's gauge
+        # (collect_gauge_outputs), so that buffer must be binary64 too.
+        outputs = list(getattr(block, 'outputs', ()))
+        if any(_TYPE_MAP.get(getattr(decl.data_type, 'element_dtype', None))
+               != 'double' for decl in outputs):
             return False
+        if outputs:
+            layout = self._gauge_output_layout()
+            buffers = {buf.name.name: buf
+                       for buf in (layout.outputs if layout else ())}
+            if any(self._gauge_buffer_cpp_type(buffers[decl.name.name])
+                   != 'double'
+                   for decl in outputs if decl.name.name in buffers):
+                return False
         # Vec8d is double-precision only.  If any lattice (this block
         # may read from or write to multiple) isn't double, fall back
         # to scalar emission.

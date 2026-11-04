@@ -171,6 +171,14 @@ versions follow upstream end of life and can change in any release.
   an integer division, so `f.in[x, y | int((P / 2) * 2)]` read DF 6
   while the same expression computed at run time gave 7, on every
   backend. Global constants were evaluated correctly.
+- **An integer gauge output on a real lattice failed to build on the default
+  backend.** `gauge G -> (int tt) { tt = x; }` compiled on Fortran and CUDA but
+  not on `cpu_highway` with the SoA and CBT layouts (the default): the vector
+  gauge path stored a double vector into the `int64_t` output buffer. A real
+  gauge failed the same way when it filled an integer, `real32` or `bool`
+  field that it shares with another class's gauge. A gauge whose output, or
+  the field it fills, is not binary64 now takes the scalar path, as a `bool`
+  output already did.
 
 ## [1.0.0] — 2026-10-23
 
