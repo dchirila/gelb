@@ -72,6 +72,7 @@ jobs:
             gelb/tests/unit/midware/test_periodic_continuity_validator.py \
             gelb/tests/unit/type_inference/test_partial_df_range_reads.py \
             gelb/tests/integration/test_partial_df_ranges.py \
+            gelb/tests/integration/test_int_gauge_output.py \
             gelb/tests/numeric \
             -q
 
