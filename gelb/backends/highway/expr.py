@@ -7,6 +7,8 @@ in both scalar and SIMD modes.
 
 from __future__ import annotations
 
+import math
+
 from gelb.backends.real_literals import cpp_real
 
 from gelb.backends.highway.common import (
@@ -46,6 +48,19 @@ from gelb.gelb_ast.ASTNodes import (
 )
 from gelb.midware.ast_eval import eval_const_expr, is_periodic
 from gelb.midware.ast_simplify import is_pure, numeric_kind
+
+
+def _int_to_binary32(n: int) -> float:
+    """The binary32 value nearest the integer ``n``, ties to even."""
+    m = abs(n)
+    shift = m.bit_length() - 24
+    if shift <= 0:
+        return float(n)
+    q, r = divmod(m, 1 << shift)
+    half = 1 << (shift - 1)
+    if r > half or (r == half and q & 1):
+        q += 1
+    return math.copysign(float(q << shift), n)
 
 
 # ----------------------------------------------------------------------
@@ -579,7 +594,10 @@ class ExpressionEmitMixin:
         # ``gelb_dot_prod_const`` (4-acc generic dot product
         # with a constexpr coefficient array).  When no coefficient
         # is foldable (both operands runtime), we keep the inline
-        # ``+``-chain emit.
+        # ``+``-chain emit.  A constant real array with an integer
+        # array, in either order, is written out as well
+        # (``_emit_dot_prod_real_coeffs_int_array``): the helpers would
+        # compute in the integer type or convert through binary64.
         if len(call.arguments) != 2:
             raise NotImplementedError(
                 "cpu_highway: dot_prod() expects 2 arguments.")
@@ -602,6 +620,10 @@ class ExpressionEmitMixin:
         ba, bb = _uname(a.name), _uname(b.name)
         a_vals = self._fold_array_constants(a.name)
         b_vals = self._fold_array_constants(b.name)
+        mixed = self._emit_dot_prod_real_coeffs_int_array(
+            call, a, b, a_vals, b_vals, n)
+        if mixed is not None:
+            return mixed
         # Helper-friendly path: exactly one operand is a foldable
         # array constant.  Identify which is the "coefficient"
         # side and which is the "runtime array" side.
@@ -609,8 +631,10 @@ class ExpressionEmitMixin:
         runtime_arr = None
         if a_vals is not None and b_vals is None:
             coeff_vals, runtime_arr = a_vals, bb
+            coeff_vals = self._dot_prod_coefficients(call, a, coeff_vals)
         elif a_vals is None and b_vals is not None:
             coeff_vals, runtime_arr = b_vals, ba
+            coeff_vals = self._dot_prod_coefficients(call, b, coeff_vals)
         elif a_vals is not None and b_vals is not None \
                 and all(v is not None for v in a_vals):
             # Both operands are constant arrays (the folder folds the
@@ -690,6 +714,75 @@ class ExpressionEmitMixin:
                 terms.append((sign, body))
         if not terms:
             return '0.0'
+        return '(' + self._join_signed_terms(terms) + ')'
+
+    def _dot_prod_coefficients(self, call, operand, values):
+        """The folded coefficients of a ``dot_prod`` as the helper must
+        see them: binary64 values, which it converts to the result's
+        C++ type.  Integer coefficients with a ``real32`` result convert
+        to binary32 directly (user manual, Numerical semantics: Types and
+        promotion); one above 2^53 is already rounded in binary64, so it
+        is rounded to binary32 from its exact value instead.  Every other
+        value is returned as it is."""
+        if (_TYPE_MAP.get(getattr(call.inferred_type, 'element_dtype',
+                                  None)) != 'float'
+                or _TYPE_MAP.get(getattr(operand.inferred_type,
+                                         'element_dtype', None))
+                not in ('int8_t', 'int16_t', 'int32_t', 'int64_t')):
+            return values
+        exact = [eval_const_expr(v, ast=self.ast,
+                                 lattice_info=self._lattice_info)
+                 for v in self._array_constants[operand.name]]
+        return [_int_to_binary32(int(e))
+                if isinstance(e, int) and float(e) != e else v
+                for e, v in zip(exact, values)]
+
+    def _emit_dot_prod_real_coeffs_int_array(self, call, a, b, a_vals,
+                                             b_vals, n):
+        """``dot_prod`` of a constant real array with an integer array,
+        in either order, or None for any other operands.
+
+        The result is real and each integer element converts to its
+        width (user manual, Numerical semantics: Types and promotion).
+        The helpers take their C++ type from the array they read: with
+        the integer array they would compute in it (other coefficients
+        are truncated; with coefficients of +/-1 a narrow integer wraps
+        and a ``real32`` sum is an exact integer sum), and with the
+        integer array as their coefficients they would convert it
+        through binary64.  The products are written out instead, each
+        integer element converted to the result's width (a +/-1
+        coefficient is the sign alone), and added in index order; GeLB
+        fuses none of them.  The SIMD body is left as it is: an integer
+        array does not build there yet.
+        """
+        if self._simd_mode == 'vec8d':
+            return None
+        result = _TYPE_MAP.get(
+            getattr(call.inferred_type, 'element_dtype', None))
+        if result not in ('double', 'float'):
+            return None
+        reals = ('double', 'float')
+        ints = ('int8_t', 'int16_t', 'int32_t', 'int64_t')
+        ta, tb = (_TYPE_MAP.get(getattr(op.inferred_type, 'element_dtype',
+                                        None)) for op in (a, b))
+        if ta in reals and tb in ints:
+            coeffs, array = a_vals, b
+        elif tb in reals and ta in ints:
+            coeffs, array = b_vals, a
+        else:
+            return None
+        # A real array computed per cell keeps the helper or the inline
+        # chain, both in its own type.
+        if coeffs is None or any(v is None for v in coeffs):
+            return None
+        name = _uname(array.name)
+        terms = []
+        for i in range(n):
+            coeff = float(coeffs[i])
+            value = f'static_cast<{result}>({name}[{i}])'
+            terms.append(('-' if math.copysign(1.0, coeff) < 0 else '+',
+                          value if abs(coeff) == 1.0
+                          else f'{cpp_real(abs(coeff), result)} * {value}'))
         return '(' + self._join_signed_terms(terms) + ')'
 
     def _emit_intrinsic_bounce_back_dfs(self, call, df_var):
