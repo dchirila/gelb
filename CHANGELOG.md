@@ -179,6 +179,20 @@ versions follow upstream end of life and can change in any release.
   field that it shares with another class's gauge. A gauge whose output, or
   the field it fills, is not binary64 now takes the scalar path, as a `bool`
   output already did.
+- **`dot_prod` of real coefficients with an integer array gave a wrong
+  result on `cpu_highway` and CUDA.** With `W = {0.5, 0.25, 0.125}` a
+  constant array and `k = {1, 2, 3}` an `int` array, `dot_prod(W, k)` gave 0
+  instead of 1.375 on `gpu_cuda_cpp` and on `cpu_highway` wherever the block
+  was not vectorized (the AoS layout, for example): the C++ reduction
+  helper computed in the array's integer type and truncated the
+  coefficients. With coefficients of ±1, an `int8` array wrapped, and a
+  `real32` sum was an exact integer sum instead of rounding to binary32
+  after every addition. Fortran was right. Each integer element is now
+  converted to the result's width, as the type rules say, whichever
+  operand comes first; integer coefficients with a `real32` array convert
+  to binary32 directly, not through binary64 (this mattered above 2^53).
+  In a block that the SoA or CBT layout vectorizes,
+  such a `dot_prod` still fails to build, as before.
 
 ## [1.0.0] — 2026-10-23
 

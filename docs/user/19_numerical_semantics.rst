@@ -58,7 +58,10 @@ coefficients other than ±1), which uses a fused multiply-add on targets
 that have one, and then on every code path alike: the SIMD body, the
 peeled edges and the scalar tail of a ``cpu_highway`` loop round the
 same way, so two cells with identical inputs give identical bits
-whatever their position.  Every term of a reduction counts, including
+whatever their position.  A ``dot_prod`` of a constant real array with
+an integer array does not use the helper: each integer element converts
+to the result's width, and GeLB fuses none of the products.  Every term
+of a reduction counts, including
 those with a zero coefficient, so an infinity or a NaN in any direction
 reaches the result.  On the CUDA backend a default build keeps nvcc's fusion,
 because it is worth 7–15 % on the GPU; all threads of a kernel run the
