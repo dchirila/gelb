@@ -145,8 +145,7 @@ class CudaKernelEmitMixin:
                     ax = self._axis(i)
                     bounds.append(f'g_{ax} >= {lo} && g_{ax} <= {hi}')
                 masked_terms.append(f'({" && ".join(bounds)})')
-            else:
-                masked_terms.append('true')
+            # A masked NC with no cells has no term: it zeroes nothing.
         self._emit(f'if (!({" || ".join(masked_terms)})) return;')
 
         coord_strs = [f'g_{self._axis(i)}' for i in range(self._d)]

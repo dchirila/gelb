@@ -22,6 +22,54 @@ import numpy as np
 from gelb.midware.geometry import ResolvedGeometry
 
 
+def warn_empty_node_classes(
+        geo: ResolvedGeometry) -> list[tuple[str, str, int | None]]:
+    """Flag node classes that end up with no cells.
+
+    Every paint of the class was overridden by a later one, its ``where``
+    matched nothing, its range was reversed, or ``border()`` converted
+    all of its cells.  The program is valid and the class's blocks never
+    run, but it is almost always a mistake or a constant (``-D``) that
+    made a region vanish.
+    """
+    warnings = []
+    for name, info in geo.nc_info.items():
+        if (geo.nc_map == info.nc_id).any():
+            continue
+        warnings.append((
+            f"Node class '{name}' has no cells",
+            "Every paint of it was overridden by a later paint or a "
+            "border() rule, or matched no cell, so none of its blocks "
+            "run.  Check the paint statements and the constants they "
+            "use (a -D value, for example).",
+            info.source_line))
+    return warnings
+
+
+def warn_reversed_paint_ranges(
+        geo: ResolvedGeometry) -> list[tuple[str, str, int | None]]:
+    """Flag range paints whose bounds run backwards on some axis.
+
+    Paint ranges are inclusive and run from low to high, so
+    ``nodes[40:30, :]`` paints nothing; it is never what was meant.
+    """
+    labels = ('x', 'y', 'z')
+    warnings = []
+    for kind, ranges, name in geo.paint_ops:
+        if kind != 'rect':
+            continue
+        for axis, (lo, hi) in enumerate(ranges):
+            if lo > hi:
+                warnings.append((
+                    f"A paint of '{name}' covers no cells: its "
+                    f"{labels[axis]}-range {lo}:{hi} runs backwards",
+                    f"Paint ranges are inclusive and run from low to high; "
+                    f"write {hi}:{lo} to paint those cells.",
+                    geo.source_line))
+                break
+    return warnings
+
+
 def warn_disconnected_nc_regions(
         geo: ResolvedGeometry) -> list[tuple[str, str, int | None]]:
     """Flag NCs that have multiple disconnected regions on the grid.
@@ -117,6 +165,8 @@ def all_geometry_warnings(
     """Run every geometry-lint check and return the union."""
     del stencils  # kept for source/backward compatibility
     out = []
+    out.extend(warn_reversed_paint_ranges(geo))
+    out.extend(warn_empty_node_classes(geo))
     out.extend(warn_disconnected_nc_regions(geo))
     out.extend(warn_unreachable_fluid_pockets(geo))
     return out

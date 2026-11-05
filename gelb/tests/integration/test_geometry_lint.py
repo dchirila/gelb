@@ -9,6 +9,8 @@ import pytest
 
 from gelb.midware.geometry_lint import (
     warn_disconnected_nc_regions,
+    warn_empty_node_classes,
+    warn_reversed_paint_ranges,
     warn_unreachable_fluid_pockets,
     all_geometry_warnings,
 )
@@ -152,6 +154,104 @@ def test_fluid_pockets_warn_at_geometry_block():
     msg, _, line = warnings[0]
     assert "2 disconnected pockets" in msg
     assert line == _line_of(src, "geometry {")
+
+
+# ---------------------------------------------------------------------------
+# warn_empty_node_classes, warn_reversed_paint_ranges
+# ---------------------------------------------------------------------------
+
+_EMPTY_CLASS_SRC = """
+simulation_description("empty class");
+global_constants {{ const real R = {r}; }}
+lattices {{ lattice f(2, 9, real, {{16, 8}}, {{true, true}}); }}
+initializer Init {{ f.out[x, y | :] = 1.0; }}
+dynamic D {{ f.out[x, y | :] = f.in[x, y | :]; }}
+gauge G -> (real v) {{ v = f.in[x, y | 0]; }}
+node_classes {{
+    node_class BULK(Init, D, G);
+    node_class OBST(Init, D, G);
+    node_class WALL(Init, D, G);
+}}
+geometry {{
+    nodes[:, :] = BULK;
+{paints}
+}}
+"""
+
+# name: (R, paints, the classes left without a cell)
+_EMPTY_TRIGGERS = {
+    "overwritten": ("1.0", "    nodes[4:6, 2:3] = OBST;\n"
+                           "    nodes[4:6, 2:3] = WALL;", ["OBST"]),
+    "where_matches_nothing": (
+        "0.0", "    nodes[where (real(x) - 8.0)^2 < R^2] = OBST;\n"
+               "    nodes[12:13, 5:6] = WALL;", ["OBST"]),
+    "border_of_an_empty_class": (
+        "0.0", "    nodes[where (real(x) - 8.0)^2 < R^2] = OBST;\n"
+               "    border(OBST) = WALL;", ["OBST", "WALL"]),
+    "border_converts_every_cell": ("1.0", "    nodes[4:5, 2:3] = OBST;\n"
+                                          "    border(OBST) = WALL;",
+                                   ["OBST"]),
+    "reversed_range": ("1.0", "    nodes[6:4, 2:3] = OBST;\n"
+                              "    nodes[12:13, 5:6] = WALL;", ["OBST"]),
+}
+
+
+@pytest.mark.parametrize("trigger", sorted(_EMPTY_TRIGGERS))
+def test_a_class_with_no_cells_is_reported(trigger):
+    """Each way a class can lose all its cells gets one warning per
+    empty class, on the line of its node_class statement."""
+    r, paints, empty = _EMPTY_TRIGGERS[trigger]
+    src = _EMPTY_CLASS_SRC.format(r=r, paints=paints)
+    warnings = warn_empty_node_classes(_resolve(src))
+    assert [(m, line) for m, _, line in warnings] == [
+        (f"Node class '{name}' has no cells",
+         _line_of(src, f"node_class {name}(")) for name in empty]
+
+
+def test_classes_with_cells_are_not_reported():
+    src = _EMPTY_CLASS_SRC.format(
+        r="2.0", paints="    nodes[where (real(x) - 8.0)^2 < R^2] = OBST;\n"
+                        "    border(OBST) = WALL;")
+    assert warn_empty_node_classes(_resolve(src)) == []
+
+
+def test_a_reversed_range_is_reported():
+    """``nodes[6:4, ..]`` paints nothing; the warning names the axis and
+    points at the geometry block."""
+    src = _EMPTY_CLASS_SRC.format(
+        r="1.0", paints="    nodes[12:13, 5:6] = WALL;\n"
+                        "    nodes[2:2, 5:3] = OBST;\n"
+                        "    nodes[4:5, 2:3] = OBST;")
+    geo = _resolve(src)
+    warnings = warn_reversed_paint_ranges(geo)
+    assert [(m, line) for m, _, line in warnings] == [
+        ("A paint of 'OBST' covers no cells: its y-range 5:3 runs backwards",
+         _line_of(src, "geometry {"))]
+    assert "write 3:5" in warnings[0][1]
+    # OBST still has the cells of its second paint.
+    assert warn_empty_node_classes(geo) == []
+
+
+def test_a_reversed_range_on_a_1d_grid_is_reported():
+    src = """
+    simulation_description("1-D");
+    lattices { lattice f(1, 3, real, 16, true); }
+    initializer Init { f.out[x | :] = 1.0; }
+    dynamic D { f.out[x | :] = f.in[x | :]; }
+    gauge G -> (real v) { v = f.in[x | 0]; }
+    node_classes {
+        node_class BULK(Init, D, G);
+        node_class OBST(Init, D, G);
+    }
+    geometry {
+        nodes[:] = BULK;
+        nodes[9:7] = OBST;
+    }
+    """
+    messages = [m for m, *_ in all_geometry_warnings(_resolve(src))]
+    assert messages == [
+        "A paint of 'OBST' covers no cells: its x-range 9:7 runs backwards",
+        "Node class 'OBST' has no cells"]
 
 
 # ---------------------------------------------------------------------------

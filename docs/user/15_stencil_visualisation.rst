@@ -96,6 +96,10 @@ Checks performed:
   warns at >4 components)
 - **Unreachable fluid pockets** — fluid cells separated from the
   bulk by walls
+- **Node classes with no cells** — every paint of the class was
+  overridden or matched nothing, so none of its blocks run
+- **Reversed paint ranges** — ``nodes[40:30, :]`` paints nothing,
+  because ranges are inclusive and run from low to high
 
 Lint warnings are also surfaced by ``gelbc`` itself, so they
 appear at compile time.

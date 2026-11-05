@@ -12,6 +12,8 @@ versions follow upstream end of life and can change in any release.
 ### Added
 
 - `gelbc --version`.
+- Two geometry-lint warnings: a node class with no cells, and a paint
+  range that runs backwards (`nodes[40:30, :]`, which paints nothing).
 
 ### Changed
 
@@ -193,6 +195,13 @@ versions follow upstream end of life and can change in any release.
   to binary32 directly, not through binary64 (this mattered above 2^53).
   In a block that the SoA or CBT layout vectorizes,
   such a `dot_prod` still fails to build, as before.
+- **A node class with no cells overwrote the others on `cpu_highway`.** A
+  class whose paints were all overridden, whose `where` matched no cell,
+  or that `border()` left empty (the paper's cylinder with `-D R=0`
+  empties its wall class) ran its initializer, dynamic and gauge over the
+  whole grid on every storage layout, so the run silently held that
+  class's values everywhere. Fortran and CUDA were right. Such a class
+  now runs nothing on every backend, and the compiler warns about it.
 
 ## [1.0.0] — 2026-10-23
 
