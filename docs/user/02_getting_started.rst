@@ -199,7 +199,8 @@ unless stated otherwise.
   and exit; see :doc:`15_stencil_visualisation`.
 - ``--no-geometry-lint`` — suppress the non-fatal geometry-lint
   warnings.  By default the compiler warns about suspicious
-  disconnected regions and isolated fluid pockets.
+  disconnected regions, isolated fluid pockets, node classes with no
+  cells and paint ranges that run backwards.
 - ``--poison-uninit`` — debugging aid: fill lattice storage with NaN
   at startup instead of zeros, so a read of a lattice cell that no
   initializer or update ever wrote surfaces as NaN in the gauge

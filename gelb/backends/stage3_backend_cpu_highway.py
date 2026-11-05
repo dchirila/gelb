@@ -877,7 +877,8 @@ class HighwayCodeGenerator(
         self._emit('')
 
     def _any_masked_nc(self) -> bool:
-        return any(info.masked for info in self._geom.nc_info.values())
+        return any(info.masked and info.bbox is not None
+                   for info in self._geom.nc_info.values())
 
     def _emit_masked_lattice_zero_init(self) -> None:
         """Zero the DFs of every masked-NC cell (both ping-pong
@@ -1179,9 +1180,13 @@ class HighwayCodeGenerator(
         non-dense NCs yield one synthetic dense-bbox info per rectangle
         from the greedy decomposition.  All emit paths (init, dynamic,
         gauge) iterate through this so that boundary kernels can hit
-        the SIMD path on a per-rectangle basis."""
+        the SIMD path on a per-rectangle basis.  An NC with no cells
+        (every paint of it overwritten, or none matched; its bbox is
+        None) yields nothing, so its blocks never run."""
         from dataclasses import replace
-        if info.bbox is None or info.bbox_dense:
+        if info.bbox is None:
+            return
+        if info.bbox_dense:
             yield info, False
             return
         rects = self._decompose_into_rectangles(info.nc_id, info.bbox)
@@ -1403,18 +1408,19 @@ class HighwayCodeGenerator(
         # Use the bounding box from ResolvedGeometry.nc_info[NC].
         # bbox is a list of (lo, hi) pairs, one per spatial dimension.
         d = self._d
-        sizes = self._grid_sizes()
         # Loop nesting follows Fortran's column-major convention so the
         # innermost loop varies the contiguous (x) axis: y outer, x inner
         # for 2-D.  This matches the gauge-buffer layout buf[ny][nx].
         self._spatial_loop_depth = 0
         outer = True
+        # An NC with no cells has no bbox and is never dispatched
+        # (``_iter_dispatch_rects``); reading a missing bbox as the whole
+        # grid would run its block over the cells of every other NC.
+        assert info.bbox is not None, (
+            f"NC {info.nc_id} has no cells and reached spatial-loop emit")
         for i in reversed(range(d)):
             ax = self._axis(i)
-            if info.bbox is None:
-                lo, hi = 0, sizes[i] - 1
-            else:
-                lo, hi = info.bbox[i]
+            lo, hi = info.bbox[i]
             self._emit_axis_loop_open(
                 ax, lo, hi,
                 omp=outer and self.use_openmp and d >= 2
@@ -1437,7 +1443,7 @@ class HighwayCodeGenerator(
         # nc_id) { ... }``).  That code was always-emitted-but-never-
         # read; reviving it would need the threshold logic above plus a
         # benchmark of the crossover point for irregular geometries.
-        assert info.bbox is None or info.bbox_dense, (
+        assert info.bbox_dense, (
             f"NC {info.nc_id} reached spatial-loop emit with "
             f"non-dense bbox; expected rect decomposition upstream")
 

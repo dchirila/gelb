@@ -434,6 +434,13 @@ Ordinary and predicate paints apply in their source order, and a later
 paint overrides an earlier one whatever its kind (CSS-like semantics).
 Every cell must be painted by at least one statement or the compiler
 rejects the program with "Geometry does not cover node ``(x, y)``".
+A class can still end up with no cells: every paint of it overridden,
+a ``where`` that matches no cell, a reversed range such as
+``nodes[40:30, :]`` (which paints nothing), or a ``border()`` rule
+that converts all of its cells.  The program compiles and runs, none
+of that class's blocks run, and the compiler warns.  A gauge field
+that only such a class writes holds NaN (real) or 0 (integer) at every
+cell.
 
 ``border(SOURCE) = TARGET;`` repaints the outermost layer of a
 region: every cell of ``SOURCE`` with a neighbour of another class

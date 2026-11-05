@@ -205,7 +205,7 @@ class CudaLaunchEmitMixin:
                 ' list bakes in gelb_timestep; for random()-using'
                 ' programs we keep the no-graphs path until codegen wires'
                 ' cudaGraphExecKernelNodeSetParams)')
-        any_dyn = any(info.dynamic is not None
+        any_dyn = any(info.dynamic is not None and info.bbox is not None
                       for info in self._geom.nc_info.values())
         if not any_dyn:
             return ('program has no dynamic NC -- nothing per-'
