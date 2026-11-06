@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Programs that reached the native compiler and failed there.
+"""Programs that reached the native compiler and failed there or later.
 
 The programs here once passed ``gelbc`` with empty diagnostics and then
-failed in gfortran, g++ or nvcc.  Each family below is an input the
+failed in gfortran, g++ or nvcc, or when the built program ran.  Each
+family below is an input the
 language does not support, so each is a source-located ``gelbc``
 error.  Each family has two checks:
 
@@ -22,6 +23,7 @@ import sys
 
 import pytest
 
+from gelb.frontend.GaugeValidationVisitor import GaugeValidationVisitor
 from gelb.tests.integration._toolchain import requires_compiler
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[4]
@@ -370,6 +372,49 @@ def test_a_local_array_split_into_scalar_outputs_compiles(tmp_path):
 def test_an_array_valued_gauge_output_stops_the_runner_before_the_native_compiler(tmp_path):
     stops_before_the_native_compiler(
         tmp_path, _ARRAY_GAUGE, "Gauge 'G' output 'v' is an array")
+
+
+# ---------------------------------------------------------------------------
+# A gauge output named like the output file's time variable
+# ---------------------------------------------------------------------------
+# Every backend built it, and every run stopped when it created the file:
+# NetCDF "String match to name in use".
+
+_TIME_OUTPUT = _program("v = 1.0; time = real(x);",
+                        gauge_outputs="real v, real time")
+_TIME_MESSAGE = ("Gauge 'G' output 'time' has the name of the output "
+                 "file's time variable")
+
+
+def test_a_gauge_output_named_time_is_an_error(tmp_path):
+    error = diagnostics(tmp_path, _TIME_OUTPUT)
+    assert_error_at(error, _TIME_OUTPUT, "real time", _TIME_MESSAGE)
+    assert "another name" in error["hint"]
+
+
+@requires_compiler
+def test_a_gauge_output_named_time_stops_the_runner_before_the_native_compiler(tmp_path):
+    stops_before_the_native_compiler(tmp_path, _TIME_OUTPUT, _TIME_MESSAGE)
+
+
+@pytest.mark.parametrize("backend, suffix, definition", [
+    ("cpu_fortran_serial", ".f90", "nf90_def_var(gelb_ncid, '{}', "),
+    ("cpu_highway", ".cpp", 'nc_def_var(gelb_ncid, "{}", '),
+    ("gpu_cuda_cpp", ".cu", 'nc_def_var(gelb_ncid, "{}", '),
+])
+def test_the_reserved_name_is_the_time_variable_every_backend_writes(
+        tmp_path, backend, suffix, definition):
+    """The frontend reserves the name each backend gives the time
+    variable of its output file, so the two cannot drift apart."""
+    path = _write(tmp_path, _program("v = 1.0;"))
+    out = tmp_path / f"case{suffix}"
+    result = subprocess.run(
+        [sys.executable, "-m", "gelb.gelbc", str(path), "-b", backend,
+         "-o", str(out)],
+        env=_clean_env(), text=True, capture_output=True, cwd=tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (definition.format(GaugeValidationVisitor.TIME_VARIABLE)
+            in out.read_text())
 
 
 # ---------------------------------------------------------------------------

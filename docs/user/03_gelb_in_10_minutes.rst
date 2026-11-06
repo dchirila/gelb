@@ -266,7 +266,10 @@ is no previous timestep yet.  In ``gauge`` blocks, only ``f.in[...]``
 is readable — gauges observe, they don't modify.  Each gauge output is
 one scalar per cell, one field in the output file; an array-valued
 output (``-> (array[real, 2] u)``) is not supported, so declare
-one scalar per component (``-> (real ux, real uy)``).
+one scalar per component (``-> (real ux, real uy)``).  The output file
+stores each record's time step in a variable named ``time``, so no
+gauge output may take that name; ``x``, ``y`` and ``z`` are implicit
+names already.
 
 Built-in intrinsics
 ===================

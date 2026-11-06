@@ -6,7 +6,9 @@ from gelb.frontend.stage1_frontend import (
     build_symbols_tables, get_ast, validate_ast_root_is_program,
     validate_block_signatures
 )
-from gelb.utils.exceptions import GeLBException, GeLBExTypeError
+from gelb.utils.exceptions import (
+    GeLBException, GeLBExSymbolNotAllowedHere, GeLBExTypeError
+)
 
 
 class TestGaugeValidation:
@@ -413,3 +415,63 @@ geometry {{
         ast = self._validate(source)
         with pytest.raises(GeLBException, match="already"):
             build_symbols_tables(ast)
+
+
+class TestOutputNamedTime:
+    """The output file stores each record's time step in a variable
+    named ``time`` (user manual, GeLB in 10 minutes: The f.in / f.out
+    contract), so no gauge output may take that name.  The name stays
+    free everywhere else: other spellings, a local, a function result."""
+
+    PROGRAM = """
+simulation_description("Test");
+lattices {{ lattice f(1, 1, real, 32, false); }}
+{function}
+initializer Init {{ f.out[x | 0] = 0.0; }}
+dynamic Update {{ f.out[x | 0] = f.in[x | 0]; }}
+gauge G -> ({outputs}) {{ {body} }}
+node_classes {{ node_class A(Init, Update, G); }}
+geometry {{ nodes[:] = A; }}
+"""
+
+    @classmethod
+    def _source(cls, outputs, body, function=""):
+        return cls.PROGRAM.format(outputs=outputs, body=body,
+                                  function=function)
+
+    @staticmethod
+    def _validate(source):
+        ast = get_ast("gelb_program", source)
+        validate_ast_root_is_program(ast)
+        validate_block_signatures(ast)
+        return ast
+
+    @pytest.mark.parametrize("outputs, body, position", [
+        ("real time", "time = 1.0;", 0),
+        ("int8 time", "time = 1;", 0),
+        ("real v, real time", "v = 1.0; time = 2.0;", 1),
+    ])
+    def test_an_output_named_time_is_an_error(self, outputs, body, position):
+        ast = get_ast("gelb_program", self._source(outputs, body))
+        validate_ast_root_is_program(ast)
+        with pytest.raises(GeLBExSymbolNotAllowedHere) as exc_info:
+            validate_block_signatures(ast)
+        assert str(exc_info.value).startswith(
+            "Gauge 'G' output 'time' has the name of the output file's "
+            "time variable")
+        assert "another name" in exc_info.value.hint
+        assert (exc_info.value.symbol_ref
+                is ast.gauges[0].outputs.elements[position])
+
+    @pytest.mark.parametrize("name", ["Time", "TIME", "times", "time_"])
+    def test_other_names_are_free(self, name):
+        self._validate(self._source(f"real {name}", f"{name} = 1.0;"))
+
+    def test_a_local_named_time_is_free(self):
+        self._validate(self._source(
+            "real v", "real time = f.in[x | 0]; v = time;"))
+
+    def test_a_function_result_named_time_is_free(self):
+        self._validate(self._source(
+            "real v", "v = F(f.in[x | 0]);",
+            function="function F(real a) -> (real time) { time = a; }"))

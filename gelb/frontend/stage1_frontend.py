@@ -252,7 +252,8 @@ def validate_block_signatures(ast):
     Functions and gauges declare named results; a gauge output is a
     scalar and is assigned in the gauge body; gauges that declare an
     output of the same name give it one type (``int64`` is ``int``,
-    ``real64`` is ``real``).
+    ``real64`` is ``real``); no gauge output is named ``time``, the
+    output file's time-step variable.
 
     Must run after:
     - AST building
