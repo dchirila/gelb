@@ -111,6 +111,9 @@ class SimdEmitMixin:
         # different classes that share an output name fill one buffer,
         # declared from the first-painted class's gauge
         # (collect_gauge_outputs), so that buffer must be binary64 too.
+        # The frontend rejects outputs of one name with different types
+        # (GaugeValidationVisitor), so this only guards a program that
+        # bypasses it.
         outputs = list(getattr(block, 'outputs', ()))
         if any(_TYPE_MAP.get(getattr(decl.data_type, 'element_dtype', None))
                != 'double' for decl in outputs):

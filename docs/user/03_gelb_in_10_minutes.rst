@@ -394,6 +394,10 @@ zero DFs — useful for solid obstacles you don't want in your plots.
 When node classes carry different gauges, the output file holds every
 field any of them writes; at a cell whose class does not write a field,
 a real field holds NaN and an integer field holds 0, as at masked cells.
+Gauges that declare an output of the same name write one field, so every
+gauge the program declares, used by a node class or not, must give that
+name one type (``int`` and ``int64`` are one type, and so are ``real``
+and ``real64``); otherwise ``gelbc`` reports an error.
 
 .. _geometry-paints:
 

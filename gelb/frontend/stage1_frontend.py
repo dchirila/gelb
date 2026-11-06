@@ -247,10 +247,12 @@ def validate_lattice_access_context(ast):
 
 def validate_block_signatures(ast):
     """
-    Validate function and gauge blocks have required named results.
+    Validate function and gauge signatures.
 
-    Ensures that all functions and gauges have non-empty result
-    specifications and provides user-friendly diagnostics when they do not.
+    Functions and gauges declare named results; a gauge output is a
+    scalar and is assigned in the gauge body; gauges that declare an
+    output of the same name give it one type (``int64`` is ``int``,
+    ``real64`` is ``real``).
 
     Must run after:
     - AST building
