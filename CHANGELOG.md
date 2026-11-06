@@ -27,6 +27,17 @@ versions follow upstream end of life and can change in any release.
   certifi 2026.10.23 and setuptools 84.2.1 in `uv.lock`; the VS Code
   extension's test tooling pins serialize-javascript 7.1.3 or newer.
   GeLB itself never opens untrusted image files.
+- **Gauges that share an output name must give it one type.** Outputs of
+  the same name in several gauges are one field of the output file. Its
+  type came from the gauge of the node class painted first, and the other
+  gauges' values were converted to it in the file without a warning: with
+  `-> (int v)` in that gauge, another gauge's `-> (real v)` with
+  `v = x + 0.5` was stored as `x`. On `cpu_highway` with the SoA and CBT
+  layouts (the default), a real gauge filling an integer, `real32` or
+  `bool` field failed to build instead. `gelbc` now reports an error when
+  two gauges declare an output of the same name with different types,
+  whether or not a node class uses them. `int` and `int64` count as one
+  type, and so do `real` and `real64`.
 
 ### Fixed
 
@@ -176,10 +187,8 @@ versions follow upstream end of life and can change in any release.
 - **An integer gauge output on a real lattice failed to build on the default
   backend.** `gauge G -> (int tt) { tt = x; }` compiled on Fortran and CUDA but
   not on `cpu_highway` with the SoA and CBT layouts (the default): the vector
-  gauge path stored a double vector into the `int64_t` output buffer. A real
-  gauge failed the same way when it filled an integer, `real32` or `bool`
-  field that it shares with another class's gauge. A gauge whose output, or
-  the field it fills, is not binary64 now takes the scalar path, as a `bool`
+  gauge path stored a double vector into the `int64_t` output buffer. A
+  gauge whose output is not binary64 now takes the scalar path, as a `bool`
   output already did.
 - **`dot_prod` of real coefficients with an integer array gave a wrong
   result on `cpu_highway` and CUDA.** With `W = {0.5, 0.25, 0.125}` a

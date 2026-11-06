@@ -50,7 +50,9 @@ Frontend
    gauges, neither in ``global_constants``.
 ``validate_block_signatures``
    :source:`gelb/frontend/GaugeValidationVisitor.py`: functions and
-   gauges declare named results, and a gauge assigns all of its outputs.
+   gauges declare named results; a gauge output is a scalar, and a gauge
+   assigns all of its outputs; gauges that declare an output of the same
+   name give it one type (``int64`` is ``int``, ``real64`` is ``real``).
 ``prevent_symbol_ref_implicit_clashes``
    :source:`gelb/frontend/ImplicitsRefsClashPreventerVisitor.py`: the
    implicit symbols (``x``, ``y``, ``z``, ``t``, ``Nx``, ``Ny``,

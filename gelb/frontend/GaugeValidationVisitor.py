@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
+from gelb.frontend import type_rules
 from gelb.gelb_ast.ASTNodes import *
 from gelb.utils.exceptions import GeLBExTypeError
 
@@ -13,7 +14,12 @@ class GaugeValidationVisitor(ASTBaseVisitor):
     1. All functions declare at least one named result
     2. All gauges have non-empty output specifications
     3. All gauge outputs are assigned in the gauge body
+    4. Gauges that declare an output of the same name give it one type
     """
+
+    # ``int64`` is ``int`` and ``real64`` is ``real`` (type_rules): one
+    # type, one output buffer and one NetCDF type on every backend.
+    _SAME_TYPE = {'int64': 'int', 'real64': 'real'}
     
     def visitProgram_N(
             self,
@@ -27,6 +33,7 @@ class GaugeValidationVisitor(ASTBaseVisitor):
         if hasattr(node, 'gauges') and node.gauges:
             for gauge in node.gauges:
                 self.visit(gauge, ast_root_node)
+            self._validate_shared_output_types(node.gauges)
         return node
 
     def visitFunctionBlock_N(
@@ -91,6 +98,42 @@ class GaugeValidationVisitor(ASTBaseVisitor):
         
         return node
     
+    def _validate_shared_output_types(self, gauges):
+        """Gauges share an output by its name: one field of the output
+        file (user manual, GeLB in 10 minutes: Node classes and
+        geometry).  So every gauge that declares an output of a given
+        name must give it the same type, whether a node class uses the
+        gauge or not."""
+        # A gauge name used twice, or an output name repeated in one
+        # gauge, is the symbol table's to report (build_symbols_tables
+        # rejects both); comparing types first would hide that error.
+        gauge_names = [gauge.name.name for gauge in gauges]
+        if len(set(gauge_names)) != len(gauge_names) or any(
+                len({output.name.name for output in gauge.outputs.elements})
+                != len(gauge.outputs.elements) for gauge in gauges):
+            return
+        first = {}
+        for gauge in gauges:
+            for output in gauge.outputs.elements:
+                name = output.name.name
+                dtype = output.data_type.element_dtype
+                other, other_dtype = first.setdefault(name, (gauge, dtype))
+                if (self._SAME_TYPE.get(dtype, dtype)
+                        != self._SAME_TYPE.get(other_dtype, other_dtype)):
+                    raise GeLBExTypeError(
+                        output,
+                        f"Gauge '{gauge.name.name}' declares output '{name}' "
+                        f"as {dtype}, but gauge '{other.name.name}' declares "
+                        f"it as {other_dtype}",
+                        "Gauges share an output by its name (one field of the "
+                        f"output file), so every gauge that declares '{name}' "
+                        "must give it the same type, whether a node class "
+                        "uses the gauge or not. Declare it as "
+                        f"{type_rules.common_type(dtype, other_dtype)} in "
+                        "both gauges, or give one of the two outputs another "
+                        "name."
+                    )
+
     @staticmethod
     def _is_array_type(data_type):
         """True for a declared array type with at least one extent (a
