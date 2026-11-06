@@ -11,7 +11,7 @@ only binary64 outputs keeps the vector store.  Gauges of different
 classes that share an output name fill one field, whose type is that of
 the first-painted class's declaration; a real gauge filling an integer,
 ``real32`` or ``bool`` field also takes the scalar path, and every
-backend stores the same values.
+backend stores the same values with that type.
 """
 
 import os
@@ -134,6 +134,10 @@ _FIRST_VALUES = {
     "bool": "f.in[x, y | 0] > 0.0",
 }
 
+# The type of the shared field in the file: GFirst's declaration (int is
+# int64, bool a byte).
+_FIELD_TYPES = {"int": np.int64, "real32": np.float32, "bool": np.int8}
+
 
 @requires_compiler
 @requires_cpp_highway_compiler
@@ -145,7 +149,8 @@ def test_a_real_gauge_filling_a_shared_non_double_field(tmp_path, dtype, layout)
     source = SHARED_NAME.format(dtype=dtype, value=_FIRST_VALUES[dtype])
     reference = _run(tmp_path / "fortran", "cpu_fortran_serial", source)
     data = _run(tmp_path / layout, "cpu_highway", source, layout)
-    assert data["v"].dtype.kind == reference["v"].dtype.kind
+    assert reference["v"].dtype == _FIELD_TYPES[dtype]
+    assert data["v"].dtype == _FIELD_TYPES[dtype]
     assert np.array_equal(data["v"], reference["v"])
 
 

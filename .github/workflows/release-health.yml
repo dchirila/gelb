@@ -75,6 +75,7 @@ jobs:
             gelb/tests/integration/test_int_gauge_output.py \
             gelb/tests/integration/test_dot_prod_int_array.py \
             gelb/tests/integration/test_empty_node_class.py \
+            gelb/tests/integration/test_int64_gauge_output.py \
             gelb/tests/numeric \
             -q
 

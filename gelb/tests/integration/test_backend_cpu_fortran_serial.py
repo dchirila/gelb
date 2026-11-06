@@ -207,15 +207,26 @@ class TestNetCDFCodeGeneration:
 class TestNetCDFTypeMapping:
     """Tests that GeLB types map to correct NetCDF types."""
 
-    def test_int_gauge_uses_nf90_int(self):
-        """Integer gauge output should use NF90_INT."""
-        code = _generate(_default_program())
-        assert 'NF90_INT' in code
-
-    def test_real_gauge_uses_nf90_double(self):
-        """Real gauge output should use NF90_DOUBLE."""
-        code = _generate(_program_with_real_gauge())
-        assert 'NF90_DOUBLE' in code
+    @pytest.mark.parametrize('dtype, value, nc_type', [
+        ('int', 'int(f.in[x | 0])', 'NF90_INT64'),
+        ('int64', 'int64(f.in[x | 0])', 'NF90_INT64'),
+        ('int32', 'int32(f.in[x | 0])', 'NF90_INT'),
+        ('int16', 'int16(f.in[x | 0])', 'NF90_SHORT'),
+        ('int8', 'int8(f.in[x | 0])', 'NF90_BYTE'),
+        ('bool', 'f.in[x | 0] > 0.0', 'NF90_BYTE'),
+        ('real', 'f.in[x | 0]', 'NF90_DOUBLE'),
+        ('real64', 'real64(f.in[x | 0])', 'NF90_DOUBLE'),
+        ('real32', 'real32(f.in[x | 0])', 'NF90_FLOAT'),
+    ])
+    def test_gauge_output_keeps_its_width(self, dtype, value, nc_type):
+        """A gauge output's NetCDF variable has its declared width
+        (int is int64)."""
+        source = _program_with_real_gauge().replace(
+            '(real val)', f'({dtype} val)').replace(
+            'val = f.in[x | 0];', f'val = {value};')
+        code = _generate(source)
+        defs = re.findall(r"nf90_def_var\(gelb_ncid, 'val', (\w+),", code)
+        assert defs == [nc_type]
 
     def test_real_buffer_type(self):
         """Real gauge buffer should be declared as double precision."""

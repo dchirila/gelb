@@ -202,6 +202,15 @@ versions follow upstream end of life and can change in any release.
   whole grid on every storage layout, so the run silently held that
   class's values everywhere. Fortran and CUDA were right. Such a class
   now runs nothing on every backend, and the compiler warns about it.
+- **`int` gauge outputs were 32-bit in the Fortran backend's NetCDF
+  file.** `int` is `int64`, and `cpu_highway` and CUDA store it so, but
+  `cpu_fortran_serial` declared `int` and `int64` outputs as 32-bit
+  NetCDF integers. A value outside the 32-bit range stopped the run with
+  "NetCDF: Numeric conversion not representable", after writing that
+  output's field for the record wrapped (`3000000000` as `-1294967296`),
+  and `-2147483647` read back as missing. `int` and `int64` outputs are
+  now 64-bit NetCDF integers on every backend; values in the 32-bit
+  range read back unchanged.
 
 ## [1.0.0] — 2026-10-23
 
