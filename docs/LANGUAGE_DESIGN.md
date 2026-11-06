@@ -741,6 +741,40 @@ through destructuring assignment.
   lists, keeping type analysis and code generation independent of
   signature formatting.
 
+### Gauge results are scalars
+
+**Decision**: Every named result of a gauge is a scalar. The gauge
+assigns it once per cell, and the output file holds it as one field
+over the grid, with one record per output step. A result of array type
+(`gauge G -> (array[real, 2] u)`) is rejected with a diagnostic. A
+vector quantity is written as one scalar result per component; the
+gauge body may still compute them with array locals:
+
+```gelb
+gauge Hydro -> (real rho, real ux, real uy) {
+    array[real, 9] fIn = f.in[x, y | :];
+    rho = sum(fIn);
+    ux = dot_prod(EX, fIn) / rho;
+    uy = dot_prod(EY, fIn) / rho;
+}
+```
+
+**Original Design Decision (PhD thesis)**: A gauge could declare an
+array-valued result, such as the velocity in
+`Gauge RhoVelo[OUT(Real rho, Array<Real, {2}> velo)]`.
+
+**Rationale**:
+- A field of the output file has the grid's dimensions and time, and
+  nothing else. An array result needs one more dimension per array axis:
+  in the file, in every backend's output buffers and in the tools that
+  read the file (`gelb-view`). This version has none of them.
+- One scalar result per component writes the same values, and needs no
+  convention for naming or ordering the extra dimensions.
+
+**Future consideration**: Array-valued gauge results are planned for a
+later version; until then the user manual's "Numerical Semantics"
+chapter lists them under "Not in this version".
+
 ### Const keyword syntax
 
 **Decision**: Use `const` keyword prefix instead of `_const` suffix for constants.
