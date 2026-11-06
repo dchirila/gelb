@@ -160,6 +160,13 @@ versions follow upstream end of life and can change in any release.
   (the traceback went to the terminal). A 3D variable now gets the plots
   that open, heatmap and animation, which show one slice at a time, and
   the menu says "Use ParaView for 3D visualizations".
+- **gelb-view drew large integers in a few colours.** matplotlib draws an
+  integer image of small range at single precision, which rounds values
+  above 2^24, so an `int64` field such as `3000000000 + x + 100*y` showed
+  one or two colours per row of 64 cells instead of about 21. Every
+  heatmap, slice and animation frame, headless or in the window, now
+  gets the values at double precision, which holds every integer up to
+  2^53 exactly.
 - **The paper-examples README** (`examples/softwarex-2026-paper/`). Two
   benchmark commands named programs that do not exist in the repo root,
   and the convergence command needed an NVIDIA GPU and ran resolutions it

@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QDockWidget, QWidget, QVBoxLayout, QPushButton,
 )
 
-from gelb.visualization.common import add_colorbar
+from gelb.visualization.common import add_colorbar, image_data
 from gelb.visualization.gui.plot_controllers import (
     TimestepSlider,
     ColormapSelector,
@@ -246,7 +246,7 @@ class PlotDockWidget(QDockWidget):
 
         self._clear_plot()
         self._im = self._ax.imshow(
-            data, aspect='auto', origin='lower',
+            image_data(data), aspect='auto', origin='lower',
             extent=[x[0], x[-1], 0, data.shape[0] - 1],
             cmap=cmap,
         )
@@ -267,7 +267,7 @@ class PlotDockWidget(QDockWidget):
 
         self._clear_plot()
         self._im = self._ax.imshow(
-            data, origin='lower', aspect='equal', cmap=cmap,
+            image_data(data), origin='lower', aspect='equal', cmap=cmap,
             vmin=self._global_vmin, vmax=self._global_vmax)
         self._ax.set_xlabel('x')
         self._ax.set_ylabel('y')
@@ -303,7 +303,7 @@ class PlotDockWidget(QDockWidget):
 
         self._clear_plot()
         self._im = self._ax.imshow(
-            slice_data, origin='lower', aspect='equal', cmap=cmap,
+            image_data(slice_data), origin='lower', aspect='equal', cmap=cmap,
             vmin=self._global_vmin, vmax=self._global_vmax)
         self._ax.set_xlabel(remaining[1])
         self._ax.set_ylabel(remaining[0])
@@ -342,7 +342,7 @@ class PlotDockWidget(QDockWidget):
         elif ndim == 2:
             data = self._dataset.get_variable_at_timestep(self._var_name, ts)
             if self._im is not None:
-                self._im.set_data(data)
+                self._im.set_data(image_data(data))
                 self._ax.set_title(f'{self._var_name} (t={self._dataset.timestep_value(ts)})')
             else:
                 self._render_2d_heatmap()

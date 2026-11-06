@@ -24,6 +24,20 @@ def create_figure(n_panels, title=None, figsize_per_panel=(6, 5)):
     return fig, axes
 
 
+def image_data(data):
+    """``data`` in the form an image should get it: an integer array as
+    float64, any other array unchanged.
+
+    matplotlib resamples an integer image whose range is at most 1e8 in
+    float32, which rounds every value above 2**24: an ``int64`` field
+    near 3e9 showed one or two colours per row.  float64 holds every
+    integer up to 2**53 exactly, and a masked array keeps its mask.
+    """
+    if np.asanyarray(data).dtype.kind in 'iub':
+        return np.ma.asarray(data, dtype=np.float64)
+    return data
+
+
 def add_colorbar(fig, ax, im, label=None):
     """Add a colorbar beside ``ax``, as tall as the plot itself.
 
