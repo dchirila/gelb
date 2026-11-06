@@ -58,13 +58,14 @@ _FORMAT_MAP = {
 _DIM_NAMES = ['x', 'y', 'z']
 _DIM_SIZE_NAMES = ['Nx', 'Ny', 'Nz']
 
-# GeLB type -> NetCDF type constant
+# GeLB type -> NetCDF type constant (int is int64; the C++ backends
+# use the same types)
 _NETCDF_TYPE_MAP = {
-    'int': 'NF90_INT',
+    'int': 'NF90_INT64',
     'int8': 'NF90_BYTE',
     'int16': 'NF90_SHORT',
     'int32': 'NF90_INT',
-    'int64': 'NF90_INT',
+    'int64': 'NF90_INT64',
     'real': 'NF90_DOUBLE',
     'real16': 'NF90_FLOAT',
     'real32': 'NF90_FLOAT',
