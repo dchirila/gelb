@@ -100,7 +100,8 @@ from a directory outside the checkout with ``uv`` off the ``PATH`` and
 the default backend stops with the "no Highway" message; then ``uv run
 pytest`` on the focused list in the workflow (the example diagnostics,
 the geometry lint, the viewer and runner guards,
-:source:`gelb/tests/unit/midware/test_periodic_continuity_validator.py`
-and :source:`gelb/tests/numeric/`); and finally ``uv run sphinx-build
+:source:`gelb/tests/integration/test_backend_cpu_fortran_serial.py`,
+all of :source:`gelb/tests/unit/` and :source:`gelb/tests/numeric/`);
+and finally ``uv run sphinx-build
 -b html -W --keep-going docs /tmp/gelb-docs``, so a Sphinx warning
 fails the build.  CI has no GPU, so the ``gpu`` cases skip there.
