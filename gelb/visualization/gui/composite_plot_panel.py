@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QPushButton,
 )
 
-from gelb.visualization.common import add_colorbar
+from gelb.visualization.common import add_colorbar, image_data
 from gelb.visualization.gui.plot_controllers import (
     TimestepSlider,
     ColormapSelector,
@@ -204,7 +204,7 @@ class CompositePlotDockWidget(QDockWidget):
                 ax.set_xlabel('x')
             else:
                 vmin, vmax = self._dataset.get_variable_range(var_name)
-                im = ax.imshow(data, origin='lower', aspect='equal',
+                im = ax.imshow(image_data(data), origin='lower', aspect='equal',
                                cmap=cmap, vmin=vmin, vmax=vmax)
                 self._images.append(im)
                 self._colorbars.append(add_colorbar(self._fig, ax, im))

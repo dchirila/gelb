@@ -13,7 +13,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
-from gelb.visualization.common import create_figure, add_colorbar, finish_figure
+from gelb.visualization.common import (
+    create_figure, add_colorbar, finish_figure, image_data)
 
 
 class GeLBDataset:
@@ -145,7 +146,7 @@ def plot_1d(dataset, variables=None, output=None):
         else:
             # Multiple timesteps: space-time heatmap
             im = ax.imshow(
-                data, aspect='auto', origin='lower',
+                image_data(data), aspect='auto', origin='lower',
                 extent=[x[0], x[-1], 0, data.shape[0] - 1],
             )
             ax.set_xlabel('x')
@@ -176,7 +177,7 @@ def _snapshot_2d(dataset, vars_to_plot, timestep, output):
     for ax, varname in zip(axes, vars_to_plot):
         data = dataset.get_variable(varname)  # (time, y, x)
         slice_data = data[timestep, :, :]
-        im = ax.imshow(slice_data, origin='lower', aspect='equal')
+        im = ax.imshow(image_data(slice_data), origin='lower', aspect='equal')
         ax.set_xlabel('x')
         ax.set_ylabel('y')
         ax.set_title(f'{varname} (t={dataset.timestep_value(timestep)})')
@@ -194,7 +195,7 @@ def _animate_2d(dataset, vars_to_plot, output):
     vmin, vmax = float(np.nanmin(data)), float(np.nanmax(data))
 
     fig, ax = plt.subplots(figsize=(8, 6))
-    im = ax.imshow(data[0, :, :], origin='lower', aspect='equal',
+    im = ax.imshow(image_data(data[0, :, :]), origin='lower', aspect='equal',
                    vmin=vmin, vmax=vmax)
     ax.set_xlabel('x')
     ax.set_ylabel('y')
@@ -203,7 +204,7 @@ def _animate_2d(dataset, vars_to_plot, output):
 
     def update(frame):
         frame_data = data[frame, :, :]
-        im.set_data(frame_data)
+        im.set_data(image_data(frame_data))
         title.set_text(f'{varname} (t={dataset.timestep_value(frame)})')
         return im, title
 
@@ -245,7 +246,7 @@ def plot_3d(dataset, variables=None, timestep=-1,
         slicer[ax_idx + 1] = si
         slice_data = data[tuple(slicer)]
 
-        im = ax.imshow(slice_data, origin='lower', aspect='equal')
+        im = ax.imshow(image_data(slice_data), origin='lower', aspect='equal')
         ax.set_xlabel(remaining[1])
         ax.set_ylabel(remaining[0])
         ax.set_title(f'{varname} ({slice_axis}={si}, t={dataset.timestep_value(timestep)})')
