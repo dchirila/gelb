@@ -220,6 +220,11 @@ versions follow upstream end of life and can change in any release.
   and `-2147483647` read back as missing. `int` and `int64` outputs are
   now 64-bit NetCDF integers on every backend; values in the 32-bit
   range read back unchanged.
+- **A gauge output named `time`.** The output file stores each record's
+  time step in a variable named `time`, so such an output compiled and
+  then stopped every backend's run when it created the file ("NetCDF:
+  String match to name in use"). `gelbc` now reports an error at the
+  output's declaration.
 
 ## [1.0.0] — 2026-10-23
 

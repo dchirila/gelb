@@ -3,7 +3,7 @@
 from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
 from gelb.frontend import type_rules
 from gelb.gelb_ast.ASTNodes import *
-from gelb.utils.exceptions import GeLBExTypeError
+from gelb.utils.exceptions import GeLBExSymbolNotAllowedHere, GeLBExTypeError
 
 
 class GaugeValidationVisitor(ASTBaseVisitor):
@@ -15,11 +15,18 @@ class GaugeValidationVisitor(ASTBaseVisitor):
     2. All gauges have non-empty output specifications
     3. All gauge outputs are assigned in the gauge body
     4. Gauges that declare an output of the same name give it one type
+    5. No gauge output takes the name of the output file's time variable
     """
 
     # ``int64`` is ``int`` and ``real64`` is ``real`` (type_rules): one
     # type, one output buffer and one NetCDF type on every backend.
     _SAME_TYPE = {'int64': 'int', 'real64': 'real'}
+
+    # The variable in which every backend's output file stores each
+    # record's time step (stage3_backend_cpu_fortran_serial.py,
+    # highway/output.py).  The file's other names, the axes x, y and z,
+    # are implicit symbols, which no output can take either.
+    TIME_VARIABLE = 'time'
     
     def visitProgram_N(
             self,
@@ -91,6 +98,18 @@ class GaugeValidationVisitor(ASTBaseVisitor):
                     "not in this version.  Declare one scalar output per "
                     f"component, for example '-> (real {output.name.name}0, "
                     f"real {output.name.name}1)', and assign each."
+                )
+            # Such an output compiled, and every run stopped when it
+            # created the output file (NetCDF: name in use).
+            if output.name.name == self.TIME_VARIABLE:
+                raise GeLBExSymbolNotAllowedHere(
+                    output,
+                    f"Gauge '{node.name.name}' output '{output.name.name}' "
+                    "has the name of the output file's time variable",
+                    "The output file stores the time step of each record in "
+                    f"a variable named '{self.TIME_VARIABLE}', so no gauge "
+                    "output can take that name. Give the output another "
+                    "name, for example 'sim_time'."
                 )
         
         # Check that all declared output variables are assigned in the gauge body
