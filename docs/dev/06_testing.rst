@@ -79,7 +79,13 @@ outcome differs between backends.  :source:`CONTRIBUTING.md` requires
 the snapshot to be identical for any backend work whose change to
 the generated code is not intentional and explained; a frontend or
 midware change that alters the AST handed to the backends changes
-the emission too.
+the emission too.  The snapshot does not compile what it stores:
+:source:`gelb/tests/integration/test_plain_build_compiles.py`
+generates every example's plain build (``--no-slice-simplify
+--no-scalar-cse``) on each backend and runs the native compiler's
+syntax check on it, with gelb-run's default flags on Linux
+(``GELB_CXXFLAGS``, ``GELB_FFLAGS`` and ``GELB_NVCC_FLAGS`` do not
+apply).
 
 The numeric suite
 =================
