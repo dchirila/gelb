@@ -245,7 +245,8 @@ class ExpressionEmitMixin:
                 # Highway has no unary ``operator-`` overload on V --
                 # use ``hn::Neg`` for explicit lane-wise negation.
                 return f'hn::Neg({inner})'
-            return f'(-{inner})'
+            kind = numeric_kind(getattr(expr, 'inferred_type', None))
+            return self._negate(inner, kind is not None and kind.startswith('int'))
         if isinstance(expr, RectSelOfLatticeInDFs_N):
             return self._emit_lattice_in(expr, df_var)
         if isinstance(expr, RectSelOfArrayElems_N):

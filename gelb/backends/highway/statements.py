@@ -10,6 +10,7 @@ from __future__ import annotations
 from gelb.backends.real_literals import cpp_real
 
 import math
+import re
 
 from gelb.backends.highway.common import (
     _lname,
@@ -244,6 +245,26 @@ class StatementEmitMixin:
     # fold only in real arithmetic, where the tokens are doubles and
     # Python's float arithmetic is the native one.
 
+    # A negative literal is emitted bare (``EX[3]`` -> ``-1.0``, a
+    # negative ``-D`` value), so a minus put in front of it would read
+    # ``--0.05``: a decrement to C++ and CUDA.
+    _NEGATIVE_LITERAL = re.compile(r'-(?:\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?')
+
+    @classmethod
+    def _negate(cls, s: str, integer: bool = False) -> str:
+        """``-s``, spelled so that the minus reads as one negation.  An
+        operand whose text starts with a minus is the only one that
+        changes: a real literal becomes its exact negation (``-0.05`` ->
+        ``0.05``, ``-0.0`` -> ``0.0``), anything else, an integer
+        literal included, is parenthesized (``(-(-2))``).  Every other
+        operand keeps ``(-s)``."""
+        if not s.startswith('-'):
+            return f'(-{s})'
+        if (not integer and cls._NEGATIVE_LITERAL.fullmatch(s)
+                and any(c in s for c in '.eE')):
+            return cpp_real(-float(s))
+        return f'(-({s}))'
+
     @staticmethod
     def _is_zero(v, negative=None) -> bool:
         """``v`` is a zero; of the given sign unless ``negative`` is None."""
@@ -270,7 +291,7 @@ class StatementEmitMixin:
         if cls._is_zero(vb, None if integer else False):
             return a
         if cls._is_zero(va, None if integer else True):
-            return f'(-{b})'
+            return cls._negate(b, integer)
         if va is not None and vb is not None and not integer:
             return cls._fold_literals(ev_sub, va, vb, f'({a} - {b})')
         return f'({a} - {b})'
@@ -286,9 +307,9 @@ class StatementEmitMixin:
         if vb == 1.0:
             return a
         if va == -1.0:
-            return f'(-{b})'
+            return cls._negate(b, integer)
         if vb == -1.0:
-            return f'(-{a})'
+            return cls._negate(a, integer)
         if va is not None and vb is not None and not integer:
             return cls._fold_literals(ev_mul, va, vb, f'({a} * {b})')
         return f'({a} * {b})'
