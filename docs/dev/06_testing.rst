@@ -40,8 +40,9 @@ Markers and options
 - ``gpu`` is registered in ``[tool.pytest.ini_options]`` of
   :source:`pyproject.toml` and marks the CUDA cases of the numeric
   suite, :source:`gelb/tests/integration/test_real_width_contract.py`,
-  :source:`gelb/tests/integration/test_reproducibility.py` and
-  :source:`gelb/tests/integration/test_constant_coefficients.py`, which
+  :source:`gelb/tests/integration/test_reproducibility.py`,
+  :source:`gelb/tests/integration/test_constant_coefficients.py` and
+  :source:`gelb/tests/integration/test_same_name_block_locals.py`, which
   also carry ``requires_gpu_cuda_cpp_compiler``; the smoke test's CUDA
   case carries neither and skips through its own toolchain check.
 - ``smoke`` is registered in

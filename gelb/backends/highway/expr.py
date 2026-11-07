@@ -954,25 +954,19 @@ class ExpressionEmitMixin:
         return f'({terms})'
 
     def _lookup_local_array_size(self, name: str) -> int:
-        """Walk the AST to find the array size of a local declaration.
-        Used when emitting ``sum(name)`` and we need to know how many
-        terms to unroll.
+        """The length of the local array ``name`` declared in the block
+        being emitted (``_local_array_sizes`` is filled by the
+        declaration emit and by the matmul lifts, and reset for every
+        block body).  Used when emitting ``dot_prod``, ``matmul`` and a
+        whole-array assignment, which unroll over the length.  A name
+        that no declaration of this block registered is an internal
+        error: the frontend has checked that every local is declared
+        before its use, so the walk over the other blocks that used to
+        stand here could only return another block's array of the same
+        name, and did.
         """
-        # Runtime-injected temps (e.g. matmul lifts) are recorded
-        # directly in _local_array_sizes -- check that first since
-        # they're not in the AST.
         if name in self._local_array_sizes:
             return self._local_array_sizes[name]
-        for block_list in (self.ast.initializers, self.ast.dynamics,
-                           self.ast.gauges):
-            if block_list is None:
-                continue
-            for block in block_list:
-                for stmt in block.stmts:
-                    if (isinstance(stmt, VariableDeclarationStmt_N)
-                            and stmt.name.name == name):
-                        sz = self._array_decl_size(stmt)
-                        if sz is not None:
-                            return sz
         raise NotImplementedError(
-            f"cpu_highway: could not determine size of local array '{name}'.")
+            f"cpu_highway: local array '{name}' is not declared in the "
+            f"block being emitted.")

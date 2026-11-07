@@ -183,8 +183,9 @@ class HighwayCodeGenerator(
         # _array_constants[name] = list of folded scalar values (for EX, EY, W
         #   etc).  Lets us fold EX[i] to a literal when emitting upstream_dfs.
         # _array_locals = set of variable names that are array-typed in the
-        #   current emit scope.  Used when an Identifier appears inside a
-        #   for-df loop: array -> name[gelb_df]; scalar -> name.
+        #   block body being emitted (reset per body by _emit_block_body).
+        #   Used when an Identifier appears inside a for-df loop:
+        #   array -> name[gelb_df]; scalar -> name.
         self._array_constants: dict[str, list] = {}
         # _array_constant_dtypes[name] = the declared element dtype of a
         #   1-D constant: its folded values are exact in that type.
@@ -210,9 +211,10 @@ class HighwayCodeGenerator(
         # ``double`` for a lattice-out store) emit the right Highway
         # spelling rather than a compile-failing ``static_cast``.
         self._simd_int_locals: dict[str, str] = {}
-        # Sizes of runtime-lifted temp arrays (e.g. matmul second-arg
-        # lifts).  Consulted by _lookup_local_array_size before
-        # falling back to the AST walk.
+        # Lengths of the 1-D local arrays declared in the block body
+        # being emitted, the runtime-lifted temps (matmul second-arg
+        # lifts) included; reset per body with _array_locals.  The
+        # only source for _lookup_local_array_size.
         self._local_array_sizes: dict[str, int] = {}
         # Counter for unique matmul temp names.
         self._matmul_temp_counter: int = 0
