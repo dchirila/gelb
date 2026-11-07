@@ -507,6 +507,11 @@ Each type name doubles as an explicit cast intrinsic:
 ``int(3.7)`` yields ``3``, ``real(n)`` promotes an int to real,
 ``int8(255)`` truncates to an 8-bit representation.
 
+A variable declared inside an ``initializer``, ``dynamic`` or ``gauge``
+block belongs to that block.  Two blocks may give a local the same name
+with a different type or array length; each block computes with its own
+declaration.
+
 Expressions and control flow
 =============================
 

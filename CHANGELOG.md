@@ -41,6 +41,16 @@ versions follow upstream end of life and can change in any release.
 
 ### Fixed
 
+- **A local array keeps its own length in every block on `cpu_highway`
+  and `gpu_cuda_cpp`.** The C++ and CUDA backends looked a local array's
+  length up by name across every block of the program and took the
+  first declaration, so when two blocks declared arrays of the same
+  name with different lengths, the later block's `dot_prod` and
+  whole-array assignment (`v = v * 2.0`) used the earlier block's
+  length (`dot_prod(v, w)` over four elements gave the two-element
+  result), `matmul` rejected the program ("M cols (4) != v len (2)"),
+  and an array `tmp` in one dynamic made a scalar `tmp` of another
+  dynamic fail to build. The lookup is now per block, as in Fortran.
 - **Integer constant arrays and integer `dot_prod` are exact on
   `cpu_highway` and `gpu_cuda_cpp`.** The C++ and CUDA backends folded
   every constant array to binary64, so an `int` element above 2^53

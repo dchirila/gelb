@@ -53,16 +53,24 @@ class StatementEmitMixin:
     """
 
     def _emit_block_body(self, block, *, context: str) -> None:
-        # SIMD-retyped int locals are scoped to one body emit:
-        # the same block is re-emitted for the SIMD body and for any
-        # scalar peel/remainder, with a fresh set of decls each time.
-        # Save/restore so a parent caller's set (if any) is preserved.
+        # The block's locals are scoped to one body emit: the same
+        # block is re-emitted for the SIMD body and for any scalar
+        # peel/remainder, with a fresh set of decls each time, and a
+        # name declared in another block (an array of another length,
+        # or a scalar of the same name) must not be visible here.
+        # Save/restore so a parent caller's sets (if any) are preserved.
         prev_simd_int_locals = self._simd_int_locals
+        prev_array_locals = self._array_locals
+        prev_local_array_sizes = self._local_array_sizes
         self._simd_int_locals = {}
+        self._array_locals = set()
+        self._local_array_sizes = {}
         try:
             self._emit_block_body_inner(block, context=context)
         finally:
             self._simd_int_locals = prev_simd_int_locals
+            self._array_locals = prev_array_locals
+            self._local_array_sizes = prev_local_array_sizes
 
     def _emit_block_body_inner(self, block, *, context: str) -> None:
         # Emit declarations for gauge outputs explicitly so
@@ -1138,6 +1146,7 @@ class StatementEmitMixin:
         else:
             # Array: T name[N];  followed by per-element init if any.
             self._array_locals.add(stmt.name.name)
+            self._local_array_sizes[stmt.name.name] = arr_size
             self._emit(f'{cpp_type} {name}[{arr_size}];')
             init = stmt.initial_value
             # Unwrap a TypePromotionNode_N wrapper so that the
