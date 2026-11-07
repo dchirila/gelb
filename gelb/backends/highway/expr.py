@@ -320,7 +320,6 @@ class ExpressionEmitMixin:
         # the only portable shape.
         _CMP_HWY = {
             'Equal_N':        'hn::Eq',
-            'NotEqual_N':     'hn::Ne',
             'Less_N':         'hn::Lt',
             'LessEqual_N':    'hn::Le',
             'Greater_N':      'hn::Gt',
@@ -341,6 +340,13 @@ class ExpressionEmitMixin:
             if self._simd_mode == 'vec8d' and (
                     self._yields_simd_vector(expr.left)
                     or self._yields_simd_vector(expr.right)):
+                if cmp_kind == 'NotEqual_N':
+                    # ``hn::Ne`` is the *ordered* comparison with
+                    # AVX2 or AVX-512 (``_CMP_NEQ_OQ``): false when a
+                    # lane is NaN, where IEEE 754, the scalar path,
+                    # Fortran, NEON and SSE say true.  ``Not(Eq)`` is
+                    # the unordered inequality on every target.
+                    return f'hn::Not(hn::Eq({a}, {b}))'
                 return f'{_CMP_HWY[cmp_kind]}({a}, {b})'
             return f'({a} {_CMP_OP[cmp_kind]} {b})'
         # Boolean ops on masks -> ``hn::And`` / ``hn::Or`` /

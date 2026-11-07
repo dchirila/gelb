@@ -41,6 +41,12 @@ versions follow upstream end of life and can change in any release.
 
 ### Fixed
 
+- **`!=` is true for a NaN in the `cpu_highway` vector body.** Highway's
+  `Ne` is the ordered comparison with AVX2 or AVX-512, so `v != v` with
+  a NaN `v` gave `false` in the vectorized part of a block, where the
+  scalar paths, Fortran, CUDA, NEON and SSE give `true` (the IEEE 754
+  result, and the manual's). The vector body now computes `!=` as the
+  negation of `==`. No example uses `!=`.
 - **A local array keeps its own length in every block on `cpu_highway`
   and `gpu_cuda_cpp`.** The C++ and CUDA backends looked a local array's
   length up by name across every block of the program and took the
