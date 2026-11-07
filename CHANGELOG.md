@@ -41,6 +41,24 @@ versions follow upstream end of life and can change in any release.
 
 ### Fixed
 
+- **Integer constant arrays and integer `dot_prod` are exact on
+  `cpu_highway` and `gpu_cuda_cpp`.** The C++ and CUDA backends folded
+  every constant array to binary64, so an `int` element above 2^53
+  (`{2, 9007199254740993}`) lost its low bit when the array passed
+  through a function, and so did `int` coefficients of a `dot_prod`
+  with an integer result. A `dot_prod` of `int` coefficients with an
+  `int8` or `int32` array was computed in the array's narrow type, so
+  it wrapped at 127 or 2^31 (Fortran gave 20000 + x and 2^31), and one
+  of five or more terms went through a fused multiply-add in double in
+  a default build, so `{1, 1, 1, 1, 3}` against `{0, 0, 0, 0,
+  3002399751580331}` gave 2^53 instead of 2^53 + 1. Every constant
+  array now keeps its elements exactly, and an integer `dot_prod` is
+  computed in its result's type, each element converted to it first,
+  with no fused multiply-add, as the Fortran backend did and chapter 19
+  says. A `dot_prod` whose coefficients are all -1 (`S * {1.0, 1.0,
+  1.0}` with `-D S=-1`) with a per-cell real array also failed to build
+  on `cpu_highway` with the SoA and CBT layouts; it builds, and negates
+  as the other paths do. No example's generated code changes.
 - **`gelb-run -n` and `-w` are validated.** `-w 0`, `-w 08` or a
   negative `-n` made bash print an arithmetic error and exit 0 without
   running anything, leaving the previous `.nc` in place. Both options

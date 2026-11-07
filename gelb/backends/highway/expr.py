@@ -14,6 +14,8 @@ from gelb.backends.real_literals import cpp_real
 from gelb.backends.highway.common import (
     _TYPE_MAP,
     _uname,
+    int64_literal,
+    int64_typed_literal,
 )
 
 from gelb.frontend.intrinsic_functions import CAST_INTRINSIC_NAMES
@@ -126,15 +128,7 @@ class ExpressionEmitMixin:
 
     def _emit_expression(self, expr, df_var: str | None = None) -> str:
         if isinstance(expr, IntLiteral_N):
-            # A decimal literal takes the first of int, long, long long
-            # that holds it, so every int64 value but the minimum is
-            # spelled bare; the minimum's magnitude is not a signed
-            # literal (clang reads it as unsigned and the negation
-            # keeps the wrong sign), so it is the negative maximum
-            # minus one; a native literal must express its GeLB value.
-            if expr.value == -2 ** 63:
-                return '(-9223372036854775807LL - 1LL)'
-            return str(expr.value)
+            return int64_literal(expr.value)
         if isinstance(expr, RealLiteral_N):
             kind = getattr(getattr(expr, 'inferred_type', None), 'element_dtype', None)
             cpp_type = 'float' if kind in ('real16', 'real32') else 'double'
@@ -178,6 +172,10 @@ class ExpressionEmitMixin:
                 # as a multiplication even though the value is -1
                 # (IEEE-754 strictness).  Inlining the literal lets
                 # the compiler see ``-1.0 * x`` and fold it to ``-x``.
+                # An integer array's element is its exact value (an
+                # int64 above 2^53 keeps its low bits), carrying its
+                # int64 width into the expression; a real one is a
+                # literal of the array's width.
                 if (df_var.lstrip('-').isdigit()
                         and expr.name in self._array_constants):
                     vals = self._fold_array_constants(expr.name)
@@ -186,7 +184,8 @@ class ExpressionEmitMixin:
                         if 0 <= idx < len(vals):
                             return (cpp_real(vals[idx], _TYPE_MAP.get(
                                 getattr(expr.inferred_type, 'element_dtype', 'real'), 'double'))
-                                if isinstance(vals[idx], float) else repr(vals[idx]))
+                                if isinstance(vals[idx], float)
+                                else int64_typed_literal(vals[idx]))
                 return f'{base}[{df_var}]'
             return base
         if isinstance(expr, (Add_N, Sub_N, Mul_N)):
@@ -625,6 +624,9 @@ class ExpressionEmitMixin:
             call, a, b, a_vals, b_vals, n)
         if mixed is not None:
             return mixed
+        integer = self._emit_dot_prod_integer(call, a, b, a_vals, b_vals, n)
+        if integer is not None:
+            return integer
         # Helper-friendly path: exactly one operand is a foldable
         # array constant.  Identify which is the "coefficient"
         # side and which is the "runtime array" side.
@@ -700,10 +702,12 @@ class ExpressionEmitMixin:
         # Fallback: both runtime, both foldable, or all-positive /
         # all-negative +/-1.  Keep the original inline emit, every term
         # included (a zero coefficient is a ``0.0 * x`` term).
+        # A real result: an integer constant's coefficients are the
+        # binary64 values the helper paths see.
         terms = []
         for i in range(n):
-            ca = a_vals[i] if a_vals is not None else None
-            cb = b_vals[i] if b_vals is not None else None
+            ca = float(a_vals[i]) if a_vals is not None else None
+            cb = float(b_vals[i]) if b_vals is not None else None
             lhs = self._operand_for_coeff(ca, f'{ba}[{i}]')
             rhs = self._operand_for_coeff(cb, f'{bb}[{i}]')
             if lhs is None and rhs is None:
@@ -737,6 +741,66 @@ class ExpressionEmitMixin:
         return [_int_to_binary32(int(e))
                 if isinstance(e, int) and float(e) != e else v
                 for e, v in zip(exact, values)]
+
+    _INTEGER_CPP_TYPES = ('int8_t', 'int16_t', 'int32_t', 'int64_t')
+
+    def _emit_dot_prod_integer(self, call, a, b, a_vals, b_vals, n):
+        """``dot_prod`` with an integer result on the scalar path,
+        computed in the result's type, or None for any other call.
+
+        Each element and each coefficient converts to the result's
+        type before it is multiplied, and the products and sums are
+        exact integer operations in it, never a fused multiply-add
+        (user manual, Numerical semantics: Types and promotion,
+        Reproducibility).  The deducing helpers would compute in the
+        array's own type (an int8 array wraps at 127 under int64
+        coefficients), take the coefficients as binary64 (an int64 above
+        2^53 loses its low bits) and, from the fifth term, go through
+        ``std::fma``, which converts to double; the typed overloads
+        (``gelb_signed_sum_as``, ``gelb_dot_prod_const_as``) take the
+        result's type and the coefficients exactly, so every case with a
+        constant operand uses one of them.  Two per-cell arrays are
+        written out as the helpers compute: each element converted to
+        ``int64_t``, the products and sums in it, and one conversion of
+        the sum to the result's type, which wraps a narrow result as a
+        conversion after every operation would (the bare chain would
+        compute two int8 elements in ``int`` and never narrow, so
+        ``real(dot_prod(a8, b8))`` would see 130 where Fortran gives
+        -126).  The SIMD body is left as it is: an integer array does
+        not build there yet.
+        """
+        if self._simd_mode == 'vec8d':
+            return None
+        result = _TYPE_MAP.get(
+            getattr(call.inferred_type, 'element_dtype', None))
+        if result not in self._INTEGER_CPP_TYPES:
+            return None
+        ba, bb = _uname(a.name), _uname(b.name)
+        if a_vals is not None:
+            coeffs, array = a_vals, bb
+        elif b_vals is not None:
+            coeffs, array = b_vals, ba
+        else:
+            terms = [('+', f'static_cast<int64_t>({ba}[{i}])'
+                           f' * static_cast<int64_t>({bb}[{i}])')
+                     for i in range(n)]
+            return (f'static_cast<{result}>('
+                    + self._join_signed_terms(terms) + ')')
+        pos_idx = [i for i, c in enumerate(coeffs) if c == 1]
+        neg_idx = [i for i, c in enumerate(coeffs) if c == -1]
+        if pos_idx and neg_idx and len(pos_idx) + len(neg_idx) == n:
+            pos_name = self._register_constexpr_array(
+                'gelb_dp_pos', 'int', tuple(pos_idx))
+            neg_name = self._register_constexpr_array(
+                'gelb_dp_neg', 'int', tuple(neg_idx))
+            return (f'gelb::gelb_signed_sum_as<{result}>({array}, '
+                    f'{pos_name}, {neg_name})')
+        coeff_name = self._register_constexpr_array(
+            'gelb_dp_coeff', 'int64_t', tuple(int(c) for c in coeffs))
+        idx_name = self._register_constexpr_array(
+            'gelb_dp_idx', 'int', tuple(range(n)))
+        return (f'gelb::gelb_dot_prod_const_as<{result}>({coeff_name}, '
+                f'{array}, {idx_name})')
 
     def _emit_dot_prod_real_coeffs_int_array(self, call, a, b, a_vals,
                                              b_vals, n):

@@ -17,6 +17,7 @@ from gelb.backends.highway.common import (
     _CBT_TILE,
     _cbt_addr_to_tile_start,
     _uname,
+    int64_typed_literal,
 )
 
 from gelb.gelb_ast.ASTNodes import (
@@ -329,14 +330,19 @@ class StatementEmitMixin:
     def _fold_array_constants(self, name: str):
         """If ``name`` is a constexpr array constant whose elements
         all fold to numeric values at codegen time, return them as a
-        list of floats.  Otherwise return None.  Used by dot_prod and
-        broadcast-op simplification to drop zero-coefficient terms."""
+        list of their exact values in the array's declared element
+        type: Python ints for an integer array (an int64 above 2^53
+        keeps its low bits), floats for a real one.  Otherwise return
+        None.  Used by dot_prod, the constant-index read and the
+        slice-unrolling test."""
         if name not in self._array_constants:
             return None
+        integer = self._array_constant_dtypes.get(name, 'real').startswith('int')
         try:
-            return [float(eval_const_expr(v, ast=self.ast,
-                                           lattice_info=self._lattice_info))
-                    for v in self._array_constants[name]]
+            values = [eval_const_expr(v, ast=self.ast,
+                                      lattice_info=self._lattice_info)
+                      for v in self._array_constants[name]]
+            return [int(v) if integer else float(v) for v in values]
         except Exception:
             return None
 
@@ -390,16 +396,25 @@ class StatementEmitMixin:
                 body = f'{ma} * {mb}'
         return (sign, body)
 
-    @staticmethod
-    def _join_signed_terms(terms):
+    def _join_signed_terms(self, terms):
         """Compose a list of ``(sign, body)`` tuples into a single
-        ``a + b - c + d`` expression, leading sign suppressed."""
+        ``a + b - c + d`` expression, leading sign suppressed.  A
+        leading negative term is negated: in the SIMD body with
+        ``hn::Neg`` (Highway's vector type has no unary minus), which
+        like ``-x`` keeps the sign of a zero (``0 - x`` would give +0
+        for x = +0; user manual, Numerical semantics: Special
+        values)."""
         if not terms:
             return '0.0'
         out = []
         for i, (sign, body) in enumerate(terms):
             if i == 0:
-                out.append(body if sign == '+' else f'-{body}')
+                if sign == '+':
+                    out.append(body)
+                elif self._simd_mode == 'vec8d':
+                    out.append(f'hn::Neg({body})')
+                else:
+                    out.append(f'-{body}')
             else:
                 out.append(f' {sign} {body}')
         return ''.join(out)
@@ -562,16 +577,26 @@ class StatementEmitMixin:
             else:
                 # General case (non-+/-1 coefficients OR all-positive
                 # +/-1 OR all-negative +/-1): inline coeff*v products
-                # (with scalar-broadcast in SIMD mode).
+                # (with scalar-broadcast in SIMD mode).  An integer
+                # matrix's entries are spelled exactly.
                 if simd:
                     terms = ' + '.join(
-                        f'hn::Set(d, {cpp_real(float(c))}) * {vg}[{j}]'
+                        f'hn::Set(d, {self._matrix_entry_text(c)}) * {vg}[{j}]'
                         for c, j in survived)
                 else:
                     terms = ' + '.join(
-                        f'{cpp_real(float(c))} * {vg}[{j}]'
+                        f'{self._matrix_entry_text(c)} * {vg}[{j}]'
                         for c, j in survived)
                 self._emit(f'{name}[{i}] = ({terms});')
+
+    @staticmethod
+    def _matrix_entry_text(c) -> str:
+        """The C++ spelling of a folded 2-D constant's entry: its exact
+        value, with its int64 width, for an integer matrix (the product
+        with a per-cell int32 must not overflow a C++ int), a binary64
+        literal for a real one."""
+        return (int64_typed_literal(c) if isinstance(c, int)
+                else cpp_real(float(c)))
 
     def _emit_upstream_dfs(self, name: str, n: int,
                            call: IntrinsicFunctionCall_N) -> None:

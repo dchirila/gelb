@@ -60,7 +60,9 @@ peeled edges and the scalar tail of a ``cpu_highway`` loop round the
 same way, so two cells with identical inputs give identical bits
 whatever their position.  A ``dot_prod`` of a constant real array with
 an integer array does not use the helper: each integer element converts
-to the result's width, and GeLB fuses none of the products.  Every term
+to the result's width, and GeLB fuses none of the products.  A
+``dot_prod`` with an integer result is exact integer arithmetic in every
+build, so a fused multiply-add never enters it.  Every term
 of a reduction counts, including
 those with a zero coefficient, so an infinity or a NaN in any direction
 reaches the result.  On the CUDA backend a default build keeps nvcc's fusion,
@@ -124,7 +126,11 @@ zero, build strictly.
    1, 1, 1, 1`` over ``-1, 0, 0, 0, 1 - 2^-52, 0, 0, 0, 0``, which is
    exactly ``-2^-104`` when its multiply-add is fused once and ``0``
    when it is not) fuses nothing in a strict build and gives identical
-   cells in a default build on every target.
+   cells in a default build on every target.  Tested by
+   ``test_constant_coefficients.py``: an integer ``dot_prod`` of five
+   terms is exact in a default build as in a strict one, and a
+   ``dot_prod`` whose coefficients are all -1 builds in the vector body
+   and negates there as on every other path.
 
 Types and promotion
 ===================
@@ -185,6 +191,15 @@ returns it.  ``abs`` returns its argument's type, integers included, so
 argument, ``sqrt`` of a ``real32`` being a ``real32``; an integer
 argument is converted to ``real`` first.  These are the conventions of
 Fortran's generic intrinsics, C++'s overloads, NumPy, Julia and CUDA.
+``dot_prod`` returns the common type of its two arrays, by the table
+above, and is computed in it: each element converts to the result's type
+before it is multiplied, so ``dot_prod`` of ``int`` coefficients with an
+``int8`` array is an ``int`` whose products do not wrap at 127, while
+``dot_prod`` of two ``int32`` arrays is an ``int32``.  An integer result
+is exact integer arithmetic, with nothing fused, in every build and on
+every backend; a coefficient above 2^53 keeps its value, and a product
+or a sum past the result's width is an integer overflow, undefined as
+below.
 
 At run time these intrinsics are one helper each, the same on every
 backend and every code path (Highway's SIMD body and scalar tail, CUDA,
@@ -212,8 +227,12 @@ real overflow it can see folds to the infinity (see *Constant folding*).
    ``sqrt`` of a ``real32``, ``min`` of a ``real32`` and an integer,
    ``abs`` of an integer, ``real16`` rejected end to end, the integer
    intrinsics and casts on the coordinate, IEEE ``min``/``max`` with a
-   NaN and a signed zero on every path; and by the battery's width,
-   conversion and special-value cases against the C++ oracle.
+   NaN and a signed zero on every path; by the battery's width,
+   conversion and special-value cases against the C++ oracle; and by
+   ``test_constant_coefficients.py``: an integer ``dot_prod`` computed
+   in its result's type with ``int8`` and ``int32`` arrays, ``int``
+   coefficients above 2^53, and a constant element's 64-bit width in
+   arithmetic, on every backend.
 
 Special values
 ==============

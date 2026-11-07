@@ -18,6 +18,36 @@ from pathlib import Path
 # Type mapping: GeLB scalar dtype -> C++ type spelling
 # ----------------------------------------------------------------------
 
+def int64_literal(value: int) -> str:
+    """The C++ spelling of an ``int64_t`` value.  A decimal literal
+    takes the first of int, long, long long that holds it, so every
+    value but the minimum is spelled bare; the minimum's magnitude is
+    not a signed literal (the compilers read it as unsigned: g++ warns
+    and keeps the value, nvcc rejects it in a braced initializer, and
+    clang's negation keeps the wrong sign), so it is the negative
+    maximum minus one.  A native literal must express its GeLB value."""
+    value = int(value)
+    if value == -2 ** 63:
+        return '(-9223372036854775807LL - 1LL)'
+    return str(value)
+
+
+def int64_typed_literal(value: int) -> str:
+    """The C++ spelling of an ``int64_t`` value that carries its width
+    into an expression: a bare literal that fits an ``int`` is an
+    ``int``, so ``(2147483647 * 2)`` overflows before the value reaches
+    an int64 variable, where GeLB's ``int`` arithmetic gives
+    4294967294.  The suffix makes it a long long; a negative value is
+    parenthesised so that no caller writes ``--``, and the minimum is
+    spelled as above.  Used where a folded constant's element is
+    written into arithmetic (an unrolled array operation, a ``matmul``
+    entry, a coefficient array)."""
+    value = int(value)
+    if value == -2 ** 63:
+        return '(-9223372036854775807LL - 1LL)'
+    return f'({value}LL)' if value < 0 else f'{value}LL'
+
+
 _TYPE_MAP = {
     'int':    'int64_t',
     'int8':   'int8_t',
