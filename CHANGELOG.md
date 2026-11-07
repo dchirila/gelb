@@ -47,6 +47,12 @@ versions follow upstream end of life and can change in any release.
   scalar paths, Fortran, CUDA, NEON and SSE give `true` (the IEEE 754
   result, and the manual's). The vector body now computes `!=` as the
   negation of `==`. No example uses `!=`.
+- **`==` and `!=` between per-cell `bool` values build on `cpu_highway`.**
+  Two `bool` locals computed per cell (`bool a = f.in[x, y | 0] > 0.0;`)
+  are masks in the vector body, and comparing them (`real(a != b)`)
+  failed to build with the SoA and CBT layouts ("no match for
+  operator!="); AoS, Fortran and CUDA were right. They now compare in
+  the vector body too, also against a uniform `bool` such as `t > 0`.
 - **A local array keeps its own length in every block on `cpu_highway`
   and `gpu_cuda_cpp`.** The C++ and CUDA backends looked a local array's
   length up by name across every block of the program and took the
