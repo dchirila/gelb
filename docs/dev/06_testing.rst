@@ -51,6 +51,13 @@ Markers and options
   skipped.  :source:`gelb/tests/integration/test_examples_smoke.py`
   compiles and runs every ``.gelb`` file under ``examples/`` on the
   selected backends.
+- ``pytest-xdist`` is a dev dependency for the integration files whose
+  cases each build and run their own program, such as
+  :source:`gelb/tests/integration/test_constant_coefficients.py`:
+  ``uv run pytest -n 12 <file>`` runs the builds in parallel.  Run the
+  full suite without ``-n``: collecting a path under ``gelb/``
+  regenerates the parser (see below), and the numeric suite shares its
+  oracle builds.
 
 The emission snapshot
 =====================

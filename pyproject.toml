@@ -36,6 +36,7 @@ docs = [
 ]
 dev = [
     "pytest>=9.0.3",
+    "pytest-xdist>=3.6.1",
     "setuptools>=70.0.0",
     "packaging>=24.0",
     "pluggy>=1.5.0",
@@ -72,6 +73,7 @@ version = { attr = "gelb.__version__" }
 [dependency-groups]
 dev = [
     "pytest>=9.0.3",
+    "pytest-xdist>=3.6.1",
     "setuptools>=70.0.0",
     "packaging>=24.0",
     "pluggy>=1.5.0",
