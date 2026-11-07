@@ -89,6 +89,7 @@ jobs:
               gelb/tests/integration/test_int64_gauge_output.py
               gelb/tests/integration/test_backend_cpu_fortran_serial.py
               gelb/tests/integration/test_same_name_block_locals.py
+              gelb/tests/integration/test_simd_comparisons.py
 
           - name: diagnostics, lint, viewer, runner
             xdist: -n auto
