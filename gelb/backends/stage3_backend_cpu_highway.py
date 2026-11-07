@@ -83,6 +83,7 @@ from gelb.backends.highway.common import (
     _NT_STORE_THRESHOLD_BYTES,
     _TYPE_MAP,
     _cbt_addr_to_tile_start,
+    int64_literal,
     _detect_avx512_available,
     _uname,
 )
@@ -185,6 +186,9 @@ class HighwayCodeGenerator(
         #   current emit scope.  Used when an Identifier appears inside a
         #   for-df loop: array -> name[gelb_df]; scalar -> name.
         self._array_constants: dict[str, list] = {}
+        # _array_constant_dtypes[name] = the declared element dtype of a
+        #   1-D constant: its folded values are exact in that type.
+        self._array_constant_dtypes: dict[str, str] = {}
         # 2-D constants: name -> (nrows, ncols).  Used by matmul to
         # fold the inner dimension at codegen time.
         self._array_constants_2d: dict[str, tuple[int, int]] = {}
@@ -326,7 +330,11 @@ class HighwayCodeGenerator(
         # Negative lookbehind ``(?<!>)`` skips parens immediately
         # preceded by ``>`` -- those are part of ``static_cast<TYPE>(N)``
         # where the parens are required syntax, not a redundant wrap.
-        parens_int = re.compile(rf'(?<!>)\(\s*({int_pat})\s*\)')
+        # ``(?<!-)``: a negative literal keeps its parentheses when a
+        # minus stands right in front of them (``(-(-1LL))``), because
+        # ``--1LL`` is a decrement; elsewhere it is stripped as before,
+        # so the wrap forms fold the same way.
+        parens_int = re.compile(rf'(?<![>-])\(\s*({int_pat})\s*\)')
         chain_pat = re.compile(
             rf'(?<!>)\(\s*({int_pat}(?:\s*[+\-*%]\s*{int_pat})+)\s*\)')
         sanitiser = re.compile(
@@ -342,7 +350,13 @@ class HighwayCodeGenerator(
             except Exception:
                 return m.group(0)
             if isinstance(result, int):
-                return f'{result}{suffix}'
+                # The int64 minimum has no literal of its own (its
+                # magnitude is unsigned), so its chain stays as written;
+                # a negative result keeps its parentheses as above.
+                if result == -2 ** 63:
+                    return m.group(0)
+                return (f'({result}{suffix})' if result < 0
+                        else f'{result}{suffix}')
             return m.group(0)
 
         while True:
@@ -518,7 +532,9 @@ class HighwayCodeGenerator(
         name = f'{prefix}_{self._deferred_constexpr_counter}'
         if ctype in ('int', 'int8_t', 'int16_t', 'int32_t', 'int64_t',
                      'uint8_t', 'uint16_t', 'uint32_t', 'uint64_t'):
-            value_str = ', '.join(str(int(v)) for v in values)
+            # Bare: a braced initializer converts to the array's type,
+            # and nothing here enters arithmetic as a literal.
+            value_str = ', '.join(int64_literal(v) for v in values)
         else:
             value_str = ', '.join(cpp_real(float(v), ctype) for v in values)
         decl = (f'static constexpr {ctype} {name}[] = '
@@ -681,6 +697,7 @@ class HighwayCodeGenerator(
                        f'{{ {", ".join(emitted_elems)} }};')
             # Record for later folding (e.g. when emitting upstream_dfs).
             self._array_constants[stmt.name.name] = list(elements)
+            self._array_constant_dtypes[stmt.name.name] = elem
             return
         # 2-D array constant -- extract rows and cols from the shape
         # literal (Array1DLiteral_N or List_N of two IntLiterals).
@@ -737,21 +754,23 @@ class HighwayCodeGenerator(
                    f'{{ {", ".join(out_lines)} }};')
         # Track 2-D constants separately from 1-D for matmul lookups.
         self._array_constants_2d[stmt.name.name] = (nrows, ncols)
-        # Try to fold every (row, col) to a numeric.  If all entries
-        # fold, cache them so the matmul emit can prune zero
-        # coefficients and recognise the +/-1 case per row.  If any
-        # entry fails to fold (rare -- typically every M / M_inv in
-        # MRT examples is a literal numeric matrix), fall back: the
-        # matmul emit will skip the helper path and use the original
-        # 19-term ``+`` chain.
+        # Try to fold every (row, col) to a numeric, exact in the
+        # declared element type (ints for an integer matrix, floats
+        # for a real one).  If all entries fold, cache them so the
+        # matmul emit can prune zero coefficients and recognise the
+        # +/-1 case per row.  If any entry fails to fold (rare --
+        # typically every M / M_inv in MRT examples is a literal
+        # numeric matrix), fall back: the matmul emit will skip the
+        # helper path and use the original 19-term ``+`` chain.
+        integer = str(elem).startswith('int')
         try:
             folded = []
             for r in rows:
                 folded_row = []
                 for e in r.value.elements:
-                    folded_row.append(float(eval_const_expr(
-                        e, ast=self.ast,
-                        lattice_info=self._lattice_info)))
+                    value = eval_const_expr(e, ast=self.ast,
+                                            lattice_info=self._lattice_info)
+                    folded_row.append(int(value) if integer else float(value))
                 folded.append(folded_row)
             self._array_constants_2d_values[stmt.name.name] = folded
         except Exception:
@@ -1480,13 +1499,19 @@ class HighwayCodeGenerator(
 
     @staticmethod
     def _try_parse_lit(s: str):
-        """If ``s`` is a literal-looking C++ float (no operators or
-        identifiers, just a number), return its float value;
-        otherwise return None.  Used by the arithmetic-folding
+        """If ``s`` is a literal-looking C++ number (no operators or
+        identifiers: a binary64 literal, or an int64 one with its LL
+        suffix, in parentheses when negative), return its value as a
+        float; otherwise return None.  Used by the arithmetic-folding
         helpers below to recognise pre-evaluated constexpr-array
-        substitutions (e.g. ``EX[3]`` -> ``-1.0``)."""
+        substitutions (e.g. ``EX[3]`` -> ``-1.0`` or ``(-1LL)``)."""
+        text = s.strip()
+        if text.startswith('(') and text.endswith('LL)'):
+            text = text[1:-1]
+        if text.endswith('LL'):
+            text = text[:-2]
         try:
-            return float(s)
+            return float(text)
         except (ValueError, TypeError):
             return None
 

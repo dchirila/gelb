@@ -200,7 +200,13 @@ GELB_SCALAR_HOST_DEVICE GELB_SCALAR_INLINE T gelb_mul_add(T a, T b, T c) {
 #elif defined(GELB_FMA_NATIVE) && GELB_FMA_NATIVE
 template <typename T>
 GELB_SCALAR_HOST_DEVICE GELB_SCALAR_INLINE T gelb_mul_add(T a, T b, T c) {
-    return std::fma(a, b, c);
+    if constexpr (std::is_integral<T>::value) {
+        // An integer multiply-add is exact in T; std::fma would
+        // convert the integers to double and round above 2^53.
+        return a * b + c;
+    } else {
+        return std::fma(a, b, c);
+    }
 }
 #else
 template <typename T>
@@ -284,6 +290,77 @@ GELB_SCALAR_HOST_DEVICE GELB_SCALAR_INLINE T gelb_dot_prod_const(
         return (s0 + s1) + (s2 + s3);
     }
     return T(0);
+}
+
+// ----------------------------------------------------------------
+// The same reductions with the accumulator type given: a dot_prod with
+// an integer result is computed in that result's type (user manual,
+// Numerical semantics: Types and promotion), whatever the arrays' own
+// types.  The deducing helpers above take their type from the array
+// they read (an int8 array would wrap at 127 under int64 coefficients)
+// and their coefficients as binary64 (an int64 above 2^53 would lose
+// its low bits).  Here every element and coefficient converts to the
+// accumulator type first, the coefficients are stored exactly, and
+// an integer multiply-add is exact (gelb_mul_add above).
+//
+// An integer accumulator runs in int64_t and is converted once at the
+// end, so a narrow element's product is not formed in C++'s int (two
+// int32 values would overflow it) and the sum narrows to the result's
+// type as a GeLB conversion does.  A product or a sum past int64 is an
+// integer overflow, which the language leaves undefined (user manual,
+// Numerical semantics: Types and promotion).  A real accumulator keeps
+// its width, term for term as above.
+// ----------------------------------------------------------------
+
+template <typename AccT>
+using gelb_accumulator_t = typename std::conditional<
+    std::is_integral<AccT>::value, std::int64_t, AccT>::type;
+
+template <typename AccT, typename A, std::size_t Mp, std::size_t Mn>
+GELB_SCALAR_HOST_DEVICE GELB_SCALAR_INLINE AccT gelb_signed_sum_as(
+        const A* a,
+        const int (&pos)[Mp],
+        const int (&neg)[Mn]) {
+    using W = gelb_accumulator_t<AccT>;
+    W sp = (Mp > 0) ? W(a[pos[0]]) : W(0);
+    W sn = (Mn > 0) ? W(a[neg[0]]) : W(0);
+    for (std::size_t i = 1; i < Mp; ++i) sp = sp + W(a[pos[i]]);
+    for (std::size_t j = 1; j < Mn; ++j) sn = sn + W(a[neg[j]]);
+    if constexpr (Mn == 0) return AccT(sp);
+    if constexpr (Mp == 0) return AccT(W(0) - sn);
+    return AccT(sp - sn);
+}
+
+template <typename AccT, typename C, typename A, std::size_t M>
+GELB_SCALAR_HOST_DEVICE GELB_SCALAR_INLINE AccT gelb_dot_prod_const_as(
+        const C (&coeff)[M],
+        const A* a,
+        const int (&idx)[M]) {
+    using W = gelb_accumulator_t<AccT>;
+    if constexpr (M == 0) return AccT(0);
+    if constexpr (M == 1) return AccT(W(coeff[0]) * W(a[idx[0]]));
+    if constexpr (M == 2)
+        return AccT(W(coeff[0]) * W(a[idx[0]]) + W(coeff[1]) * W(a[idx[1]]));
+    if constexpr (M == 3)
+        return AccT((W(coeff[0]) * W(a[idx[0]])
+                     + W(coeff[1]) * W(a[idx[1]]))
+                    + W(coeff[2]) * W(a[idx[2]]));
+    if constexpr (M >= 4) {
+        W s0 = W(coeff[0]) * W(a[idx[0]]);
+        W s1 = W(coeff[1]) * W(a[idx[1]]);
+        W s2 = W(coeff[2]) * W(a[idx[2]]);
+        W s3 = W(coeff[3]) * W(a[idx[3]]);
+        std::size_t k = 4;
+        for (; k + 4 <= M; k += 4) {
+            s0 = gelb_mul_add(W(coeff[k + 0]), W(a[idx[k + 0]]), s0);
+            s1 = gelb_mul_add(W(coeff[k + 1]), W(a[idx[k + 1]]), s1);
+            s2 = gelb_mul_add(W(coeff[k + 2]), W(a[idx[k + 2]]), s2);
+            s3 = gelb_mul_add(W(coeff[k + 3]), W(a[idx[k + 3]]), s3);
+        }
+        for (; k < M; ++k) s0 = gelb_mul_add(W(coeff[k]), W(a[idx[k]]), s0);
+        return AccT((s0 + s1) + (s2 + s3));
+    }
+    return AccT(0);
 }
 
 }  // namespace gelb
