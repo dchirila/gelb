@@ -335,6 +335,20 @@ class ExpressionEmitMixin:
         }
         cmp_kind = type(expr).__name__
         if cmp_kind in _CMP_OP:
+            if self._simd_mode == 'vec8d' and (
+                    self._produces_simd_bool_mask(expr.left)
+                    or self._produces_simd_bool_mask(expr.right)):
+                # ``==`` / ``!=`` between per-cell bools (the frontend
+                # rejects an order on bool): both sides are masks, a
+                # uniform scalar bool broadcasts.  Highway has no
+                # ``Eq`` / ``Ne`` on masks; ``Xor`` is ``!=``.
+                a = self._broadcast_simd_bool(
+                    expr.left, self._emit_expression(expr.left, df_var))
+                b = self._broadcast_simd_bool(
+                    expr.right, self._emit_expression(expr.right, df_var))
+                if cmp_kind == 'NotEqual_N':
+                    return f'hn::Xor({a}, {b})'
+                return f'hn::Not(hn::Xor({a}, {b}))'
             a, b = self._broadcast_for_binop(
                 expr.left, expr.right, df_var)
             if self._simd_mode == 'vec8d' and (

@@ -621,7 +621,14 @@ class SimdEmitMixin:
         )
         if isinstance(node, Identifier_N):
             return self._simd_int_locals.get(node.name) == 'mask'
-        if isinstance(node, (_Less, _LE, _Gr, _GE, _Eq, _NE)):
+        if isinstance(node, (_Eq, _NE)):
+            # Also ``==`` / ``!=`` between per-cell bools, which are
+            # masks, not vectors.
+            return (self._yields_simd_vector(node.left)
+                    or self._yields_simd_vector(node.right)
+                    or self._produces_simd_bool_mask(node.left)
+                    or self._produces_simd_bool_mask(node.right))
+        if isinstance(node, (_Less, _LE, _Gr, _GE)):
             return (self._yields_simd_vector(node.left)
                     or self._yields_simd_vector(node.right))
         if isinstance(node, (_And, _Or)):

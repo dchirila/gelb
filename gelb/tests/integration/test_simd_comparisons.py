@@ -1,19 +1,26 @@
-"""Comparisons in the Highway vector body: ``!=`` with a NaN.
+"""Comparisons in the Highway vector body: ``!=`` with a NaN, and
+``==`` / ``!=`` between per-cell bools.
 
 A comparison is one of the IEEE basic operations, defined exactly on
 every backend (user manual, Numerical semantics: What must agree), so
 ``v != v`` is true and ``v == v`` false exactly where ``v`` is a NaN,
-on the scalar paths and in the vector body alike.  Every backend and
-layout, Fortran among them, is checked against the closed form of the
-program, exactly.  The check on the generated code pins the emitter's
+on the scalar paths and in the vector body alike.  Two ``bool`` values
+compare with ``==`` and ``!=`` only (Types and promotion), and a
+per-cell ``bool`` in the vector body, a mask, compares like one on the
+scalar paths, also against a uniform ``bool`` (a local, or ``t > 0``
+written inline) and under ``!`` and ``&&``.  Every backend and layout,
+Fortran among them, is checked against the closed form of the
+program, exactly.  The checks on the generated code pin the emitter's
 spelling, an implementation choice the manual does not define: the
 unordered ``hn::Not(hn::Eq(..))`` for ``!=`` on vectors (Highway's
 ``hn::Ne`` is the ordered comparison with AVX2 or AVX-512, false for a
-NaN lane).
+NaN lane), ``hn::Xor`` for ``!=`` on masks, with an inline uniform
+operand broadcast inside the comparison.
 """
 
 import os
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -167,3 +174,64 @@ def test_not_equal_on_vectors_is_spelled_unordered(tmp_path):
     cpp = _source(tmp_path, _nan_program("dynamic", True))
     assert "hn::Not(hn::Eq(" in cpp
     assert "hn::Ne(" not in cpp
+
+
+# Per-cell bools from f = x - 31.5: a is true from x = 32, b from x = 33,
+# so a != b only at x = 32; c = (t > 0) is a uniform bool, true after
+# the first step.
+_BOOL_PROGRAM = """\
+simulation_description("== and != between per-cell bools in the vector body");
+lattices {{ lattice f(2, 2, real, {{{nx}, {ny}}}, {{false, false}}); }}
+initializer Init {{ f.out[x, y | :] = real(x) - 31.5; }}
+dynamic Dyn {{ f.out[x, y | :] = f.in[x, y | :]; }}
+gauge G -> (real ne, real eq, real mixed, real notted, real anded,
+            real inline_left, real inline_right) {{
+    bool a = f.in[x, y | 0] > 0.0;
+    bool b = f.in[x, y | 0] > 1.0;
+    bool c = t > 0;
+    ne = real(a != b);
+    eq = real(a == b);
+    mixed = real(c != b);
+    notted = real(!(a == b));
+    anded = real((a != b) && c);
+    inline_left = real((t > 0) != b);     // a uniform bool operand, not a local
+    inline_right = real(b == (t > 0));
+}}
+node_classes {{ node_class A(Init, Dyn, G); }}
+geometry {{ nodes[:, :] = A; }}
+"""
+
+A = (_X > 31.5).astype(np.float64)
+B = (_X > 32.5).astype(np.float64)
+
+
+@pytest.mark.parametrize("backend, layout", CONFIGS)
+def test_bool_locals_compare_with_equal_and_not_equal(tmp_path, backend,
+                                                      layout):
+    """``a != b`` and ``a == b`` between two per-cell bools build and
+    give the scalar paths' values in the vector body, also against a
+    uniform bool (a local, and ``t > 0`` written inline on either
+    side), under ``!`` and inside ``&&``."""
+    _skip_cbt_without_avx512(layout)
+    data = _run(tmp_path / "run", backend, _BOOL_PROGRAM.format(nx=NX, ny=NY),
+                layout)
+    ne = np.abs(A - B)
+    _assert_field(data, "ne", ne)
+    _assert_field(data, "eq", 1.0 - ne)
+    _assert_field(data, "mixed", 1.0 - B)        # c is true after step 1
+    _assert_field(data, "notted", ne)
+    _assert_field(data, "anded", ne)
+    _assert_field(data, "inline_left", 1.0 - B)   # true != b
+    _assert_field(data, "inline_right", B)        # b == true
+
+
+def test_bool_comparisons_are_spelled_with_xor(tmp_path):
+    """The vector body spells ``!=`` on masks as ``hn::Xor`` and ``==``
+    as ``hn::Not(hn::Xor(..))``; an inline uniform bool operand is
+    broadcast with ``hn::FirstN`` inside the comparison, on either
+    side."""
+    cpp = _source(tmp_path, _BOOL_PROGRAM.format(nx=NX, ny=NY))
+    assert "hn::Not(hn::Xor(" in cpp
+    assert "hn::Xor(" in cpp
+    assert "hn::Xor(hn::FirstN(d, (" in cpp                    # (t > 0) != b
+    assert re.search(r"hn::Not\(hn::Xor\(\w+, hn::FirstN\(d, \(", cpp)   # b == (t > 0)
