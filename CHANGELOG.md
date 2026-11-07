@@ -232,6 +232,16 @@ versions follow upstream end of life and can change in any release.
   then stopped every backend's run when it created the file ("NetCDF:
   String match to name in use"). `gelbc` now reports an error at the
   output's declaration.
+- **A negative wall velocity broke the C++ and CUDA builds.** With
+  `-D U_LID=-0.1`, any lid-driven cavity example, the paper's included,
+  failed to compile on `cpu_highway` and `gpu_cuda_cpp`, and so did the
+  bounce-back Couette flows with a negative `U_WALL`: the code negated a
+  negative constant as `(--0.1)`, which C++ reads as a decrement. A
+  negative constant that a program negates, multiplies by -1 (an `EX`
+  entry) or subtracts from zero could do the same, and with
+  `--no-slice-simplify --no-scalar-cse` the paper's four Zou-He
+  programs failed even with their own values. Fortran was right. The
+  negation is now written as one, with the same value.
 
 ## [1.0.0] — 2026-10-23
 

@@ -1,0 +1,38 @@
+simulation_description("a negated negative constant: 1 + EX * U with U < 0");
+
+// U reaches the initializer through an inlined function, as a moving
+// wall's velocity does; EX's -1 then negates it: -1.0 * -0.05.
+global_constants {
+    const real U = -0.05;
+    const array[real, 3] EX = {0.0, 1.0, -1.0};
+}
+
+lattices {
+    lattice f(2, 3, real, {64, 8}, {true, true});
+}
+
+function Shift(real u) -> (array[real, 3] g) {
+    g = 1.0 + EX * u;
+}
+
+initializer Init {
+    f.out[x, y | :] = Shift(U);
+}
+
+dynamic Step {
+    f.out[x, y | :] = f.in[x, y | :];
+}
+
+gauge G -> (real a, real b, real c) {
+    a = f.in[x, y | 0];
+    b = f.in[x, y | 1];
+    c = f.in[x, y | 2];
+}
+
+node_classes {
+    node_class BULK(Init, Step, G);
+}
+
+geometry {
+    nodes[:, :] = BULK;
+}
