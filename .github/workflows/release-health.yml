@@ -6,8 +6,15 @@ on:
     tags: ['v*']
   pull_request:
 
+# A push to a pull-request branch cancels the run of the previous push;
+# runs on main and on tags finish, so every commit there keeps its result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  release-health:
+  package:
+    name: package, wheel smoke, docs
     runs-on: ubuntu-latest
 
     steps:
@@ -16,23 +23,8 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v7
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y g++ gfortran libnetcdf-dev libnetcdff-dev
-          # Qt (the gelb-view tests, offscreen) loads the GL libraries
-          sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1
-
-      - name: Install project
-        run: uv sync --all-extras
+      - name: Set up the toolchain
+        uses: ./.github/actions/setup
 
       - name: Build package artifacts
         run: uv build --wheel --sdist
@@ -56,35 +48,74 @@ jobs:
             ! /tmp/gelb-wheel/bin/gelb-run -n 1 ex0_int_vec_setto_one.gelb 2> highway.err
             grep -F "this installation has no Highway" highway.err'
 
-      - name: Run focused tests
-        run: |
-          uv run pytest \
-            gelb/tests/integration/test_example_diagnostics.py \
-            gelb/tests/integration/test_geometry_lint.py \
-            gelb/tests/integration/test_cbt_guard.py \
-            gelb/tests/integration/test_view_colorbar.py \
-            gelb/tests/integration/test_view_context_menu.py \
-            gelb/tests/integration/test_view_layout.py \
-            gelb/tests/integration/test_view_composite_cmap.py \
-            gelb/tests/integration/test_view_integer_fields.py \
-            gelb/tests/integration/test_gelb_run_guards.py \
-            gelb/tests/integration/test_cli_entry_points.py \
-            gelb/tests/integration/test_gelbc_output_paths.py \
-            gelb/tests/integration/test_gelb_run_flag_overrides.py \
-            gelb/tests/integration/test_define_diagnostics.py \
-            gelb/tests/integration/test_partial_df_ranges.py \
-            gelb/tests/integration/test_int_gauge_output.py \
-            gelb/tests/integration/test_dot_prod_int_array.py \
-            gelb/tests/integration/test_empty_node_class.py \
-            gelb/tests/integration/test_int64_gauge_output.py \
-            gelb/tests/integration/test_backend_cpu_fortran_serial.py \
-            gelb/tests/integration/test_constant_coefficients.py \
-            gelb/tests/unit \
-            gelb/tests/numeric \
-            -q
-
       - name: Build documentation with warnings as errors
         run: uv run sphinx-build -b html -W --keep-going docs /tmp/gelb-docs
+
+  tests:
+    name: tests, ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The unit suite runs alone and in one process: gelb/conftest.py
+          # regenerates the ANTLR parser in the tree at session start.
+          - name: unit
+            xdist: ""
+            paths: gelb/tests/unit
+
+          # The numeric suite builds its runtime corpus once per module and
+          # backend; with workers every worker builds it again, which costs
+          # more than the tests save, so it runs in one process.
+          - name: numeric
+            xdist: ""
+            paths: gelb/tests/numeric
+
+          # Files whose cases each build and run their own program: they
+          # take most of the time, so each group gets its own runner and
+          # every core of it.
+          - name: constant coefficients
+            xdist: -n auto
+            paths: gelb/tests/integration/test_constant_coefficients.py
+
+          - name: backends
+            xdist: -n auto
+            paths: >-
+              gelb/tests/integration/test_cbt_guard.py
+              gelb/tests/integration/test_partial_df_ranges.py
+              gelb/tests/integration/test_int_gauge_output.py
+              gelb/tests/integration/test_dot_prod_int_array.py
+              gelb/tests/integration/test_empty_node_class.py
+              gelb/tests/integration/test_int64_gauge_output.py
+              gelb/tests/integration/test_backend_cpu_fortran_serial.py
+
+          - name: diagnostics, lint, viewer, runner
+            xdist: -n auto
+            paths: >-
+              gelb/tests/integration/test_example_diagnostics.py
+              gelb/tests/integration/test_geometry_lint.py
+              gelb/tests/integration/test_view_colorbar.py
+              gelb/tests/integration/test_view_context_menu.py
+              gelb/tests/integration/test_view_layout.py
+              gelb/tests/integration/test_view_composite_cmap.py
+              gelb/tests/integration/test_view_integer_fields.py
+              gelb/tests/integration/test_gelb_run_guards.py
+              gelb/tests/integration/test_cli_entry_points.py
+              gelb/tests/integration/test_gelbc_output_paths.py
+              gelb/tests/integration/test_gelb_run_flag_overrides.py
+              gelb/tests/integration/test_define_diagnostics.py
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Set up the toolchain
+        uses: ./.github/actions/setup
+
+      - name: Run the tests
+        run: uv run pytest -q --durations=25 ${{ matrix.xdist }} ${{ matrix.paths }}
 
   vscode-extension:
     runs-on: ubuntu-latest

@@ -1,0 +1,53 @@
+name: Set up the toolchain
+description: >-
+  Python, uv with its cache, the apt packages and the ANTLR jar from the
+  Actions cache, then the project with every extra. Every job of the
+  release-health workflow starts with this.
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v7
+      with:
+        python-version: "3.12"
+
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: true
+        cache-dependency-glob: uv.lock
+
+    - name: Name the runner image
+      id: image
+      shell: bash
+      run: echo "name=${ImageOS:-unknown}-${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
+
+    - name: Restore the apt packages
+      uses: actions/cache@v6
+      with:
+        path: ${{ runner.temp }}/apt/*.deb
+        key: apt-${{ steps.image.outputs.name }}-${{ hashFiles('.github/actions/setup/action.yml') }}
+
+    - name: Install system dependencies
+      shell: bash
+      run: |
+        mkdir -p "$RUNNER_TEMP/apt/partial"
+        sudo apt-get update
+        # Qt (the gelb-view tests, offscreen) loads the GL libraries
+        sudo apt-get install -y -o Dir::Cache::Archives="$RUNNER_TEMP/apt" \
+          g++ gfortran libnetcdf-dev libnetcdff-dev \
+          libegl1 libgl1 libxkbcommon0 libfontconfig1
+
+    - name: Restore the ANTLR jar
+      # gelb/conftest.py regenerates the parser at the start of every pytest
+      # session, and antlr4-tools downloads the jar into ~/.m2 when it is
+      # missing; the version follows antlr4-python3-runtime in uv.lock.
+      uses: actions/cache@v6
+      with:
+        path: ~/.m2/repository/org/antlr/antlr4
+        key: antlr-jar-${{ hashFiles('uv.lock') }}
+
+    - name: Install project
+      shell: bash
+      run: uv sync --all-extras

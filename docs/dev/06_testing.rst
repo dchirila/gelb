@@ -102,20 +102,36 @@ lists diagnosed expected failures; it is empty.
 What CI runs
 ============
 
-:source:`.github/workflows/release-health.yml`, on every push and
-pull request, on ``ubuntu-latest``: installs ``g++``, ``gfortran``,
-``libnetcdf-dev`` and ``libnetcdff-dev``; ``uv sync --all-extras``;
-``uv build --wheel --sdist``; installs the wheel into a fresh venv and,
-from a directory outside the checkout with ``uv`` off the ``PATH`` and
-``GELB_PYTHON`` unset, checks that ``gelb`` imports from that venv,
-``gelbc --version``, ``gelbc --diagnostics-json`` on
-``examples/basic/1d/ex0_int_vec_setto_one.gelb``, a one-step
-``gelb-run -b cpu_fortran_serial`` that writes its ``.nc``, and that
-the default backend stops with the "no Highway" message; then ``uv run
-pytest`` on the focused list in the workflow (the example diagnostics,
-the geometry lint, the viewer and runner guards,
-:source:`gelb/tests/integration/test_backend_cpu_fortran_serial.py`,
-all of :source:`gelb/tests/unit/` and :source:`gelb/tests/numeric/`);
-and finally ``uv run sphinx-build
--b html -W --keep-going docs /tmp/gelb-docs``, so a Sphinx warning
-fails the build.  CI has no GPU, so the ``gpu`` cases skip there.
+:source:`.github/workflows/release-health.yml` runs on every push to
+``main``, on every ``v*`` tag and on every pull request (a new push to a
+pull-request branch cancels the run of the previous one), on
+``ubuntu-latest``.  Every job starts with the composite action
+:source:`.github/actions/setup/action.yml`: Python 3.12, ``uv`` with its
+cache, ``g++``, ``gfortran``, ``libnetcdf-dev``, ``libnetcdff-dev`` and
+the GL libraries the viewer tests load, the ANTLR jar from the Actions
+cache, then ``uv sync --all-extras``.  The jobs run on separate runners:
+
+- *package, wheel smoke, docs*: ``uv build --wheel --sdist``; installs
+  the wheel into a fresh venv and, from a directory outside the checkout
+  with ``uv`` off the ``PATH`` and ``GELB_PYTHON`` unset, checks that
+  ``gelb`` imports from that venv, ``gelbc --version``, ``gelbc
+  --diagnostics-json`` on ``examples/basic/1d/ex0_int_vec_setto_one.gelb``,
+  a one-step ``gelb-run -b cpu_fortran_serial`` that writes its ``.nc``,
+  and that the default backend stops with the "no Highway" message; then
+  ``uv run sphinx-build -b html -W --keep-going docs /tmp/gelb-docs``, so
+  a Sphinx warning fails the build.
+- *tests, unit*: all of :source:`gelb/tests/unit/`, in one process,
+  because :source:`gelb/conftest.py` regenerates the parser in the tree
+  at session start.
+- *tests, numeric*: all of :source:`gelb/tests/numeric/`, in one
+  process: its runtime corpus is built once per module and backend, and
+  workers would each build it again.
+- *tests, constant coefficients*, *tests, backends* and *tests,
+  diagnostics, lint, viewer, runner*: the focused integration files
+  listed in the workflow, grouped so that the files whose cases each
+  build and run a program share no runner with the quick ones.
+
+The three integration jobs run with ``pytest-xdist`` (``-n auto``, one
+worker per core of the runner), and every pytest job passes
+``--durations=25``, so its log ends with its slowest tests.
+CI has no GPU, so the ``gpu`` cases skip there.
