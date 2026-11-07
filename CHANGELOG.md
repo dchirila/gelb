@@ -242,6 +242,14 @@ versions follow upstream end of life and can change in any release.
   `--no-slice-simplify --no-scalar-cse` the paper's four Zou-He
   programs failed even with their own values. Fortran was right. The
   negation is now written as one, with the same value.
+- **A negative power base lost its sign on `cpu_fortran_serial`.**
+  `(-0.5) ^ real(t)` and `(-2) ^ t`, a negative constant raised to a
+  power known only at run time, were written as `-0.5d0 ** n`, which
+  Fortran reads as `-(0.5d0 ** n)`: `(-0.5)^2` gave -0.25 and `(-2)^2`
+  gave -4. The other backends were right, and no example does this. The
+  base is now parenthesized, and so is a negative constant after an
+  operator (`x * -0.05d0` is a GNU extension, rejected with
+  `-std=f2008`); the results of the examples do not change.
 
 ## [1.0.0] — 2026-10-23
 
