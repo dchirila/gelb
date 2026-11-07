@@ -1829,7 +1829,9 @@ class FortranCodeGenerator:
 
         # --- unary ---
         elif isinstance(node, UnaryMinusExpr_N):
-            return f'(-{self._emit_expr(node.value, context)})'
+            value = self._emit_expr(node.value, context)
+            # ``(--0.05d0)``, two signs in a row, is a GNU extension.
+            return f'(-({value}))' if value.startswith('-') else f'(-{value})'
         elif isinstance(node, NotExpr_N):
             return f'(.not. {self._emit_expr(node.value, context)})'
 
@@ -1916,9 +1918,21 @@ class FortranCodeGenerator:
         joined = ', '.join(all_elements)
         return f'reshape((/{joined}/), (/{nrows}, {ncols}/))'
 
+    # Fortran allows a sign only at the start of an operand sum: after an
+    # arithmetic operator (``a * -0.1d0``) it is a GNU extension, and a
+    # signed power base binds after the power (``-0.5d0 ** n`` is
+    # ``-(0.5d0 ** n)``).  A negative literal is printed bare, so such an
+    # operand is parenthesized.
+    _ARITHMETIC_OPS = ('+', '-', '*', '/', '**')
+
     def _binop(self, node, op, context):
         left = self._emit_expr(node.left, context)
         right = self._emit_expr(node.right, context)
+        if op in self._ARITHMETIC_OPS:
+            if right.startswith('-'):
+                right = f'({right})'
+            if op == '**' and left.startswith('-'):
+                left = f'({left})'
         return f'({left} {op} {right})'
 
     # ------------------------------------------------------------------

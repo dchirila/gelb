@@ -7,10 +7,12 @@ zero; each is the IEEE negation (user manual, Numerical semantics: the
 IEEE basic operations), so a zero keeps its sign (Special values), a
 ``real32`` constant keeps its precision, and the backends agree bit
 for bit.  The C++ and CUDA builds must read such
-a minus as one negation, never as a decrement.  The constants reach the
-blocks through an inlined function, as a moving wall's velocity does: a
-constant used directly in a block is folded by the midware before any
-backend sees it.
+a minus as one negation, never as a decrement, and the Fortran build
+must be standard Fortran.  The constants reach the blocks through an
+inlined function, as a moving wall's velocity does: a constant used
+directly in a block is folded by the midware before any backend sees
+it.  A negative base raised to a run-time power keeps its sign:
+``(-0.5)^2`` is ``0.25``.
 """
 
 import os
@@ -20,9 +22,12 @@ import sys
 
 import numpy as np
 import pytest
+from click.testing import CliRunner
 
 from gelb.backends.highway import common
+from gelb.gelbc import cli
 from gelb.tests.integration._toolchain import (
+    NC_FFLAGS,
     requires_compiler,
     requires_cpp_highway_compiler,
     requires_gpu_cuda_cpp_compiler,
@@ -239,3 +244,62 @@ def test_reversed_wall_builds(tmp_path, fortran_run, backend, example, define):
         # (CUDA keeps nvcc's multiply-adds).
         np.testing.assert_allclose(values, reference[output],
                                    rtol=1e-12, atol=1e-15, err_msg=output)
+
+
+# A negative base raised to a power known only at run time.  Fortran
+# binds a sign after the power: -0.5d0 ** n is -(0.5d0 ** n).
+POWER = """
+simulation_description("a negative base raised to a run-time power");
+lattices {{ lattice f(1, 1, real, 64, true); }}
+initializer Init {{ f.out[x | 0] = 0.0; }}
+dynamic Step {{ f.out[x | 0] = f.in[x | 0]; }}
+gauge G -> (real a) {{ {gauge} }}
+node_classes {{ node_class BULK(Init, Step, G); }}
+geometry {{ nodes[:] = BULK; }}
+"""
+
+BASES = {
+    "int": ("a = real((-2) ^ (t + 2));", lambda t: float((-2) ** (t + 2))),
+    "real": ("a = (-0.5) ^ real(t + 2);", lambda t: (-0.5) ** (t + 2)),
+}
+
+# A real power may differ on CUDA (Numerical semantics: What must agree),
+# so the real base runs on the CPU backends only.
+POWER_CONFIGS = [
+    pytest.param(*config.values, base, marks=config.marks,
+                 id=f"{config.id}-{base}")
+    for base in sorted(BASES) for config in CONFIGS
+    if base == "int" or config.values[0] != "gpu_cuda_cpp"
+]
+
+
+@pytest.mark.parametrize("backend, layout, base", POWER_CONFIGS)
+def test_negative_power_base(tmp_path, backend, layout, base):
+    if layout == "cbt" and not common._detect_avx512_available():
+        pytest.skip("the cbt layout needs an AVX-512 host")
+    gauge, power = BASES[base]
+    a = _run(tmp_path / "run", backend, POWER.format(gauge=gauge), layout)["a"]
+    # Records t = 0, 1, 2: the base squared, cubed, to the fourth.
+    expected = np.array([power(t) for t in range(3)])
+    np.testing.assert_array_equal(a, np.broadcast_to(expected[:, None], a.shape))
+
+
+@requires_compiler
+@pytest.mark.parametrize("case", sorted(CASES))
+def test_fortran_is_standard(tmp_path, case):
+    """A negative literal after an operator (``x * -0.05d0``) or after a
+    unary minus (``--0.05d0``) is a GNU extension: the Fortran backend
+    parenthesizes it, so the program is Fortran 2008."""
+    path = tmp_path / "prog.gelb"
+    path.write_text(CASES[case][0])
+    out = tmp_path / "prog.f90"
+    result = CliRunner().invoke(
+        cli, [str(path), "-b", "cpu_fortran_serial", "-o", str(out)])
+    assert result.exit_code == 0, result.output
+    # -fno-range-check as gelb-run passes it: 1 / (EX * Z) divides by a
+    # zero that gfortran sees.
+    check = subprocess.run(
+        ["gfortran", "-std=f2008", "-fno-range-check", "-ffree-line-length-none",
+         "-fsyntax-only", *NC_FFLAGS.split(), str(out)],
+        cwd=tmp_path, capture_output=True, text=True)
+    assert check.returncode == 0, check.stderr
