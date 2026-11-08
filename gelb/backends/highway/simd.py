@@ -163,6 +163,22 @@ class SimdEmitMixin:
         # the scalar path.
         if self._block_has_integer_arithmetic_on_x(block):
             return False
+        # The vector body holds every per-cell value as a binary64
+        # vector.  It can copy x into an int local and turn a comparison
+        # into 0 or 1, but it has no vector form for an integer cast of
+        # a per-cell value, for integer arithmetic on one or for a store
+        # of one into an ``int64_t`` local, and an integer computed as a
+        # double would round where its type says exact (user manual,
+        # Numerical semantics: Types and promotion).  A block with any
+        # other per-cell integer value is emitted once, as scalar code.
+        if self._block_has_lane_varying_integer(block):
+            return False
+        # A reduction (``sum``, ``dot_prod``, ``matmul``) over an
+        # integer array local to the block has scalar helpers only; a
+        # global constant integer array (an integer velocity set) has
+        # exact vector helpers.
+        if self._block_has_integer_array_reduction(block):
+            return False
         # An intrinsic with no vector form (``mod``, ``atan2``, a
         # width-specific cast, a power that is not unrolled) is emitted
         # once, as scalar code, so that every cell takes the same path
@@ -333,6 +349,162 @@ class SimdEmitMixin:
                 if dtype in int_kinds:
                     tainted.add(name)
         return False
+
+    def _block_has_lane_varying_integer(self, block) -> bool:
+        """Whether ``block`` holds an integer value that varies across
+        the lanes of a vector body, other than the two shapes the body
+        holds exactly as a double vector: a bare reference to x or to an
+        int local declared from x, and an integer cast of a comparison
+        (also an int local declared from one).  A later store into such
+        an admitted local also counts.
+
+        A value varies across the lanes when its expression mentions x,
+        a lattice read, ``random()``, ``upstream_dfs``/``bounce_back_dfs``,
+        a reduction (``sum``, ``dot_prod``, ``matmul``, which the body
+        holds as a vector whatever its arguments), a real or bool local
+        or gauge output (always a vector or a mask in the body), or an
+        admitted int local.  Lattice and array index
+        expressions are not value expressions and are skipped."""
+        from gelb.gelb_ast.ASTNodes import (
+            Node_N as _Node, List_N as _List,
+            IntrinsicFunctionCall_N as _Call,
+            VariableDeclarationStmt_N as _Decl,
+            VariableAssignmentStmt_N as _Assign,
+            RectSelOfLatticeInDFs_N as _LIn,
+            RectSelOfLatticeOutDFs_N as _LOut, RectSelOfArrayElems_N as _ASel,
+        )
+        int_kinds = ('int', 'int64', 'int32', 'int16', 'int8')
+        selections = (_LIn, _LOut, _ASel)
+        # The calls the vector body holds as vectors whatever their
+        # arguments (``_yields_simd_vector``): an int local declared from
+        # the int of a comparison on one of them is a double vector too.
+        lane_calls = ('random', 'upstream_dfs', 'bounce_back_dfs',
+                      'sum', 'dot_prod', 'matmul')
+        stream_calls = ('upstream_dfs', 'bounce_back_dfs')
+
+        def dtype(n):
+            return getattr(getattr(n, 'inferred_type', None),
+                           'element_dtype', None)
+
+        def children(n):
+            if isinstance(n, _List):
+                return list(n.elements)
+            if isinstance(n, _Node):
+                try:
+                    return [getattr(n, nm) for nm in n.get_children_names()]
+                except Exception:
+                    return []
+            return []
+
+        stmts = getattr(getattr(block, 'stmts', None), 'elements', None) or []
+        outputs = getattr(getattr(block, 'outputs', None), 'elements', None) or []
+        lane, int_locals = {'x'}, set()
+        for decl in list(outputs) + list(stmts):
+            if isinstance(decl, _Decl):
+                if getattr(decl.data_type, 'element_dtype', None) in int_kinds:
+                    int_locals.add(decl.name.name)
+                else:
+                    lane.add(decl.name.name)
+
+        def varies(n):
+            if n is None:
+                return False
+            if isinstance(n, Identifier_N):
+                return n.name in lane
+            if isinstance(n, _LIn):
+                return True
+            if isinstance(n, _ASel):
+                return getattr(n.array_name, 'name', None) in lane
+            if isinstance(n, _LOut):
+                return False
+            if isinstance(n, _Call) and n.function_name in lane_calls:
+                return True
+            return any(varies(c) for c in children(n))
+
+        def int_cast_of_bool(n):
+            if isinstance(n, _Call) and n.function_name == 'int':
+                args = n.arguments.elements if n.arguments is not None else []
+                return len(args) == 1 and dtype(args[0]) == 'bool'
+            return (isinstance(n, TypePromotionNode_N)
+                    and dtype(n) in int_kinds and dtype(n.expr) == 'bool')
+
+        def found(n):
+            # An integer cast, operation or call whose value varies
+            # across the lanes; a bare reference and the cast of a
+            # comparison are the shapes the body holds exactly.
+            if n is None or isinstance(n, selections):
+                return False
+            if isinstance(n, _Call) and n.function_name in stream_calls:
+                return False
+            if (dtype(n) in int_kinds and not isinstance(n, Identifier_N)
+                    and not int_cast_of_bool(n) and varies(n)):
+                return True
+            return any(found(c) for c in children(n))
+
+        for stmt in stmts:
+            if isinstance(stmt, _Decl):
+                init = stmt.initial_value
+                if found(init):
+                    return True
+                if stmt.name.name in int_locals and varies(init):
+                    if not ((isinstance(init, Identifier_N) and init.name == 'x')
+                            or int_cast_of_bool(init)):
+                        return True
+                    lane.add(stmt.name.name)
+            elif isinstance(stmt, _Assign):
+                if found(stmt.rhs):
+                    return True
+                # A store of a per-cell value into an int local, or of
+                # any value into an admitted one: the admitted local is a
+                # double vector, which would round an int64 above 2^53.
+                if (isinstance(stmt.lhs, Identifier_N)
+                        and stmt.lhs.name in int_locals
+                        and (varies(stmt.rhs) or stmt.lhs.name in lane)):
+                    return True
+            elif any(found(c) for c in children(stmt)):
+                return True
+        return False
+
+    def _block_has_integer_array_reduction(self, block) -> bool:
+        """Whether a value expression of ``block`` reduces an integer
+        array of the block: ``sum``, ``dot_prod`` or ``matmul`` with an
+        argument of an integer type other than a bare reference to a
+        global constant array (the constant-coefficient helpers hold
+        those exactly)."""
+        from gelb.gelb_ast.ASTNodes import (
+            Node_N as _Node, List_N as _List,
+            IntrinsicFunctionCall_N as _Call,
+            VariableDeclarationStmt_N as _Decl,
+        )
+        int_kinds = ('int', 'int64', 'int32', 'int16', 'int8')
+        stmts = getattr(getattr(block, 'stmts', None), 'elements', None) or []
+        locals_ = {stmt.name.name for stmt in stmts if isinstance(stmt, _Decl)}
+
+        def is_global_constant(a):
+            return isinstance(a, Identifier_N) and a.name not in locals_
+
+        def children(n):
+            if isinstance(n, _List):
+                return list(n.elements)
+            if isinstance(n, _Node):
+                try:
+                    return [getattr(n, nm) for nm in n.get_children_names()]
+                except Exception:
+                    return []
+            return []
+
+        def found(n):
+            if (isinstance(n, _Call)
+                    and n.function_name in ('sum', 'dot_prod', 'matmul')):
+                args = n.arguments.elements if n.arguments is not None else []
+                if any(getattr(getattr(a, 'inferred_type', None),
+                               'element_dtype', None) in int_kinds
+                       and not is_global_constant(a)
+                       for a in args):
+                    return True
+            return any(found(c) for c in children(n))
+
+        return any(found(stmt) for stmt in stmts)
 
     def _block_has_xref_bool_op(self, block) -> bool:
         """Walk ``block`` looking for an And_N / Or_N whose subtree
@@ -582,6 +754,14 @@ class SimdEmitMixin:
         # ``static_cast<double>`` of a vector does not compile.
         if (cpp_target == 'double'
                 and self._expr_contains_spatial_x(inner_node)):
+            return inner_str
+        # A binary64 value that is already a vector (an element of a
+        # ``V[]`` array, a reduction over one, an expression of vectors)
+        # is its own conversion to ``real``.
+        if (cpp_target == 'double'
+                and getattr(getattr(inner_node, 'inferred_type', None),
+                            'element_dtype', None) in ('real', 'real64')
+                and self._yields_simd_vector(inner_node)):
             return inner_str
         return f'static_cast<{cpp_target}>({inner_str})'
 
@@ -1228,6 +1408,13 @@ class SimdEmitMixin:
             return (self._yields_simd_vector(node.left)
                     or self._yields_simd_vector(node.right))
         if isinstance(node, Pow_N):
+            # A power 0 is emitted as a scalar one in the power's type,
+            # which the consuming operation broadcasts.
+            exponent = node.right
+            while isinstance(exponent, TypePromotionNode_N):
+                exponent = exponent.expr
+            if isinstance(exponent, IntLiteral_N) and exponent.value == 0:
+                return False
             return self._yields_simd_vector(node.left)
         if isinstance(node, UnaryMinusExpr_N):
             return self._yields_simd_vector(node.value)

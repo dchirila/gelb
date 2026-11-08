@@ -63,7 +63,7 @@ CONFIGS = [
                  id="fortran"),
     *(pytest.param("cpu_highway", layout, marks=requires_cpp_highway_compiler,
                    id=f"highway-{layout}")
-      for layout in ("aos",)),
+      for layout in ("soa", "aos", "cbt")),
     pytest.param("gpu_cuda_cpp", None,
                  marks=[pytest.mark.gpu, requires_gpu_cuda_cpp_compiler],
                  id="cuda"),
