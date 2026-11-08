@@ -197,16 +197,21 @@ class ExpressionEmitMixin:
             # dropped operand makes no call to random().
             if integer and isinstance(expr, Mul_N) and not is_pure(expr):
                 integer = False
-            a, b = self._broadcast_for_binop(expr.left, expr.right, df_var)
-            fold = (self._fold_add if isinstance(expr, Add_N) else
-                    self._fold_sub if isinstance(expr, Sub_N) else
-                    self._fold_mul)
+            a, b = self._broadcast_for_binop(expr.left, expr.right, df_var,
+                                             int64_op=kind == 'int64')
+            if isinstance(expr, Mul_N):
+                return self._fold_mul(a, b, integer, int64=kind == 'int64')
+            fold = self._fold_add if isinstance(expr, Add_N) else self._fold_sub
             return fold(a, b, integer)
         if isinstance(expr, Div_N):
-            a, b = self._broadcast_for_binop(expr.left, expr.right, df_var)
+            kind = numeric_kind(getattr(expr, 'inferred_type', None))
+            a, b = self._broadcast_for_binop(expr.left, expr.right, df_var,
+                                             int64_op=kind == 'int64')
             return f'({a} / {b})'
         if isinstance(expr, Pow_N):
-            base = self._emit_expression(expr.left, df_var)
+            base = self._emit_operand(
+                expr.left, df_var, int64_op=numeric_kind(
+                    getattr(expr, 'inferred_type', None)) == 'int64')
             # Small non-negative integer exponents -> unrolled multiplication.
             # The exponent may be a bare IntLiteral_N or a TypePromotionNode_N
             # wrapping one (the latter happens when the type-inference
@@ -219,11 +224,23 @@ class ExpressionEmitMixin:
                 k = int_exp_node.value
                 if 0 <= k <= 8:
                     if k == 0:
-                        # ``1`` is a scalar literal; if it gets consumed
-                        # in a V-context the surrounding binop will
-                        # broadcast it via the ``_broadcast_for_binop``
-                        # path.
-                        return '1'
+                        # One, in the power's own type: a scalar that a
+                        # consuming vector operation broadcasts
+                        # (``_broadcast_for_binop``).  The bare C++
+                        # literal ``1`` is a 32-bit ``int``: a quotient
+                        # of such powers was an integer division, and a
+                        # product with ``int`` literals wrapped at 2^31
+                        # (user manual, Numerical semantics: Types and
+                        # promotion).  An integer one is a cast to the
+                        # power's own width (``int32(k)^0`` is int32).
+                        kind0 = getattr(getattr(expr, 'inferred_type', None),
+                                        'element_dtype', None)
+                        cpp0 = _TYPE_MAP.get(kind0)
+                        if cpp0 == 'double':
+                            return '1.0'
+                        if cpp0 == 'float':
+                            return '1.0f'
+                        return f'static_cast<{cpp0 or "int64_t"}>(1)'
                     if k == 1:
                         return base
                     return '(' + ' * '.join([base] * k) + ')'
@@ -238,7 +255,9 @@ class ExpressionEmitMixin:
             # A real base: backend-defined; the platform's pow.
             return f'std::pow({base}, {exp_e})'
         if isinstance(expr, UnaryMinusExpr_N):
-            inner = self._emit_expression(expr.value, df_var)
+            inner = self._emit_operand(
+                expr.value, df_var, int64_op=numeric_kind(
+                    getattr(expr, 'inferred_type', None)) == 'int64')
             if self._simd_mode == 'vec8d' \
                     and self._yields_simd_vector(expr.value):
                 # Highway has no unary ``operator-`` overload on V --
@@ -524,6 +543,34 @@ class ExpressionEmitMixin:
         inner = self._emit_expression(arg_node, df_var)
         return self._emit_simd_aware_cast(inner, arg_node, target)
 
+    def _emit_operand(self, expr, df_var: str | None = None, *,
+                      int64_op: bool = False) -> str:
+        """An operand of an expression.  For an operand of an ``int64``
+        operation (``int64_op``: ``+ - * /``, ``^``, unary minus,
+        ``abs``) an integer literal, also broadcast over a slice or taken
+        from an array literal, is written with the operation's int64
+        width (``2147483647LL``), whatever its own type (a folded
+        ``int32`` constant passed to an ``int`` parameter is an int64
+        operand there): a bare C++ literal is a 32-bit ``int``, and
+        an operation with two of them is computed in 32 bits where GeLB
+        computes in int64 (user manual, Numerical semantics: Types and
+        promotion).  With every literal operand so written, every
+        ``int64`` operation has 64-bit operands, whatever the folds keep
+        or combine.  An index (``_emit_coord_scalar``) keeps its literals
+        bare."""
+        node = expr
+        while isinstance(node, BroadcastNode_N):
+            node = node.scalar_expr
+        if (isinstance(node, Array1DLiteral_N) and df_var is not None
+                and df_var.lstrip('-').isdigit()):
+            elements = node.value.elements
+            if 0 <= int(df_var) < len(elements):
+                node = elements[int(df_var)]
+        if (int64_op and not getattr(self, '_in_coord_scalar', False)
+                and isinstance(node, IntLiteral_N)):
+            return int64_typed_literal(int(node.value))
+        return self._emit_expression(expr, df_var)
+
     def _emit_intrinsic_unary_math(self, call: IntrinsicFunctionCall_N,
                                df_var: str | None) -> str:
         fname = call.function_name
@@ -533,7 +580,9 @@ class ExpressionEmitMixin:
             raise NotImplementedError(
                 f"cpu_highway: {fname}() expects 1 argument.")
         arg_node = call.arguments[0]
-        inner = self._emit_expression(arg_node, df_var)
+        inner = self._emit_operand(
+            arg_node, df_var, int64_op=fname == 'abs' and numeric_kind(
+                getattr(call, 'inferred_type', None)) == 'int64')
         vector_arg = (self._simd_mode == 'vec8d'
                       and self._yields_simd_vector(arg_node))
         if fname in _LIBRARY_FUNCTIONS and self.backend_name == 'cpu_highway' \

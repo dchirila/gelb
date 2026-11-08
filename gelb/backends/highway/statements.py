@@ -306,11 +306,16 @@ class StatementEmitMixin:
         return f'({a} - {b})'
 
     @classmethod
-    def _fold_mul(cls, a: str, b: str, integer: bool = False) -> str:
+    def _fold_mul(cls, a: str, b: str, integer: bool = False,
+                  int64: bool = False) -> str:
         va = cls._try_parse_lit(a)
         vb = cls._try_parse_lit(b)
         if integer and (cls._is_zero(va) or cls._is_zero(vb)):
-            return '0'
+            # The zero of an int64 product with its width, like every
+            # literal operand of an int64 operation (``_emit_operand``):
+            # a bare ``0`` would be a 32-bit C++ ``int`` in
+            # ``(0 / 1) + ...``.  A narrower product's zero stays bare.
+            return '0LL' if int64 else '0'
         if va == 1.0:
             return b
         if vb == 1.0:
@@ -1292,11 +1297,15 @@ class StatementEmitMixin:
         (the inner dimensions of g_f_storage[...]), where the per-lane
         Vec8d gelb_xv would not type-check as an integer subscript."""
         old = self._simd_mode
+        old_index = getattr(self, '_in_coord_scalar', False)
         self._simd_mode = 'scalar'
+        # An index keeps its literals bare (``_emit_operand``).
+        self._in_coord_scalar = True
         try:
             return self._emit_expression(node, df_var)
         finally:
             self._simd_mode = old
+            self._in_coord_scalar = old_index
 
     def _split_axis_offset(self, expr):
         """Parse a coord expression that is one axis's coordinate plus

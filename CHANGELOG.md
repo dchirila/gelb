@@ -41,6 +41,25 @@ versions follow upstream end of life and can change in any release.
 
 ### Fixed
 
+- **Integer literals and zero powers keep their type on `cpu_highway`
+  and `gpu_cuda_cpp`.** The C++ backends wrote an integer literal bare,
+  as a 32-bit C++ `int`, so an `int` operation on two literals was
+  computed in 32 bits instead of int64: `int q = 46341^2;` gave
+  -2147479015, and so did `Sq(46341)` with
+  `function Sq(int a) -> (int b) { b = a^2; }`. The same wrap happened
+  where the emitter dropped a factor of zero or one:
+  `(k * 0 + 2147483647) * 2` and `((k * 0) / 1 + 2147483647) * 2` gave
+  -2 instead of 4294967294. `v^0` was that `int` one too: a quotient
+  built only from real zero powers, `(v^0)^2 / ((v^0)^2 + (v^0)^2)`, was
+  an integer division (0 where Fortran gives 0.5), and
+  `k^0 * 2147483647 * 2` wrapped. Every integer literal of an `int`
+  operation now carries the int64 width, and `v^0` is one in the power's
+  type. The literal-only shapes were wrong on every `cpu_highway` layout
+  and on `gpu_cuda_cpp`, the others on the scalar paths of `cpu_highway`
+  (AoS, and the SoA remainder) and on `gpu_cuda_cpp`; the SoA and CBT
+  vector bodies failed to build the zero powers. Twelve examples' C++
+  and CUDA sources change in spelling only (`g_NY - 1` is now
+  `g_NY - 1LL`), and no value changes.
 - **`!=` is true for a NaN in the `cpu_highway` vector body.** Highway's
   `Ne` is the ordered comparison with AVX2 or AVX-512, so `v != v` with
   a NaN `v` gave `false` in the vectorized part of a block, where the

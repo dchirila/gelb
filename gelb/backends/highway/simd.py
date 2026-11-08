@@ -1301,7 +1301,8 @@ class SimdEmitMixin:
             return self._yields_simd_vector(elem)
         return self._yields_simd_vector(rhs)
 
-    def _broadcast_for_binop(self, left, right, df_var):
+    def _broadcast_for_binop(self, left, right, df_var, *,
+                             int64_op: bool = False):
         """Emit (left_str, right_str) with cpu_highway scalar-broadcast
         wrapping applied to the binop arguments.  When exactly one
         operand yields a V, the other is wrapped in ``hn::Set(d, ...)``
@@ -1316,9 +1317,12 @@ class SimdEmitMixin:
         Without this, RHSs like ``moments + {0, 0, scalar*V_local,
         ...}`` mistakenly broadcast the V-yielding element 2 in
         ``hn::Set(d, V)``.
+
+        ``int64_op``: the operands are those of an ``int64`` operation,
+        whose integer literals carry their width (``_emit_operand``).
         """
-        a = self._emit_expression(left, df_var)
-        b = self._emit_expression(right, df_var)
+        a = self._emit_operand(left, df_var, int64_op=int64_op)
+        b = self._emit_operand(right, df_var, int64_op=int64_op)
         if self._simd_mode != 'vec8d':
             return a, b
         a_vec = self._yields_simd_vector_at_df(left, df_var)
