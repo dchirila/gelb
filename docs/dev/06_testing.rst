@@ -43,8 +43,9 @@ Markers and options
   :source:`gelb/tests/integration/test_reproducibility.py`,
   :source:`gelb/tests/integration/test_constant_coefficients.py`,
   :source:`gelb/tests/integration/test_same_name_block_locals.py`,
-  :source:`gelb/tests/integration/test_simd_comparisons.py` and
-  :source:`gelb/tests/integration/test_literal_types.py`, which
+  :source:`gelb/tests/integration/test_simd_comparisons.py`,
+  :source:`gelb/tests/integration/test_literal_types.py` and
+  :source:`gelb/tests/integration/test_int_values_simd.py`, which
   also carry ``requires_gpu_cuda_cpp_compiler``; the smoke test's CUDA
   case carries neither and skips through its own toolchain check.
 - ``smoke`` is registered in

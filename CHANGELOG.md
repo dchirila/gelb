@@ -41,6 +41,21 @@ versions follow upstream end of life and can change in any release.
 
 ### Fixed
 
+- **Integer values in the `cpu_highway` vector body.** A block whose
+  integer value varies from cell to cell
+  (`int k = int(f.in[x, y | 0]);`, `int k; k = x;`, an inlined function
+  returning an `int`, destructuring into an `int`, a per-cell `int`
+  array), or that reduces an integer array with `sum`, `dot_prod` or
+  `matmul`, failed to build with the SoA and CBT layouts (the default),
+  and integer arithmetic on the `int` of a comparison
+  (`real(int(f.in[x, y | 0] > 0.0) * 3 / 2)`) was computed in binary64,
+  1.5 where every other backend gives 1. Such a block now takes the
+  scalar path. An `int` local copied from `x` or holding the `int` of a
+  comparison stays vectorized, unless a later statement stores into it:
+  a store of a value above 2^53 was rounded. `v^0` inside a vector
+  expression and `real()` of a vector value (an element of a local real
+  array, the sum of one) build as well. AoS, Fortran and CUDA were right
+  for the integer shapes. No example changes.
 - **Integer literals and zero powers keep their type on `cpu_highway`
   and `gpu_cuda_cpp`.** The C++ backends wrote an integer literal bare,
   as a 32-bit C++ `int`, so an `int` operation on two literals was
