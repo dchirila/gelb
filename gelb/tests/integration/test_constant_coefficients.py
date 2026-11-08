@@ -567,11 +567,12 @@ def test_the_peepholes_give_the_unfolded_values(tmp_path, backend, layout):
 
 def test_the_peepholes_fire_on_the_suffixed_literals(tmp_path):
     """A spelling check: the x1, x-1 and x0 folds recognise a literal
-    with its ``LL`` suffix, and a negative one in its parentheses."""
+    with its ``LL`` suffix, and a negative one in its parentheses; the
+    zero of x0 keeps the int64 width."""
     cpp = _source(tmp_path, PEEP, "cpu_highway", "aos")
     assert re.search(r"\w+\[0\] = 7LL;", cpp)
     assert re.search(r"\w+\[1\] = \(-\(-3LL\)\);", cpp)
-    assert re.search(r"\w+\[2\] = 0;", cpp)
+    assert re.search(r"\w+\[2\] = 0LL;", cpp)
     assert re.search(r"\w+\[3\] = \(2LL \* 5LL\);", cpp)
     assert re.search(r"\w+\[1\] = \w+\[1\];", cpp)
     assert re.search(r"\w+\[2\] = \(-\w+\[2\]\);", cpp)
@@ -645,10 +646,10 @@ def test_an_integer_array_is_spelled_exactly(tmp_path):
 def test_a_constant_element_is_spelled_with_its_width(tmp_path):
     """A spelling check: a bare ``2147483647`` is a C++ ``int``, and
     ``(2147483647 * 2)`` overflows it before the value reaches an int64
-    variable."""
+    variable; both literals carry the int64 width."""
     for backend in ("cpu_highway", "gpu_cuda_cpp"):
         cpp = _source(tmp_path / backend, WIDTH_SCALE, backend)
-        assert "(2147483647LL * 2)" in cpp
+        assert "(2147483647LL * 2LL)" in cpp
         assert "(2147483647 * 2)" not in cpp
 
 

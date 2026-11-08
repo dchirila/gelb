@@ -40,7 +40,7 @@ def test_coordinates_are_int64_in_the_loops_that_evaluate_user_code():
 
 def test_timestep_and_grid_size_are_widened_where_read():
     code = _generate(_IMPLICIT_INTEGERS)
-    assert '((static_cast<int64_t>(g__nx) + static_cast<int64_t>(gelb_timestep)) * 1073741824)' in code
+    assert '((static_cast<int64_t>(g__nx) + static_cast<int64_t>(gelb_timestep)) * 1073741824LL)' in code
     assert 'g_Nx' not in code
     assert 'int gelb_timestep = 0;' in code
 
@@ -72,7 +72,7 @@ def test_integer_arithmetic_on_x_takes_the_scalar_path():
     # In the SIMD body x is a double vector, and `(x - 7) / 2`
     # would be a real division; the block is emitted as a scalar loop.
     code = _generate(_INTEGER_DIVISION_ON_X)
-    assert "((g_x - 7) / 2)" in code
+    assert "((g_x - 7LL) / 2LL)" in code
     assert "/ hn::Set(d, 2)" not in code
     control = _generate(_INTEGER_DIVISION_ON_X.replace("(x - 7) / 2", "x * 0.5"))
     assert "hn::Iota(d, static_cast<double>(g_x))" in control
