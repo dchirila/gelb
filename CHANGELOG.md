@@ -41,6 +41,30 @@ versions follow upstream end of life and can change in any release.
 
 ### Fixed
 
+- **A call whose arguments are constants is a constant expression.**
+  Inlining a call such as `Sq(3037000500)`, `Q(0)` with `b = 7 / a`, or
+  `R(-1.0)` with `b = sqrt(a)` exposed a constant expression that was
+  never folded or checked: the overflow wrapped silently, the zero
+  divisor stopped the `cpu_highway` program with SIGILL, gave 0 on
+  `gpu_cuda_cpp` and failed to build on `cpu_fortran_serial`, and
+  gfortran rejected `sqrt(-1.0)` and
+  `log(0.0)` as constant arguments, also when only some arguments were
+  constants. A call whose arguments are all constants is now folded and
+  checked like an intrinsic of constants, its value included
+  (`1 / Sq(0)` is a zero divisor, `Sq(Sq(100000))` an overflow, and
+  `const int a = Sq(0);` a constant), and an error found in a call names
+  it (`in the call Sq(3037000500) on line 7`). A constant array, a
+  literal one or a constant's, is a constant argument too, and an array
+  a call of constants writes as a literal folds in the reductions that
+  read it. A call with some constant arguments folds what only they
+  reach; its locals stay variables, as do a call's value stored in a
+  variable and every user variable. The generated code of 45 examples
+  changes: in 13, a call with constant arguments (`Eq(1.0, 0.0, 0.0)`,
+  an equilibrium at a constant velocity) folds; in 40, a scalar output
+  that a call's body reads (`rho` of `Macro(fIn)`, which divides by it)
+  is a variable of the call's own, stored into its target after the
+  body. Their output is bit-identical on the three backends in default
+  and strict builds.
 - **A call converts its arguments and outputs as a store does, and
   checks them as a store does.** An argument that is a variable or a
   literal of another type than its parameter went into the function body

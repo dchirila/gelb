@@ -529,12 +529,13 @@ Constant folding
 ================
 
 An expression whose operands are all constants (literals, constants, and
-intrinsics of such) is evaluated once at compile time, wherever it is
-written: a constant's value, a variable's initializer (``int q =
-46341^2;`` as well as ``q = 46341^2;``), the right-hand side of a store,
-an argument.  One evaluator is shared by the folder, the geometry's
-``where`` predicates and the optimizer.  A folded value is the value the
-same expression has in the same width at run time, with these rules:
+intrinsics and calls of functions of such) is evaluated once at compile
+time, wherever it is written: a constant's value, a variable's
+initializer (``int q = 46341^2;`` as well as ``q = 46341^2;``), the
+right-hand side of a store, an argument.  One evaluator is shared by the
+folder, the geometry's ``where`` predicates and the optimizer.  A folded
+value is the value the same expression has in the same width at run
+time, with these rules:
 
 - Arithmetic, conversions, ``abs``, ``min``, ``max``, ``mod``, ``sqrt``
   and integer powers are exact or correctly rounded in the expression's
@@ -581,6 +582,29 @@ same expression has in the same width at run time, with these rules:
 - A block-local ``const`` is, after folding, a typed local declaration
   holding its value, a special value included; its immutability is
   checked before, by the frontend.
+- A call of a function whose arguments are all constants (literals,
+  constants, constant arrays and array literals of constants, and calls
+  of such) is a constant expression, like an
+  intrinsic of constants: its body is evaluated with the arguments'
+  values, converted to the parameters' types, by the rules above, so
+  ``Sq(3037000500)`` with ``Sq(int a)`` computing ``a * a`` is an
+  overflow error, ``1 / Sq(0)`` a zero divisor and ``R(-1.0)`` with
+  ``R`` computing ``sqrt(a)`` the NaN; a block-local ``const`` holding
+  such a call is a constant (``const int a = Sq(0);`` then ``7 / a`` is
+  an error).  A call with some constant arguments folds what only they
+  reach (``w * sqrt(c)`` with ``c`` the constant ``-1.0`` is ``w *
+  NaN``); its locals are variables, as the same statements written in
+  the block are.  An error found in a call names it (``in the call
+  Sq(3037000500) on line 7``).  A call's value stored in a variable is
+  a variable, as any stored value is: ``int a = Sq(0);`` then ``1 / a``
+  is a run-time division.  An array a call of constants holds is
+  carried into the reductions that read it (``sum``, ``dot_prod``,
+  ``matmul``), in the body and after the call, where its value is
+  written as a literal of constants (an argument ``{0.0, 1.0}``, a
+  store ``m = {a, 1.0}``); one computed element by element, by
+  arithmetic on a named array, or as a named constant array converted
+  to another element type is not, and its reductions are left to run
+  time.
 - A constant array's elements are the values its declared width
   stores, on every backend and in every reading: ``const array[int8,
   2] A = {300, 1}`` holds 44 and 1, a ``real32`` array holds the
@@ -613,7 +637,12 @@ same expression has in the same width at run time, with these rules:
    overflowing product and a narrowed ``real32``, as literals, global
    constants, constant arrays, block-local constants and variables'
    initializers, folded to their special values and read back from the
-   output on three backends); and by the battery's constant forms.
+   output on three backends); by
+   ``gelb/tests/integration/test_function_calls.py`` (calls of
+   constants: the errors, named with the calls, a call of a call and
+   nested functions included; their special values on every backend and
+   Highway layout; a draw in their body kept in order; a call's value in
+   a variable left to run time); and by the battery's constant forms.
 
 Not in this version
 ===================

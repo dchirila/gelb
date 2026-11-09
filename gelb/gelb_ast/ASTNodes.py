@@ -13,6 +13,10 @@ _AST_METADATA_FIELD_NAMES = frozenset({
     'slice_df_expansions',
     'cse_temps_emitted',
     'output_stores',
+    'inline_calls',
+    'inline_binding',
+    'lowered_const',
+    'inlined_from_call',
 })
 
 

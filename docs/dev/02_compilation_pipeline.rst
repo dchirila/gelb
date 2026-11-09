@@ -16,7 +16,9 @@ profile.  The frontend passes are wrapped by the functions of
 those of :source:`gelb/midware/stage2_midware.py`;
 ``apply_constant_overrides``, ``sequence_draws``, ``inline_functions``,
 ``hoist_intrinsic_args``, the three rewrites and ``resolve_geometry``
-are imported straight from their own modules.  The module behind each
+are imported straight from their own modules (the two runs after
+inlining are ``fold_constants`` and ``validate_division_by_zero``
+again).  The module behind each
 pass is named below, under the names ``record`` uses.  Two sanity
 checks: ``validate_ast_root`` confirms that the root is a
 ``Program_N``, and ``validate_midware_input`` confirms that again and
@@ -129,9 +131,36 @@ Midware
    sets passed to ``upstream_dfs`` and ``bounce_back_dfs``;
    :source:`gelb/midware/DrawSequencing.py` moves each ``random()``
    call into its own temporary, in source order.
-``inline_functions``, ``hoist_intrinsic_args``
+``inline_functions``, ``fold_constants_after_inlining``, ``validate_division_by_zero_after_inlining``, ``hoist_intrinsic_args``
    :source:`gelb/midware/inline_functions.py` replaces every user
-   function call by the function body;
+   function call by the function body, copying every statement with
+   the caller's values; a parameter the body stores into is bound to a
+   copy of the argument, and an output to a variable of its own where
+   an argument reads its target, another output goes to the same
+   target, it has another type, the body reads it, or the target is
+   not a variable of the caller's block (a name of a function body or of
+   the inliner); whether a call is a call of constants, only the
+   folder decides.  It inlines again until a pass inlines no call; a
+   call left in the DF selector or a spatial index of a lattice store
+   is reported by the stencil check.  It records, on each statement it
+   emits, the calls it comes from (``inline_calls``), on each
+   declaration of a name only inlined code holds its binding
+   (``inline_binding``: argument, parameter copy, local or output, and
+   the call), and on the program each call's argument sources
+   (``inline_call_args``).  The folder and the zero-divisor check (the
+   modules of ``fold_constants`` and
+   ``validate_division_by_zero``) then run again.  Following each block
+   in order, the folder decides at a call's first statement whether its
+   arguments hold constants there (a constant array among them: any
+   global constant, an array literal of constants, an array a name of
+   the inliner holds; an array is carried only into reductions, as a
+   literal); such a call is a constant
+   expression, folded and checked like the rest, with the constants
+   its names hold carried into their uses (an argument's always, its
+   locals' and outputs' only in a call of constants, a block-local
+   constant's (``lowered_const``) always, a user variable's never) and
+   its names dropped where nothing reads them; an error found in
+   inlined code names the calls.
    :source:`gelb/midware/IntrinsicArgHoisting.py` gives ``dot_prod``
    bare identifiers as arguments.
 ``collinearity_rewrite``, ``scalar_block_cse``, ``slice_df_expansion``

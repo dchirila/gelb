@@ -45,4 +45,7 @@ def _lowered(stmt):
         stmt.code_range, stmt.data_type, stmt.name, stmt.value)
     if hasattr(stmt, 'inferred_type'):
         decl.inferred_type = stmt.inferred_type
+    # still a constant: the fold after inlining carries its value when
+    # only inlining made it one (``const int a = Sq(0);``)
+    decl.lowered_const = True
     return decl
