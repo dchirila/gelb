@@ -1268,7 +1268,11 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         return node
     
     def visitVariableDeclarationStmt_N(self, node: VariableDeclarationStmt_N, ast_root_node: Program_N):
-        """Variable declarations don't have expressions to fold."""
+        """Fold a declaration's initializer, as an assignment's right-hand
+        side is folded: ``int q = 46341^2;`` and ``int q; q = 46341^2;``
+        are the same constant expression."""
+        if node.initial_value is not None:
+            node.initial_value = self.visit(node.initial_value, ast_root_node)
         return node
     
     def visitRectSelOfLatticeInDFs_N(self, node: RectSelOfLatticeInDFs_N, ast_root_node: Program_N):

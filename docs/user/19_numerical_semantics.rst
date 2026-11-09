@@ -520,10 +520,12 @@ Constant folding
 ================
 
 An expression whose operands are all constants (literals, constants, and
-intrinsics of such) is evaluated once at compile time, by one evaluator
-shared by the folder, the geometry's ``where`` predicates and the
-optimizer.  A folded value is the value the same expression has in the
-same width at run time, with these rules:
+intrinsics of such) is evaluated once at compile time, wherever it is
+written: a constant's value, a variable's initializer (``int q =
+46341^2;`` as well as ``q = 46341^2;``), the right-hand side of a store,
+an argument.  One evaluator is shared by the folder, the geometry's
+``where`` predicates and the optimizer.  A folded value is the value the
+same expression has in the same width at run time, with these rules:
 
 - Arithmetic, conversions, ``abs``, ``min``, ``max``, ``mod``, ``sqrt``
   and integer powers are exact or correctly rounded in the expression's
@@ -586,7 +588,8 @@ same width at run time, with these rules:
 
    Tested by ``gelb/tests/unit/midware/test_const_eval.py`` (a rule
    per test on the evaluator; the folder, the geometry evaluator and
-   the simplifier agree; the diagnostics) and by
+   the simplifier agree; the folded values and the diagnostics the same
+   for a constant, a variable's initializer and an assignment) and by
    ``test_real_width_contract.py``: folded ``mod``, powers and
    ``real32`` library calls on three backends, reductions of constants
    in their width (an exact integer sum, a ``real32`` dot product, an
@@ -599,9 +602,9 @@ same width at run time, with these rules:
    ``gelb/tests/unit/midware/test_nonfinite_folding.py`` (programs
    with ``sqrt(-1.0)``, ``log(0.0)``, ``exp(1000.0)``, an
    overflowing product and a narrowed ``real32``, as literals, global
-   constants, constant arrays and block-local constants, folded to
-   their special values and read back from the output on three
-   backends); and by the battery's constant forms.
+   constants, constant arrays, block-local constants and variables'
+   initializers, folded to their special values and read back from the
+   output on three backends); and by the battery's constant forms.
 
 Not in this version
 ===================
