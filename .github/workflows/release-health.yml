@@ -78,6 +78,10 @@ jobs:
             xdist: -n auto
             paths: gelb/tests/integration/test_constant_coefficients.py
 
+          - name: function calls
+            xdist: -n auto
+            paths: gelb/tests/integration/test_function_calls.py
+
           - name: backends
             xdist: -n auto
             paths: >-
