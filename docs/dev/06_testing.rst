@@ -44,8 +44,9 @@ Markers and options
   :source:`gelb/tests/integration/test_constant_coefficients.py`,
   :source:`gelb/tests/integration/test_same_name_block_locals.py`,
   :source:`gelb/tests/integration/test_simd_comparisons.py`,
-  :source:`gelb/tests/integration/test_literal_types.py` and
-  :source:`gelb/tests/integration/test_int_values_simd.py`, which
+  :source:`gelb/tests/integration/test_literal_types.py`,
+  :source:`gelb/tests/integration/test_int_values_simd.py` and
+  :source:`gelb/tests/integration/test_function_calls.py`, which
   also carry ``requires_gpu_cuda_cpp_compiler``; the smoke test's CUDA
   case carries neither and skips through its own toolchain check.
 - ``smoke`` is registered in
@@ -130,12 +131,13 @@ cache, then ``uv sync --all-extras``.  The jobs run on separate runners:
 - *tests, numeric*: all of :source:`gelb/tests/numeric/`, in one
   process: its runtime corpus is built once per module and backend, and
   workers would each build it again.
-- *tests, constant coefficients*, *tests, backends* and *tests,
-  diagnostics, lint, viewer, runner*: the focused integration files
+- *tests, constant coefficients*, *tests, function calls*, *tests,
+  backends* and *tests, diagnostics, lint, viewer, runner*: the focused
+  integration files
   listed in the workflow, grouped so that the files whose cases each
   build and run a program share no runner with the quick ones.
 
-The three integration jobs run with ``pytest-xdist`` (``-n auto``, one
+The four integration jobs run with ``pytest-xdist`` (``-n auto``, one
 worker per core of the runner), and every pytest job passes
 ``--durations=25``, so its log ends with its slowest tests.
 CI has no GPU, so the ``gpu`` cases skip there.
