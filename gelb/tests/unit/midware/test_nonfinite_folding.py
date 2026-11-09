@@ -19,6 +19,7 @@ and read the special values back from the output file.
 """
 
 import math
+import re
 
 import numpy as np
 import pytest
@@ -50,7 +51,8 @@ def program(gauge, *, globals="", outputs="real v"):
 
 
 # One program per place a non-finite constant can be written: directly,
-# as a global constant, in a global constant array, as a block-local const.
+# as a global constant, in a global constant array, as a block-local
+# const, as a variable's initializer.
 DIRECT_SQRT_DOMAIN = program("v = sqrt(-1.0);")
 GLOBAL_CONST_OVERFLOW = program(
     "v = a;", globals="global_constants {const real a = exp(1000.0);}")
@@ -58,12 +60,16 @@ GLOBAL_ARRAY_DOMAIN = program(
     "v = a[0];",
     globals="global_constants {const array[real32, 2] a = {sqrt(-1.0), 1.0};}")
 LOCAL_CONST_NARROW_OVERFLOW = program("const real32 a = real32(1.0e300); v = a;")
+DECLARATION_SQRT_DOMAIN = program("real a = sqrt(-1.0); v = a;")
+DECLARATION_LOG_POLE = program("real32 a = log(real32(0.0)); v = a;")
 
 NONFINITE_PROGRAMS = [
     pytest.param(DIRECT_SQRT_DOMAIN, math.nan, id="direct sqrt(-1.0)"),
     pytest.param(GLOBAL_CONST_OVERFLOW, math.inf, id="global exp(1000.0)"),
     pytest.param(GLOBAL_ARRAY_DOMAIN, math.nan, id="real32 array sqrt(-1.0)"),
     pytest.param(LOCAL_CONST_NARROW_OVERFLOW, math.inf, id="local real32(1.0e300)"),
+    pytest.param(DECLARATION_SQRT_DOMAIN, math.nan, id="declaration sqrt(-1.0)"),
+    pytest.param(DECLARATION_LOG_POLE, -math.inf, id="real32 declaration log(0.0)"),
 ]
 
 # One program with every construct, for the native runs.
@@ -235,8 +241,9 @@ def test_the_nonfinite_constants_pass_gelbc_with_empty_diagnostics(
         gelbc_cli, [str(path), "--backend", backend, "-o", str(out)])
     assert result.exit_code == 0, result.output
     text = out.read_text()
-    # never the invalid call as a constant argument
-    assert "sqrt(-1.0" not in text and "exp(1000.0" not in text
+    # never the invalid call as a constant argument (``sqrt((-1.0d0))``
+    # included): every call in these programs is constant, so none is left
+    assert re.search(r"\b(sqrt|log|exp)\s*\(", text) is None, text
 
 
 # ---------------------------------------------------------------------------

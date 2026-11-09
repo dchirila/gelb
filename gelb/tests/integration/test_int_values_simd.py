@@ -185,19 +185,29 @@ _SHAPES_B = {
     "pow_zero_division": ("", "({F}^0 + {F}^0) / ({F}^0 + {F}^0 + {F}^0)",
                           np.full(NX, 2.0 / 3.0), True),
     "pow_zero_over_int": ("", "{F}^0 / 2", np.full(NX, 0.5), True),
-    # the int of a comparison on a uniform reduction is a vector too:
-    # a later store or integer arithmetic sends the block scalar
-    "reassign_reduction_mask": ("int m = int(dot_prod(W, W) > 0.25);"
+    # the int of a comparison on a uniform reduction (here of ``t``, 1
+    # at every step of the run) is a vector too: a later store or integer
+    # arithmetic sends the block scalar
+    "reassign_reduction_mask": ("array[real, 3] u = {real(min(t, 1)), 0.25, 0.125};"
+                                " int m = int(dot_prod(W, u) > 0.25);"
                                 " m = 9007199254740993;",
                                 "real(m == 9007199254740992)", np.zeros(NX),
                                 False),
-    "reduction_mask_arithmetic": ("int m = int(dot_prod(W, W) > 0.25);",
+    "reduction_mask_arithmetic": ("array[real, 3] u = {real(min(t, 1)), 0.25, 0.125};"
+                                  " int m = int(dot_prod(W, u) > 0.25);",
                                   "real(m * 3 / 2)", np.ones(NX), False),
-    "reduction_mask": ("int m = int(dot_prod(W, W) > 0.25);",
+    "reduction_mask": ("array[real, 3] u = {real(min(t, 1)), 0.25, 0.125};"
+                       " int m = int(dot_prod(W, u) > 0.25);",
                        "{F} * 0.0 + real(m)", np.ones(NX), True),
-    # an int sum of a global constant array, not folded
+    # an int sum of a uniform int array
+    "int_sum_of_uniform": ("array[int, 3] c = {min(t, 1), 2, 3}; int m = sum(c);",
+                           "{F} * 0.0 + real(m)", np.full(NX, 6.0), False),
+    # the same of constants folds to a constant, which the vector body
+    # holds (user manual, Numerical semantics: Constant folding)
+    "constant_reduction_mask": ("int m = int(dot_prod(W, W) > 0.25);",
+                                "real(m * 3 / 2)", np.ones(NX), True),
     "int_sum_of_constant": ("int m = sum(C);", "{F} * 0.0 + real(m)",
-                            np.full(NX, 6.0), False),
+                            np.full(NX, 6.0), True),
     # (the type of a zero power: test_literal_types.py)
     "real_of_array_element": ("array[real, 2] fi = {S};"
                               " real c = real(fi[0]) + real(fi[1]) * 0.5;",

@@ -41,6 +41,20 @@ versions follow upstream end of life and can change in any release.
 
 ### Fixed
 
+- **A variable's initializer is folded and checked like any constant
+  expression.** `int q = 9223372036854775807 + 1;`, `int q = 1 / (2 - 2);`
+  and `real r = sqrt(-1.0);` were neither folded nor checked, while the
+  same expression assigned (`q = ...;`) was: the overflow wrapped instead
+  of being a compile-time error, the zero divisor stopped the
+  `cpu_highway` program with SIGILL (and gave 0 on `gpu_cuda_cpp`), and
+  `cpu_fortran_serial` failed to build `sqrt(-1.0)`, `log(0.0)` and the
+  zero divisor. An initializer is now folded with the rules of the
+  numerical semantics chapter (*Constant folding*), and `sum` of a
+  literal array in an initializer builds on `cpu_highway` and
+  `gpu_cuda_cpp`. The generated code of 40 examples changes:
+  their initializers of constants (`real ux_h = ux + 0.5 * G / rho;`)
+  fold; their output is bit-identical on the three backends in default
+  and strict builds.
 - **Integer values in the `cpu_highway` vector body.** A block whose
   integer value varies from cell to cell
   (`int k = int(f.in[x, y | 0]);`, `int k; k = x;`, an inlined function

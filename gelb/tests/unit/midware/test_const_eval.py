@@ -256,15 +256,40 @@ def test_a_result_takes_the_table_width_and_rounds_once():
 # --- the passes agree ------------------------------------------------------------
 
 def _folded_constant(decl, name="R"):
+    """The folded value of ``name``: a constant's, a declaration's
+    initializer or an assignment's right-hand side."""
     code = minimal_gelb_program_1d(initializer_content=f"{decl}\nf.out[x | 0] = 0;")
     ast = get_midware_processed_ast(code)
     for stmt in ast.initializers[0].stmts:
-        if getattr(getattr(stmt, "name", None), "name", None) == name:
-            node = stmt.value
-            while isinstance(node, TypePromotionNode_N):
-                node = node.expr
-            return node
+        target = getattr(stmt, "name", None) or getattr(stmt, "lhs", None)
+        if getattr(target, "name", None) != name:
+            continue
+        node = next((getattr(stmt, slot) for slot in ("value", "initial_value", "rhs")
+                     if getattr(stmt, slot, None) is not None), None)
+        if node is None:
+            continue
+        while isinstance(node, TypePromotionNode_N):
+            node = node.expr
+        return node
     raise AssertionError(f"no constant {name}")
+
+
+def _as_variable(decl, form):
+    """``decl`` (``const T R = e;``, possibly after other constants)
+    with its last constant written as a declaration (``T R = e;``) or
+    as an assignment (``T R; R = e;``): the same constant expression,
+    so the same value and the same errors (user manual, Numerical
+    semantics: Constant folding)."""
+    head, sep, last = decl.rpartition("const ")
+    if form == "const":
+        return decl
+    typed, _, value = last.partition(" = ")
+    if form == "declaration":
+        return f"{head}{typed} = {value}"
+    return f"{head}{typed}; R = {value}"
+
+
+FORMS = ["const", "declaration", "assignment"]
 
 
 @pytest.mark.parametrize("decl,kind,expected", [
@@ -285,35 +310,42 @@ def _folded_constant(decl, name="R"):
     ("const int R = abs(-9223372036854775807);", IntLiteral_N, 9223372036854775807),
     ("const int R = -9223372036854775807 - 1;", IntLiteral_N, -9223372036854775808),
 ])
-def test_the_folder_folds_through_the_evaluator(decl, kind, expected):
-    node = _folded_constant(decl)
+@pytest.mark.parametrize("form", FORMS)
+def test_the_folder_folds_through_the_evaluator(decl, kind, expected, form):
+    node = _folded_constant(_as_variable(decl, form))
     assert isinstance(node, kind)
     assert node.value == expected
 
 
-def test_the_folder_rounds_a_real32_library_result_once():
-    node = _folded_constant("const real32 W = 0.5; const real32 R = sin(W);")
+@pytest.mark.parametrize("form", FORMS)
+def test_the_folder_rounds_a_real32_library_result_once(form):
+    node = _folded_constant(_as_variable("const real32 W = 0.5; const real32 R = sin(W);", form))
     assert isinstance(node, RealLiteral_N)
     assert node.value == float(f32(math.sin(0.5)))
     assert node.inferred_type.element_dtype == "real32"
 
 
-def test_the_folder_folds_a_transcendental_on_the_rounded_argument():
+@pytest.mark.parametrize("form", FORMS)
+def test_the_folder_folds_a_transcendental_on_the_rounded_argument(form):
     # the division rounds first, in its width, then the host's exp
-    node = _folded_constant("const real TAU = 0.6; const real R = exp(-1.0 / TAU);")
+    node = _folded_constant(_as_variable(
+        "const real TAU = 0.6; const real R = exp(-1.0 / TAU);", form))
     assert isinstance(node, RealLiteral_N)
     assert node.value == math.exp(-1.0 / 0.6)
 
 
-def test_the_folder_folds_a_real_overflow_and_a_domain_error_to_the_ieee_value():
+@pytest.mark.parametrize("form", FORMS)
+def test_the_folder_folds_a_real_overflow_and_a_domain_error_to_the_ieee_value(form):
     # the value the run time would give, which the backends write as an
     # explicit special value (user manual, Numerical semantics: Special
     # values)
-    assert _folded_constant("const real R = exp(1000.0);").value == math.inf
-    assert _folded_constant("const real R = log(0.0);").value == -math.inf
-    assert math.isnan(_folded_constant("const real R = sqrt(-1.0);").value)
-    assert _folded_constant("const real R = 1e308 * 10.0;").value == math.inf
-    assert _folded_constant("const real R = -(1e308 * 10.0);").value == -math.inf
+    def folded(decl):
+        return _folded_constant(_as_variable(decl, form)).value
+    assert folded("const real R = exp(1000.0);") == math.inf
+    assert folded("const real R = log(0.0);") == -math.inf
+    assert math.isnan(folded("const real R = sqrt(-1.0);"))
+    assert folded("const real R = 1e308 * 10.0;") == math.inf
+    assert folded("const real R = -(1e308 * 10.0);") == -math.inf
 
 
 @pytest.mark.parametrize("decl,match", [
@@ -327,11 +359,15 @@ def test_the_folder_folds_a_real_overflow_and_a_domain_error_to_the_ieee_value()
     ("const int R = mod(7, 0);", "mod by zero"),
     ("const real R = mod(7.0, 0.0);", "mod by zero"),
     ("const int R = 0^(-2);", "negative integer power"),
+    ("const int R = 1 / (2 - 2);", "Division by zero"),
+    ("const real R = 1.0 / (0.5 - 0.5);", "Division by zero"),
 ])
-def test_what_the_contract_makes_an_error_is_reported(decl, match):
+@pytest.mark.parametrize("form", FORMS)
+def test_what_the_contract_makes_an_error_is_reported(decl, match, form):
     # the folder reports an overflow or an invalid conversion itself; a
     # visible zero divisor is left for the validator that follows it
-    code = minimal_gelb_program_1d(initializer_content=f"{decl}\nf.out[x | 0] = 0;")
+    code = minimal_gelb_program_1d(
+        initializer_content=f"{_as_variable(decl, form)}\nf.out[x | 0] = 0;")
     with pytest.raises(GeLBExTypeError, match=match):
         validate_division_by_zero(get_midware_processed_ast(code))
 
