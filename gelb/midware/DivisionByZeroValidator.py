@@ -4,6 +4,8 @@ from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
 from gelb.frontend.visitor_mixins import ProgramTraversalMixin
 from gelb.gelb_ast.ASTNodes import *
 from gelb.utils.exceptions import GeLBExTypeError
+from gelb.midware.inline_functions import (
+    call_chain_text, value_of_call_text)
 
 
 class DivisionByZeroValidator(ASTBaseVisitor, ProgramTraversalMixin):
@@ -21,6 +23,8 @@ class DivisionByZeroValidator(ASTBaseVisitor, ProgramTraversalMixin):
     
     def __init__(self):
         super().__init__()
+        # the calls the statement being checked was inlined from
+        self._chain = ()
     
     # Program traversal
     
@@ -36,6 +40,21 @@ class DivisionByZeroValidator(ASTBaseVisitor, ProgramTraversalMixin):
     def _before_block_visit(self, block_node, block_type):
         """Set current block context before visiting."""
         self.current_block = block_node
+
+    def _visit_block_stmts(self, node, ast_root_node: Program_N):
+        """Check each statement, knowing the calls it was inlined from
+        (``inline_calls``), which an error names."""
+        for stmt in node.stmts:
+            self._chain = getattr(stmt, 'inline_calls', ())
+            self.visit(stmt, ast_root_node)
+        self._chain = ()
+        return node
+
+    def _where(self, divisor):
+        """The calls the zero comes from: the call whose value it is,
+        when the folder carried it out of an inlined call, and the calls
+        the statement was inlined from."""
+        return value_of_call_text(divisor) + call_chain_text(self._chain)
     
     # Division operation
     
@@ -50,7 +69,8 @@ class DivisionByZeroValidator(ASTBaseVisitor, ProgramTraversalMixin):
         if is_zero:
             raise GeLBExTypeError(
                 node.right,
-                f"Division by zero: divisor is {description}",
+                f"Division by zero: divisor is {description}"
+                f"{self._where(self._unwrapped(node.right))}",
                 "Remove the division by zero or use a non-zero divisor"
             )
 
@@ -68,7 +88,8 @@ class DivisionByZeroValidator(ASTBaseVisitor, ProgramTraversalMixin):
             if is_zero:
                 raise GeLBExTypeError(
                     divisor,
-                    f"mod by zero: the divisor is {description}",
+                    f"mod by zero: the divisor is {description}"
+                    f"{self._where(self._unwrapped(divisor))}",
                     "Remove the mod by zero or use a non-zero divisor"
                 )
         return node
@@ -85,7 +106,8 @@ class DivisionByZeroValidator(ASTBaseVisitor, ProgramTraversalMixin):
                 and isinstance(exponent, IntLiteral_N) and exponent.value < 0:
             raise GeLBExTypeError(
                 node,
-                "Division by zero: 0 raised to a negative integer power",
+                "Division by zero: 0 raised to a negative integer power"
+                f"{self._where(base)}",
                 "An integer power with a negative exponent is 1 / x^n in"
                 " integer division; use a non-zero base"
             )

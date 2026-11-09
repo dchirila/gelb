@@ -279,6 +279,17 @@ def compile_source(
         record("inline_functions")
         capture(ast, "function_inlining")
 
+        # A call whose arguments are constants is a constant expression,
+        # like an intrinsic of constants (user manual, Numerical
+        # semantics: Constant folding): what inlining exposed is folded
+        # and checked as the rest was, before any pass that could move it.
+        ast = fold_constants(ast, after_inlining=True)
+        record("fold_constants_after_inlining")
+        capture(ast, "constant_folding_after_inlining")
+
+        ast = validate_division_by_zero(ast)
+        record("validate_division_by_zero_after_inlining")
+
         from gelb.midware.IntrinsicArgHoisting import hoist_intrinsic_args
         hoist_intrinsic_args(ast)
         record("hoist_intrinsic_args")

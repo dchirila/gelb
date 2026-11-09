@@ -231,12 +231,25 @@ def _aos_source(tmp_path, source):
 
 
 @pytest.mark.parametrize("shape, cpp_type", [
-    ("per_cell", "double"), ("real32", "float"),
-    ("function_reversed", "double"), ("function_reversed_real32", "float")])
+    ("per_cell", "double"), ("real32", "float")])
 def test_the_integer_elements_are_converted_in_line(tmp_path, shape, cpp_type):
     cpp = _aos_source(tmp_path, _program(shape))
     assert "gelb_dot_prod_const(" not in cpp
     assert re.search(rf"static_cast<{cpp_type}>\(\w+\[0\]\)", cpp)
+
+
+@pytest.mark.parametrize("shape, literal", [
+    ("function_reversed", "[0] = 1.375;"),
+    ("function_reversed_real32", "[0] = static_cast<double>(1073741824.0f);")])
+def test_a_call_of_constant_arrays_folds_to_its_value(tmp_path, shape, literal):
+    """Both arrays constant, through an inlined function: a call of
+    constants, folded in its width (user manual, Numerical semantics:
+    Constant folding) and stored as that value, with no conversion of
+    an element left in the code."""
+    cpp = _aos_source(tmp_path, _program(shape))
+    assert "gelb_dot_prod_const(" not in cpp
+    assert literal in cpp
+    assert not re.search(r"static_cast<(double|float)>\(\w+\[0\]\)", cpp)
 
 
 def test_a_real_array_keeps_the_reduction_helper(tmp_path):

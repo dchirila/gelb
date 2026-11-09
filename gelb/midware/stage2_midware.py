@@ -66,12 +66,15 @@ def validate_midware_input(ast):
             raise AttributeError(f"AST missing required attribute: {attr}")
 
 
-def fold_constants(ast):
+def fold_constants(ast, *, after_inlining=False):
     """
     Apply constant folding optimization to the AST.
     
     Evaluates constant expressions at compile time and replaces them
-    with their computed literal values.
+    with their computed literal values.  Run again after inlining
+    (``after_inlining``), it also folds what inlining exposed: a call
+    whose arguments are constants, partly or wholly, with the constants
+    the inliner's own names hold carried into their uses.
     
     Args:
         ast (Program_N): The AST to optimize
@@ -79,7 +82,7 @@ def fold_constants(ast):
     Returns:
         Program_N: The AST with constant expressions folded
     """
-    folder = ConstantFoldingVisitor()
+    folder = ConstantFoldingVisitor(after_inlining=after_inlining)
     return folder.visit(ast, ast)
 
 

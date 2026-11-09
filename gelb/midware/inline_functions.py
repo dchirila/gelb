@@ -72,9 +72,10 @@ def inline_functions(ast):
     # Build lookup: function_name -> FunctionBlock_N
     func_map = {func.name.name: func for func in ast.functions}
 
-    # Monotonically increasing counter for unique alpha-rename prefixes;
-    # a prefix no name of the program starts with
-    counter = _Counter(_names_in(ast))
+    # Monotonically increasing counter for unique alpha-rename prefixes
+    # (a prefix no name of the program starts with), the calls inlined
+    # and the calls each statement comes from
+    counter = _State(_names_in(ast))
 
     # Process every block that can contain function calls
     for block_list in (ast.initializers, ast.dynamics, ast.gauges):
@@ -89,7 +90,9 @@ def inline_functions(ast):
     # Also inline inside function bodies themselves (in case functions
     # call other functions), then again in the program blocks (the
     # bodies they copied held calls)
+    counter.in_blocks = False
     _inline_until_done(ast.functions, func_map, counter)
+    counter.in_blocks = True
     blocks = [block for block_list in (ast.initializers, ast.dynamics, ast.gauges)
               if block_list is not None for block in block_list
               if block.stmts is not None]
@@ -97,8 +100,165 @@ def inline_functions(ast):
 
     # Remove function definitions -- they are fully inlined
     ast.functions = None
+    ast.inline_call_args = counter.call_args
 
     return ast
+
+
+def _inline_until_done(owners, func_map, counter):
+    """Inline the calls in the statements of *owners* (functions or
+    blocks) again while a call is left and the last pass inlined one.
+    Recursion is rejected by the frontend, so this ends whatever the
+    order of the definitions; a call no pass inlines (in the DF selector
+    or a spatial index of a lattice store) is left to the checks that
+    follow, which report it."""
+    while any(_contains_call(owner.stmts, func_map) for owner in owners):
+        inlined = counter[0]          # the prefixes given out so far
+        for owner in owners:
+            owner.stmts.elements = _inline_block_stmts(
+                owner.stmts.elements, func_map, counter)
+        if counter[0] == inlined:
+            return
+
+
+class _Counter(list):
+    """The prefix counter (``counter[0]``) and the names of the program,
+    which no prefix may start (a user may write ``__F_0_a``)."""
+
+    def __init__(self, taken):
+        super().__init__([0])
+        self.taken = taken
+
+    def fresh_prefix(self, fname):
+        while True:
+            prefix = f"__{fname}_{self[0]}"
+            self[0] += 1
+            if not any(name.startswith(prefix + "_") for name in self.taken):
+                return prefix
+
+
+class _State(_Counter):
+    """The prefix counter and the program's names (``_Counter``); the
+    calls inlined, each with the sources of its arguments (recorded on
+    the program as ``inline_call_args``, for the folder that runs after
+    inlining to tell whether the call is a call of constants: only the
+    folder decides that); the calls the statement being inlined itself
+    comes from, innermost first; and whether the statements being
+    inlined are a program block's (a function body's otherwise)."""
+
+    def __init__(self, taken):
+        super().__init__(taken)
+        self.call_args = {}
+        self.chain = ()
+        self.in_blocks = True
+
+    def new_call(self, fname, code_range):
+        """A new call: (function name, code range, id)."""
+        k = len(self.call_args)
+        self.call_args[k] = []
+        return (fname, code_range, k)
+
+    def argument(self, call, source):
+        """Record an argument source of *call*: ``('expr', node)`` for an
+        argument substituted for its parameter, ``(role, name)`` for one
+        bound to a temporary (``'argument'``, or ``'param'`` when the
+        body stores into it)."""
+        self.call_args[call[2]].append(source)
+
+
+def _bound(decl, role, call):
+    """``decl``, a declaration of a name only inlined code holds, with
+    its binding ``decl.inline_binding = (role, call)``: the role
+    (``'argument'``, ``'param'`` for a parameter the body stores into,
+    ``'local'``, ``'output'``) and the call (function name, code range,
+    id).  The folder that runs after inlining carries an argument's
+    constant into its uses, and a local's or an output's only when the
+    call is a call of constants, which it decides from the arguments'
+    values (gelb.midware.ConstantFoldingVisitor)."""
+    decl.inline_binding = (role, call)
+    return decl
+
+
+def _bound_copy(body_stmt, subst, locals_, call, state, remap):
+    """A body statement copied for a call: a declaration of one of the
+    call's locals (``locals_``) is bound as such; one that an earlier
+    inlining into the body had bound keeps its role, for a copy of that
+    inner call whose argument sources are renamed as the body is
+    (``remap``: inner call -> its copy)."""
+    stmt = _subst_stmt(body_stmt, subst)
+    chain = tuple(_remapped(c, subst, state, remap)
+                  for c in getattr(body_stmt, 'inline_calls', ()))
+    stmt.inline_calls = chain
+    if isinstance(stmt, VariableDeclarationStmt_N) and \
+            getattr(body_stmt.name, 'name', None) in locals_:
+        earlier = getattr(body_stmt, 'inline_binding', None)
+        if earlier is None:
+            _bound(stmt, 'local', call)
+        else:
+            role, inner = earlier
+            _bound(stmt, role, _remapped(inner, subst, state, remap))
+    return stmt
+
+
+def _remapped(call, subst, state, remap):
+    """The copy of an inner call, made once per copy of the body that
+    holds it, its argument sources renamed by *subst*."""
+    fname, code_range, k = call
+    if k not in remap:
+        copied = state.new_call(fname, code_range)
+        for kind, source in state.call_args[k]:
+            if kind == 'expr':
+                state.argument(copied, (kind, _subst_expr(source, subst)))
+            else:
+                renamed = subst.get(source)
+                state.argument(copied, (kind, renamed.name
+                                        if isinstance(renamed, Identifier_N) else source))
+        remap[k] = copied
+    return remap[k]
+
+
+def _tagged(stmt, chain):
+    """``stmt``, recording the calls it was inlined from, innermost
+    first, as ``stmt.inline_calls``: ((function name, code range of the
+    call), ...).  Diagnostics found in inlined code name these calls."""
+    stmt.inline_calls = chain
+    return stmt
+
+
+def call_chain_text(chain):
+    """``", in the call Sq(3037000500) on line 7"`` for each call of
+    ``chain`` (``stmt.inline_calls``), innermost first; empty for code
+    that was not inlined."""
+    return "".join(f", in the call {_call_text(fname, code_range)}"
+                   f" on line {code_range.start_line}"
+                   for fname, code_range, *_ in chain if code_range is not None)
+
+
+def value_of_call_text(node):
+    """``", the value of the call Sq(0) on line 7"`` when ``node`` (a
+    literal, under any conversions) is the constant value the folder
+    carried out of an inlined call (``inlined_from_call``); else empty."""
+    while isinstance(node, TypePromotionNode_N):
+        node = node.expr
+    origin = getattr(node, 'inlined_from_call', None)
+    if origin is None:
+        return ""
+    return call_chain_text((origin,)).replace(
+        ", in the call", ", the value of the call", 1)
+
+
+def _call_text(fname, code_range):
+    """The call as written, when it is on one line of the source."""
+    import gelb.utils.config
+    source = getattr(gelb.utils.config, 'GELB_SRC_RAW', None)
+    if source and code_range.start_line == code_range.stop_line:
+        lines = source.splitlines()
+        if 0 < code_range.start_line <= len(lines):
+            text = lines[code_range.start_line - 1][
+                code_range.start_col:code_range.stop_col + 1]
+            if text.startswith(fname) and text.endswith(")"):
+                return text
+    return f"{fname}(...)"
 
 
 # ---------------------------------------------------------------------------
@@ -125,92 +285,76 @@ def _inline_one_stmt(stmt, func_map, counter, out):
     emitted before the original statement, and the call expression is
     replaced by a reference to the inlined output variable).
     """
+    counter.chain = getattr(stmt, 'inline_calls', ())
     # --- Destructuring: {a, b, c} = Func(args...) ---
     if isinstance(stmt, DestructuringAssignmentStmt_N):
         rhs = stmt.rhs
         if isinstance(rhs, UserFunctionCall_N) and rhs.function_name.name in func_map:
-            func = func_map[rhs.function_name.name]
-            prefix = counter.fresh_prefix(rhs.function_name.name)
+            fname = rhs.function_name.name
+            func = func_map[fname]
+            prefix = counter.fresh_prefix(fname)
+            site = counter.chain                  # the call's own statement
+            call = counter.new_call(fname, rhs.code_range)
+            body_chain = (call,) + site
 
-            # Build substitution map
+            # Inputs -> actual arguments, a call in an argument inlined
+            # first
             subst = {}
             stored = _stored_names(func.stmts)
             arg_names = set()
-
-            # Inputs -> actual arguments (with temps for complex exprs)
             for param, arg in zip(func.inputs.elements, rhs.arguments):
-                # First, inline any calls inside the argument itself
                 prefix_stmts = []
                 arg = _transform_expr(arg, func_map, counter, prefix_stmts)
                 out.extend(prefix_stmts)
                 arg_names |= _names_in(arg)
-
-                pname = param.name.name
-                if _is_simple_expr(arg) and pname not in stored:
-                    subst[pname] = arg
-                else:
-                    # Create temp variable for complex argument
-                    temp_name = f"{prefix}_{pname}"
-                    temp_id = Identifier_N(None, temp_name)
-                    _copy_inferred_type(param.name, temp_id)
-                    temp_decl = VariableDeclarationStmt_N(
-                        None, copy.deepcopy(param.data_type),
-                        Identifier_N(None, temp_name), arg)
-                    out.append(temp_decl)
-                    subst[pname] = Identifier_N(None, temp_name)
+                _bind_argument(param, arg, stored, prefix, call, site,
+                               counter, subst, out)
 
             # Outputs -> destructuring targets.  An output is stored in its
             # target after the body, in the targets' order, as assignments
             # store them, with the conversion the frontend recorded
-            # (``output_stores``); the body writes the target itself only
-            # where that is the same: the output has the target's type, no
+            # (``output_stores``).  The body writes the target itself only
+            # where that is the same and nothing the folder decides can
+            # depend on it: the target is a variable of the caller's block
+            # (a user variable, which the folder never carries; not a name
+            # of a function body or of the inliner, which a call of
+            # constants carries), the output has the target's type, no
             # argument reads the target (``{w, q} = Two(w)`` must not see
-            # ``w`` change halfway through the body) and no other output
-            # goes to it
+            # ``w`` change halfway through the body), no other output goes
+            # to it, and the body does not read it.  Otherwise the output
+            # is the call's own name, which the folder carries when the
+            # call is a call of constants (only the folder decides that).
             stores = (getattr(stmt, 'output_stores', None)
                       or [None] * len(stmt.targets))
+            reads = _read_names(func.stmts)
             final_stores = []
             repeated = {t.name for t in stmt.targets
                         if [u.name for u in stmt.targets].count(t.name) > 1}
             for out_param, target, store in zip(
                     func.outputs.elements, stmt.targets, stores):
                 out_name = out_param.name.name
-                if store is None and target.name not in arg_names \
-                        and target.name not in repeated:
+                if counter.in_blocks and target.name in counter.taken \
+                        and store is None and target.name not in arg_names \
+                        and target.name not in repeated and out_name not in reads:
                     subst[out_name] = Identifier_N(None, target.name)
                     continue
                 temp_name = f"{prefix}_{out_name}"
                 subst[out_name] = Identifier_N(None, temp_name)
-                out.append(VariableDeclarationStmt_N(
+                out.append(_tagged(_bound(VariableDeclarationStmt_N(
                     None, _copy_tree(out_param.data_type),
-                    Identifier_N(None, temp_name), None))
+                    Identifier_N(None, temp_name), None),
+                    'output', call), site))
                 value = Identifier_N(None, temp_name)
                 _copy_inferred_type(out_param.name, value)
                 if store is not None:
                     value = _subst_expr(store, {out_name: value})
                 target_id = Identifier_N(target.code_range, target.name)
                 _copy_inferred_type(target, target_id)
-                final_stores.append(VariableAssignmentStmt_N(
-                    stmt.code_range, target_id, value))
+                final_stores.append(_tagged(VariableAssignmentStmt_N(
+                    stmt.code_range, target_id, value), site))
 
-            # Alpha-rename local variables
-            for body_stmt in func.stmts:
-                if isinstance(body_stmt, VariableDeclarationStmt_N):
-                    vname = body_stmt.name.name
-                    if vname not in subst:
-                        new_name = f"{prefix}_{vname}"
-                        subst[vname] = Identifier_N(None, new_name)
-                elif isinstance(body_stmt, ConstantDefinitionStmt_N):
-                    vname = body_stmt.name.name
-                    if vname not in subst:
-                        new_name = f"{prefix}_{vname}"
-                        subst[vname] = Identifier_N(None, new_name)
-
-            # Emit the (substituted) function body
-            for body_stmt in func.stmts:
-                out.append(_subst_stmt(body_stmt, subst))
+            _emit_body(func, subst, prefix, call, body_chain, counter, out)
             out.extend(final_stores)
-
             return
 
     # --- All other statement types: inline calls in expressions ---
@@ -218,6 +362,45 @@ def _inline_one_stmt(stmt, func_map, counter, out):
     new_stmt = _transform_stmt(stmt, func_map, counter, prefix_stmts)
     out.extend(prefix_stmts)
     out.append(new_stmt)
+
+
+def _bind_argument(param, arg, stored, prefix, call, site, counter, subst, out):
+    """Bind *param* of *call* to *arg* in *subst*: a simple argument the
+    body does not store into is substituted for the parameter; any other
+    is stored in a variable of the call's own, declared in *out* (the
+    caller's variable is never written through a parameter).  The
+    argument's source is recorded for the folder."""
+    pname = param.name.name
+    if _is_simple_expr(arg) and pname not in stored:
+        subst[pname] = arg
+        counter.argument(call, ('expr', arg))
+        return
+    temp_name = f"{prefix}_{pname}"
+    role = 'param' if pname in stored else 'argument'
+    out.append(_tagged(_bound(VariableDeclarationStmt_N(
+        None, copy.deepcopy(param.data_type),
+        Identifier_N(None, temp_name), arg), role, call), site))
+    counter.argument(call, (role, temp_name))
+    subst[pname] = Identifier_N(None, temp_name)
+
+
+def _emit_body(func, subst, prefix, call, body_chain, counter, out):
+    """Copy the body of *func* into *out* with the caller's names:
+    *subst* maps the parameters and outputs, each local is renamed with
+    the call's *prefix*, and each statement records the calls it comes
+    from (*body_chain*, innermost first)."""
+    locals_ = set()
+    for body_stmt in func.stmts:
+        if isinstance(body_stmt, (VariableDeclarationStmt_N,
+                                  ConstantDefinitionStmt_N)):
+            vname = body_stmt.name.name
+            if vname not in subst:
+                subst[vname] = Identifier_N(None, f"{prefix}_{vname}")
+                locals_.add(vname)
+    remap = {}
+    for body_stmt in func.stmts:
+        copied = _bound_copy(body_stmt, subst, locals_, call, counter, remap)
+        out.append(_tagged(copied, copied.inline_calls + body_chain))
 
 
 # ---------------------------------------------------------------------------
@@ -288,57 +471,32 @@ def _transform_expr(expr, func_map, counter, prefix_stmts):
                     _transform_expr(arg, func_map, counter, prefix_stmts))
 
             prefix = counter.fresh_prefix(fname)
+            site = counter.chain                  # the call's own statement
+            call = counter.new_call(fname, expr.code_range)
+            body_chain = (call,) + site
 
             subst = {}
             stored = _stored_names(func.stmts)
-
-            # Inputs -> actual arguments: a parameter the body stores into
-            # is a variable of its own, initialized with the argument (the
-            # caller's variable is never written through it)
             for param, arg in zip(func.inputs.elements, new_args):
-                pname = param.name.name
-                if _is_simple_expr(arg) and pname not in stored:
-                    subst[pname] = arg
-                else:
-                    temp_name = f"{prefix}_{pname}"
-                    temp_id = Identifier_N(None, temp_name)
-                    _copy_inferred_type(param.name, temp_id)
-                    temp_decl = VariableDeclarationStmt_N(
-                        None, copy.deepcopy(param.data_type),
-                        Identifier_N(None, temp_name), arg)
-                    prefix_stmts.append(temp_decl)
-                    subst[pname] = Identifier_N(None, temp_name)
+                _bind_argument(param, arg, stored, prefix, call, site,
+                               counter, subst, prefix_stmts)
 
-            # Alpha-rename outputs and emit their declarations
+            # The output: a variable of the call's own
             assert len(func.outputs.elements) == 1, \
                 f"Single-output function expected, got {len(func.outputs.elements)} outputs for '{fname}'"
             out_param = func.outputs.elements[0]
             out_new_name = f"{prefix}_{out_param.name.name}"
             subst[out_param.name.name] = Identifier_N(None, out_new_name)
-            # Declare the output variable
-            prefix_stmts.append(VariableDeclarationStmt_N(
+            prefix_stmts.append(_tagged(_bound(VariableDeclarationStmt_N(
                 None, copy.deepcopy(out_param.data_type),
-                Identifier_N(None, out_new_name), None))
+                Identifier_N(None, out_new_name), None),
+                'output', call), site))
 
-            # Alpha-rename locals
-            for body_stmt in func.stmts:
-                if isinstance(body_stmt, VariableDeclarationStmt_N):
-                    vname = body_stmt.name.name
-                    if vname not in subst:
-                        subst[vname] = Identifier_N(None,
-                                                    f"{prefix}_{vname}")
-                elif isinstance(body_stmt, ConstantDefinitionStmt_N):
-                    vname = body_stmt.name.name
-                    if vname not in subst:
-                        subst[vname] = Identifier_N(None,
-                                                    f"{prefix}_{vname}")
+            _emit_body(func, subst, prefix, call, body_chain, counter,
+                       prefix_stmts)
 
-            # Emit substituted function body as prefix statements
-            for body_stmt in func.stmts:
-                prefix_stmts.append(_subst_stmt(body_stmt, subst))
-
-            # Return a reference to the output variable
-            result_id = Identifier_N(None, out_new_name)
+            # Return a reference to the output variable, at the call
+            result_id = Identifier_N(expr.code_range, out_new_name)
             # Preserve the inferred type from the original call
             if hasattr(expr, 'inferred_type') and expr.inferred_type is not None:
                 result_id.inferred_type = expr.inferred_type
@@ -525,38 +683,6 @@ def _subst_identifier(node, subst):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _inline_until_done(owners, func_map, counter):
-    """Inline the calls in the statements of *owners* (functions or
-    blocks) again while a call is left and the last pass inlined one.
-    Recursion is rejected by the frontend, so this ends whatever the
-    order of the definitions; a call no pass inlines (in the DF selector
-    or a spatial index of a lattice store) is left to the checks that
-    follow, which report it."""
-    while any(_contains_call(owner.stmts, func_map) for owner in owners):
-        inlined = counter[0]          # the prefixes given out so far
-        for owner in owners:
-            owner.stmts.elements = _inline_block_stmts(
-                owner.stmts.elements, func_map, counter)
-        if counter[0] == inlined:
-            return
-
-
-class _Counter(list):
-    """The prefix counter (``counter[0]``) and the names of the program,
-    which no prefix may start (a user may write ``__F_0_a``)."""
-
-    def __init__(self, taken):
-        super().__init__([0])
-        self.taken = taken
-
-    def fresh_prefix(self, fname):
-        while True:
-            prefix = f"__{fname}_{self[0]}"
-            self[0] += 1
-            if not any(name.startswith(prefix + "_") for name in self.taken):
-                return prefix
-
-
 def _contains_call(node, func_map):
     """True when a call of a user function is left below *node*."""
     if isinstance(node, UserFunctionCall_N) and node.function_name.name in func_map:
@@ -585,6 +711,29 @@ def _names_in(node):
         if isinstance(c, Node_N):
             names |= _names_in(c)
     return names
+
+
+def _read_names(stmts):
+    """The names a function body reads (a store's target is not read;
+    the indices of an element store are)."""
+    read = set()
+    for stmt in stmts:
+        if isinstance(stmt, VariableDeclarationStmt_N):
+            read |= _names_in(stmt.initial_value) if stmt.initial_value is not None else set()
+        elif isinstance(stmt, ConstantDefinitionStmt_N):
+            read |= _names_in(stmt.value)
+        elif isinstance(stmt, DestructuringAssignmentStmt_N):
+            read |= _names_in(stmt.rhs)
+        elif hasattr(stmt, 'lhs') and hasattr(stmt, 'rhs'):
+            target = stmt.lhs
+            if isinstance(target, RectSelOfArrayElems_N):
+                read |= _names_in(target) - _names_in(target.array_name)
+            elif not isinstance(target, Identifier_N):
+                read |= _names_in(target)
+            read |= _names_in(stmt.rhs)
+        else:
+            read |= _names_in(stmt)
+    return read
 
 
 def _stored_names(stmts):

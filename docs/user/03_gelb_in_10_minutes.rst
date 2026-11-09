@@ -376,7 +376,9 @@ is an error (a ``real`` for an ``int`` parameter, an ``int`` for a
 ``bool`` one, an array of another length).  A destructuring call stores
 each output in its target the same way.  Inside the function, the
 parameters and outputs have their declared types, whatever the caller
-passes.
+passes.  A call whose arguments are constants is evaluated at compile
+time, like an intrinsic of constants, and its errors are compile-time
+errors (:doc:`19_numerical_semantics`, *Constant folding*).
 
 A function works on copies of its arguments: assigning a parameter, or
 an element of an array parameter, never changes the caller's variable,

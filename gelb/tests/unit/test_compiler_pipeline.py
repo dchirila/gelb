@@ -39,6 +39,9 @@ _CODEGEN_MIDWARE_SUFFIX = (
     "validate_streaming_intrinsic_args",
     "sequence_draws",
     "inline_functions",
+    # what inlining exposed is folded and checked as the rest was
+    "fold_constants_after_inlining",
+    "validate_division_by_zero_after_inlining",
     "hoist_intrinsic_args",
     "extract_stencils",
     "validate_initializer_coverage",
@@ -106,12 +109,14 @@ def test_diagnostics_profile_runs_optimization_passes_by_default(tmp_path):
         "validate_streaming_intrinsic_args",
         "sequence_draws",
         "inline_functions",
+        "fold_constants_after_inlining",
+        "validate_division_by_zero_after_inlining",
         "hoist_intrinsic_args",
         # The collinearity rewrite is off by default (user manual,
         # Numerical semantics: What the optimizer promises): it
         # re-associates and has no general error bound.
         *_OPTIMIZATION_PASSES[1:],
-        *_CODEGEN_MIDWARE_SUFFIX[4:],
+        *_CODEGEN_MIDWARE_SUFFIX[6:],
     )
 
 
@@ -175,6 +180,7 @@ def test_pipeline_ast_capture_callback_receives_named_stages(tmp_path):
         "promotions",
         "constant_folding",
         "function_inlining",
+        "constant_folding_after_inlining",
         "intrinsic_arg_hoisting",
         "midware",
     ]

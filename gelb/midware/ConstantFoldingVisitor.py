@@ -19,6 +19,8 @@ _REAL_WIDTHS = frozenset(('real', 'real64')) | NARROW_REAL_WIDTHS
 _INT_WIDTHS = frozenset(('int', 'int64')) | NARROW_INT_WIDTHS
 from gelb.utils.exceptions import GeLBException, GeLBExTypeError
 from gelb.utils.CodeRange import CodeRange
+from gelb.midware.inline_functions import (
+    _value_fields, call_chain_text, value_of_call_text)
 
 
 class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
@@ -42,8 +44,25 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
     - Division by zero detection (to detect zeros in expressions)
     """
     
-    def __init__(self):
+    def __init__(self, after_inlining=False):
         super().__init__()
+        self._after_inlining = after_inlining
+        # the names the run after inlining may carry, in the current
+        # block: name -> (declared type, (role, call))
+        self._tracked = {}
+        # the inlined calls' argument sources (inline_functions) and,
+        # per block, whether each call met so far is a call of constants
+        self._call_args = {}
+        self._constant_calls = {}
+        self._kept = set()
+        # the constant each of them holds at this point of the block, and
+        # those that hold a constant not carried (an array, or a value no
+        # literal writes): name -> the array literal, when it is one, for
+        # the reductions of the body; still a constant argument
+        self._values = {}
+        self._constant_names = {}
+        # the calls the statement being folded was inlined from
+        self._chain = ()
     
     # Program traversal
     
@@ -57,10 +76,261 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         the literal; the backends emit such a literal as an explicit
         special value (user manual, Numerical semantics: Constant
         folding; tests in ``test_nonfinite_folding.py``).
+
+        After inlining (``after_inlining``), a call whose arguments are
+        constants is a constant expression too, like an intrinsic of
+        constants: its body was folded with the arguments in place of
+        the parameters, and the constants the inliner's own names hold
+        (the arguments' temporaries, the outputs, the bodies' locals)
+        are carried into their uses, so the call's value folds where it
+        is used (see ``_rewrite_block_stmts``).
         """
+        if self._after_inlining:
+            self._call_args = getattr(node, 'inline_call_args', None) or {}
         with ieee_special_values():
             self.traverse_program_blocks(node, ast_root_node)
         return node
+
+    def _rewrite_block_stmts(self, node, ast_root_node):
+        """Fold each statement of the block.  After inlining, the block
+        (straight-line code) is followed: a scalar the inliner bound as
+        one that may be carried (``inline_binding``: an argument's
+        temporary, the locals and outputs of a call of constants), and a
+        block-local constant, hold at each point the constant last stored
+        in them, converted to their declared type, or nothing; their
+        reads fold to that constant, and an inliner's name nothing reads
+        any more loses its declaration and its stores of constants.  A
+        user variable is never carried, nor the locals of a call with an
+        argument that is not a constant (user manual, Numerical
+        semantics: Constant folding)."""
+        self._values, self._tracked = {}, {}
+        self._constant_calls, self._kept = {}, set()
+        self._constant_names = {}
+        for i, stmt in enumerate(node.stmts):
+            self._chain = getattr(stmt, 'inline_calls', ())
+            if self._after_inlining:
+                self._start_calls(stmt)
+            stmt = self.visit(stmt, ast_root_node)
+            node.stmts[i] = stmt
+            if self._after_inlining:
+                self._bind(stmt, self._kept)
+        self._chain = ()
+        tracked, kept = self._tracked, self._kept
+        self._values, self._tracked, self._constant_calls = {}, {}, {}
+        self._constant_names = {}
+        if tracked:
+            self._drop_dead_private(node, tracked, kept)
+        return node
+
+    def _start_calls(self, stmt):
+        """Decide, at the first statement of each inlined call that
+        *stmt* belongs to (outermost first), whether the call is a call
+        of constants: every argument holds a constant there.  A call
+        that is not one keeps its parameters' copies as variables."""
+        calls = [c for c in reversed(self._chain) if len(c) > 2]
+        binding = getattr(stmt, 'inline_binding', None)
+        if binding is not None and binding[0] in ('local', 'output'):
+            calls.append(binding[1])
+        for call in calls:
+            k = call[2]
+            if k in self._constant_calls:
+                continue
+            sources = self._call_args.get(k, [])
+            constant = all(self._holds_constant(kind, source)
+                           for kind, source in sources)
+            self._constant_calls[k] = constant
+            if not constant:
+                for kind, name in sources:
+                    if kind == 'param':
+                        self._values.pop(name, None)
+                        self._tracked.pop(name, None)
+                        self._constant_names.pop(name, None)
+                        self._kept.add(name)
+
+    def _holds_constant(self, kind, source):
+        """True when an argument of a call holds a constant here: its
+        variable (``kind`` ``'argument'`` or ``'param'``) holds one, or
+        the argument itself (``'expr'``) is one."""
+        if kind != 'expr':
+            return source in self._values or source in self._constant_names
+        return self._is_constant_value(source)
+
+    def _is_constant_value(self, node):
+        """True for a constant expression, as chapter 19 has it: one
+        built only of literals and constants (a name holding a constant
+        here, carried or not, or a global constant, whatever its form)
+        by operators, conversions and intrinsics other than ``random()``;
+        a lattice read, ``x`` or ``t``, or a variable is none."""
+        if isinstance(node, Identifier_N):
+            return (node.name in self._values or node.name in self._constant_names
+                    or self._names_global_constant(node.name))
+        if isinstance(node, (IntLiteral_N, RealLiteral_N, BoolLiteral_N)):
+            return True
+        if isinstance(node, IntrinsicFunctionCall_N) and node.function_name == 'random':
+            return False
+        if isinstance(node, List_N):
+            children = node.elements
+        elif isinstance(node, Node_N):
+            children = [getattr(node, f) for f in _value_fields(node)]
+        else:
+            return False
+        children = [c for c in children if isinstance(c, Node_N)]
+        return bool(children) and all(self._is_constant_value(c) for c in children)
+
+    def _names_global_constant(self, name):
+        """True when *name*, where the current block reads it, is a
+        global constant: a name of the block's own (a variable, or a
+        block-local constant, which ``_bind`` follows) is not."""
+        table = getattr(getattr(self, 'current_block', None), 'symbol_defs', None)
+        if table is None or table.get_symbol_definition_local(name) is not None:
+            return False
+        parent = getattr(table, 'parent_table', None)
+        symbol = parent.get_symbol_definition(name) if parent else None
+        return symbol is not None and symbol.tag in ('constant', 'constant definition')
+
+    def _bind(self, stmt, kept):
+        """Record what a statement stores into a carried scalar; any
+        other store into one (a destructuring, an element store) makes
+        it hold nothing from then on."""
+        if isinstance(stmt, VariableDeclarationStmt_N):
+            name = getattr(stmt.name, 'name', None)
+            binding = getattr(stmt, 'inline_binding', None)
+            carried = binding is not None and (
+                binding[0] in ('argument', 'param')
+                or self._constant_calls.get(binding[1][2], False))
+            if carried:
+                self._tracked[name] = (stmt.data_type, binding)
+            elif getattr(stmt, 'lowered_const', False):
+                self._tracked[name] = (stmt.data_type, ('const', None))
+            else:
+                self._tracked.pop(name, None)
+                self._values.pop(name, None)
+                self._constant_names.pop(name, None)
+                return
+            value = stmt.initial_value
+        elif isinstance(stmt, VariableAssignmentStmt_N) \
+                and isinstance(stmt.lhs, Identifier_N) \
+                and stmt.lhs.name in self._tracked:
+            name = stmt.lhs.name
+            value = stmt.rhs
+        else:
+            for name in self._written_names(stmt):
+                if name in self._tracked:
+                    self._values.pop(name, None)
+                    self._constant_names.pop(name, None)
+                    kept.add(name)
+            return
+        # What the store leaves in the name is decided from what the names
+        # hold before it (``a = -a`` reads the old ``a``), then replaces it
+        declared = self._tracked[name][0]
+        literal = (None if value is None else
+                   self._constant_of_type(value, declared, stmt))
+        constant = literal is None and value is not None \
+            and self._is_constant_value(value)
+        snapshot = self._constant_array_literal(value) if constant else None
+        self._constant_names.pop(name, None)
+        self._values.pop(name, None)
+        if literal is not None:
+            self._values[name] = literal
+            return
+        if value is None:
+            return
+        kept.add(name)                  # never dropped: no literal writes it
+        if constant:
+            # a constant not carried (an array): an argument of a call of
+            # constants all the same, and an array literal for reductions
+            self._constant_names[name] = snapshot
+
+    @staticmethod
+    def _written_names(stmt):
+        """The names a statement stores into."""
+        if isinstance(stmt, DestructuringAssignmentStmt_N):
+            return {t.name for t in stmt.targets if isinstance(t, Identifier_N)}
+        target = getattr(stmt, 'lhs', None)
+        if isinstance(target, Identifier_N):
+            return {target.name}
+        if isinstance(target, RectSelOfArrayElems_N):
+            array = target.array_name
+            return {array.name} if isinstance(array, Identifier_N) else set()
+        return set()
+
+    def _constant_of_type(self, value, declared_type, stmt):
+        """The literal a scalar of ``declared_type`` holds after storing
+        the folded ``value``, or None when ``value`` is not a constant."""
+        if not self._is_scalar_type(declared_type) \
+                or not self._is_constant_literal(value):
+            return None
+        dtype = self._element_dtype(declared_type)
+        stored = self._get_literal_value(value)
+        code_range = getattr(value, 'code_range', None)
+        if dtype == 'bool':
+            if not isinstance(stored, bool):
+                return None
+            literal = BoolLiteral_N(code_range, self._bool_to_string(stored))
+        elif dtype in _INT_WIDTHS or dtype in _REAL_WIDTHS:
+            try:
+                stored = plain(convert(stored, dtype))
+            except ConstantEvaluationError as exc:
+                raise self._diagnostic(stmt, exc)
+            except (OverflowError, ValueError):
+                return None
+            literal = (IntLiteral_N(code_range, int(stored)) if dtype in _INT_WIDTHS
+                       else RealLiteral_N(code_range, float(stored)))
+        else:
+            return None
+        literal.inferred_type = declared_type
+        return self._narrowed(literal)
+
+    @staticmethod
+    def _is_scalar_type(data_type):
+        shape = getattr(data_type, 'shape', None)
+        return isinstance(shape, List_N) and len(shape.elements) == 0
+
+    def _drop_dead_private(self, node, tracked, kept):
+        """Drop the declaration and the stores of each carried inliner's
+        name nothing reads any more, when every store into it was a
+        constant (a store of a value computed at run time, a ``random()``
+        draw among them, is never dropped; a block's own constants stay
+        declared)."""
+        reads = {}
+        for stmt in node.stmts:
+            self._count_reads(stmt, reads)
+        dead = {name for name, (_, binding) in tracked.items()
+                if binding[0] != 'const' and name not in kept
+                and not reads.get(name)}
+        if not dead:
+            return
+
+        def stores_dead(stmt):
+            if isinstance(stmt, VariableDeclarationStmt_N):
+                return getattr(stmt.name, 'name', None) in dead
+            return (isinstance(stmt, VariableAssignmentStmt_N)
+                    and isinstance(stmt.lhs, Identifier_N)
+                    and stmt.lhs.name in dead)
+        node.stmts.elements = [stmt for stmt in node.stmts.elements
+                               if not stores_dead(stmt)]
+
+    @classmethod
+    def _count_reads(cls, node, reads):
+        """Count the names read below ``node`` (a store's target and a
+        declaration's name are not reads)."""
+        if isinstance(node, Identifier_N):
+            reads[node.name] = reads.get(node.name, 0) + 1
+            return
+        if isinstance(node, VariableDeclarationStmt_N):
+            children = [node.initial_value]
+        elif isinstance(node, VariableAssignmentStmt_N) \
+                and isinstance(node.lhs, Identifier_N):
+            children = [node.rhs]
+        elif isinstance(node, List_N):
+            children = node.elements
+        elif isinstance(node, Node_N):
+            children = node.get_children()
+        else:
+            return
+        for child in children:
+            if isinstance(child, Node_N):
+                cls._count_reads(child, reads)
     
     def _store_global_constants(self, node):
         """Hook for storing global constants block."""
@@ -334,14 +604,20 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
 
         return node
 
-    @staticmethod
-    def _diagnostic(node, exc):
+    def _diagnostic(self, node, exc):
         """The compile-time error the numerical semantics make of ``exc``
         (an integer overflow; an invalid real-to-integer conversion), at
-        the expression's location."""
+        the expression's location; in inlined code, with the calls it
+        was inlined from."""
+        operands = (node.arguments.elements if isinstance(node, IntrinsicFunctionCall_N)
+                    else [getattr(node, f, None) for f in ('left', 'right', 'value')])
+        values_of = "".join(dict.fromkeys(
+            value_of_call_text(operand) for operand in operands
+            if isinstance(operand, Node_N)))
         return GeLBExTypeError(
             node,
-            f"{exc} in a constant expression",
+            f"{exc} in a constant expression{values_of}"
+            f"{call_chain_text(self._chain)}",
             "An integer overflow and a real-to-integer conversion of a NaN, an"
             " infinity or an out-of-range value are compile-time errors in a"
             " constant expression (user manual, numerical semantics chapter); change the"
@@ -631,8 +907,10 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         return node
     
     def visitVariableAssignmentStmt_N(self, node: VariableAssignmentStmt_N, ast_root_node: Program_N):
-        """Fold expressions in variable assignments."""
-        node.lhs = self.visit(node.lhs, ast_root_node)
+        """Fold expressions in variable assignments (a target that is a
+        name is not a value: it is never replaced)."""
+        if not isinstance(node.lhs, Identifier_N):
+            node.lhs = self.visit(node.lhs, ast_root_node)
         node.rhs = self.visit(node.rhs, ast_root_node)
         return node
     
@@ -1057,6 +1335,10 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         named constant array, typed by its declaration.  None otherwise."""
         if self._is_constant_array(node):
             return node
+        if isinstance(node, Identifier_N) and \
+                self._constant_names.get(node.name) is not None:
+            # an array of the inliner's or a block's constant holding one
+            return copy.deepcopy(self._constant_names[node.name])
         if isinstance(node, Identifier_N):
             const_stmt = self._constant_definition(node.name)
             if const_stmt is None:
@@ -1186,6 +1468,16 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
     
     def visitIdentifier_N(self, node: Identifier_N, ast_root_node: Program_N):
         """Replace constant identifiers with their literal values for constant propagation."""
+        if node.name in self._values:
+            # a carried name holding a constant (see _rewrite_block_stmts)
+            literal = copy.copy(self._values[node.name])
+            literal.code_range = node.code_range
+            role, call = self._tracked[node.name][1]
+            # read outside the call: its value (inside, the call's own name)
+            if role == 'output' and all(len(c) < 3 or c[2] != call[2]
+                                        for c in self._chain):
+                literal.inlined_from_call = call
+            return literal
         # Check if this identifier refers to a constant
         if hasattr(self, 'current_block') and self.current_block is not None:
             symbol_table = getattr(self.current_block, 'symbol_defs', None)
