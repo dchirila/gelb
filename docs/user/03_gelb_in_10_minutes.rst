@@ -367,6 +367,12 @@ on output count:
     array[real, 2] u;
     {rho, u} = ComputeMacros(fIn);
 
+A function works on copies of its arguments: assigning a parameter, or
+an element of an array parameter, never changes the caller's variable,
+and a destructuring call stores its outputs in its targets once the
+body is done, so ``{w, q} = Two(w);`` computes both outputs from the
+``w`` passed in.
+
 Functions can call other functions, but **not recursively** (the
 compiler detects direct and indirect recursion and rejects it).  A
 function is called from ``initializer``, ``dynamic``, ``gauge`` and
