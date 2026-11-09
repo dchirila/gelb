@@ -12,6 +12,7 @@ _AST_METADATA_FIELD_NAMES = frozenset({
     'collinearity_rewrites',
     'slice_df_expansions',
     'cse_temps_emitted',
+    'output_stores',
 })
 
 

@@ -99,6 +99,11 @@ Frontend
    ``TypePromotionNode_N`` where a conversion is implicit,
    :source:`gelb/frontend/TypeValidationVisitor.py` rejects what is
    left; the first two ask :source:`gelb/frontend/type_rules.py`.
+   A store (``_converted_for_store``, ``_store_mismatch``) is converted
+   and checked by one rule, whether it is a declaration's initializer,
+   a call's argument stored in its parameter, or a destructuring call's
+   output stored in its target (recorded as ``output_stores`` for the
+   inliner).
 ``validate_constant_assignments``, ``validate_lattice_consistency``
    :source:`gelb/frontend/ConstantAssignmentValidationVisitor.py`: no
    assignment to a constant;

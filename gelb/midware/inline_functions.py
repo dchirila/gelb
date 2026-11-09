@@ -161,16 +161,22 @@ def _inline_one_stmt(stmt, func_map, counter, out):
 
             # Outputs -> destructuring targets.  An output is stored in its
             # target after the body, in the targets' order, as assignments
-            # would store them; the body writes the target itself only
-            # where that is the same: no argument reads the target
-            # (``{w, q} = Two(w)`` must not see ``w`` change halfway
-            # through the body) and no other output goes to it
+            # store them, with the conversion the frontend recorded
+            # (``output_stores``); the body writes the target itself only
+            # where that is the same: the output has the target's type, no
+            # argument reads the target (``{w, q} = Two(w)`` must not see
+            # ``w`` change halfway through the body) and no other output
+            # goes to it
+            stores = (getattr(stmt, 'output_stores', None)
+                      or [None] * len(stmt.targets))
             final_stores = []
             repeated = {t.name for t in stmt.targets
                         if [u.name for u in stmt.targets].count(t.name) > 1}
-            for out_param, target in zip(func.outputs.elements, stmt.targets):
+            for out_param, target, store in zip(
+                    func.outputs.elements, stmt.targets, stores):
                 out_name = out_param.name.name
-                if target.name not in arg_names and target.name not in repeated:
+                if store is None and target.name not in arg_names \
+                        and target.name not in repeated:
                     subst[out_name] = Identifier_N(None, target.name)
                     continue
                 temp_name = f"{prefix}_{out_name}"
@@ -180,6 +186,8 @@ def _inline_one_stmt(stmt, func_map, counter, out):
                     Identifier_N(None, temp_name), None))
                 value = Identifier_N(None, temp_name)
                 _copy_inferred_type(out_param.name, value)
+                if store is not None:
+                    value = _subst_expr(store, {out_name: value})
                 target_id = Identifier_N(target.code_range, target.name)
                 _copy_inferred_type(target, target_id)
                 final_stores.append(VariableAssignmentStmt_N(
