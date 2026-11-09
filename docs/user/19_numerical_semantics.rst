@@ -164,8 +164,11 @@ same table on every backend:
 
 Every operation rounds to its type: a ``real32`` product is one binary32
 rounding, and no intermediate is kept wider.  A conversion happens where
-the table says, and at a store into a narrower variable or lattice.
-Each conversion is one rounding, the same on every backend:
+the table says, and at a store into a narrower variable or lattice; a
+call is a store too, of each argument into its parameter and of each
+output into its destructuring target, so ``Sq(h)`` with ``h`` a
+``real32`` and ``Sq(real a)`` squares in binary64.  Each conversion is
+one rounding, the same on every backend:
 
 - An integer converts to a real width directly, rounded once to that
   width and never through binary64 first: ``real32(2^54 + 2^30 + 1)``
@@ -232,7 +235,13 @@ real overflow it can see folds to the infinity (see *Constant folding*).
    ``test_constant_coefficients.py``: an integer ``dot_prod`` computed
    in its result's type with ``int8`` and ``int32`` arrays, ``int``
    coefficients above 2^53, and a constant element's 64-bit width in
-   arithmetic, on every backend.
+   arithmetic, on every backend; and by
+   ``gelb/tests/integration/test_function_calls.py``: arguments
+   converted to their parameters' types (``int32`` and ``int16`` into
+   ``int``, ``int`` into ``int32``, ``real32`` into ``real``) and an
+   output to its target's (``int`` into ``int32``) on every backend and
+   Highway layout, and the arguments a declaration could not hold
+   rejected.
 
 Special values
 ==============

@@ -41,6 +41,28 @@ versions follow upstream end of life and can change in any release.
 
 ### Fixed
 
+- **A call converts its arguments and outputs as a store does, and
+  checks them as a store does.** An argument that is a variable or a
+  literal of another type than its parameter went into the function body
+  with its own type: with `function Sq(int a) -> (int b) { b = a * a; }`,
+  `Sq(h)` squared in 32 bits for an `int32` variable `h` on every backend
+  (-2147479015 instead of 2147488281 for 46341), `Sq(W)` with `W` a
+  `real32` constant and a `real` parameter squared in binary32, and an
+  `int` variable for an `int32` parameter kept its 64 bits. An `int`
+  output stored into an `int32` destructuring target was narrowed at
+  every assignment in the body instead of once at the end, and a scalar
+  argument for an array parameter failed to build. Each argument is now
+  converted to its parameter's type, and each output to its target's, by
+  the rule of a declaration's initializer (user manual, GeLB in 10
+  minutes: User-defined functions). A call `gelbc` accepted although the
+  same store is an error now reports one, instead of running the body with
+  the wrong type or failing in the native compiler: a `real` argument for
+  an `int` parameter (`F(2.5)` ran the body with 2.5 in `a`), an `int` for
+  a `bool`, an array of another shape or length, a `real` output into an
+  `int` target. The generated code of `poiseuille_flow_2d_mrt_fp32`
+  changes (its `Eq(1.0, 0.0, 0.0)` converts the `real` literals for its
+  `real32` parameters); its output is bit-identical on the three
+  backends.
 - **Every statement of a function body is inlined, and the body works on
   copies of the arguments.** A destructuring call inside a function
   (`{u, w} = Two(p);` in the body of `Outer`) failed to build on every

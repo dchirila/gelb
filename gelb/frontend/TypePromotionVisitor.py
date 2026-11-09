@@ -539,15 +539,60 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         return node
 
     def visitUserFunctionCall_N(self, node, ast_root_node: Program_N):
-        """Apply type promotions to user function call arguments."""
+        """A call stores each argument in its parameter, as a declaration
+        stores its initializer: each argument is converted by the store
+        rule (``Sq(h)`` with ``h`` an ``int32`` and ``Sq(int a)`` converts
+        ``h`` to ``int``; a scalar for an array parameter is broadcast)."""
         for i, arg in enumerate(node.arguments.elements):
             node.arguments.elements[i] = self.visit(arg, ast_root_node)
+        func = self._function_block(node, ast_root_node)
+        if func is not None:
+            args = node.arguments.elements
+            for i, param in enumerate(func.inputs.elements[:len(args)]):
+                args[i] = self._converted_for_store(
+                    args[i], param.data_type,
+                    problem=lambda element, scalar, p=param.name.name, f=func.name.name:
+                        f"Argument '{p}' of '{f}' is declared as an array of"
+                        f" '{element}' but given '{scalar}'")
         return node
 
     def visitDestructuringAssignmentStmt_N(self, node, ast_root_node: Program_N):
-        """Apply type promotions in destructuring assignment."""
+        """A destructuring call stores each output in its target, as an
+        assignment does.  The conversion of each output is recorded as
+        ``node.output_stores[i]``: the output's value, written as an
+        identifier named after the output, converted by the store rule
+        for its target, or None where the types are the same.  The
+        inliner binds the output to a variable of its own type and
+        stores it into the target with this expression."""
         node.rhs = self.visit(node.rhs, ast_root_node)
+        rhs = node.rhs
+        func = (getattr(rhs, 'function_block', None)
+                if isinstance(rhs, UserFunctionCall_N) else None)
+        if func is None or len(func.outputs.elements) != len(node.targets):
+            return node
+        stores = []
+        for output, target in zip(func.outputs.elements, node.targets):
+            value = Identifier_N(target.code_range, output.name.name)
+            value.inferred_type = output.data_type
+            converted = self._converted_for_store(
+                value, getattr(target, 'inferred_type', None),
+                problem=lambda element, scalar, o=output.name.name,
+                    f=func.name.name, t=target.name:
+                        f"Output '{o}' of '{f}' is '{scalar}' but its target"
+                        f" '{t}' is an array of '{element}'")
+            stores.append(None if converted is value else converted)
+        node.output_stores = stores
         return node
+
+    @staticmethod
+    def _function_block(call, ast_root_node):
+        """The ``FunctionBlock_N`` a user function call names, or None."""
+        table = getattr(ast_root_node, 'symbol_defs', None)
+        sdef = (table.get_symbol_definition(call.function_name.name)
+                if table is not None else None)
+        if sdef is None or sdef.tag != "function":
+            return None
+        return sdef.value
 
     def visitFunctionBlock_N(self, node, ast_root_node: Program_N):
         """Apply type promotions within function body."""
@@ -596,24 +641,45 @@ class TypePromotionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         return node
     
     def visitVariableDeclarationStmt_N(self, node: VariableDeclarationStmt_N, ast_root_node: Program_N):
-        """A declaration's initializer is promoted like an assignment's
-        right-hand side: a scalar initializing an array is broadcast
-        (``array[real, 9] t = min(a, 0.0);``), and a value of another
-        type is converted to the declared one."""
+        """A declaration's initializer is converted by the store rule."""
         if node.initial_value:
             node.initial_value = self.visit(node.initial_value, ast_root_node)
-            if hasattr(node.initial_value, 'inferred_type'):
-                declared_type = node.data_type
-                initial_type = node.initial_value.inferred_type
-                declared_is_array = (isinstance(declared_type, ArrayDataType_N)
-                                     and not self._is_scalar_array(declared_type))
-                initial_is_scalar = (self._is_scalar_array(initial_type)
-                                     if isinstance(initial_type, ArrayDataType_N) else True)
-                if declared_is_array and initial_is_scalar:
-                    node.initial_value = self._create_broadcast(node.initial_value, declared_type)
-                elif self._needs_promotion(initial_type, declared_type):
-                    node.initial_value = self._create_promotion(node.initial_value, declared_type.element_dtype)
+            node.initial_value = self._converted_for_store(
+                node.initial_value, node.data_type)
         return node
+
+    def _converted_for_store(self, value, declared_type, problem=None):
+        """``value`` as a store into a variable of ``declared_type``
+        converts it: a scalar stored into an array is broadcast
+        (``array[real, 9] t = min(a, 0.0);``), and a value of another type
+        is converted to the declared one (``int q = h;`` with ``h`` an
+        ``int32``).  A declaration's initializer, a call's argument
+        (stored in its parameter) and a destructuring call's output
+        (stored in its target) are converted by this one rule; ``value``
+        itself is returned when it needs no conversion."""
+        if not hasattr(value, 'inferred_type'):
+            return value
+        initial_type = value.inferred_type
+        declared_is_array = (isinstance(declared_type, ArrayDataType_N)
+                             and not self._is_scalar_array(declared_type))
+        initial_is_scalar = (self._is_scalar_array(initial_type)
+                             if isinstance(initial_type, ArrayDataType_N) else True)
+        if declared_is_array and initial_is_scalar:
+            scalar = self._get_type_name(initial_type)
+            element = declared_type.element_dtype
+            if problem is not None and scalar != element \
+                    and not self._can_promote(scalar, element):
+                # a call's store, reported with its argument or target
+                raise GeLBExTypeError(
+                    value, problem(element, scalar),
+                    "A call stores each argument in its parameter, and each"
+                    " output in its target, as a declaration stores its"
+                    " initializer: a scalar is broadcast into an array of a"
+                    " type it converts to; convert it (int(...), real(...))")
+            return self._create_broadcast(value, declared_type)
+        if self._needs_promotion(initial_type, declared_type):
+            return self._create_promotion(value, declared_type.element_dtype)
+        return value
     
     def visitTypePromotionNode_N(self, node: TypePromotionNode_N, ast_root_node: Program_N):
         """Pass through existing type promotion nodes (may appear from earlier passes)."""

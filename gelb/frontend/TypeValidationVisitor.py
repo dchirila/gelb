@@ -308,6 +308,20 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         
         return True
     
+    def _store_mismatch(self, declared_type, value_type):
+        """None when a value of ``value_type``, as converted by the store
+        rule, can be stored in a variable of ``declared_type`` (a scalar
+        into an array is broadcast); otherwise ``"shape"`` when only the
+        shapes differ, else ``"type"``.  A declaration's initializer, a
+        call's argument and a destructuring call's output are checked by
+        this one rule."""
+        if (self._is_scalar_type(value_type)
+                and not self._is_scalar_type(declared_type)):
+            return None
+        if self._types_match(declared_type, value_type):
+            return None
+        return "shape" if self._same_base_type(declared_type, value_type) else "type"
+
     def _validate_assignment(self, lhs_type, rhs_type, node):
         """
         Validate assignment compatibility.
@@ -688,9 +702,37 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         return node
 
     def visitUserFunctionCall_N(self, node, ast_root_node: Program_N):
-        """Validate sub-expressions within user function call arguments."""
+        """A call stores each argument in its parameter: each argument,
+        as converted by the store rule, must be a value its parameter can
+        hold, as a declaration's initializer must (no real into an
+        integer parameter, no integer into a ``bool``, the parameter's
+        shape)."""
         for arg in node.arguments.elements:
             self.visit(arg, ast_root_node)
+        table = getattr(ast_root_node, 'symbol_defs', None)
+        name = node.function_name.name
+        sdef = table.get_symbol_definition(name) if table is not None else None
+        if sdef is None or sdef.tag != "function":
+            return node
+        for param, arg in zip(sdef.value.inputs.elements, node.arguments.elements):
+            value_type = self._require_inferred_type(arg, node)
+            mismatch = self._store_mismatch(param.data_type, value_type)
+            if mismatch is None:
+                continue
+            pname = param.name.name
+            if mismatch == "shape":
+                problem = (f"Argument '{pname}' of '{name}' is declared with shape "
+                           f"{self._shape_text(param.data_type)} but given "
+                           f"shape {self._shape_text(value_type)}")
+            else:
+                problem = (f"Argument '{pname}' of '{name}' is declared as "
+                           f"'{self._get_type_name(param.data_type)}' but given "
+                           f"'{self._get_type_name(value_type)}'")
+            raise GeLBExTypeError(
+                arg, problem,
+                "A call stores each argument in its parameter, as a declaration"
+                " stores its initializer; convert the argument (int(...),"
+                " real(...)) or change the parameter's type")
         return node
 
     def visitDestructuringAssignmentStmt_N(self, node, ast_root_node: Program_N):
@@ -745,6 +787,34 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
                     "The number of LHS targets must match the number "
                     "of function outputs."
                 )
+            # each output is stored in its target, as an assignment is
+            stores = getattr(node, 'output_stores', None) or [None] * n_targets
+            for output, target, store in zip(
+                    func_block.outputs.elements, node.targets, stores):
+                target_type = self._require_inferred_type(target, node)
+                # the output as the store rule converted it, if it did
+                value_type = (store.inferred_type if store is not None
+                              else output.data_type)
+                mismatch = self._store_mismatch(target_type, value_type)
+                if mismatch is None:
+                    continue
+                if mismatch == "shape":
+                    problem = (f"Output '{output.name.name}' of "
+                               f"'{rhs.function_name.name}' has shape "
+                               f"{self._shape_text(output.data_type)} but its "
+                               f"target '{target.name}' has shape "
+                               f"{self._shape_text(target_type)}")
+                else:
+                    problem = (f"Output '{output.name.name}' of "
+                               f"'{rhs.function_name.name}' is "
+                               f"'{self._get_type_name(output.data_type)}' but "
+                               f"its target '{target.name}' is "
+                               f"'{self._get_type_name(target_type)}'")
+                raise GeLBExTypeError(
+                    target, problem,
+                    "A destructuring call stores each output in its target, as"
+                    " an assignment does; change the target's type or convert"
+                    " the output inside the function")
             return node
 
         # Non-function-call RHS: must be a 1D array of statically-known
@@ -851,12 +921,10 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         self.visit(initial, ast_root_node)
         value_type = self._require_inferred_type(initial, node)
         declared_type = node.data_type
-        if (self._is_scalar_type(value_type)
-                and not self._is_scalar_type(declared_type)):
-            return node
-        if not self._types_match(declared_type, value_type):
+        mismatch = self._store_mismatch(declared_type, value_type)
+        if mismatch is not None:
             name = getattr(node.name, "name", node.name)
-            if self._same_base_type(declared_type, value_type):
+            if mismatch == "shape":
                 raise GeLBExTypeError(
                     node,
                     f"Variable '{name}' is declared with shape "

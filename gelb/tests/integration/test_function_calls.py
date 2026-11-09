@@ -271,3 +271,112 @@ def test_a_call_of_a_constant_in_the_df_selector_of_a_store_builds(
         tmp_path, backend, layout):
     source = program("f.out[x, y | I(1)] = v + 1.0;", functions=IDENTITY)
     _check(tmp_path, backend, layout, source, V + 1.0)
+
+
+# ---------------------------------------------------------------------------
+# a call stores each argument in its parameter and each output in its
+# target, converting and checking them as a store does
+# ---------------------------------------------------------------------------
+
+_X = np.arange(NX)
+SQ = "function Sq(int a) -> (int b) { b = a * a; }"
+
+# Each case runs across x = 0..66, where the store's conversion matters
+# for some cells and not others (an int32 square past 2^31 from x = 41).
+CONVERSIONS = [
+    pytest.param(
+        program("int32 h = int32(x) + int32(46300); f.out[x, y | 1] = real(Sq(h));",
+                functions=SQ),
+        ((46300 + _X) ** 2).astype(np.float64), id="int32 argument, int parameter"),
+    pytest.param(
+        program("int h = x + 46300; f.out[x, y | 1] = real(Sq(h));", functions=SQ),
+        ((46300 + _X) ** 2).astype(np.float64), id="control: int argument"),
+    pytest.param(
+        program("int16 a = int16(x) + int16(30000); int16 b = int16(30000);"
+                " f.out[x, y | 1] = real(P3(a, b, b));",
+                functions="function P3(int a, int b, int c) -> (int d) { d = a * b * c; }"),
+        ((30000 + _X) * 30000 * 30000).astype(np.float64),
+        id="int16 arguments, int parameters"),
+    pytest.param(
+        program("int h = x + 4294967297; f.out[x, y | 1] = real(N32(h));",
+                functions="function N32(int32 a) -> (int b) { b = a; }"),
+        (1 + _X).astype(np.float64), id="int argument, int32 parameter"),
+    pytest.param(
+        program("int32 h = int32(x + 4294967297); f.out[x, y | 1] = real(N32(h));",
+                functions="function N32(int32 a) -> (int b) { b = a; }"),
+        (1 + _X).astype(np.float64), id="control: int32 argument"),
+    pytest.param(
+        program("real32 w = real32(v * 0.1); f.out[x, y | 1] = Sqr(w);",
+                functions="function Sqr(real a) -> (real b) { b = a * a; }"),
+        (V * 0.1).astype(np.float32).astype(np.float64) ** 2,
+        id="real32 argument, real parameter"),
+    pytest.param(
+        program("real w = real(real32(v * 0.1)); f.out[x, y | 1] = Sqr(w);",
+                functions="function Sqr(real a) -> (real b) { b = a * a; }"),
+        (V * 0.1).astype(np.float32).astype(np.float64) ** 2,
+        id="control: real argument"),
+    pytest.param(
+        program("int32 p; int32 u; {p, u} = F2(x + 65536); f.out[x, y | 1] = real(p);",
+                functions="function F2(int a) -> (int b, int c)"
+                          " { b = a; b = b * b / 65536; c = 0; }"),
+        ((65536 + _X) ** 2 // 65536).astype(np.float64),
+        id="int output, int32 target"),
+    pytest.param(
+        program("int p; int u; {p, u} = F2(x + 65536); f.out[x, y | 1] = real(p);",
+                functions="function F2(int a) -> (int b, int c)"
+                          " { b = a; b = b * b / 65536; c = 0; }"),
+        ((65536 + _X) ** 2 // 65536).astype(np.float64),
+        id="control: int target"),
+    pytest.param(
+        program("f.out[x, y | 1] = Second(v);",
+                functions="function Second(array[real, 2] a) -> (real b) { b = a[1]; }"),
+        V, id="scalar argument, array parameter"),
+    pytest.param(
+        program("f.out[x, y | 1] = real(I(v > 0.0));",
+                functions="function I(int a) -> (int b) { b = a * 3; }"),
+        3.0 * (V > 0.0), id="bool argument, int parameter"),
+]
+
+
+@pytest.mark.parametrize("source, expected", CONVERSIONS)
+@pytest.mark.parametrize("backend, layout", CONFIGS)
+def test_a_call_converts_its_arguments_and_outputs_as_a_store_does(
+        tmp_path, backend, layout, source, expected):
+    _check(tmp_path, backend, layout, source, expected)
+
+
+@pytest.mark.parametrize("functions, call, message", [
+    ("function F(int a) -> (int b) { b = a; }",
+     "f.out[x, y | 1] = real(F(2.5));",
+     "Argument 'a' of 'F' is declared as 'int' but given 'real'"),
+    ("function F(bool a) -> (int b) { b = int(a); }",
+     "f.out[x, y | 1] = real(F(1));",
+     "Argument 'a' of 'F' is declared as 'bool' but given 'int'"),
+    ("function F(real a) -> (real b) { b = a; }",
+     "f.out[x, y | 1] = F({1.0, 2.0});",
+     r"Argument 'a' of 'F' is declared with shape scalar but given shape \[2\]"),
+    ("function F(array[real, 3] a) -> (real b) { b = a[1]; }",
+     "f.out[x, y | 1] = F({1.0, 2.0});",
+     r"Argument 'a' of 'F' is declared with shape \[3\] but given shape \[2\]"),
+    ("function F(real a) -> (real b, real c) { b = a; c = a; }",
+     "int p; int u; {p, u} = F(2.5); f.out[x, y | 1] = real(p);",
+     "Output 'b' of 'F' is 'real' but its target 'p' is 'int'"),
+    ("function T(real a) -> (array[real, 3] p, real q) { p = {a, a, a}; q = a; }",
+     "array[real32, 2] w; real zz; {w, zz} = T(v); f.out[x, y | 1] = real(w[0]);",
+     r"Output 'p' of 'T' has shape \[3\] but its target 'w' has shape \[2\]"),
+    ("function S(array[int, 2] a) -> (int b) { b = a[0]; }",
+     "f.out[x, y | 1] = real(S(v));",
+     "Argument 'a' of 'S' is declared as an array of 'int' but given 'real'"),
+    ("function T(real a) -> (real p, real q) { p = a; q = a; }",
+     "array[int, 2] w; real zz; {w, zz} = T(v); f.out[x, y | 1] = real(w[0]);",
+     "Output 'p' of 'T' is 'real' but its target 'w' is an array of 'int'"),
+])
+def test_a_call_is_checked_as_a_store_is(functions, call, message):
+    """What a declaration's initializer may not hold, an argument may not
+    either, and an output stored in a target is checked as an assignment."""
+    from gelb.compiler_pipeline import (
+        PipelineOptions, PipelineProfile, compile_source)
+    from gelb.utils.exceptions import GeLBExTypeError
+    with pytest.raises(GeLBExTypeError, match=message):
+        compile_source(program(call, functions=functions),
+                       PipelineProfile.CODEGEN, PipelineOptions())

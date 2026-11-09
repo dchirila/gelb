@@ -367,6 +367,17 @@ on output count:
     array[real, 2] u;
     {rho, u} = ComputeMacros(fIn);
 
+A call stores each argument in its parameter, as a declaration stores
+its initializer: the argument is converted to the parameter's type (an
+``int32`` argument for an ``int`` parameter is widened, an ``int`` for
+an ``int32`` parameter keeps its low bits, a scalar for an array
+parameter is broadcast), and an argument a declaration could not hold
+is an error (a ``real`` for an ``int`` parameter, an ``int`` for a
+``bool`` one, an array of another length).  A destructuring call stores
+each output in its target the same way.  Inside the function, the
+parameters and outputs have their declared types, whatever the caller
+passes.
+
 A function works on copies of its arguments: assigning a parameter, or
 an element of an array parameter, never changes the caller's variable,
 and a destructuring call stores its outputs in its targets once the
