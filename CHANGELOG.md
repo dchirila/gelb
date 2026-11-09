@@ -41,6 +41,23 @@ versions follow upstream end of life and can change in any release.
 
 ### Fixed
 
+- **Every statement of a function body is inlined, and the body works on
+  copies of the arguments.** A destructuring call inside a function
+  (`{u, w} = Two(p);` in the body of `Outer`) failed to build on every
+  backend, and an element store inside a function (`tt[0] = a;`) or a call
+  inside an element store or an array index failed on
+  `cpu_fortran_serial`, the backend that implements element stores: the
+  compiler copied such statements with the function's own names, which do
+  not exist where the body is inlined, or left the call in place; a chain
+  of functions whose bodies are single destructuring calls failed in either
+  order of definition. A body that assigned its parameter
+  (`a = a * 2.0;`) wrote the caller's variable, and failed to build when
+  the argument was a literal; a destructuring target that was also an
+  argument (`{w, q} = Two(w);`) changed halfway through the body. Now
+  every statement is copied with the caller's values, a parameter the
+  body stores into is a copy of the argument, and an output is stored in
+  a target that an argument reads after the body, two outputs into one
+  target in the targets' order. No example changes.
 - **A variable's initializer is folded and checked like any constant
   expression.** `int q = 9223372036854775807 + 1;`, `int q = 1 / (2 - 2);`
   and `real r = sqrt(-1.0);` were neither folded nor checked, while the
