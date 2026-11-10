@@ -371,13 +371,17 @@ class SliceDFExpansionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
     def _build_single_df_lhs(
             self, lhs: RectSelOfLatticeOutDFs_N, i: int):
         """Build a single-DF LHS at index ``i`` by deep-copying the
-        original LHS and replacing its DF range."""
+        original LHS and replacing its DF range; it is the single DF, a
+        scalar of the slice's element type (the backends emit a
+        selection as an array when its type is one)."""
         cr = lhs.code_range
         new_lhs = copy.deepcopy(lhs)
         # Replace the last element_range with a singleton ``Range(i, i)``.
         idx_lit_low = IntLiteral_N(cr, i)
         idx_lit_high = IntLiteral_N(cr, i)
         new_lhs.element_ranges[-1] = Range_N(cr, idx_lit_low, idx_lit_high)
+        if isinstance(getattr(lhs, 'inferred_type', None), ArrayDataType_N):
+            new_lhs.inferred_type = _scalar_dtype_for(lhs.inferred_type)
         return new_lhs
 
     # --- Per-direction expansion core --------------------------------
@@ -534,6 +538,10 @@ class SliceDFExpansionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         lo = df_range.low.value if isinstance(df_range.low, IntLiteral_N) else 0
         node.element_ranges[-1] = Range_N(
             cr, IntLiteral_N(cr, lo + i), IntLiteral_N(cr, lo + i))
+        # the single DF is a scalar of the slice's element type (the
+        # backends emit a selection as an array when its type is one)
+        if isinstance(getattr(node, 'inferred_type', None), ArrayDataType_N):
+            node.inferred_type = _scalar_dtype_for(node.inferred_type)
         return node
 
     def _subst_array_elems(self, node: RectSelOfArrayElems_N, i: int):

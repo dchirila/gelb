@@ -47,6 +47,14 @@ from gelb.midware.ast_eval import (
 )
 
 
+def _is_array_typed(node) -> bool:
+    """True when the type pass gave *node* an array type (a non-empty
+    shape); a scalar is an array type with an empty shape."""
+    dtype = getattr(node, 'inferred_type', None)
+    shape = getattr(dtype, 'shape', None)
+    return isinstance(shape, List_N) and len(shape.elements) > 0
+
+
 class StatementEmitMixin:
     """Mixin: see module docstring.  Assembled into
     ``HighwayCodeGenerator`` (stage3_backend_cpu_highway).
@@ -850,9 +858,11 @@ class StatementEmitMixin:
             self, stmt: AssignmentStmt_N,
             lhs: RectSelOfLatticeOutDFs_N, context: str) -> None:
         """``f.out[... | dfs] = expr`` -- single-DF store or
-        DF-slice loop, scalar or SIMD."""
+        DF-slice loop, scalar or SIMD.  A selection the type pass made
+        an array takes the loop, also when it holds one DF (``| :`` on a
+        q = 1 lattice is ``array[real, 1]``)."""
         df_lo, df_hi = self._df_range(lhs)
-        if df_lo == df_hi:
+        if df_lo == df_hi and not _is_array_typed(lhs):
             lhs_addr = self._emit_lattice_out_lhs(lhs, context)
             rhs_expr = self._emit_expression(
                 stmt.rhs, df_var=(str(df_lo) if

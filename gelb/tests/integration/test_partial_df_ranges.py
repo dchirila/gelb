@@ -158,3 +158,90 @@ def test_a_run_time_df_index_runs_on_fortran_and_is_rejected_elsewhere(tmp_path,
         assert result.returncode != 0
         assert 'DF index computed at run time is not supported' in result.stdout + result.stderr
         assert 'Traceback' not in result.stderr
+
+
+# A full slice of a q = 1 lattice is an array of one element (user
+# manual, chapter 3, the ``|`` notation): a local array, a function's
+# array result, a draw and an expression of the slice are stored into it,
+# and ``sum`` reads it.  The backends used to emit it as the single DF
+# when its bounds were equal, which failed to build on every backend.
+Q1 = """
+simulation_description("a full slice of a q = 1 lattice is an array of one element");
+function Twice(array[real, 1] s) -> (array[real, 1] r) { r = s * 2.0; }
+lattices {
+    lattice a(2, 1, real, {67, 4}, {true, true});
+    lattice b(2, 1, real, {67, 4}, {true, true});
+    lattice c(2, 1, real, {67, 4}, {true, true});
+    lattice r(2, 1, real, {67, 4}, {true, true});
+}
+initializer Init {
+    a.out[x, y | :] = real(x) + 0.5;
+    b.out[x, y | :] = real(x) + 0.5;
+    c.out[x, y | :] = real(x) + 0.5;
+    r.out[x, y | :] = random();
+}
+dynamic Step {
+    array[real, 1] la = a.in[x, y | :] + 1.0;
+    a.out[x, y | :] = la;
+    b.out[x, y | :] = Twice(b.in[x, y | :]) - (real(x) + 0.5);
+    c.out[x, y | 0:] = c.in[x, y | 0:] + 1.0;
+    r.out[x, y | :] = r.in[x, y | :];
+}
+gauge G -> (real sa, real sb, real sc, real sum_a, real draw) {
+    sa = a.in[x, y | 0];
+    sb = b.in[x, y | 0];
+    sc = c.in[x, y | 0];
+    sum_a = sum(a.in[x, y | :]);
+    draw = r.in[x, y | 0];
+}
+node_classes { node_class BULK(Init, Step, G); }
+geometry { nodes[:, :] = BULK; }
+"""
+
+ALL_LAYOUTS = LAYOUTS[:2] + [('cpu_highway', 'aos', requires_cpp_highway_compiler)] + LAYOUTS[2:]
+
+
+@pytest.mark.parametrize(('backend', 'layout'), [
+    pytest.param(b, l, marks=m, id=f'{b}-{l or "default"}') for b, l, m in ALL_LAYOUTS])
+def test_a_full_slice_of_a_q1_lattice_is_an_array_of_one(tmp_path, backend, layout):
+    result = run_text(tmp_path, backend, layout, Q1)
+    if layout == 'cbt' and result.returncode != 0 and 'AVX-512' in result.stdout + result.stderr:
+        pytest.skip('the cbt layout needs an AVX-512 host')
+    assert result.returncode == 0, result.stdout + result.stderr
+    with netCDF4.Dataset(tmp_path / 'probe.nc') as nc:
+        data = {name: np.asarray(var[:]) for name, var in nc.variables.items()}
+    x = np.arange(67) + 0.5
+    for t in range(3):
+        assert np.all(data['sa'][t] == x + t), t
+        assert np.all(data['sb'][t] == x), t
+        assert np.all(data['sc'][t] == x + t), t
+        assert np.all(data['sum_a'][t] == x + t), t
+        assert np.all(data['draw'][t] == data['draw'][0]), t
+    draw = data['draw'][0]
+    assert np.all((0.0 <= draw) & (draw < 1.0)) and np.unique(draw).size > 1
+
+
+@pytest.mark.parametrize(('q', 'selection', 'is_array'), [
+    (1, ':', True), (1, '0:', True),
+    (9, ':', True), (9, '3:3', False), (9, ':0', False), (9, '8:', False), (9, '3', False),
+])
+def test_which_df_selections_are_arrays(q, selection, is_array):
+    """``| :`` (and ``| 0:``) is all DFs, an array even when q = 1; a
+    range with equal bounds (``| 3:3``, an open end that reaches one DF)
+    is the single DF, a scalar (user manual, chapter 3)."""
+    from gelb.compiler_pipeline import PipelineOptions, PipelineProfile, compile_source
+    from gelb.utils.exceptions import GeLBExTypeError
+    source = f"""
+simulation_description("which selections are arrays");
+lattices {{ lattice f(2, {q}, real, {{16, 4}}, {{true, true}}); }}
+initializer Init {{ f.out[x, y | :] = 1.0; }}
+dynamic Step {{ f.out[x, y | :] = f.in[x, y | :]; }}
+gauge G -> (real s) {{ s = sum(f.in[x, y | {selection}]); }}
+node_classes {{ node_class BULK(Init, Step, G); }}
+geometry {{ nodes[:, :] = BULK; }}
+"""
+    if is_array:
+        compile_source(source, PipelineProfile.CODEGEN, PipelineOptions())
+    else:
+        with pytest.raises(GeLBExTypeError, match="expects an array argument"):
+            compile_source(source, PipelineProfile.CODEGEN, PipelineOptions())
