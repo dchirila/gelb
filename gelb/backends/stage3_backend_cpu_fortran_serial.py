@@ -74,6 +74,14 @@ _NETCDF_TYPE_MAP = {
 }
 
 
+def _is_array_typed(node):
+    """True when the type pass gave *node* an array type (a non-empty
+    shape); a scalar is an array type with an empty shape."""
+    dtype = getattr(node, 'inferred_type', None)
+    shape = getattr(dtype, 'shape', None)
+    return isinstance(shape, List_N) and len(shape.elements) > 0
+
+
 def generate_fortran(ast, num_timesteps=1, output_mode='netcdf',
                      output_filename=None, write_every=1,
                      random_seed=None, source_file=None,
@@ -1974,8 +1982,15 @@ class FortranCodeGenerator:
         spatial_ranges = [node.element_ranges[i] for i in range(n_ranges - 1)]
 
         parts = []
-        # DF index (first dimension)
-        parts.append(self._emit_range(df_range, context))
+        # DF index (first dimension).  A selection the type pass made an
+        # array stays a section, also when it holds one DF (``| :`` on a
+        # q = 1 lattice is ``array[real, 1]``); only a single DF (``| 3``,
+        # ``| 3:3``) is an index.
+        if _is_array_typed(node):
+            parts.append(f'{self._emit_index(df_range.low, context)}:'
+                         f'{self._emit_index(df_range.high, context)}')
+        else:
+            parts.append(self._emit_range(df_range, context))
         # Spatial dimensions: the hidden halo holds the periodic wrap one
         # cell deep, so the user-coord expression passes through
         # directly unless it reaches further along a periodic axis.

@@ -41,6 +41,15 @@ versions follow upstream end of life and can change in any release.
 
 ### Fixed
 
+- **A full DF slice of a `q = 1` lattice builds on every backend.**
+  `f.out[x | :]` on a lattice with one DF is an array of one element, as
+  the type pass already had it, but the backends emitted it as the single
+  DF because its bounds were equal: storing a draw (`f.out[x | :] =
+  random();`), a local `array[real, 1]` or a function's array result into
+  it failed to build on all three backends, and `sum(f.in[x | :])` failed
+  on `cpu_fortran_serial`. The backends now follow the type pass: a
+  selection it made an array stays an array, also when it holds one DF;
+  `| 3` and `| 3:3` stay the single DF. No example changes.
 - **A call whose arguments are constants is a constant expression.**
   Inlining a call such as `Sq(3037000500)`, `Q(0)` with `b = 7 / a`, or
   `R(-1.0)` with `b = sqrt(a)` exposed a constant expression that was

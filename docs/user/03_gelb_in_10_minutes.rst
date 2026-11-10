@@ -201,8 +201,10 @@ A slice ``| lo:hi`` is an array of ``hi - lo + 1`` elements whose
 element ``i`` is DF ``lo + i``: ``array[real, 4] v = f.in[x, y | 1:4];``
 reads DFs 1 to 4, and ``f.out[x, y | 1:4] = v;`` writes them.  An open
 end means the first or the last DF (``| 5:``, ``| :3``), and a range
-with equal bounds (``| 3:3``) is the single DF ``| 3``, a scalar.  The
-declared length must match the slice; the compiler reports a mismatch.
+with equal bounds (``| 3:3``) is the single DF ``| 3``, a scalar.
+``| :`` (or ``| 0:``) is all DFs, an array of ``q`` elements even when
+``q`` is 1.  The declared length must match the slice; the compiler
+reports a mismatch.
 The bounds are compile-time constants; a single index may be computed
 at run time (``| mod(x, 9)``) on the Fortran backend only.
 
