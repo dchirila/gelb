@@ -156,53 +156,102 @@ smoke, plain-build, and reproducibility sweeps run in the local gate.
 The local refactoring gate
 ==========================
 
-:source:`scripts/run_refactor_gate.sh` accepts a checkout, its base
-revision, external emission and value baselines, and a new output
-directory. Use ``--help`` for the full invocation. The snapshot directory
-contains ``default``, ``soa``, ``aos``, and ``plain`` subdirectories
-(read-only symlinks are suitable); ``--snapshot-tool`` supplies the
-variant-aware emission driver. Value baselines contain ``default`` and
-``strict`` directories recorded with the value tool below.
+:source:`scripts/run_refactor_gate.sh` accepts ``--tree``, ``--base``,
+``--snapshots``, ``--baseline-values``, and a new ``--out`` directory.
+Snapshots contain ``default``, ``soa``, ``aos``, ``cbt``, ``plain``, and
+``strict`` directories; ``emis_<variant>`` and ``emis_*_<variant>`` names
+also work. ``--extra-snapshots DIR`` supplies missing variants from a
+second directory. ``--snapshot-tool`` optionally replaces the repo driver.
+Value baselines contain ``default`` and ``strict`` recordings.
 
-The gate verifies the imported checkout, runtime header bytes, all four
-emission variants, C++ and Fortran syntax, and agreement of backend
-compilation outcomes. The all-example Fortran syntax check uses the GNU
-default dialect, without ``-fno-range-check``; strict Fortran 2008 remains
-on the small fixtures in
+The gate verifies the imported checkout and runtime header bytes, then
+writes all six candidate variants under ``OUT/emissions/<variant>``.
+It compares those files and syntax-checks the candidate C++ and Fortran
+sources. Fortran uses the default GNU dialect, without ``-std=f2008`` or
+``-fno-range-check``. Backend compilation outcomes must agree.
+Strict Fortran 2008 checks remain on the focused fixtures in
 :source:`gelb/tests/integration/test_negated_negative_constant.py`.
-The gate then runs the unit, integration (including opt-in smoke), and
-numeric suites, and a strict HTML manual build with offline intersphinx.
-Missing CUDA/GPU or AVX-512 fails the gate unless the caller explicitly
-passes ``--allow-no-gpu`` or ``--allow-no-avx512``. The selected
-configurations and every stage's command and log are saved in the output.
+``--emission-mode byte`` is the default; ``structural`` uses
+:source:`scripts/emission_structural_diff.py` to allow only bijective
+compiler-temporary renaming within lexical scopes. Operators, grouping,
+casts, literals, indices, non-temporary names, and statement order remain
+fixed. ``--allow-emission-changed`` and ``--allow-value-changed`` are
+separate comma-separated lists of exact corpus-relative example filenames:
+allowing an emission change never excuses a value difference.
 
-:source:`scripts/differential_value_gate.py` provides three commands:
+The integration stages are independent:
+
+- ``integration-ci49`` runs exactly the 49 non-smoke CI files identified by
+  ``ci_files()`` in :source:`gelb/tests/unit/test_ci_integration_coverage.py`,
+  at ``-n JOBS`` (``--jobs``, default 12), with wall time in ``timings.txt``.
+- ``reproducibility`` runs when ``git diff --name-only BASE`` touches
+  ``gelb/**`` outside ``gelb/tests/**``, any of
+  ``gelb/tests/integration/{test_reproducibility.py,conftest.py,_toolchain.py}``,
+  ``scripts/gelb-run``, ``third_party/**``, ``pyproject.toml``, or ``uv.lock``.
+  New files must be intent-to-add (``git add -N``) to appear in that diff.
+  Otherwise it logs ``SKIP``. Neither build-sweep skip flag suppresses it.
+- ``plain-build`` runs :source:`gelb/tests/integration/test_plain_build_compiles.py`.
+- ``smoke`` runs :source:`gelb/tests/integration/test_examples_smoke.py` with
+  ``--run-smoke``, ``--smoke-iters`` (default 10), and ``--smoke-backends``.
+
+The unit and numeric suites and a strict offline Sphinx HTML build also run.
+Missing CUDA/GPU or AVX-512 fails unless explicitly waived with
+``--allow-no-gpu`` or ``--allow-no-avx512``. The selected configurations,
+stage commands, logs, outcomes, and timings are saved under ``--out``.
+Tests use a short temporary directory under ``/tmp``, with a Git discovery
+ceiling, so long output paths and enclosing worktrees do not affect them.
+The temporary directory is removed on exit; stage logs remain under ``--out``.
+
+:source:`scripts/differential_value_gate.py` provides these commands:
 
 - ``record --tree TREE --out DIR`` runs every example for three steps,
-  writing every step with seed 42. It fixes ``OMP_NUM_THREADS`` (default
-  4, configurable), records toolchain and runtime-header fingerprints,
-  and hashes each NetCDF variable with its name, dimensions, shape, and
-  dtype. Integer values retain all 64 bits. Signed zeros and NaN
-  positions matter; NaN signs and payloads do not. Use ``--strict-fp``
-  for a separate strict recording and ``-j`` to bound concurrent builds.
-- ``compare-baseline --baseline DIR --candidate DIR`` compares the same
-  corpus and configurations across revisions. Only exact corpus-relative
-  filenames listed in ``--allow-changed`` may have changed values or
-  source hashes; missing files, failed runs, or incompatible manifests
-  still fail.
+  writing every step with seed 42. ``--strict-fp`` selects strict mode;
+  ``--configs`` selects configurations and ``-j`` bounds concurrency.
+  ``--omp-threads`` defaults to 4. The recorder uses ``gelb-run -k``, hashes
+  the exact compiled source, then removes that source and executable.
+  It retains logs and NetCDF output, hashing variable names, dimensions,
+  shapes, dtypes, values, signed zeros, and NaN positions. NaN payloads
+  and signs are ignored; integer values retain all 64 bits.
+- ``compare-baseline --baseline DIR --candidate DIR`` compares values
+  and input fingerprints across revisions with compatible settings,
+  toolchains, runtime headers, and Highway. ``--allow-changed`` excuses
+  only named corpus-relative examples. Existing format-1 recordings
+  remain comparable without the new per-entry ``source_sha256`` or
+  top-level ``runners`` fields.
+- ``verify-sources --tree TREE --baseline DIR`` requires those new fields
+  and regenerates each source with the recorder's exact code-generation
+  flags, without compiling or executing it. ``--configs``, ``--strict-fp``,
+  ``-n`` (steps), and ``--omp-threads`` must match the recording. Every
+  source hash, input, setting, header, runner, toolchain, and Highway
+  revision must match. Missing or differing hashes name the affected entry.
+- ``record-build-hashes`` and ``verify-build-hashes`` take ``--tree TREE``,
+  ``--build-hashes DIR``, ``--kind smoke|plain-build``, and ``--backends``.
+  Smoke pins ``--smoke-iters`` and normalized backends (``serial`` means
+  ``cpu_fortran_serial``), using the sweep's output cadence and
+  ``--nc-output smoke.nc``, without a seed. Plain-build pins the backends,
+  one timestep, write interval one, and ``--no-slice-simplify --no-scalar-cse``
+  with no explicit NetCDF filename. Each kind has its own manifest and
+  exact source hashes, inputs, headers, runners, and environment guards.
 - ``compare-backends --run-dir DIR`` checks strict SoA/AoS/CBT identity
-  for non-random examples. ``record --exact-probes --strict-fp`` instead
-  records small reductions with independently bounded exact
-  intermediates (one to three steps); these compare across all selected
-  configurations, including Fortran and CUDA. General examples are not
-  required to agree across different math libraries or reduction orders.
+  for non-random examples. ``record --exact-probes --strict-fp`` records
+  bounded exact-intermediate fixtures (one to three steps) that compare
+  across all selected configurations, including Fortran and CUDA.
 
-An optional ``--fuzz-dir`` and matching ``--fuzz-baseline`` run a supplied
-corpus through the same seeded, timeout-bounded value checks. The
-structural emission comparator separately accepts files or directories
-and permits only bijective temporary renaming within each C, C++, or CUDA
-brace block or Fortran routine. Enclosing temporary bindings remain
-visible in nested brace blocks, and sibling blocks may reuse temporary
-names. Fortran statements are read across continuation lines. The
-comparator preserves operators, grouping, casts, literal spelling,
-indices, and statement order.
+``--skip-values``, ``--skip-smoke``, and ``--skip-plain-build`` each require
+matching exact-source evidence and unchanged headers and both runner files
+relative to ``--base``. Build manifests come from ``--build-hashes DIR``
+(default ``SNAPSHOTS/build_hashes``); plain-build also requires a byte-equal
+plain emission comparison. A failed guard logs the affected stage as
+``FAIL`` and exits **1 immediately**, without running the omitted stage or
+logging ``PASS``/``SKIP`` for it. A successful guard logs **SKIP**, never
+PASS. Old baselines lacking source hashes cannot authorize skips. Omit a
+skip flag to execute its stage.
+
+``--allow-changed-headers`` accepts only exact paths from the value tool's
+three runtime ``HEADERS``. It excuses only those hashes in the header stage
+and baseline comparison, retains all other guards, and is incompatible
+with **every** skip flag. Runner changes cannot authorize skips.
+
+An optional ``--fuzz-dir`` with ``--fuzz-baseline`` checks a supplied corpus
+with the same seeded value recorder. ``--corpus DIR`` on the value and
+build-hash commands supports small scratch round trips independently.
