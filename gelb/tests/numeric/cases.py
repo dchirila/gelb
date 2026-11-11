@@ -161,6 +161,8 @@ def corpus(seed=SEED, random_count=32):
         Case("coordinate_sum_singleton", "u + ((x + 2147483647LL) + 1LL)", "0.0", "double", cells=1),
         Case("coordinate_sum_simd", "u + (x + 2147483647LL)", "0.0", "double", cells=67),
         Case("coordinate_division_simd", "u + ((x - 7LL) / 2LL)", "0.0", "double", cells=67),
+        Case("coordinate_real_sum_simd", "u + (static_cast<double>(x) + 0.25)", "0.5", "double", cells=67),
+        Case("coordinate_real_fma_simd", "u * static_cast<double>(x) - 1.5", "0.5", "double", cells=67),
         # A shared real32 subtree keeps its width; a real zero
         # keeps its sign (u*0.0 is -0 for u = -1, u + 0.0 is +0 for
         # u = -0, 0.0 - u is +0 for u = +0), and an exact cancellation

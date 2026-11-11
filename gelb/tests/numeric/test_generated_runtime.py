@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -111,14 +112,25 @@ def runtime_results(backend, mode, tmp_path_factory, numeric_oracle):
                 for path in directory.glob(pattern):
                     path.unlink()
 
-    for cells in sorted({case.cells for case in RUNTIME_CASES}):
-        group = [case for case in RUNTIME_CASES if case.cells == cells]
-        run_batch(group, f"batch{cells}")
+    real_coordinates = {"coordinate_real_sum_simd", "coordinate_real_fma_simd"}
+    groups = {}
+    for case in RUNTIME_CASES:
+        groups.setdefault((case.cells, case.name in real_coordinates), []).append(case)
+    for (cells, vectorized), group in sorted(groups.items()):
+        run_batch(group, f"batch{cells}" + ("_real" if vectorized else ""))
         if backend == "cpu_highway" and cells == 67 and "error" not in results[group[0].name]:
-            # The SIMD-sized all-real program does enter the vector body
-            # (its coordinate-division block takes the scalar path).
             generated = Path(results[group[0].name]["source"]).with_suffix(".cpp").read_text()
-            assert "hn::Iota(d, static_cast<double>(g_x))" in generated
+            section = re.search(
+                r"^\s*(// Dynamic: D \(BULK\)(?: -- SIMD)?)\n(.*?)"
+                r"(?=^\s*// (?:Initialiser|Init \(2nd buffer\)|Dynamic|Gauge):|\Z)",
+                generated, re.M | re.S)
+            assert section, generated
+            header, body = section.groups()
+            assert header == "// Dynamic: D (BULK)" + (" -- SIMD" if vectorized else "")
+            if vectorized:
+                assert "hn::Iota(d, static_cast<double>(g_x))" in body
+            else:
+                assert "hn::" not in body
     (work / "results.json").write_text(json.dumps(results, indent=2) + "\n")
     assert set(results) == {case.name for case in RUNTIME_CASES}
     return results
