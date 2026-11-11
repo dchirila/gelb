@@ -789,3 +789,5 @@ class GeLBExGeometryDiscontinuity(GeLBException):
             return None
         cr = self.periodicity_stmt.code_range
         return (cr.start_line, cr.start_col)
+class GeLBInternalInvariantError(RuntimeError):
+    """Compiler metadata violates a stage-boundary contract."""

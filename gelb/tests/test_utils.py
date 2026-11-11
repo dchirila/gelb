@@ -19,7 +19,8 @@ from gelb.frontend.stage1_frontend import (
     add_implicit_symbols,
     infer_types,
     promote_types,
-    validate_types
+    validate_types,
+    canonicalize_types,
 )
 from gelb.gelb_ast.ASTNodes import *
 from gelb.utils import config
@@ -117,6 +118,7 @@ def get_fully_validated_ast(gelb_code):
     ast = get_typed_ast(gelb_code)  # Up to type inference
     ast = promote_types(ast)        # Apply type promotion
     validate_types(ast)             # Apply type validation
+    canonicalize_types(ast)
     return ast
 
 

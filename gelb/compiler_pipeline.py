@@ -47,6 +47,7 @@ class PipelineOptions:
     # the runtime headers read, and ``gelb-run`` adds the matching
     # native flags.
     strict_fp: bool = False
+    strict_invariants: bool = True
 
 
 @dataclass
@@ -145,6 +146,7 @@ def compile_source(
         infer_types,
         promote_types,
         validate_types,
+        canonicalize_types,
         validate_constant_assignments,
         validate_lattice_consistency,
     )
@@ -173,6 +175,19 @@ def compile_source(
         if options.emit_warnings:
             from gelb.utils.output_to_terminal import warning_with_hint_to_term
             warning_with_hint_to_term(msg, hint, source_line)
+
+    def invariant(pass_fn, ast):
+        from gelb.utils.exceptions import GeLBInternalInvariantError
+        try:
+            pass_fn(ast)
+        except GeLBInternalInvariantError as error:
+            if options.strict_invariants:
+                raise
+            message, hint = f"(internal) {error}", "Please report this compiler invariant violation."
+            emit_warning(message, hint, None)
+            if not options.emit_warnings:
+                from gelb.utils.output_to_terminal import warning_with_hint_to_term
+                warning_with_hint_to_term(message, hint, None)
 
     ast = get_ast("gelb_program", src_raw)
     record("parse")
@@ -236,6 +251,9 @@ def compile_source(
     ast = validate_types(ast)
     record("validate_types")
 
+    invariant(canonicalize_types, ast)
+    record("canonicalize_types")
+
     ast = validate_constant_assignments(ast)
     record("validate_constant_assignments")
 
@@ -247,6 +265,10 @@ def compile_source(
 
     initial_validation_geometry(ast)
     record("initial_validation_geometry")
+
+    from gelb.frontend.ASTInvariantValidator import check_stage1
+    invariant(check_stage1, ast)
+    record("check_stage1")
 
     validate_midware_input(ast)
     record("validate_midware_input")

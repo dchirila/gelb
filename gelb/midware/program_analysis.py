@@ -41,7 +41,7 @@ def run_analysis_pipeline(gelb_file: str | pathlib.Path):
     result = compile_file(
         gelb_file,
         PipelineProfile.PROGRAM_ANALYSIS,
-        PipelineOptions(),
+        PipelineOptions(strict_invariants=False),
     )
     return result.ast
 
@@ -63,6 +63,7 @@ def compile_to_program_analysis(
     result = compile_file(
         gelb_file,
         PipelineProfile.PROGRAM_ANALYSIS,
-        PipelineOptions(require_geometry=True, require_stencils=True),
+        PipelineOptions(require_geometry=True, require_stencils=True,
+                        strict_invariants=False),
     )
     return ProgramAnalysis(geometry=result.geometry, stencils=result.stencils)

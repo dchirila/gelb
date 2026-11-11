@@ -15,7 +15,7 @@ profile.  The frontend passes are wrapped by the functions of
 :source:`gelb/frontend/stage1_frontend.py` and the midware checks by
 those of :source:`gelb/midware/stage2_midware.py`;
 ``apply_constant_overrides``, ``sequence_draws``, ``inline_functions``,
-``hoist_intrinsic_args``, the three rewrites and ``resolve_geometry``
+``hoist_intrinsic_args``, ``check_stage1``, the three rewrites and ``resolve_geometry``
 are imported straight from their own modules (the two runs after
 inlining are ``fold_constants`` and ``validate_division_by_zero``
 again).  The module behind each
@@ -106,6 +106,16 @@ Frontend
    a call's argument stored in its parameter, or a destructuring call's
    output stored in its target (recorded as ``output_stores`` for the
    inliner).
+``canonicalize_types``
+   :source:`gelb/frontend/ASTInvariantValidator.py` attaches immutable
+   :source:`gelb/gelb_ast/CanonicalType.py` metadata after type validation.
+   Scalars have dimensions ``()``, singleton arrays ``(1,)``; aliases
+   ``int64`` and ``real64`` map to ``int`` and ``real`` without rewriting
+   the AST's declared type or shape. Assigning ``inferred_type`` synchronizes
+   concrete expression metadata; this pass resolves remaining constant
+   extents for metadata only, using grid dimensions and the declaration's
+   local constants. Shared function-output types retain their declaration
+   scope when referenced from a caller with shadowing constants.
 ``validate_constant_assignments``, ``validate_lattice_consistency``
    :source:`gelb/frontend/ConstantAssignmentValidationVisitor.py`: no
    assignment to a constant;
@@ -115,6 +125,22 @@ Frontend
    :source:`gelb/frontend/NodeClassesValidationVisitor.py` and
    :source:`gelb/frontend/GeometryInitialValidationVisitor.py`: the
    blocks a node class names, and the node classes a paint names, exist.
+
+``check_stage1``
+   :source:`gelb/frontend/ASTInvariantValidator.py`. Immediately after
+   geometry's initial validation and before
+   ``validate_midware_input``, check live types, symbol metadata, computational
+   expressions, and deterministic structural children. Both type attachment
+   and this check use explicit stacks. Syntactic names, shape/selection bounds,
+   inner array row wrappers, and the specified non-value expressions retain
+   their existing inference behavior; typed paint bounds and literal leaves
+   are still checked. Live inferred types are cross-checked to catch in-place
+   edits that bypass assignment synchronization.
+
+   ``PipelineOptions.strict_invariants`` defaults to true in every profile:
+   internal violations raise ``GeLBInternalInvariantError``. Editor diagnostics
+   and program-analysis entry points explicitly disable strictness and report
+   structured ``(internal)`` warnings. User errors remain errors.
 
 Midware
 =======

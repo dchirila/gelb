@@ -84,4 +84,4 @@ class TestStringTypeNotInComputationalContexts:
         assert isinstance(array_type, ArrayDataType_N)
         
         # StringType_N should have no children (terminal node)
-        assert string_type.get_children() == set()
+        assert string_type.get_children() == ()
