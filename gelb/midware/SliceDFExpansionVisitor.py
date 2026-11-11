@@ -380,6 +380,8 @@ class SliceDFExpansionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         idx_lit_low = IntLiteral_N(cr, i)
         idx_lit_high = IntLiteral_N(cr, i)
         new_lhs.element_ranges[-1] = Range_N(cr, idx_lit_low, idx_lit_high)
+        # The inferred_type setter also replaces the canonical slice type
+        # with the scalar element type.
         if isinstance(getattr(lhs, 'inferred_type', None), ArrayDataType_N):
             new_lhs.inferred_type = _scalar_dtype_for(lhs.inferred_type)
         return new_lhs
@@ -539,7 +541,8 @@ class SliceDFExpansionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         node.element_ranges[-1] = Range_N(
             cr, IntLiteral_N(cr, lo + i), IntLiteral_N(cr, lo + i))
         # the single DF is a scalar of the slice's element type (the
-        # backends emit a selection as an array when its type is one)
+        # backends emit a selection as an array when its type is one).
+        # Assignment also synchronizes canonical_type to rank zero.
         if isinstance(getattr(node, 'inferred_type', None), ArrayDataType_N):
             node.inferred_type = _scalar_dtype_for(node.inferred_type)
         return node

@@ -75,11 +75,8 @@ _NETCDF_TYPE_MAP = {
 
 
 def _is_array_typed(node):
-    """True when the type pass gave *node* an array type (a non-empty
-    shape); a scalar is an array type with an empty shape."""
-    dtype = getattr(node, 'inferred_type', None)
-    shape = getattr(dtype, 'shape', None)
-    return isinstance(shape, List_N) and len(shape.elements) > 0
+    """Whether the computational type has at least one array dimension."""
+    return bool(node.canonical_type is not None and node.canonical_type.is_array)
 
 
 def generate_fortran(ast, num_timesteps=1, output_mode='netcdf',
