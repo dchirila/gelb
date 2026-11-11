@@ -97,6 +97,38 @@ jobs:
               gelb/tests/integration/test_literal_types.py
               gelb/tests/integration/test_int_values_simd.py
 
+          - name: backends-2
+            xdist: -n auto
+            paths: >-
+              gelb/tests/integration/test_backend_cpu_highway_widths.py
+              gelb/tests/integration/test_bounce_back_dfs.py
+              gelb/tests/integration/test_cavity_boundaries.py
+              gelb/tests/integration/test_constant_folding_integration.py
+              gelb/tests/integration/test_cpu_fortran_serial_e2e.py
+              gelb/tests/integration/test_diagnostic_layout.py
+              gelb/tests/integration/test_geometry_lint_cli.py
+              gelb/tests/integration/test_highway_simd_casts.py
+              gelb/tests/integration/test_large_grid_compile.py
+              gelb/tests/integration/test_midware.py
+              gelb/tests/integration/test_native_lowering.py
+              gelb/tests/integration/test_negated_negative_constant.py
+              gelb/tests/integration/test_offset_writes.py
+              gelb/tests/integration/test_periodic_addressing.py
+              gelb/tests/integration/test_poison_uninit.py
+              gelb/tests/integration/test_rayleigh_benard_mrt_e2e.py
+              gelb/tests/integration/test_tutorial_cli.py
+              gelb/tests/integration/test_tutorial_regressions.py
+              gelb/tests/integration/test_view_default_plot.py
+              gelb/tests/integration/test_simd_vector_body.py
+              gelb/tests/integration/test_refactor_defect_probes.py
+
+          - name: widths-and-math
+            xdist: -n auto
+            paths: >-
+              gelb/tests/integration/test_math_library_accuracy.py
+              gelb/tests/integration/test_predicate_precision.py
+              gelb/tests/integration/test_real_width_contract.py
+
           - name: diagnostics, lint, viewer, runner
             xdist: -n auto
             paths: >-

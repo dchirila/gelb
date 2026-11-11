@@ -132,12 +132,77 @@ cache, then ``uv sync --all-extras``.  The jobs run on separate runners:
   process: its runtime corpus is built once per module and backend, and
   workers would each build it again.
 - *tests, constant coefficients*, *tests, function calls*, *tests,
-  backends* and *tests, diagnostics, lint, viewer, runner*: the focused
+  backends*, *tests, backends-2*, *tests, widths-and-math* and *tests,
+  diagnostics, lint, viewer, runner*: the focused
   integration files
   listed in the workflow, grouped so that the files whose cases each
   build and run a program share no runner with the quick ones.
 
-The four integration jobs run with ``pytest-xdist`` (``-n auto``, one
+The six integration jobs run with ``pytest-xdist`` (``-n auto``, one
 worker per core of the runner), and every pytest job passes
 ``--durations=25``, so its log ends with its slowest tests.
 CI has no GPU, so the ``gpu`` cases skip there.
+
+The ``backends-2`` shard includes the vector-body and compiler-defect
+tests, native lowering, streaming, boundaries, and tutorial regressions.
+``widths-and-math`` contains math-library accuracy, predicate precision,
+and real-width contracts. Public example diagnostics are parametrized
+per example so workers can share the work. The unit test
+:source:`gelb/tests/unit/test_ci_integration_coverage.py` checks that each
+integration file belongs to exactly one shard or an explicit exemption.
+The empty ``test_frontend.py`` placeholder has no tests; the example
+smoke, plain-build, and reproducibility sweeps run in the local gate.
+
+The local refactoring gate
+==========================
+
+:source:`scripts/run_refactor_gate.sh` accepts a checkout, its base
+revision, external emission and value baselines, and a new output
+directory. Use ``--help`` for the full invocation. The snapshot directory
+contains ``default``, ``soa``, ``aos``, and ``plain`` subdirectories
+(read-only symlinks are suitable); ``--snapshot-tool`` supplies the
+variant-aware emission driver. Value baselines contain ``default`` and
+``strict`` directories recorded with the value tool below.
+
+The gate verifies the imported checkout, runtime header bytes, all four
+emission variants, C++ and Fortran syntax, and agreement of backend
+compilation outcomes. The all-example Fortran syntax check uses the GNU
+default dialect, without ``-fno-range-check``; strict Fortran 2008 remains
+on the small fixtures in
+:source:`gelb/tests/integration/test_negated_negative_constant.py`.
+The gate then runs the unit, integration (including opt-in smoke), and
+numeric suites, and a strict HTML manual build with offline intersphinx.
+Missing CUDA/GPU or AVX-512 fails the gate unless the caller explicitly
+passes ``--allow-no-gpu`` or ``--allow-no-avx512``. The selected
+configurations and every stage's command and log are saved in the output.
+
+:source:`scripts/differential_value_gate.py` provides three commands:
+
+- ``record --tree TREE --out DIR`` runs every example for three steps,
+  writing every step with seed 42. It fixes ``OMP_NUM_THREADS`` (default
+  4, configurable), records toolchain and runtime-header fingerprints,
+  and hashes each NetCDF variable with its name, dimensions, shape, and
+  dtype. Integer values retain all 64 bits. Signed zeros and NaN
+  positions matter; NaN signs and payloads do not. Use ``--strict-fp``
+  for a separate strict recording and ``-j`` to bound concurrent builds.
+- ``compare-baseline --baseline DIR --candidate DIR`` compares the same
+  corpus and configurations across revisions. Only exact corpus-relative
+  filenames listed in ``--allow-changed`` may have changed values or
+  source hashes; missing files, failed runs, or incompatible manifests
+  still fail.
+- ``compare-backends --run-dir DIR`` checks strict SoA/AoS/CBT identity
+  for non-random examples. ``record --exact-probes --strict-fp`` instead
+  records small reductions with independently bounded exact
+  intermediates (one to three steps); these compare across all selected
+  configurations, including Fortran and CUDA. General examples are not
+  required to agree across different math libraries or reduction orders.
+
+An optional ``--fuzz-dir`` and matching ``--fuzz-baseline`` run a supplied
+corpus through the same seeded, timeout-bounded value checks. The
+structural emission comparator separately accepts files or directories
+and permits only bijective temporary renaming within each C, C++, or CUDA
+brace block or Fortran routine. Enclosing temporary bindings remain
+visible in nested brace blocks, and sibling blocks may reuse temporary
+names. Fortran statements are read across continuation lines. The
+comparator preserves operators, grouping, casts, literal spelling,
+indices, and statement order.
