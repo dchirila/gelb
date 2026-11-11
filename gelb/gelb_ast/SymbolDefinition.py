@@ -14,6 +14,7 @@ class SymbolDefinition:
         self.name = name
         self.tag = tag
         self.value = value
+        self.canonical_type = None
 
     def __repr__(self):
         """Terse representation (for unit-testing)."""

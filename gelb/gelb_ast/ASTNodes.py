@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from gelb.gelb_ast import SymbolReference
+from gelb.gelb_ast.CanonicalType import canonical_from_ast
 
 
 _AST_METADATA_FIELD_NAMES = frozenset({
@@ -17,6 +18,11 @@ _AST_METADATA_FIELD_NAMES = frozenset({
     'inline_binding',
     'lowered_const',
     'inlined_from_call',
+    'inline_call_args',
+    'scalar_cse_runs',
+    'scalar_cse_temps',
+    'canonical_type',
+    'has_open_high',
 })
 
 
@@ -26,6 +32,30 @@ class Node_N(ABC):
     """
     def __init__(self, code_range):
         self.code_range = code_range
+        self._canonical_type = None
+
+    @property
+    def canonical_type(self):
+        return self._canonical_type
+
+    @canonical_type.setter
+    def canonical_type(self, value):
+        self._canonical_type = value
+
+    @property
+    def inferred_type(self):
+        # Preserve the distinction between unvisited syntax and an explicitly
+        # untyped value; the existing type visitors use hasattr for this.
+        try:
+            return self.__dict__['inferred_type']
+        except KeyError:
+            raise AttributeError('inferred_type') from None
+
+    @inferred_type.setter
+    def inferred_type(self, value):
+        # Keep the metadata key used by tree copies that share inferred types.
+        self.__dict__['inferred_type'] = value
+        self._canonical_type = canonical_from_ast(value)
 
     @abstractmethod
     def __str__(self):
@@ -506,6 +536,7 @@ class ArrayDataType_N(Node_N):
         super().__init__(code_range)
         self.element_dtype = element_dtype
         self.shape = shape  # might be either Array1DLiteral_N or IntLiteral_N
+        self.canonical_type = canonical_from_ast(self)
 
     def __str__(self):
         return (
@@ -515,7 +546,7 @@ class ArrayDataType_N(Node_N):
     def get_children(self):
         # Only return shape as child since element_dtype is a string
         # and doesn't have get_referenced_symbols method
-        return {self.shape}
+        return (self.shape,) if self.shape is not None else ()
 
 
 class StringType_N(Node_N):
@@ -542,7 +573,7 @@ class StringType_N(Node_N):
         return f"StringType_N({self.code_range})"
     
     def get_children(self):
-        return set()
+        return ()
 
 
 class BinaryExpr_N(Expr_N):
@@ -717,12 +748,7 @@ class TypePromotionNode_N(Expr_N):
         self.inferred_type = target_type
     
     def get_children(self):
-        children = set()
-        if self.expr is not None:
-            children.add(self.expr)
-        if self.target_type is not None:
-            children.add(self.target_type)
-        return children
+        return tuple(child for child in (self.expr, self.target_type) if child is not None)
     
     def __str__(self):
         return f"(TypePromotion {self.expr} -> {self.target_type})"
@@ -753,12 +779,7 @@ class BroadcastNode_N(Expr_N):
         self.inferred_type = target_array_type
     
     def get_children(self):
-        children = set()
-        if self.scalar_expr is not None:
-            children.add(self.scalar_expr)
-        if self.target_array_type is not None:
-            children.add(self.target_array_type)
-        return children
+        return tuple(child for child in (self.scalar_expr, self.target_array_type) if child is not None)
     
     def __str__(self):
         return f"(Broadcast {self.scalar_expr} -> {self.target_array_type})"
@@ -781,10 +802,7 @@ class IntrinsicFunctionCall_N(Expr_N):
         self.arguments = arguments          # List_N of Expr_N: function arguments
     
     def get_children(self):
-        children = set()
-        if self.arguments is not None:
-            children.add(self.arguments)
-        return children
+        return (self.arguments,) if self.arguments is not None else ()
     
     def get_referenced_symbols(self):
         result = set()
@@ -811,10 +829,7 @@ class UserFunctionCall_N(Expr_N):
         self.arguments = arguments          # List_N of Expr_N
 
     def get_children(self):
-        children = set()
-        if self.arguments is not None:
-            children.add(self.arguments)
-        return children
+        return (self.arguments,) if self.arguments is not None else ()
 
     def get_referenced_symbols(self):
         result = set()
@@ -915,7 +930,7 @@ class StringLiteral_N(Literal_N):
         return f"(StringLiteral {self.value})"
 
     def get_children(self):
-        return set()
+        return ()
 
 
 class ArrayLiteral_N(Literal_N):

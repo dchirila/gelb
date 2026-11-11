@@ -106,6 +106,7 @@ def _run_diagnostics(input_file, define, show_traceback, no_geometry_lint):
                 require_stencils=True,
                 require_geometry=True,
                 emit_warnings=True,
+                strict_invariants=False,
                 geometry_lint=not no_geometry_lint,
             ),
         )

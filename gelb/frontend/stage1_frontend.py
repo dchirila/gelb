@@ -374,3 +374,7 @@ def validate_constant_assignments(ast):
     ast_visitor = ConstantAssignmentValidationVisitor()
     ast_visitor.visit(ast, ast)
     return ast
+def canonicalize_types(ast):
+    """Attach resolved computational type metadata without rewriting shapes."""
+    from gelb.frontend.ASTInvariantValidator import canonicalize_types as canonicalize
+    return canonicalize(ast)
