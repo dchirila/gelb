@@ -54,7 +54,12 @@ Top-level directories
    (a shim for the ``gelb-run`` runner :source:`gelb/scripts/gelb-run`,
    which compiles and runs a program, :doc:`04_backends`),
    :source:`scripts/emission_snapshot.py` (byte-compare the generated
-   code of every example), :source:`scripts/regenerate_antlr.sh`
+   code of every example), :source:`scripts/emission_structural_diff.py`
+   (compare emitted tokens allowing only temporary renaming),
+   :source:`scripts/differential_value_gate.py` (record NetCDF schemas and
+   exact value hashes, compare revisions and strict backend contracts),
+   :source:`scripts/run_refactor_gate.sh` (the complete local compiler
+   gate, :doc:`06_testing`), :source:`scripts/regenerate_antlr.sh`
    (rebuild the parser), :source:`scripts/gelb_bootstrap.sh` (create
    the ``uv`` environment and, through
    :source:`scripts/gelb-shell-setup`, put its ``.venv/bin`` on

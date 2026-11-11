@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import pytest
 
 from click.testing import CliRunner
 
@@ -38,17 +39,12 @@ def _public_examples():
     return sorted(_EXAMPLES_DIR.rglob("*.gelb"))
 
 
-def test_public_examples_have_clean_diagnostics():
-    failures = []
-    for example in _public_examples():
-        code, diagnostics = _run_diagnostics_path(example)
-        errors = [d for d in diagnostics if d["severity"] == "error"]
-        if code != 0 or errors:
-            rel = example.relative_to(_REPO_ROOT)
-            messages = "; ".join(d["message"] for d in errors)
-            failures.append(f"{rel}: {messages}")
-
-    assert not failures
+@pytest.mark.parametrize("example", _public_examples(),
+                         ids=lambda path: str(path.relative_to(_EXAMPLES_DIR)))
+def test_public_examples_have_clean_diagnostics(example):
+    code, diagnostics = _run_diagnostics_path(example)
+    errors = [d for d in diagnostics if d["severity"] == "error"]
+    assert code == 0 and not errors, diagnostics
 
 
 def test_hardening_discontinuous_periodic_geometry_fails():
