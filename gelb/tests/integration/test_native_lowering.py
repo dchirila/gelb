@@ -1,6 +1,7 @@
 """Native-lowering regressions compiled and run through the normal gelb-run defaults."""
 
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -163,8 +164,12 @@ def test_nonfinite_literal_contract(tmp_path, monkeypatch, backend, kind, specia
     # IEEE folder produces them.
     # The shim changes only a finite sentinel after the normal frontend
     # and midware passes; gelb-run still builds/runs with its default flags.
+    for name in ('types.py', 'enum.py', 'numbers.py'):
+        (tmp_path / name).write_text('raise RuntimeError("shadowed")\n')
     launcher = tmp_path / 'literal-python'
-    launcher.write_text(f'#!{sys.executable}\n' + r"""
+    # Safe-path mode must apply before even the shim's first stdlib import.
+    launcher.write_text(f'#!{sys.executable} -P\n'
+                        f'import sys\nsys.path.insert(0, {str(Path(__file__).resolve().parents[3])!r})\n' + r"""
 import functools
 import importlib
 import os
@@ -194,6 +199,8 @@ for suffix, entry in [('cpu_fortran_serial', 'generate_fortran'),
                       ('gpu_cuda_cpp', 'generate_cuda_cpp')]:
     module = importlib.import_module('gelb.backends.stage3_backend_' + suffix)
     setattr(module, entry, functools.partial(inject, getattr(module, entry)))
+while sys.argv[1:2] == ['-P']:
+    del sys.argv[1]
 assert sys.argv[1] == '-m'
 module = sys.argv[2]
 sys.argv = sys.argv[2:]
