@@ -12,6 +12,7 @@ import signal
 import subprocess
 import sys
 import threading
+import tempfile
 
 import netCDF4
 import numpy as np
@@ -22,6 +23,8 @@ HEADERS = ("gelb/backends/cpp_runtime_common.hpp", "gelb/backends/cpu_highway_ru
            "gelb/backends/gpu_cuda_cpp_runtime.cuh")
 HOST_KEYS = ("GELB_HAS_AVX512", "GELB_L3_SIZE_BYTES", "GELB_NT_STORE_THRESHOLD_BYTES",
              "GELB_NT_STORE_THRESHOLD_L3_MULTIPLIER")
+RUNNERS = ("gelb/scripts/gelb-run", "scripts/gelb-run")
+EXTENSIONS = {"cpu_fortran_serial": ".f90", "cpu_highway": ".cpp", "gpu_cuda_cpp": ".cu"}
 NC_LOCK = threading.Lock()  # HDF5/NetCDF reads cannot run concurrently in threads.
 
 
@@ -70,7 +73,7 @@ geometry {{ nodes[:] = BULK; }}
 '''
 
 
-def record(args):
+def prepare_record(args):
     import gelb
     from gelb.backends.highway import common
     tree, out = args.tree.resolve(), args.out.resolve()
@@ -118,8 +121,15 @@ def record(args):
                      "host_overrides": {key: env.get(key) for key in HOST_KEYS},
                      "avx512": common._detect_avx512_available(), "l3_bytes": common._detect_l3_size_bytes(),
                      "nt_store_bytes": common._nt_store_threshold_bytes()},
+        "runners": {name: digest((tree / name).read_bytes()) for name in RUNNERS},
         "inputs": inputs, "runs": {},
     }
+
+    return tree, out, corpus, examples, configs, env, manifest
+
+
+def record(args):
+    tree, out, corpus, examples, configs, env, manifest = prepare_record(args)
 
     def one(job):
         index, path, config = job
@@ -127,7 +137,7 @@ def record(args):
         directory.mkdir(parents=True)
         backend, layout = CONFIGS[config]
         child_env = dict(env, GELBC_EXTRA=f"--storage-layout {layout}" if layout else "")
-        cmd = [str(tree / "scripts/gelb-run"), "-b", backend, "-n", str(args.steps), "-w", "1", "-s", "42"]
+        cmd = [str(tree / "scripts/gelb-run"), "-b", backend, "-n", str(args.steps), "-w", "1", "-s", "42", "-k"]
         cmd += (["--strict-fp"] if args.strict_fp else []) + [str(path)]
         try:
             with subprocess.Popen(cmd, cwd=directory, env=child_env, stdout=subprocess.PIPE,
@@ -157,6 +167,14 @@ def record(args):
                     entry["variables"] = fingerprint(outputs[0])
                 except Exception as error:
                     entry.update(status=125, error=str(error))
+        source = directory / (path.stem + EXTENSIONS[backend])
+        try:
+            entry["source_sha256"] = digest(source.read_bytes())
+        except OSError as error:
+            entry.update(status=125, error=f"compiled source unavailable: {error}")
+        finally:
+            source.unlink(missing_ok=True)
+            (directory / path.stem).unlink(missing_ok=True)
         name = str(path.relative_to(corpus))
         print(f"{config}: {name}: status {entry['status']}", flush=True)
         return name, config, entry
@@ -189,9 +207,7 @@ def compare_baseline(args):
     allowed = set(filter(None, args.allow_changed.split(",")))
     if allowed - before["inputs"].keys():
         raise ValueError("allow-changed must name exact corpus-relative filenames")
-    for key in ("format", "settings", "headers", "compiler_versions", "highway_revision"):
-        if before[key] != after[key]:
-            raise ValueError(f"incompatible manifests: {key}")
+    compatible(before, after, allowed_headers(getattr(args, "allow_changed_headers", "")))
     if before["inputs"].keys() != after["inputs"].keys():
         raise ValueError("different corpus file sets")
     failures = []
@@ -229,35 +245,186 @@ def compare_backends(args):
     return int(bad != 0)
 
 
+
+def allowed_headers(value):
+    paths = set(filter(None, value.split(",")))
+    if paths - set(HEADERS):
+        raise ValueError("allow-changed-headers must name exact runtime header paths")
+    return paths
+
+
+def compatible(before, after, headers=(), *, sources=False):
+    keys = ("format", "settings", "compiler_versions", "highway_revision")
+    if sources:
+        keys += ("inputs", "runners")
+    for key in keys:
+        if key not in before or before[key] != after[key]:
+            raise ValueError(f"incompatible manifests: {key}")
+    if before["headers"].keys() != set(HEADERS) or after["headers"].keys() != set(HEADERS):
+        raise ValueError("incomplete runtime header manifest")
+    for name in HEADERS:
+        if name not in headers and before["headers"][name] != after["headers"][name]:
+            raise ValueError(f"changed runtime header: {name}")
+
+
+def require_hashes(data, configs):
+    if not data.get("inputs") or data["inputs"].keys() != data.get("runs", {}).keys():
+        raise ValueError("incomplete source corpus")
+    for name, runs in data["runs"].items():
+        if runs.keys() != set(configs):
+            raise ValueError(f"incomplete source configurations: {name}")
+        for config, entry in runs.items():
+            if not re.fullmatch(r"[0-9a-fA-F]{64}", str(entry.get("source_sha256", ""))):
+                raise ValueError(f"missing or invalid source_sha256: {name} ({config})")
+
+
+def generated_hash(tree, path, backend, flags, env, timeout):
+    with tempfile.TemporaryDirectory() as tmp:
+        source = Path(tmp) / (path.stem + EXTENSIONS[backend])
+        cmd = [sys.executable, "-P", "-m", "gelb.gelbc", str(path), "--backend", backend,
+               "-o", str(source), *flags]
+        run = subprocess.run(cmd, cwd=tree, env=env, capture_output=True, text=True, timeout=timeout)
+        if run.returncode:
+            raise ValueError(f"code generation failed for {path.name} ({backend}): {run.stdout}{run.stderr}")
+        return digest(source.read_bytes())
+
+
+def verify_sources(args):
+    before = load(args.baseline)
+    require_hashes(before, args.configs.split(","))
+    with tempfile.TemporaryDirectory() as tmp:
+        args.out = Path(tmp)
+        tree, _, corpus, examples, configs, env, after = prepare_record(args)
+        compatible(before, after, sources=True)
+        def one(job):
+            path, config = job
+            backend, layout = CONFIGS[config]
+            flags = ["--num-timesteps", str(args.steps), "--write-every", "1", "--output-mode",
+                     "netcdf", "--seed", "42", "--cuda-graphs"]
+            flags += ["--strict-fp"] if args.strict_fp else []
+            flags += ["--storage-layout", layout] if layout else []
+            name = str(path.relative_to(corpus))
+            actual = generated_hash(tree, path, backend, flags, env, args.timeout)
+            if actual != before["runs"][name][config]["source_sha256"]:
+                raise ValueError(f"source_sha256 mismatch: {name} ({config})")
+        with ThreadPoolExecutor(args.jobs) as pool:
+            list(pool.map(one, [(path, config) for path in examples for config in configs]))
+    print(f"verified sources: {len(examples) * len(configs)}")
+    return 0
+
+
+def build_hashes(args):
+    """Record or verify the sources generated by the two independent build sweeps."""
+    backends = sorted({"cpu_fortran_serial" if b == "serial" else b for b in args.backends.split(",")})
+    if not backends or set(backends) - EXTENSIONS.keys():
+        raise ValueError("unknown build backend")
+    target = args.build_hashes / args.kind / "manifest.json"
+    before = None
+    if args.command == "verify-build-hashes":
+        before = json.loads(target.read_text())
+        require_hashes(before, backends)
+    with tempfile.TemporaryDirectory() as tmp:
+        args.out = Path(tmp)
+        tree, _, corpus, examples, _, env, data = prepare_record(args)
+        if args.kind == "plain-build":
+            flags = ["--no-slice-simplify", "--no-scalar-cse"]
+            data["settings"] = {"flags": flags, "steps": 1, "write_every": 1, "backends": backends}
+        else:
+            flags = ["--num-timesteps", str(args.smoke_iters), "--write-every", str(max(args.smoke_iters, 1)),
+                     "--nc-output", "smoke.nc"]
+            data["settings"] = {"smoke_iters": args.smoke_iters, "backends": backends}
+        if before is not None:
+            compatible(before, data, sources=True)
+        def one(job):
+            path, backend = job
+            name = str(path.relative_to(corpus))
+            sha = generated_hash(tree, path, backend, flags, env, args.timeout)
+            if before is not None and sha != before["runs"][name][backend]["source_sha256"]:
+                raise ValueError(f"source_sha256 mismatch: {name} ({backend})")
+            return name, backend, {"source_sha256": sha}
+        with ThreadPoolExecutor(args.jobs) as pool:
+            for name, backend, entry in pool.map(one, [(p, b) for p in examples for b in backends]):
+                data["runs"].setdefault(name, {})[backend] = entry
+        if before is None:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with target.open("x") as f:
+                json.dump(data, f, indent=2, sort_keys=True)
+    print(f"{args.command} {args.kind}: {len(examples) * len(backends)} sources")
+    return 0
+
+
+def changed_files(tree, base):
+    return command_output(["git", "diff", "--name-only", base, "--"], tree).splitlines()
+
+
+def needs_reproducibility(paths):
+    return any((p.startswith("gelb/") and not p.startswith("gelb/tests/"))
+               or p.startswith("third_party/") or p in {
+                   "gelb/tests/integration/test_reproducibility.py", "gelb/tests/integration/conftest.py",
+                   "gelb/tests/integration/_toolchain.py", "scripts/gelb-run", "pyproject.toml", "uv.lock"}
+               for p in paths)
+
+
+def check_base_files(args):
+    allowed = allowed_headers(args.allow_changed_headers)
+    names = RUNNERS if args.command == "check-runners" else HEADERS
+    if args.command == "check-runners":
+        if allowed:
+            raise ValueError("header exceptions cannot be combined with a skip")
+        names = (*HEADERS, *RUNNERS)
+    for name in names:
+        expected = subprocess.check_output(["git", "show", f"{args.base}:{name}"], cwd=args.tree)
+        if name not in allowed and (args.tree / name).read_bytes() != expected:
+            raise ValueError(f"changed dependency: {name}")
+    return 0
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    p = sub.add_parser("record")
-    p.add_argument("--tree", type=Path, required=True)
-    p.add_argument("--out", type=Path, required=True)
-    p.add_argument("--configs", default=",".join(CONFIGS))
-    p.add_argument("--strict-fp", action="store_true")
-    p.add_argument("--omp-threads", type=int, default=4)
-    p.add_argument("-n", "--steps", type=int, default=3)
-    p.add_argument("-j", "--jobs", type=int, default=4)
-    p.add_argument("--timeout", type=int, default=900)
-    corpus = p.add_mutually_exclusive_group()
-    corpus.add_argument("--corpus", type=Path, help="run this .gelb corpus instead of examples/")
-    corpus.add_argument("--exact-probes", action="store_true", help="run built-in exact-intermediate fixtures")
+    for command in ("record", "verify-sources", "record-build-hashes", "verify-build-hashes"):
+        p = sub.add_parser(command)
+        p.add_argument("--tree", type=Path, required=True)
+        if command == "record":
+            p.add_argument("--out", type=Path, required=True)
+        p.add_argument("--configs", default=",".join(CONFIGS))
+        p.add_argument("--strict-fp", action="store_true")
+        p.add_argument("--omp-threads", type=int, default=4)
+        p.add_argument("-n", "--steps", type=int, default=3)
+        p.add_argument("-j", "--jobs", type=int, default=4)
+        p.add_argument("--timeout", type=int, default=900)
+        corpus = p.add_mutually_exclusive_group()
+        corpus.add_argument("--corpus", type=Path, help="run this .gelb corpus instead of examples/")
+        corpus.add_argument("--exact-probes", action="store_true", help="run built-in exact-intermediate fixtures")
+        if command == "verify-sources":
+            p.add_argument("--baseline", type=Path, required=True)
+        if command.endswith("build-hashes"):
+            p.add_argument("--build-hashes", type=Path, required=True)
+            p.add_argument("--kind", choices=("smoke", "plain-build"), required=True)
+            p.add_argument("--backends", default=",".join(EXTENSIONS))
+            p.add_argument("--smoke-iters", type=int, default=10)
     p = sub.add_parser("compare-baseline")
     p.add_argument("--baseline", type=Path, required=True)
     p.add_argument("--candidate", type=Path, required=True)
     p.add_argument("--allow-changed", default="", help="comma-separated exact corpus-relative filenames")
+    p.add_argument("--allow-changed-headers", default="")
     p = sub.add_parser("compare-backends")
     p.add_argument("--run-dir", type=Path, required=True)
+    for command in ("check-headers", "check-runners", "reproducibility-needed"):
+        p = sub.add_parser(command)
+        p.add_argument("--tree", type=Path, required=True)
+        p.add_argument("--base", required=True)
+        p.add_argument("--allow-changed-headers", default="")
     args = parser.parse_args()
     try:
-        if args.command == "record" and min(args.steps, args.jobs, args.omp_threads, args.timeout) < 1:
+        if hasattr(args, "steps") and min(args.steps, args.jobs, args.omp_threads, args.timeout) < 1:
             raise ValueError("steps, jobs, threads and timeout must be positive")
         if args.command == "record" and args.exact_probes and args.steps > 3:
             raise ValueError("exact-intermediate fixtures are proved only for 1..3 steps")
         return {"record": record, "compare-baseline": compare_baseline,
-                "compare-backends": compare_backends}[args.command](args)
+                "compare-backends": compare_backends, "verify-sources": verify_sources,
+                "record-build-hashes": build_hashes, "verify-build-hashes": build_hashes,
+                "check-headers": check_base_files, "check-runners": check_base_files,
+                "reproducibility-needed": lambda a: print("RUN" if needs_reproducibility(changed_files(a.tree, a.base)) else "SKIP") or 0}[args.command](args)
     except (OSError, ValueError, KeyError, RuntimeError) as error:
         print(f"FAIL: {error}", file=sys.stderr)
         return 1
