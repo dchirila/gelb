@@ -519,6 +519,11 @@ class RectSelOfArrayElems_N(RectSel_N):
         super().__init__(code_range, element_ranges)
         self.array_name = array_name
 
+    def replace_symbol_references(self, name, value):
+        # array_name is syntax, not a value substitution site.
+        for bounds in self.element_ranges:
+            bounds.replace_symbol_references(name, value)
+
     def __str__(self):
         return (
             f"(RectSelOfArrayElems"
@@ -746,6 +751,12 @@ class TypePromotionNode_N(Expr_N):
         self.target_type = target_type  # Type to promote to
         # The inferred type of a promotion node is its target type
         self.inferred_type = target_type
+
+    def is_singleton_coercion(self):
+        source = getattr(self.expr, 'canonical_type', None)
+        target = self.canonical_type
+        return (source is not None and source.dims == (1,)
+                and target is not None and target.is_scalar)
     
     def get_children(self):
         return tuple(child for child in (self.expr, self.target_type) if child is not None)

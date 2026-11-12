@@ -7,7 +7,7 @@ Tests that array range selections properly reduce their shape based on the range
 
 import pytest
 from gelb.gelb_ast.ASTNodes import *
-from gelb.utils.exceptions import GeLBException
+from gelb.utils.exceptions import GeLBException, GeLBExTypeError
 from gelb.tests.test_utils import (
     get_typed_ast,
     minimal_gelb_program_1d,
@@ -292,8 +292,8 @@ class TestArrayRangeErrorCases:
         # Updated to match the new improved error message format
         assert "Cannot index" in str(exc_info.value.error) and "with 3 indices" in str(exc_info.value.error)
     
-    def test_negative_range_size_fallback(self):
-        """Test fallback behavior for invalid ranges."""
+    def test_reversed_range_is_rejected(self):
+        """A reversed constant slice is rejected before shape reduction."""
         test_code = minimal_gelb_program_1d(
             initializer_content="""
                 array[int, 5] vec;
@@ -302,14 +302,5 @@ class TestArrayRangeErrorCases:
             """
         )
         
-        # Should not crash, should provide fallback behavior
-        ast = get_typed_ast(test_code)
-        
-        # Find the assignment
-        init_block = ast.initializers[0]
-        assignment = init_block.stmts.elements[2]  # invalid = vec[4:2]
-        
-        # Should have some reasonable fallback type
-        vec_selection = assignment.rhs
-        assert isinstance(vec_selection.inferred_type, ArrayDataType_N)
-        assert vec_selection.inferred_type.element_dtype == "int"
+        with pytest.raises(GeLBExTypeError):
+            get_typed_ast(test_code)

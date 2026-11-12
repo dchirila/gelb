@@ -24,7 +24,8 @@ from gelb.gelb_ast.ASTNodes import (
     LatticeInstaStmt_N,
     VariableAssignmentStmt_N, VariableDeclarationStmt_N,
     UserFunctionCall_N, IntrinsicFunctionCall_N,
-    TypePromotionNode_N, Array1DLiteral_N, RectSelOfArrayElems_N,
+    TypePromotionNode_N, Array1DLiteral_N, Array2DLiteral_N,
+    Array3DLiteral_N, Array4DLiteral_N, RectSelOfArrayElems_N,
     ArrayDataType_N,
 )
 from gelb.frontend.type_rules import (
@@ -811,7 +812,10 @@ def eval_const_expr(expr, bindings=None, *, ast=None, lattice_info=None):
 
     if isinstance(expr, TypePromotionNode_N):
         # a promoted array converts element by element
-        return _typed(e(expr.expr), expr.target_type)
+        value = e(expr.expr)
+        if expr.is_singleton_coercion():
+            value = value[0]
+        return _typed(value, expr.target_type)
 
     if isinstance(expr, UserFunctionCall_N):
         func = find_function(ast, expr.function_name.name)
@@ -828,21 +832,23 @@ def eval_const_expr(expr, bindings=None, *, ast=None, lattice_info=None):
         return intrinsic(str(expr.function_name),
                          [e(a) for a in expr.arguments.elements])
 
-    if isinstance(expr, Array1DLiteral_N):
+    if isinstance(expr, (Array1DLiteral_N, Array2DLiteral_N, Array3DLiteral_N, Array4DLiteral_N)):
         return [e(el) for el in expr.value]
 
     if isinstance(expr, RectSelOfArrayElems_N):
         base = e(expr.array_name)
-        if not isinstance(base, list):
-            raise ValueError("indexing a non-array value")
-        ranges = expr.element_ranges
-        if len(ranges) != 1:
-            raise ValueError("only one-dimensional array indexing is supported here")
-        r = ranges[0]
-        lo = e(r.low)
-        if r.high is not None and r.high is not r.low and e(r.high) != lo:
-            raise ValueError("array slices cannot be evaluated here; index one element")
-        return base[lo]
+        for r in expr.element_ranges:
+            if not isinstance(base, list):
+                raise ValueError("indexing a non-array value")
+            lo = plain(e(r.low))
+            if isinstance(lo, bool) or not isinstance(lo, int):
+                raise ValueError("array index must be an integer")
+            if r.high is not None and r.high is not r.low and e(r.high) != lo:
+                raise ValueError("array slices cannot be evaluated here; index one element")
+            if not 0 <= lo < len(base):
+                raise ValueError(f"array index {lo} is outside 0..{len(base) - 1}")
+            base = base[lo]
+        return base
 
     if isinstance(expr, UnaryMinusExpr_N):
         return negate(e(expr.value))

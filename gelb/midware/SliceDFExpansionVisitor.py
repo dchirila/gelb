@@ -466,6 +466,10 @@ class SliceDFExpansionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         opaque sub-tree (distinct per direction via structural-key
         interning).
         """
+        if isinstance(node, TypePromotionNode_N) and node.is_singleton_coercion():
+            # This value has its own sole element, independent of the
+            # direction of the surrounding slice store.
+            return node
         # Identifier_N: the most common case -- references to W, EX, EY,
         # local array variables, etc.
         if isinstance(node, Identifier_N):

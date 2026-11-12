@@ -22,6 +22,7 @@ _FRONTEND_TYPED_SUFFIX = (
     "validate_global_constant_initializers",
     "resolve_all_constants",
     "resolve_ranges",
+    "resolve_declared_shapes",
     "infer_types",
     "promote_types",
     "validate_types",

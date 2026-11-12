@@ -12,7 +12,7 @@ from gelb.gelb_ast import ASTNodes as A
 from gelb.gelb_ast.CanonicalType import CanonicalType
 from gelb.gelb_ast.SymbolDefinition import SymbolDefinition
 from gelb.tests.test_utils import get_fully_validated_ast, minimal_gelb_program_1d
-from gelb.utils.exceptions import GeLBInternalInvariantError
+from gelb.utils.exceptions import GeLBInternalInvariantError, GeLBExSyntaxError
 
 
 def items(*values):
@@ -64,12 +64,13 @@ def test_assignment_sync_and_unresolved_shape():
         assert node.canonical_type is None
 
 
-def test_named_extent_is_attached_without_rewriting_shape():
+def test_named_extent_is_resolved_before_inference():
     ast = get_fully_validated_ast(minimal_gelb_program_1d(
         global_constants_content='const int Q = 2;',
         gauge_content='array[int, Q] a = {1, 2}; val = a[0];'))
     declaration = ast.gauges[0].stmts[0]
-    assert isinstance(declaration.data_type.shape, A.Identifier_N)
+    assert isinstance(declaration.data_type.shape, A.IntLiteral_N)
+    assert declaration.data_type.shape.value == 2
     assert declaration.data_type.canonical_type == CanonicalType('int', (2,))
     invariant.check_stage1(ast)
 
@@ -212,7 +213,8 @@ def test_local_extent_uses_declaration_scope(block):
                     if isinstance(node, A.VariableDeclarationStmt_N) and node.name.name == 'a']
     assert len(declarations) == 1
     declared = declarations[0].data_type
-    assert isinstance(declared.shape, A.Identifier_N)
+    assert isinstance(declared.shape, A.IntLiteral_N)
+    assert declared.shape.value == 3
     assert declared.canonical_type == CanonicalType('int', (3,))
     invariant.check_stage1(ast)
     for profile in PipelineProfile:
@@ -221,12 +223,15 @@ def test_local_extent_uses_declaration_scope(block):
 
 @pytest.mark.parametrize('extent,dims', [('Nx', (32,)), ('Nx / 2', (16,)),
                                        ('Ny', (32,)), ('{Nx, Ny}', (32, 32))])
-def test_grid_extents_keep_shape_syntax(extent, dims):
+def test_grid_extents_are_concrete(extent, dims):
     from gelb.tests.test_utils import minimal_gelb_program_2d
     source = minimal_gelb_program_2d(gauge_content=f'array[int, {extent}] a; val = 1;')
     ast = get_fully_validated_ast(source)
     declared = ast.gauges[0].stmts[0].data_type
     shape = declared.shape
+    extents = shape.value.elements if isinstance(shape, A.Array1DLiteral_N) else [shape]
+    assert tuple(part.value for part in extents) == dims
+    assert all(isinstance(part, A.IntLiteral_N) for part in extents)
     assert declared.canonical_type == CanonicalType('int', dims)
     invariant.check_stage1(ast)
     assert declared.shape is shape
@@ -234,9 +239,9 @@ def test_grid_extents_keep_shape_syntax(extent, dims):
         assert not compile_source(source, profile).warnings
 
 
-def test_shared_function_output_uses_owner_under_caller_shadowing():
+def test_shared_function_output_has_concrete_owner_shape():
     source = minimal_gelb_program_1d(global_constants_content='const int Q = 2;',
-        gauge_content='const int Q = 5; array[int, 2] b = F(3); val = b[0] + Q;')
+        gauge_content='const int L = 5; array[int, 2] b = F(3); val = b[0] + L;')
     source += 'function F(int z) -> (array[int, Q] r) { r = {z, z}; }'
     ast = get_fully_validated_ast(source)
     output = ast.functions[0].outputs[0].data_type
@@ -244,7 +249,7 @@ def test_shared_function_output_uses_owner_under_caller_shadowing():
     assert call.inferred_type is output
     assert call.canonical_type == output.canonical_type == CanonicalType('int', (2,))
     invariant.check_stage1(ast)
-    # A later in-place shape change must be evaluated in the same owner scope.
+    # Stage-boundary checks must reject an unresolved synthetic extent.
     output.shape = A.Add_N(None, A.Identifier_N(None, 'Q'), A.IntLiteral_N(None, 1))
     with pytest.raises(GeLBInternalInvariantError, match='inconsistent canonical type'):
         invariant.check_stage1(ast)
@@ -262,7 +267,7 @@ def test_synthetic_program_without_lattices():
                                   'int Q = 0', 'int Q = -1'])
 @pytest.mark.parametrize('expression,kind', [('{value}', 'int'), ('2 * {value}', 'int'),
     ('{value} + {value}', 'int'), ('real({value})', 'real'), ('{value} + 0.5', 'real')])
-def test_shared_extent_keeps_declaration_owner(owner, caller, shadow, expression, kind):
+def test_global_extent_name_cannot_be_shadowed(owner, caller, shadow, expression, kind):
     constants = 'const int Q = 2;'
     if owner == 'global':
         constants += ' const array[int, Q] W = {1, 2};'
@@ -273,22 +278,9 @@ def test_shared_extent_keeps_declaration_owner(owner, caller, shadow, expression
                                    **{caller + '_content': body})
     if owner == 'function':
         source += 'function F(int z) -> (array[int, Q] r) { r = {z, z}; }'
-    ast = get_fully_validated_ast(source)
-    invariant.check_stage1(ast)
-    # Check every array expression, including the synthesized binary/cast types
-    # and the promotion target that structurally revisits the shared shape.
-    arrays = [node for node, _, _, _ in invariant._walk(ast)
-              if isinstance(node, A.Expr_N) and node.canonical_type is not None
-              and node.canonical_type.is_array]
-    assert arrays
-    assert all(node.canonical_type.dims == (2,) for node in arrays)
-    declaration = (ast.global_constants.stmts[1] if owner == 'global'
-                   else ast.functions[0].outputs[0])
-    shape = declaration.data_type.shape
-    assert isinstance(shape, A.Identifier_N)
-    if expression == '{value} + 0.5':
-        assert any(isinstance(node, A.TypePromotionNode_N)
-                   and node.target_type.shape is shape for node in arrays)
+    for profile in PipelineProfile:
+        with pytest.raises(GeLBExSyntaxError, match="Q.*global_constants"):
+            compile_source(source, profile)
 
 
 @pytest.mark.parametrize('caller', ['dynamic', 'initializer'])
@@ -296,7 +288,7 @@ def test_shared_extent_keeps_declaration_owner(owner, caller, shadow, expression
 def test_shared_shape_containers_and_extent_nodes(caller, shape_kind):
     source = minimal_gelb_program_1d(
         global_constants_content='const int Q = 2; const array[int, {Q, 3}] W = {{1, 2, 3}, {4, 5, 6}};',
-        **{caller + '_content': 'const int Q = 5; f.out[x | 0] = 1;'})
+        **{caller + '_content': 'const int L = 5; f.out[x | 0] = 1;'})
     ast = get_fully_validated_ast(source)
     declared = ast.global_constants.stmts[1].data_type
     block = (ast.dynamics if caller == 'dynamic' else ast.initializers)[0]
@@ -318,6 +310,9 @@ def test_shared_shape_containers_and_extent_nodes(caller, shape_kind):
     assert node.canonical_type == CanonicalType('int', (2,) if shape_kind == 'partial_slice' else (2, 3))
     assert declared.canonical_type == CanonicalType('int', (2, 3))
     assert shared.shape is shape
+    shared.shape = A.Identifier_N(None, 'Q')
+    with pytest.raises(GeLBInternalInvariantError):
+        invariant.check_stage1(ast)
 
 
 def test_concrete_types_do_not_build_extent_bindings(monkeypatch):

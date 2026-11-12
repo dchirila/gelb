@@ -138,6 +138,7 @@ def compile_source(
         validate_global_constant_initializers,
         resolve_all_constants,
         resolve_ranges,
+        resolve_declared_shapes,
         prevent_clashes_of_symbol_refs_with_implicits,
         prevent_clashes_of_symbol_defs_with_implicits,
         detect_function_recursion,
@@ -239,6 +240,9 @@ def compile_source(
     ast = resolve_ranges(ast)
     record("resolve_ranges")
     capture(ast, "ranges")
+
+    ast = resolve_declared_shapes(ast)
+    record("resolve_declared_shapes")
 
     ast = infer_types(ast)
     record("infer_types")
