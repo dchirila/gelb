@@ -84,7 +84,8 @@ class SymbolsTablesBuilderVisitor(ASTBaseVisitor, SymbolTableUtilityMixin):
                     # OK, symbol *is* in the symbols table (but is it
                     # referenced before it is defined?)
                     sdef = node.symbol_defs.get_symbol_definition(sref.name)
-                    if sdef.value.code_range > sref.code_range:
+                    if (node.symbol_defs.contains_local(sref.name)
+                            and sdef.value.code_range > sref.code_range):
                         raise GeLBExSymbolRefBeforeDef(sref, sdef)
         else:
             raise GeLBExIncorrectStagesOrdering(
