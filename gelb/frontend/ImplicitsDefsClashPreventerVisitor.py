@@ -24,12 +24,24 @@ class ImplicitsDefsClashPreventerVisitor(ASTBaseVisitor):
         # generic error-message
         self.error = "Your GeLB program contains a syntax error."
         self.hint_suffix = f" Please choose another identifier."
+        self.global_constants = None
 
     def check_node_symbol_table(self, node):
         if node.symbol_defs is not None:
             reserved_names = reserved_definition_names_for_block(node)
             for symbol_def in node.symbol_defs:
                 self.check_id_for_clashes(symbol_def.value, reserved_names)
+                if (isinstance(node, (InitializerBlock_N, DynamicBlock_N,
+                                      GaugeBlock_N, FunctionBlock_N))
+                        and self.global_constants is not None
+                        and self.global_constants.contains_local(symbol_def.name)):
+                    original = self.global_constants.get_symbol_definition_local(symbol_def.name)
+                    name = symbol_def.value.name
+                    raise GeLBExSyntaxError(
+                        name.code_range.start_line, name.code_range.start_col,
+                        f"Identifier '{symbol_def.name}' is reserved by global_constants",
+                        f"The constant is defined on line {original.value.code_range.start_line}. "
+                        "Choose a different local or parameter name.")
 
     def check_id_for_clashes(self, identifier, reserved_names):
         line = identifier.name.code_range.start_line
@@ -95,6 +107,8 @@ class ImplicitsDefsClashPreventerVisitor(ASTBaseVisitor):
             node: Program_N,
             ast_root_node: Program_N
     ):
+        self.global_constants = (node.global_constants.symbol_defs
+                                 if node.global_constants is not None else None)
         self.check_node_symbol_table(node)
         # trigger check of symbols table of GlobalConstantsBlock_N
         if node.global_constants is not None:

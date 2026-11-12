@@ -6,6 +6,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from gelb.compiler_pipeline import compile_source, PipelineProfile
+from gelb.utils.exceptions import GeLBExSyntaxError
+
 from gelb.tests.integration.test_tutorial_regressions import (
     BACKENDS, netCDF4, run_source,
 )
@@ -148,9 +151,13 @@ def test_block_local_identity(tmp_path, backend, initializer, dynamic):
 @pytest.mark.parametrize('gauge,globals,expected', [
     ('real u = x; v = u;', '', [0, 1, 2, 3]),
     ('array[real,2] a = {real(x),2.0}; v = a[0];',
-     'global_constants { const real a = 9.0; }', [0, 1, 2, 3]),
+     'global_constants { const real a = 9.0; }', None),
 ])
 def test_local_shadowing(tmp_path, backend, gauge, globals, expected):
+    if expected is None:
+        with pytest.raises(GeLBExSyntaxError, match="a.*global_constants"):
+            compile_source(program(gauge, globals=globals), PipelineProfile.CODEGEN)
+        return
     data = run_source(tmp_path, backend, program(gauge, globals=globals))
     np.testing.assert_array_equal(data['v'], [expected, expected])
 
