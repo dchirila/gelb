@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[3]
 
 CASES = [
     ('examples/lbm/3d/taylor_green_vortex_3d_bgk.gelb', 'N=0',
-     'Division by zero', 'const int N = 32;'),
+     'Grid size element [0] = 0 is invalid', 'const int N = 32;'),
     ('examples/basic/1d/ex30_simple_constants_test.gelb', 'SIZE=0',
      'Grid size 0 is invalid', 'const int SIZE = 16;'),
 ]
@@ -54,3 +54,12 @@ def test_json_mode_carries_the_declaration_range(tmp_path, example, define, prob
     assert problem in diagnostic['message']
     source_lines = (ROOT / example).read_text().splitlines()
     assert declaration in source_lines[diagnostic['range']['startLine']]
+
+
+@pytest.mark.parametrize('check', [test_text_mode_shows_the_problem_at_the_declaration,
+                                  test_json_mode_carries_the_declaration_range], ids=['text', 'json'])
+def test_division_override_with_positive_grid(tmp_path, check):
+    from gelb.tests.integration.test_refactor_defect_probes import source
+    path = tmp_path / 'division.gelb'
+    path.write_text(source(constants='const real DEN = 2.0;\nconst real RATIO = 1.0 / DEN;'))
+    check(tmp_path, str(path), 'DEN=0', 'Division by zero', 'const real DEN = 2.0;')

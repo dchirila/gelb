@@ -81,28 +81,13 @@ for n in (2, 9):
         q=n, kind="real32", init="u.out[x | :] = 1.0;", outputs="real r")
 
 
-def build_failure(case, config):
-    if case == "singleton_local_element" and config != "fortran":
-        return r'(cannot convert .*double \[1\].*double|a value of type "double \*" cannot be assigned)'
-    if case == "singleton_element_store" and config == "fortran":
-        return "Incompatible ranks 0 and 1"
-    if case == "late_constants":
-        return r"You reference K\. However, you only define it later"
-    if case == "named_extent":
-        return ("Expected a right parenthesis" if config == "fortran" else
-                "Array1DLiteral_N as a free-standing expression is unsupported")
-    if case == "named_zero_slice":
-        return "expects an array argument, got scalar"
-    return None
-
-
 PARAMS = []
 for case in PROGRAMS:
     for cfg in CONFIGS:
         config = cfg.values[0]
         marks = list(cfg.marks)
-        if build_failure(case, config) or (config != "fortran" and (
-                case.startswith(("narrow_matmul", "mixed_dot")) or case == "integer_literal_division")):
+        if config != "fortran" and (
+                case.startswith(("narrow_matmul", "mixed_dot")) or case == "integer_literal_division"):
             marks.append(expected_failure(case.replace("_", " ")))
         PARAMS.append(pytest.param(case, config, marks=marks, id=f"{case}-{config}"))
 
@@ -111,9 +96,6 @@ for case in PROGRAMS:
 def test_runtime_contract(tmp_path, case, config):
     result, data = run_program(tmp_path, config, PROGRAMS[case])
     log = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout + result.stderr)
-    pattern = build_failure(case, config)
-    if result.returncode and pattern and re.search(pattern, log):
-        raise KnownDefect(pattern)
     assert result.returncode == 0, log
     values = {name: array[-1] for name, (dims, array) in data.items() if "time" in dims and name != "time"}
     if case.startswith("zero_matmul"):
@@ -146,8 +128,9 @@ def test_runtime_contract(tmp_path, case, config):
         np.testing.assert_array_equal(values[name], np.broadcast_to(value, values[name].shape))
 
 
-@pytest.mark.parametrize("case", REJECTIONS)
-@expected_failure("invalid declarations or constant zero divisors are accepted")
+@pytest.mark.parametrize("case", [
+    pytest.param(case, marks=expected_failure("constant zero divisor is accepted"))
+    if case == "constant_element_zero_divisor" else case for case in REJECTIONS])
 def test_required_diagnostic(tmp_path, case):
     path = tmp_path / "probe.gelb"
     path.write_text(REJECTIONS[case])
@@ -193,3 +176,105 @@ def test_constant_element_folded(tmp_path, config):
     pattern = r"\bg__a\(1\)" if config == "fortran" else r"\bg_A\[1\]"
     if re.search(pattern, out.read_text()):
         raise KnownDefect("constant-array element read was emitted")
+
+
+@pytest.mark.parametrize('config', CONFIGS)
+def test_shapes_indices_and_late_constants(tmp_path, config):
+    text = source('''
+        const int K = 2;
+        array[real, Nx/2] a = F(u.in[x | 0]);
+        array[real, SZ[0, 1]] b = {1.0, 2.0, 3.0};
+        array[real, K] c = {b[1+1], b[2:1+1]};
+        v = dot_prod(a, c) + Y;
+        ''', functions='''
+        function F(real z) -> (array[real, Q] r) { r = Later(z); }
+        function Later(real z) -> (array[real, Q] r) { r = {z, z}; }
+        ''') + '''global_constants {
+            const int Q = 2;
+            const array[int, {2, 2}] SZ = {{2, 3}, {3, 2}};
+            const array[real, 2] W = {1.0, 2.0};
+            const real Y = W[0] + 1.0;
+        }'''
+    result, data = run_program(tmp_path, config, text)
+    assert result.returncode == 0, result.stdout + result.stderr
+    np.testing.assert_array_equal(data['v'][1][-1], np.arange(1.0, 5.0) * 6 + 2)
+
+
+@pytest.mark.parametrize('config', CONFIGS)
+def test_singleton_values_widths_and_assignments(tmp_path, config):
+    text = source('''
+        array[real, 1] a = u.in[x | :];
+        array[real32, 1] s = real32(1.0/3.0);
+        array[int16, 1] k = int16(3);
+        array[bool, 1] p = true;
+        array[real, 8] b = {a, 2.0*a, real(k), F(a[0]), a[:], s, real(p), 5.0};
+        array[real, 2] assigned;
+        assigned = {a, a};
+        v = sum(b) + sum(assigned);
+        sign = b[0];
+        array[bool, 2] flags = {p, false};
+        truth = flags[0];
+        ''', functions='function F(real z) -> (array[real, 1] r) { r = z; }',
+        init='u.out[x | 0] = -0.0;', outputs='real v, real sign, bool truth')
+    result, data = run_program(tmp_path, config, text)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert np.signbit(data['sign'][1]).all()
+    assert data['truth'][1].all()
+    np.testing.assert_array_equal(data['v'][1], np.full((2, 4), 9.0 + float(np.float32(1.0/3.0))))
+
+
+@pytest.mark.parametrize('config', CONFIGS)
+@pytest.mark.parametrize('element', ['a', 'u.in[x | :]'])
+def test_repeated_singleton_arithmetic_in_expanded_store(tmp_path, config, element):
+    text = source('v = h.in[x | 0] + h.in[x | 1];',
+        extra='lattice h(1, 9, real, 4, false);',
+        init='u.out[x | 0] = 1.5; h.out[x | :] = 0.0;',
+        dynamic=f'''array[real, 1] a = u.in[x | :]; u.out[x | 0] = u.in[x | 0];
+            h.out[x | :] = {{2.0*{element}, 2.0*{element}, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};''')
+    text = text.replace('4, false', '64, false')
+    control = text.replace(f'2.0*{element}', '2.0*a[0]' if element == 'a' else '2.0*u.in[x | 0]')
+    values = []
+    for label, program in [('candidate', text), ('control', control)]:
+        folder = tmp_path / label
+        folder.mkdir()
+        result, data = run_program(folder, config, program)
+        assert result.returncode == 0, result.stdout + result.stderr
+        values.append(data['v'][1][-1])
+    np.testing.assert_array_equal(values[0], values[1])
+    np.testing.assert_array_equal(values[0], np.full(64, 6.0))
+
+
+@pytest.mark.parametrize('config', CONFIGS)
+@pytest.mark.parametrize('global_array,grid,offset', [(False, 4, 2), (True, 4, 2), (False, 8, 6)])
+def test_explicit_grid_constant_array_index(tmp_path, config, global_array, grid, offset):
+    declaration = 'array[real, 3] w = {1.0, 2.0, 3.0};'
+    text = source(('' if global_array else declaration) + f'v = w[Nx-{offset}];',
+                  constants='const ' + declaration if global_array else '').replace('4, false', f'{grid}, false')
+    result, data = run_program(tmp_path, config, text)
+    assert result.returncode == 0, result.stdout + result.stderr
+    np.testing.assert_array_equal(data['v'][1], np.full((2, grid), 3.0))
+
+
+@pytest.mark.parametrize('config', CONFIGS)
+@pytest.mark.parametrize('case', ['input_coordinate', 'input_constant', 'negative_extent'])
+def test_array_indices_rejected_before_backend_emission(tmp_path, config, case):
+    if case == 'negative_extent':
+        text = source('array[real, SZ[-1]] a = {1.0, 2.0, 3.0}; v = a[0];',
+                      constants='const array[int, 2] SZ = {2, 3};')
+        context = 'array shape'
+    else:
+        text = source('v = F(x);' if case == 'input_coordinate' else 'v = F(3);',
+            functions='function F(int i) -> (real r) { array[real, 3] w = {1.0, 2.0, 3.0}; r = w[i]; }')
+        context = 'array index'
+    path = tmp_path / 'invalid.gelb'
+    path.write_text(text)
+    args = [sys.executable, '-P', '-m', 'gelb.gelbc', str(path), '--diagnostics-json',
+            '-b', BACKENDS.get(config, 'cpu_highway')]
+    if config in ('soa', 'aos', 'cbt'):
+        args += ['--storage-layout', config]
+    result = subprocess.run(args, cwd=tmp_path, capture_output=True, text=True, timeout=60)
+    assert result.returncode == 1, result.stdout + result.stderr
+    errors = [d for d in json.loads(result.stdout)['diagnostics'] if d['severity'] == 'error']
+    assert len(errors) == 1 and context in errors[0]['message']
+    line = errors[0]['range']['startLine']
+    assert ('SZ[-1]' if case == 'negative_extent' else 'w[i]') in text.splitlines()[line]

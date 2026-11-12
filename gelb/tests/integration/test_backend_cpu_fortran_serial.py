@@ -1123,12 +1123,12 @@ class TestConstantOverrides:
         assert '0.3925' not in code
 
     def test_grid_size_propagated(self):
-        """Overriding N should change Nx/Ny (via g__nx = g__n)."""
+        """Overriding N resolves both grid dimensions to the new value."""
         code = _generate_with_overrides(
             _2d_program_with_derived(), {'N': '64'})
-        # N is overridden; Nx/Ny reference g__n
         assert 'g__n = 64' in code
-        assert 'g__nx = int(g__n)' in code
+        assert 'g__nx = 64' in code
+        assert 'g__ny = 64' in code
 
     def test_multiple_overrides(self):
         code = _generate_with_overrides(
