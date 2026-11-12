@@ -679,8 +679,8 @@ NOT_CALLS_OF_CONSTANTS = [
     pytest.param(S_ARRAY, "array[real, 2] w = {0.0, 1.0}; f.out[x, y | 1] = S(w) + v * 0.0;",
                  id="an array variable holding constants"),
     pytest.param(A_GLOBAL + "\n" + S_ARRAY,
-                 "array[real, 2] A = {v, 1.0}; f.out[x, y | 1] = S(A);",
-                 id="a local array named like a global constant one"),
+                 "array[real, 2] local_array = {v, 1.0}; f.out[x, y | 1] = S(local_array);",
+                 id="a local array alongside a global constant one"),
     pytest.param(S_ARRAY, "const array[real, 2] C = {v, 1.0}; f.out[x, y | 1] = S(C);",
                  id="a block constant array holding a variable"),
     pytest.param(S_ARRAY + "\nfunction F(real p) -> (real r) {"
@@ -708,6 +708,17 @@ def test_a_value_computed_at_run_time_makes_no_call_of_constants(functions, dyna
     parameter's copy, or a draw, makes the calls it reaches calls of
     variables, whose locals are variables (no compile-time error)."""
     _compile(program(dynamic, functions=functions))
+
+
+def test_a_local_array_cannot_reuse_a_global_constant_name():
+    from gelb.utils.exceptions import GeLBExSyntaxError
+    text = program("array[real, 2] A = {v, 1.0}; f.out[x, y | 1] = S(A);",
+                   functions=A_GLOBAL + "\n" + S_ARRAY)
+    with pytest.raises(GeLBExSyntaxError, match="Identifier 'A' is reserved by global_constants") as error:
+        _compile(text)
+    line = error.value._source_location()[0]
+    assert 'array[real, 2] A = {v, 1.0};' in text.splitlines()[line - 1]
+    assert 'constant is defined on line' in error.value.hint
 
 
 def test_a_constant_holding_a_call_of_constants_is_a_constant_argument():

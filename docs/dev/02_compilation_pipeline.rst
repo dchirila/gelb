@@ -94,6 +94,12 @@ Frontend
    explicit and implicit constants into their uses;
    :source:`gelb/frontend/RangeResolverVisitor.py` fills omitted
    range bounds with ``0`` and ``Nx-1`` (``Ny-1``, ``Nz-1``).
+``resolve_declared_shapes``
+   :source:`gelb/frontend/declared_shapes.py` resolves all declared array
+   extents before type inference, including function signatures regardless
+   of declaration order. It uses the declaration block's typed constants
+   and, in initializers, dynamics and gauges, active grid dimensions.
+   Extents must be positive integers; shapes become literal dimensions.
 ``infer_types``, ``promote_types``, ``validate_types``
    :source:`gelb/frontend/TypeInferenceVisitor.py` sets
    ``inferred_type`` on every expression,
@@ -111,11 +117,9 @@ Frontend
    :source:`gelb/gelb_ast/CanonicalType.py` metadata after type validation.
    Scalars have dimensions ``()``, singleton arrays ``(1,)``; aliases
    ``int64`` and ``real64`` map to ``int`` and ``real`` without rewriting
-   the AST's declared type or shape. Assigning ``inferred_type`` synchronizes
-   concrete expression metadata; this pass resolves remaining constant
-   extents for metadata only, using grid dimensions and the declaration's
-   local constants. Shared function-output types retain their declaration
-   scope when referenced from a caller with shadowing constants.
+   declared element-type spelling. Assigning ``inferred_type`` synchronizes
+   concrete expression metadata. This pass reads the already resolved
+   shapes directly; unresolved shapes fail ``check_stage1``.
 ``validate_constant_assignments``, ``validate_lattice_consistency``
    :source:`gelb/frontend/ConstantAssignmentValidationVisitor.py`: no
    assignment to a constant;

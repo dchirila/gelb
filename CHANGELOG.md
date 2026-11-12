@@ -17,6 +17,10 @@ versions follow upstream end of life and can change in any release.
 
 ### Changed
 
+- Names in `global_constants` are reserved in block locals, function
+  inputs and outputs, and gauge outputs. Reusing one now reports a
+  source-located error instead of silently capturing a different value.
+
 - The packaged installers for macOS and Ubuntu that the 1.0.0 notes
   announced for 1.0.1 move to a later release; the source checkout plus
   the bootstrap script remains the supported install.
@@ -40,6 +44,16 @@ versions follow upstream end of life and can change in any release.
   type, and so do `real` and `real64`.
 
 ### Fixed
+
+- Top-level blocks may appear in any order; references before a local
+  declaration remain errors. Named lattice sizes and periodicity resolve
+  consistently, including command-line overrides.
+- Declared array extents resolve before type inference. Constant array
+  indices fold before selection typing, and negative, out-of-bounds, or
+  reversed constant ranges are rejected. Named open DF slices starting
+  at zero retain their array type even on a one-DF lattice.
+- One-dimensional array literals accept length-one array expressions as
+  scalar elements on every backend and reject larger array elements.
 
 - **A full DF slice of a `q = 1` lattice builds on every backend.**
   `f.out[x | :]` on a lattice with one DF is an array of one element, as

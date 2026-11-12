@@ -20,8 +20,8 @@ The anatomy of a GeLB program
 A GeLB source file is a sequence of top-level blocks, each
 introduced by a keyword.  There are eight block kinds; every
 program uses all of them except ``global_constants`` (optional).
-They must appear in roughly this order because some blocks
-reference declarations from earlier ones:
+Top-level blocks may appear in any order. Within each block, a name
+must be declared before it is used. A typical arrangement is:
 
 .. code-block:: gelb
 
@@ -76,6 +76,10 @@ Block                        Purpose
 ``node_classes``             Bind (initializer, dynamic, gauge) triples into named classes.
 ``geometry``                 Assign node classes to spatial regions of the grid.
 ============================ ====================================================
+
+Names declared in ``global_constants`` cannot be reused by block locals,
+function inputs or outputs, or gauge outputs. Locals in separate blocks may
+share a name.
 
 The first line of every program is a ``simulation_description(...)``
 call — not a block, just a one-line metadata string.  It shows up in
@@ -515,6 +519,14 @@ variable.  To keep an expression in single precision, write
 ``real32(3.0)`` or use a ``real32`` constant (``const real32 THREE =
 3.0;`` in ``global_constants``).  The full promotion table,
 including what the intrinsics return, is in :doc:`19_numerical_semantics`.
+
+An element of a one-dimensional ``{...}`` literal may be a scalar or a
+one-dimensional array of length one. The latter contributes its sole
+scalar value, preserving its element type: ``{a1, 5.0}`` has the same
+values as ``{a1[0], 5.0}`` when ``a1`` has length one. Longer arrays and
+higher-rank arrays are rejected as elements. The velocity-set argument
+``{EX, EY[, EZ]}`` of ``upstream_dfs`` and ``bounce_back_dfs`` is a
+separate form. Multidimensional literals still contain nested rows.
 
 Array types couple element type and shape into a single type:
 
