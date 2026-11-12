@@ -40,6 +40,7 @@ from gelb.frontend.GlobalConstantsInitializerValidator import (
 from gelb.frontend.LatticeConsistencyValidator import LatticeConsistencyValidator
 from gelb.frontend.RangeResolverVisitor import RangeResolverVisitor
 from gelb.frontend.TypeInferenceVisitor import TypeInferenceVisitor
+from gelb.frontend.declared_shapes import resolve_declared_shapes
 from gelb.frontend.TypePromotionVisitor import TypePromotionVisitor
 from gelb.frontend.TypeValidationVisitor import TypeValidationVisitor
 from gelb.frontend.ConstantAssignmentValidationVisitor import ConstantAssignmentValidationVisitor

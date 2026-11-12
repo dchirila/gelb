@@ -48,61 +48,6 @@ def _walk(ast):
                 stack.extend((child, node, field, skip) for child in reversed(children))
 
 
-def _type_resolver(ast):
-    from gelb.frontend.TypeInferenceVisitor import TypeInferenceVisitor
-    from gelb.midware.ast_eval import collect_lattice_info, eval_const_expr
-
-    scopes, owners, fallbacks = {}, {}, {}
-
-    def declare(data_type, scope):
-        if isinstance(data_type, A.ArrayDataType_N):
-            # Derived types can share the whole shape or just its extent nodes.
-            # Only declarations establish ownership: a promotion's structural
-            # target type can revisit the same shape in a different block.
-            for part, _, _, _ in _walk(data_type):
-                owners[id(part)] = scope
-
-    for node, parent, _, _ in _walk(ast):
-        scope = node if isinstance(node, A.Block_N) else scopes.get(id(parent))
-        scopes[id(node)] = scope
-        inferred = getattr(node, 'inferred_type', None)
-        fallbacks.setdefault(id(inferred), scope)
-        if isinstance(node, A.ArrayDataType_N):
-            fallbacks.setdefault(id(node), scope)
-        if isinstance(node, (A.ConstantDefinitionStmt_N, A.VariableDeclarationStmt_N)):
-            declare(node.data_type, scope)
-        table = getattr(node, 'symbol_defs', None)
-        for symbol in table if table is not None else ():
-            if symbol.tag in DECLARED:
-                declare(getattr(symbol.value, 'data_type', None), scope)
-
-    inference = None
-    bindings = {}
-
-    def resolve(data_type):
-        def evaluate(expr):
-            nonlocal inference
-            owner = owners.get(id(expr), owners.get(id(data_type.shape),
-                               owners.get(id(data_type), fallbacks.get(id(data_type)))))
-            # Concrete extents and scalars never need evaluation. For unresolved
-            # extents reuse inference's width-aware constants in the owner block.
-            if inference is None:
-                inference = TypeInferenceVisitor()
-                inference._lattice_info = collect_lattice_info(ast) if ast.lattices is not None else {}
-            if owner not in bindings:
-                inference.current_block = owner
-                bindings[owner] = inference._compile_time_bindings(ast)
-            return eval_const_expr(expr, ast=ast, lattice_info=inference._lattice_info,
-                                   bindings=bindings[owner])
-
-        try:
-            return canonical_from_ast(data_type, evaluate)
-        except (ValueError, TypeError) as error:
-            raise GeLBInternalInvariantError(f'invalid computational type: {error}') from error
-
-    return resolve
-
-
 def _symbol_type(symbol):
     if symbol.tag in DECLARED:
         data_type = getattr(symbol.value, 'data_type', None)
@@ -118,14 +63,13 @@ def _symbol_type(symbol):
 
 def canonicalize_types(ast):
     """Attach canonical types without changing declared shapes or expression types."""
-    resolve_type = _type_resolver(ast)
     symbols = []
     for node, _, _, _ in _walk(ast):
         if isinstance(node, A.ArrayDataType_N):
-            node.canonical_type = resolve_type(node)
+            node.canonical_type = canonical_from_ast(node)
         inferred = getattr(node, 'inferred_type', None)
         if isinstance(inferred, A.ArrayDataType_N):
-            inferred.canonical_type = resolve_type(inferred)
+            inferred.canonical_type = canonical_from_ast(inferred)
             node.canonical_type = inferred.canonical_type
         table = getattr(node, 'symbol_defs', None)
         if table is not None:
@@ -134,7 +78,7 @@ def canonicalize_types(ast):
         if symbol.tag in DECLARED:
             _symbol_type(symbol)  # Validate the declared-type slot before attaching metadata.
             data_type = symbol.value.data_type
-            data_type.canonical_type = resolve_type(data_type)
+            data_type.canonical_type = canonical_from_ast(data_type)
         symbol.canonical_type = _symbol_type(symbol)
     return ast
 
@@ -144,10 +88,9 @@ class ASTInvariantValidator:
     def check_stage1(ast):
         if not isinstance(ast, A.Program_N) or set(ast.get_children_names()) != PROGRAM_FIELDS:
             raise GeLBInternalInvariantError('unexpected Program_N structural fields')
-        resolve_type = _type_resolver(ast)
 
         def require_type(node, data_type):
-            expected = resolve_type(data_type)
+            expected = canonical_from_ast(data_type)
             if not isinstance(expected, CanonicalType) or node.canonical_type != expected:
                 raise GeLBInternalInvariantError(f'inconsistent canonical type on {type(node).__name__}')
             if data_type.canonical_type != expected:

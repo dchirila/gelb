@@ -151,6 +151,16 @@ class ConstantsResolverVisitor(ASTBaseVisitor):
                 if symbol_def.tag == "constant definition":
                     sdef = symbol_def.value.value
                     node.replace_symbol_references(srefname, sdef)
+                    # List_N's elements are not generic structural fields.
+                    # Resolve only lattice parameter elements here; replacing
+                    # every list would also replace intrinsic array arguments.
+                    for parameter in (node.grid_size, node.periodicity):
+                        if isinstance(parameter, Array1DLiteral_N):
+                            for index, expr in enumerate(parameter.value.elements):
+                                if isinstance(expr, Identifier_N) and expr.name == srefname:
+                                    parameter.value.elements[index] = copy.deepcopy(sdef)
+                                else:
+                                    expr.replace_symbol_references(srefname, sdef)
         
         # Validate lattice parameters after constants are resolved
         self._validate_lattice_parameters(node, ast_root_node)

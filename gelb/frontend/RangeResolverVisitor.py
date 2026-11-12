@@ -139,6 +139,7 @@ class RangeResolverVisitor(ASTBaseVisitor, BinaryOperationMixin, ProgramTraversa
             node.low = IntLiteral_N(node.code_range, 0)
             
         if node.high is None:
+            node.has_open_high = True
             if self.in_dfs_range:
                 # Look up the lattice's q value (already resolved to IntLiteral_N
                 # by the constants resolver which runs before this pass)
@@ -146,8 +147,7 @@ class RangeResolverVisitor(ASTBaseVisitor, BinaryOperationMixin, ProgramTraversa
                 node.high = IntLiteral_N(node.code_range, q_val - 1)
                 # Tag so type inference can distinguish `:` from e.g. `0` when
                 # q=1.  An open end with a lower bound (`2:`) is not full.
-                node.is_full_df_range = (
-                    isinstance(node.low, IntLiteral_N) and node.low.value == 0)
+                node.is_full_df_range = isinstance(node.low, IntLiteral_N) and node.low.value == 0
             elif self.current_dimension is not None:
                 # For spatial dimensions, use Nx-1, Ny-1, or Nz-1
                 if self.current_dimension < len(DIMENSION_CONSTANT_NAMES):

@@ -370,7 +370,9 @@ def _children_slots(node):
     operands and the wrappers around them.  Anything else (an intrinsic
     call, a lattice read, an array selection) is a leaf."""
     if isinstance(node, TypePromotionNode_N):
-        return ('expr',)
+        # A singleton coercion is scalar, but its operand still has rank 1.
+        # Keep that operand inside the wrapper instead of hoisting it as a scalar.
+        return () if node.is_singleton_coercion() else ('expr',)
     if isinstance(node, BroadcastNode_N):
         return ('scalar_expr',)
     if isinstance(node, UnaryMinusExpr_N):

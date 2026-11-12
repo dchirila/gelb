@@ -2057,7 +2057,17 @@ class FortranCodeGenerator:
         source = None
         if hasattr(node.expr, 'inferred_type') and hasattr(node.expr.inferred_type, 'element_dtype'):
             source = node.expr.inferred_type.element_dtype
-        return self._emit_cast(expr, source, target)
+        converted = self._emit_cast(expr, source, target)
+        if node.is_singleton_coercion():
+            # Extract the sole stored value without a reduction: adding
+            # zero would change negative zero and can lose the element width.
+            if target == 'bool':
+                converted = f'logical({expr}, kind=1)'
+                mold = '.false._1'
+            else:
+                mold = self._emit_cast('0', 'int', target)
+            return f'transfer({converted}, {mold})'
+        return converted
 
     def _emit_cast(self, expr, source, target):
         """Emit a Fortran type-conversion expression.

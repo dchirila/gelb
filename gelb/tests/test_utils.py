@@ -16,6 +16,7 @@ from gelb.frontend.stage1_frontend import (
     build_symbols_tables,
     resolve_all_constants,
     resolve_ranges,
+    resolve_declared_shapes,
     add_implicit_symbols,
     infer_types,
     promote_types,
@@ -55,6 +56,7 @@ def get_typed_ast(gelb_code):
     ast = add_implicit_symbols(ast)
     ast = resolve_all_constants(ast)
     ast = resolve_ranges(ast)
+    ast = resolve_declared_shapes(ast)
     ast = infer_types(ast)
     return ast
 

@@ -327,7 +327,7 @@ class ExpressionEmitMixin:
             tgt_elem = (getattr(tgt, 'element_dtype', None)
                         or getattr(tgt, 'name', 'double'))
             cpp_tgt = _TYPE_MAP.get(tgt_elem, 'double')
-            inner = self._emit_expression(expr.expr, df_var)
+            inner = self._emit_expression(expr.expr, '0' if expr.is_singleton_coercion() else df_var)
             return self._emit_simd_aware_cast(inner, expr.expr, cpp_tgt)
         # Comparison operators -- in scalar mode produce a C++ bool
         # (implicitly convertible to int / double in arithmetic

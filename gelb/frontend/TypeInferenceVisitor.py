@@ -30,6 +30,7 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         # Track current block context for symbol lookup
         self.current_block = None
         self._lattice_info = None
+        self._velocity_set = None
     
     # Helper method to create scalar array types
     def _create_scalar_array_type(self, code_range, element_dtype):
@@ -126,7 +127,20 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
     
     def visitArray1DLiteral_N(self, node: Array1DLiteral_N, ast_root_node: Program_N):
         """Infer type of 1D array literal from its elements."""
-        return self._process_array_literal(node, ast_root_node, 1)
+        if not node.value.elements:
+            raise GeLBExTypeError(node, "Array literal cannot be empty",
+                                  "Array literals must contain at least one element.")
+        for i, element in enumerate(node.value.elements):
+            self.visit(element, ast_root_node)
+            dtype = element.canonical_type
+            if dtype is None or dtype.is_scalar or node is self._velocity_set:
+                continue
+            if dtype.dims != (1,):
+                raise GeLBExTypeError(element, "Non-scalar array element in a 1-D literal",
+                                      "An array element must have rank 1 and length 1.")
+            scalar = self._create_scalar_array_type(element.code_range, dtype.dtype)
+            node.value.elements[i] = TypePromotionNode_N(element.code_range, element, scalar)
+        return self._handle_array_literal_dimensions(node, ast_root_node, 1)
     
     def visitArray2DLiteral_N(self, node: Array2DLiteral_N, ast_root_node: Program_N):
         """Infer type of 2D array literal from its structure."""
@@ -384,35 +398,26 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
                 hint
             )
         
-        # Count how many ranges select single elements vs ranges
-        single_element_count = 0
-        range_count = 0
-        
-        for r in node.element_ranges.elements:
-            if isinstance(r, Range_N):
-                if r.low is not None and r.high is not None and self._are_range_bounds_equal(r.low, r.high):
-                    # Single element: arr[3] or arr[3:3]
-                    single_element_count += 1
-                elif r.low is None and r.high is None:
-                    # Full range: arr[:]
-                    range_count += 1
-                else:
-                    # Partial range: arr[1:3]
-                    range_count += 1
-        
-        # If all selections are single elements, result is scalar (0D array)
-        if single_element_count == len(node.element_ranges.elements):
-            # Validate that all single element expressions are compile-time evaluable
-            for r in node.element_ranges.elements:
-                if isinstance(r, Range_N):
-                    self._evaluate_compile_time_int(
-                        r.low, ast_root_node, "array index",
-                        original_dimensions)
-                    if r.high != r.low:  # Only validate high if it's different from low
-                        self._evaluate_compile_time_int(
-                            r.high, ast_root_node, "array index",
-                            original_dimensions)
-            
+        # Fold first: equal constant expressions denote a scalar selection.
+        for r, size in zip(node.element_ranges.elements, original_dimensions):
+            for attr in ('low', 'high'):
+                bound = getattr(r, attr)
+                if bound is None:
+                    continue
+                dimensions = original_dimensions if attr == 'high' and getattr(r, 'has_open_high', False) else None
+                self._validate_compile_time_symbol_refs(bound, "array index", dimensions)
+                if not self._deferred_array_bound(bound):
+                    value = self._evaluate_compile_time_int(
+                        bound, ast_root_node, "array index", dimensions)
+                    setattr(r, attr, IntLiteral_N(bound.code_range, value))
+            if isinstance(r.low, IntLiteral_N) and isinstance(r.high, IntLiteral_N):
+                lo, hi = r.low.value, r.high.value
+                if not 0 <= lo <= hi < size:
+                    raise GeLBExTypeError(r, f"Array index range {lo}:{hi} is outside 0..{size - 1} or reversed",
+                                          "Use increasing bounds within the declared array extent.")
+
+        if all(r.low is not None and r.high is not None
+               and self._are_range_bounds_equal(r.low, r.high) for r in node.element_ranges):
             empty_shape = List_N(node.code_range)
             node.inferred_type = ArrayDataType_N(node.code_range, base_type, empty_shape)
         else:
@@ -746,16 +751,17 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
             elif df_range.low is None and df_range.high is None:
                 is_full_range = True
 
-            # Pattern 3: explicit literal bounds that cover 0..q-1.  Not for
-            # q = 1, where the single index `| 0` also arrives as 0:0 and
-            # must stay a scalar; there only `:` (pattern 1) is the array.
+            # Pattern 3: folded bounds covering 0..q-1. For q = 1,
+            # only an open high bound denotes the full array; an explicit
+            # single-DF selection stays scalar.
             elif (isinstance(df_range.low, IntLiteral_N)
                   and isinstance(df_range.high, IntLiteral_N)
                   and isinstance(lattice_def.q, IntLiteral_N)
-                  and lattice_def.q.value > 1
+                  and (lattice_def.q.value > 1 or getattr(df_range, 'has_open_high', False))
                   and df_range.low.value == 0
                   and df_range.high.value == lattice_def.q.value - 1):
                 is_full_range = True
+                df_range.is_full_df_range = True
 
             # A slice of several DFs, `| lo:hi` with literal bounds, is an
             # array of hi-lo+1 elements; element i is DF lo+i (user manual,
@@ -895,8 +901,9 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         range_node = range_elem
         
         # Evaluate range bounds
-        low_val = self._evaluate_range_bound(range_node.low, ast_root_node, array_dimensions) if range_node.low else 0
-        high_val = self._evaluate_range_bound(range_node.high, ast_root_node, array_dimensions) if range_node.high else dimension_size - 1
+        low_val = self._evaluate_range_bound(range_node.low, ast_root_node) if range_node.low else 0
+        high_dimensions = array_dimensions if getattr(range_node, 'has_open_high', False) else None
+        high_val = self._evaluate_range_bound(range_node.high, ast_root_node, high_dimensions) if range_node.high else dimension_size - 1
         
         # Check for single element ranges
         if low_val == high_val:
@@ -984,6 +991,14 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
             )
 
         return value
+
+    def _deferred_array_bound(self, expr):
+        """Calls need the later, post-inlining check after validating arguments."""
+        from gelb.frontend.ASTInvariantValidator import _walk
+        for part, _, _, _ in _walk(expr):
+            if isinstance(part, UserFunctionCall_N):
+                return True
+        return False
 
     def _validate_compile_time_symbol_refs(
             self, expr, context, array_dimensions=None):
@@ -1122,7 +1137,12 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
         start = 1 if node.function_name in _STREAMING_INTRINSICS else 0
         for i, arg in enumerate(node.arguments):
             if i >= start:
-                self.visit(arg, ast_root_node)
+                previous = self._velocity_set
+                self._velocity_set = (arg if start and i == len(node.arguments) - 1 else None)
+                try:
+                    self.visit(arg, ast_root_node)
+                finally:
+                    self._velocity_set = previous
         
         # Look up the intrinsic function definition
         func_def = get_intrinsic_function(node.function_name)
