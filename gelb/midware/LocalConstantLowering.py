@@ -18,6 +18,8 @@ have their own emission (``parameter`` in Fortran, ``constexpr`` or an
 assigned global in C++).
 """
 
+from gelb.midware.BlockMutationHelper import replace_decl
+
 from gelb.gelb_ast.ASTNodes import (
     ConstantDefinitionStmt_N,
     VariableDeclarationStmt_N,
@@ -34,11 +36,11 @@ def lower_local_constants(ast):
             stmts = getattr(block, 'stmts', None)
             if stmts is None:
                 continue
-            stmts.elements = [_lowered(stmt) for stmt in stmts.elements]
+            stmts.elements = [_lowered(stmt, block) for stmt in stmts.elements]
     return ast
 
 
-def _lowered(stmt):
+def _lowered(stmt, block=None):
     if not isinstance(stmt, ConstantDefinitionStmt_N):
         return stmt
     decl = VariableDeclarationStmt_N(
@@ -48,4 +50,5 @@ def _lowered(stmt):
     # still a constant: the fold after inlining carries its value when
     # only inlining made it one (``const int a = Sq(0);``)
     decl.lowered_const = True
+    replace_decl(block, decl)
     return decl

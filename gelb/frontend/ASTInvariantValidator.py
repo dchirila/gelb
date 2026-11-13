@@ -136,4 +136,140 @@ class ASTInvariantValidator:
             require_type(node, inferred)
 
 
+    @staticmethod
+    def check_stage2(ast):
+        """Check live declarations, lexical references and types after midware."""
+        from gelb.frontend.SymbolsTable import SymbolsTable
+        from gelb.frontend.implicit_symbols import (
+            active_coordinate_names, active_dimension_names, dimensionality_from_program,
+        )
+
+        def require(ok, message):
+            if not ok:
+                raise GeLBInternalInvariantError(message)
+
+        def typed(node, data_type):
+            expected = canonical_from_ast(data_type)
+            require(isinstance(expected, CanonicalType)
+                    and node.canonical_type == expected
+                    and data_type.canonical_type == expected,
+                    f'inconsistent canonical type on {type(node).__name__}')
+
+        def entries(nodes, tag):
+            return [(node.name.name, tag, node) for node in nodes or ()]
+
+        def table_matches(table, parent, expected):
+            require(isinstance(table, SymbolsTable) and table.parent_table is parent,
+                    'invalid symbol table or parent')
+            names = [str(symbol.name) for symbol in table]
+            want = {name: (tag, value) for name, tag, value in expected}
+            require(len(want) == len(expected), 'duplicate declarations in block')
+            require(len(names) == len(set(names)) and set(names) == set(want),
+                    'symbol table membership differs from live declarations')
+            for symbol in table:
+                tag, value = want[str(symbol.name)]
+                require(symbol.tag == tag, f'incorrect symbol tag: {symbol.name}')
+                if value is not None:
+                    require(symbol.value is value, f'stale declaration: {symbol.name}')
+                elif tag in ('implicit lattice coordinate', 'implicit timestep variable'):
+                    require(isinstance(symbol.value, A.Identifier_N)
+                            and symbol.value.name == str(symbol.name),
+                            f'invalid implicit symbol: {symbol.name}')
+                if symbol.tag in DECLARED:
+                    typed(symbol.value.data_type, symbol.value.data_type)
+                require(symbol.canonical_type == _symbol_type(symbol),
+                        f'inconsistent canonical type for symbol {symbol.name}')
+
+        require(isinstance(ast, A.Program_N) and set(ast.get_children_names()) == PROGRAM_FIELDS,
+                'unexpected Program_N structural fields')
+        functions = (tuple(ast.functions) if ast.functions is not None
+                     else getattr(ast, '_inlined_functions', ()))
+        require(all(isinstance(func, A.FunctionBlock_N) for func in functions),
+                'invalid retained function')
+        globals_ = []
+        blocks = []
+        definitions = ((ast.global_constants, 'constant definition'),
+                       (ast.lattices, 'lattice instance'), (ast.node_classes, 'node class'))
+        for block, tag in definitions:
+            if block is not None:
+                globals_.extend(entries(block.stmts, tag))
+                blocks.append(block)
+        for group, tag in ((functions, 'function'), (ast.initializers, 'initializer'),
+                           (ast.dynamics, 'dynamic'), (ast.gauges, 'gauge')):
+            globals_.extend(entries(group, tag))
+            blocks.extend(group or ())
+        if ast.geometry is not None:
+            blocks.append(ast.geometry)
+        dimension = dimensionality_from_program(ast)
+        globals_.extend((name, 'implicit dimension constant', None)
+                        for name in active_dimension_names(dimension))
+        table_matches(ast.symbol_defs, None, globals_)
+        function_names = {func.name.name for func in functions}
+        executable = (A.InitializerBlock_N, A.DynamicBlock_N, A.GaugeBlock_N, A.FunctionBlock_N)
+        definition_tags = {A.GlobalConstantsBlock_N: 'constant definition',
+                           A.LatticesBlock_N: 'lattice instance', A.NodeClassesBlock_N: 'node class'}
+        for block in blocks:
+            expected = []
+            if type(block) in definition_tags:
+                expected.extend(entries(block.stmts, definition_tags[type(block)]))
+            elif isinstance(block, executable):
+                require(not any(isinstance(stmt, A.ConstantDefinitionStmt_N) for stmt in block.stmts),
+                        'residual local constant after lowering')
+                expected.extend(entries([stmt for stmt in block.stmts
+                                         if isinstance(stmt, A.VariableDeclarationStmt_N)],
+                                        'variable declaration'))
+                if isinstance(block, A.FunctionBlock_N):
+                    expected.extend(entries(block.inputs, 'input parameter'))
+                    expected.extend(entries(block.outputs, 'output parameter'))
+                elif isinstance(block, A.GaugeBlock_N):
+                    expected.extend(entries(block.outputs, 'output variable declaration'))
+            if isinstance(block, (A.InitializerBlock_N, A.DynamicBlock_N, A.GaugeBlock_N, A.GeometryBlock_N)):
+                expected.extend((name, 'implicit lattice coordinate', None)
+                                for name in active_coordinate_names(dimension))
+                if not isinstance(block, A.GeometryBlock_N):
+                    expected.append(('t', 'implicit timestep variable', None))
+            table_matches(block.symbol_defs, ast.symbol_defs, expected)
+            for node, parent, slot, _ in _walk(block):
+                # Only the declaration's name is syntax; selection names and
+                # node-class/block/function references are lexical references too.
+                own_name = slot == 'name' and type(parent) in NAME_SLOTS
+                if isinstance(node, A.Identifier_N) and not own_name:
+                    require(block.symbol_defs.get_symbol_definition(node.name) is not None,
+                            f'dangling identifier: {node.name}')
+
+        roots = (ast,) + (functions if ast.functions is None else ())
+        for root in roots:
+            for node, parent, slot, _ in _walk(root):
+                require(not isinstance(node.get_children(), set),
+                        f'unordered children on {type(node).__name__}')
+                for call in getattr(node, 'inline_calls', ()):
+                    require(call[0] in function_names, f'missing function: {call[0]}')
+                origin = getattr(node, 'inlined_from_call', None)
+                if origin:
+                    require(origin[0] in function_names, f'missing function: {origin[0]}')
+                if isinstance(node, A.UserFunctionCall_N):
+                    require(node.function_name.name in function_names,
+                            f'missing function: {node.function_name.name}')
+                if isinstance(node, A.ArrayDataType_N):
+                    typed(node, node)
+                if not isinstance(node, A.Expr_N):
+                    continue
+                inferred = getattr(node, 'inferred_type', None)
+                string = isinstance(node, A.StringLiteral_N) and parent is ast and slot == 'simulation_description'
+                nonvalue = string or (isinstance(node, A.UserFunctionCall_N)
+                    and isinstance(parent, A.DestructuringAssignmentStmt_N) and slot == 'rhs'
+                    and getattr(node, 'function_block', None) is not None
+                    and len(node.function_block.outputs) > 1)
+                nonvalue |= (isinstance(node, A.Identifier_N) and isinstance(parent, A.IntrinsicFunctionCall_N)
+                    and slot == 'arguments' and parent.function_name in ('upstream_dfs', 'bounce_back_dfs')
+                    and parent.arguments[0] is node)
+                if nonvalue:
+                    require(node.canonical_type is None and (inferred is None
+                            or (string and isinstance(inferred, A.StringType_N))),
+                            'computational type on non-value expression')
+                elif inferred is not None:
+                    typed(node, inferred)
+
+
 check_stage1 = ASTInvariantValidator.check_stage1
+check_stage2 = ASTInvariantValidator.check_stage2

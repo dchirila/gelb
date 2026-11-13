@@ -52,6 +52,8 @@ finds no draw left inside an intrinsic argument.
 import copy
 import itertools
 
+from gelb.midware.BlockMutationHelper import declare_temp, fresh_name
+
 from gelb.gelb_ast.ASTNodes import (
     Array1DLiteral_N,
     Array2DLiteral_N,
@@ -88,7 +90,7 @@ def sequence_draws(ast: Program_N) -> None:
             continue
         new_stmts = []
         for stmt in block.stmts.elements:
-            new_stmts.extend(_sequence_statement(stmt, counter, functions, drawing))
+            new_stmts.extend(_sequence_statement(stmt, counter, functions, drawing, block))
             new_stmts.append(stmt)
         block.stmts.elements = new_stmts
 
@@ -170,7 +172,8 @@ class _Walk:
     """One statement's rewrite: the temporaries declared so far, in
     draw order, and the counter shared by the whole program."""
 
-    def __init__(self, stmt, counter, functions, drawing):
+    def __init__(self, stmt, counter, functions, drawing, block):
+        self.block = block
         self.stmt = stmt
         self.counter = counter
         self.functions = functions
@@ -178,10 +181,10 @@ class _Walk:
         self.decls = []
 
 
-def _sequence_statement(stmt, counter, functions, drawing):
+def _sequence_statement(stmt, counter, functions, drawing, block):
     """Replace the draws of ``stmt`` by temporaries; return the new
     declarations, in draw order."""
-    walk = _Walk(stmt, counter, functions, drawing)
+    walk = _Walk(stmt, counter, functions, drawing, block)
     outer = _statement_lhs_count(stmt)
     # The statement's own value expressions: everything but an index.
     for child_name in _value_children(stmt):
@@ -262,8 +265,10 @@ def _walk(node, enclosing, walk, top=False):
 def _declare(walk, name, data_type, init):
     decl_name = Identifier_N(init.code_range, name)
     decl_name.inferred_type = data_type
-    walk.decls.append(VariableDeclarationStmt_N(
-        init.code_range, data_type, decl_name, initial_value=init))
+    decl = VariableDeclarationStmt_N(
+        init.code_range, data_type, decl_name, initial_value=init)
+    declare_temp(walk.block, decl)
+    walk.decls.append(decl)
     ref = Identifier_N(init.code_range, name)
     ref.inferred_type = data_type
     return ref
@@ -272,7 +277,7 @@ def _declare(walk, name, data_type, init):
 def _draw_temporary(call, count, walk):
     """A fresh temporary for one draw, scalar or ``count``-element."""
     cr = call.code_range
-    name = f'{DRAW_PREFIX}{next(walk.counter)}'
+    name = fresh_name(walk.block, DRAW_PREFIX, walk.counter)
     scalar = ArrayDataType_N(cr, 'real', List_N(cr))
     if count is None:
         data_type = scalar
@@ -291,7 +296,7 @@ def _call_temporary(call, walk):
     func = walk.functions[call.function_name.name]
     output = func.outputs.elements[0]
     data_type = copy.deepcopy(output.data_type)
-    name = f'{CALL_PREFIX}{next(walk.counter)}'
+    name = fresh_name(walk.block, CALL_PREFIX, walk.counter)
     if getattr(call, 'inferred_type', None) is None:
         call.inferred_type = data_type
     return _declare(walk, name, data_type, call)

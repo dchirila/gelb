@@ -48,6 +48,9 @@ is gated by the ``enable_cse`` flag.
 import copy
 
 
+from itertools import count
+from gelb.midware.BlockMutationHelper import declare_temp, remove_decl, fresh_name, names_available
+
 from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
 from gelb.frontend.visitor_mixins import ProgramTraversalMixin
 from gelb.gelb_ast.ASTNodes import (
@@ -120,6 +123,7 @@ class SliceDFExpansionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         self._cse_counter = 0
         # Per-block scope reset by each block-entry visitor.
         self._scope = None
+        self._block = None
 
     # --- Dispatcher --------------------------------------------------
 
@@ -172,6 +176,7 @@ class SliceDFExpansionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         # that the visitor will NOT expand (whole-array ops kept as-is).
         # These arrays must remain as whole arrays -- expanding them
         # would leave dangling references in the unexpanded stmts.
+        self._block = block
         forced_whole = _scan_forced_whole(block.stmts.elements)
         self._scope = _BlockScope(forced_whole=forced_whole)
         new_elements = []
@@ -180,9 +185,15 @@ class SliceDFExpansionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
             if replacement is None:
                 new_elements.append(stmt)
             else:
+                if isinstance(stmt, VariableDeclarationStmt_N):
+                    remove_decl(block, stmt.name.name)
+                for decl in replacement:
+                    if isinstance(decl, VariableDeclarationStmt_N):
+                        declare_temp(block, decl)
                 new_elements.extend(replacement)
         block.stmts.elements = new_elements
         self._scope = None
+        self._block = None
         return block
 
     # --- Per-statement dispatch --------------------------------------
@@ -208,7 +219,8 @@ class SliceDFExpansionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         # Forced-whole (pre-scan): some downstream stmt references this
         # array as a whole-array operand and won't be per-direction
         # expanded.  Keep this decl whole too so the references resolve.
-        if name in self._scope.forced_whole:
+        if (name in self._scope.forced_whole
+                or not names_available(self._block, (f"{name}_{i}" for i in range(q)))):
             self._scope.unexpanded_arrays.add(name)
             return None
         # Opaque-only initial value (e.g. fIn = upstream_dfs(...)) -- leave
@@ -430,12 +442,13 @@ class SliceDFExpansionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         for the hoisted subtrees, and the expressions reading them."""
         if not self.enable_cse or len(exprs) < 2:
             return [], exprs
-        start = self._cse_counter
+        counter = count(self._cse_counter)
+        reserved = {name for names in self._scope.array_to_scalars.values() for name in names}
         temps, rewritten = hoist_common_subtrees(
-            exprs, lambda i: f'_gelb_cse_{start + i}')
+            exprs, lambda i: fresh_name(self._block, '_gelb_cse_', counter, reserved))
         if not temps:
             return [], exprs
-        self._cse_counter = start + len(temps)
+        self._cse_counter = next(counter)
         self.cse_temps_emitted += len(temps)
         decls = [self._build_temp_decl(name, body, code_range,
                                        scalar_type_of(body, scalar_dtype))
