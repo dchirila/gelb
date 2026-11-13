@@ -27,6 +27,7 @@ _FRONTEND_TYPED_SUFFIX = (
     "promote_types",
     "validate_types",
     "canonicalize_types",
+    "validate_static_selectors",
     "validate_constant_assignments",
     "validate_lattice_consistency",
     "validate_node_classes",

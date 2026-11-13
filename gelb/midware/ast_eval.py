@@ -11,6 +11,7 @@ and does not emit any target-language code.
 from __future__ import annotations
 
 import math
+from contextlib import contextmanager
 
 import numpy as np
 
@@ -31,9 +32,21 @@ from gelb.gelb_ast.ASTNodes import (
 from gelb.frontend.type_rules import (
     INTEGER_TYPES, REAL_TYPES, arithmetic_result_type, real_width_of)
 from gelb.utils.exceptions import GeLBExStencilError
+from gelb.utils import config
 
 
 _DIM_SIZE_NAMES = ('Nx', 'Ny', 'Nz')
+
+
+@contextmanager
+def nonfatal_evaluation():
+    """Let speculative callers catch evaluator errors before reporting them."""
+    previous = config.DIAGNOSTICS_MODE
+    config.DIAGNOSTICS_MODE = True
+    try:
+        yield
+    finally:
+        config.DIAGNOSTICS_MODE = previous
 
 
 def _literal_value_or_expr(node):
@@ -169,6 +182,11 @@ def eval_function_body(ast, func_block, bindings=None, *, lattice_info=None):
                 local[stmt.name.name] = _typed(eval_const_expr(
                     value, local, ast=ast, lattice_info=lattice_info),
                     stmt.data_type)
+        elif isinstance(stmt, ConstantDefinitionStmt_N):
+            declared[stmt.name.name] = stmt.data_type
+            local[stmt.name.name] = _typed(eval_const_expr(
+                stmt.value, local, ast=ast, lattice_info=lattice_info),
+                stmt.data_type)
         elif isinstance(stmt, VariableAssignmentStmt_N):
             target = stmt.lhs.name if isinstance(stmt.lhs, Identifier_N) \
                 else None

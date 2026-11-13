@@ -32,6 +32,7 @@ from gelb.gelb_ast.ASTNodes import (
     RealLiteral_N, TypePromotionNode_N, VariableAssignmentStmt_N,
     VariableDeclarationStmt_N)
 from gelb.gelbc import cli as gelbc_cli
+from gelb.utils.exceptions import GeLBExTypeError
 from gelb.tests.integration.test_tutorial_regressions import (
     BACKENDS, run_source)
 
@@ -216,15 +217,17 @@ def test_a_block_local_const_is_lowered_to_a_typed_declaration():
 
 
 def test_a_local_const_that_does_not_fold_is_lowered_too():
-    # a draw is the one initializer the frontend accepts for a local
-    # const that the folder cannot evaluate
-    ast = _ast(program("const real a = random(); v = a;"))
+    # A constant-array element stays unfolded until later lowering.
+    ast = _ast(program("const real a = C[0]; v = a;",
+                       globals="global_constants { const array[real, 2] C = {2.0, 3.0}; }"))
     stmts = ast.gauges.elements[0].stmts.elements
     [decl] = [s for s in stmts if isinstance(s, VariableDeclarationStmt_N)
               and s.name.name == "a"]
     assert decl.initial_value is not None
     assert not any(isinstance(n, ConstantDefinitionStmt_N) for n in _walk(ast.gauges))
     assert isinstance(_gauge_value(ast, "v"), Identifier_N)
+    with pytest.raises(GeLBExTypeError, match="random"):
+        _ast(program("const real a = random(); v = a;"))
 
 
 @pytest.mark.parametrize("source, expected", NONFINITE_PROGRAMS)

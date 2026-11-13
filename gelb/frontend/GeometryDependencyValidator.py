@@ -21,6 +21,7 @@ from gelb.frontend.implicit_symbols import (
 from gelb.gelb_ast.ASTNodes import (
     BorderStmt_N,
     ConditionalPaintStmt_N,
+    ConstantDefinitionStmt_N,
     FunctionBlock_N,
     Identifier_N,
     IntrinsicFunctionCall_N,
@@ -170,6 +171,8 @@ def _check_function(call, ast, calls):
                 value = getattr(stmt, 'initial_value', None)
                 if value is not None:
                     _check_expr(value, ast, where='a function', calls=calls)
+            elif isinstance(stmt, ConstantDefinitionStmt_N):
+                _check_expr(stmt.value, ast, where='a function', calls=calls)
             elif isinstance(stmt, VariableAssignmentStmt_N):
                 _check_expr(stmt.rhs, ast, where='a function', calls=calls)
             else:

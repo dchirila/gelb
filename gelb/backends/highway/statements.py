@@ -1437,7 +1437,6 @@ class StatementEmitMixin:
             single = self._single_df_literal(df_node)
             if single is not None:
                 return str(single)
-            self._reject_runtime_df_index(df_node)
             lo = self._slice_low(df_node)
             if lo == 0:
                 return df_var
@@ -1447,30 +1446,8 @@ class StatementEmitMixin:
         df_scalar = self._range_scalar(df_node)
         if isinstance(df_scalar, IntLiteral_N):
             return str(df_scalar.value)
-        self._reject_runtime_df_index(df_node)
         raise NotImplementedError(
             "cpu_highway: DF index must be a literal int outside a slice loop.")
-
-    @staticmethod
-    def _reject_runtime_df_index(df_node):
-        """A single DF whose index is computed at run time (``| mod(x, 9)``)
-        has no SIMD lowering here; the Fortran backend runs it.  Inside a
-        slice loop it used to be read at the loop index, silently."""
-        single = (df_node.low if isinstance(df_node, Range_N)
-                  and (df_node.low is df_node.high
-                       or (isinstance(df_node.low, Identifier_N)
-                           and isinstance(df_node.high, Identifier_N)
-                           and df_node.low.name == df_node.high.name))
-                  else df_node if not isinstance(df_node, Range_N) else None)
-        if single is not None and not isinstance(single, IntLiteral_N):
-            from gelb.utils.exceptions import GeLBExStencilError
-            cr = getattr(df_node, 'code_range', None)
-            raise GeLBExStencilError(
-                "A DF index computed at run time is not supported by the "
-                "cpu_highway and gpu_cuda_cpp backends",
-                "Give the DF index as a constant, select the DF with a node "
-                "class, or use -b cpu_fortran_serial, which runs it",
-                source_line=cr.start_line if cr is not None else None)
 
     def _collect_bounce_back_dfs_keys(self):
         """Walk the AST and collect every velocity-set tuple used in

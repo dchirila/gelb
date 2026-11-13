@@ -148,6 +148,7 @@ def compile_source(
         promote_types,
         validate_types,
         canonicalize_types,
+        validate_static_selectors,
         validate_constant_assignments,
         validate_lattice_consistency,
     )
@@ -257,6 +258,9 @@ def compile_source(
 
     invariant(canonicalize_types, ast)
     record("canonicalize_types")
+
+    ast = validate_static_selectors(ast)
+    record("validate_static_selectors")
 
     ast = validate_constant_assignments(ast)
     record("validate_constant_assignments")

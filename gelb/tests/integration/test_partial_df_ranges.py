@@ -8,6 +8,7 @@ for ``| 2:5``), silently. The DFs hold 1..9, so every expected value is
 a small integer sum, exact in double on every backend.
 """
 import os
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -110,9 +111,7 @@ def test_df_slices_read_and_write_the_right_dfs(tmp_path, backend, layout):
             assert np.all(data[name][t] == value), (t, name, value, np.unique(data[name][t]))
 
 
-# A single DF index computed at run time inside a slice statement: the
-# Fortran backend runs it; the C++ backends reject it with a located
-# message (they used to read the loop index instead, silently).
+# A DF selector is compile-time evaluable on every backend.
 RUNTIME_INDEX = """
 simulation_description("a run-time DF index inside a slice statement");
 global_constants { const array[real, 9] INIT = {1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0}; }
@@ -141,23 +140,11 @@ def run_text(tmp_path, backend, layout, source):
 
 @pytest.mark.parametrize(('backend', 'layout'), [
     pytest.param(b, l, marks=m, id=f'{b}-{l or "default"}') for b, l, m in LAYOUTS])
-def test_a_run_time_df_index_runs_on_fortran_and_is_rejected_elsewhere(tmp_path, backend, layout):
+def test_a_run_time_df_index_is_rejected_on_every_backend(tmp_path, backend, layout):
     result = run_text(tmp_path, backend, layout, RUNTIME_INDEX)
-    if backend == 'cpu_fortran_serial':
-        assert result.returncode == 0, result.stdout + result.stderr
-        with netCDF4.Dataset(tmp_path / 'probe.nc') as nc:
-            s = np.asarray(nc.variables['s'][:])     # (time, y, x)
-        x = np.arange(16)
-        assert np.all(s[0] == 45)
-        # DFs 5..8 become four copies of DF (x mod 9), whose value is x mod 9 + 1.
-        assert np.all(s[1] == 15 + 4 * (x % 9 + 1))
-        assert np.all(s[2] == 15 + 4 * (x % 9 + 1))
-    else:
-        if layout == 'cbt' and result.returncode != 0 and 'AVX-512' in result.stdout + result.stderr:
-            pytest.skip('the cbt layout needs an AVX-512 host')
-        assert result.returncode != 0
-        assert 'DF index computed at run time is not supported' in result.stdout + result.stderr
-        assert 'Traceback' not in result.stderr
+    assert result.returncode != 0
+    assert "DF selector must be compile-time evaluable" in result.stdout + result.stderr
+    assert "Traceback" not in result.stderr
 
 
 # A full slice of a q = 1 lattice is an array of one element (user
@@ -245,3 +232,62 @@ geometry {{ nodes[:, :] = BULK; }}
     else:
         with pytest.raises(GeLBExTypeError, match="expects an array argument"):
             compile_source(source, PipelineProfile.CODEGEN, PipelineOptions())
+
+
+@pytest.mark.parametrize('backend, layout', [
+    pytest.param(b, l, marks=m) for b, l, m in ALL_LAYOUTS])
+@pytest.mark.parametrize('body, functions, message', [
+    ('int s = 1; const int k = s; f.out[x, y | 1] = k;', '', 'Constant'),
+    ('const real k = random(); f.out[x, y | 1] = k;', '', 'random()'),
+    ('f.out[x, y | 1] = F(1);',
+     'function F(int p) -> (int r) { const int k = p; r = k; }', 'Constant'),
+    ('f.out[x, y | 1] = f.in[x, y | mod(x, 2)];', '', 'DF selector'),
+    ('f.out[x, y | 1] = f.in[x, y | mod(t, 2)];', '', 'DF selector'),
+    ('int k = 1; f.out[x, y | 1] = f.in[x, y | k];', '', 'DF selector'),
+    ('f.out[x, y | 1] = f.in[x, y | Pick(x)];',
+     'function Pick(int p) -> (int r) { r = mod(p, 2); }', 'DF selector'),
+    ('f.out[x, y | 1] = f.in[x, y | Rnd()];',
+     'function Rnd() -> (int r) { r = int(random()); }', 'random()'),
+    ('f.out[x, y | 1] = f.in[x, y | int(f.in[x, y | 1])];', '', 'lattice access'),
+    ('array[real, 2] w = {1.0, 2.0}; f.out[x, y | 1] = w[ID(int(random()))];',
+     'function ID(int p) -> (int r) { r = p; }', 'Array index'),
+])
+def test_nonconstant_declarations_and_selectors_have_located_diagnostics(
+        tmp_path, backend, layout, body, functions, message):
+    from gelb.tests.integration.test_function_calls import program
+    source = program(body, functions=functions)
+    result = run_text(tmp_path, backend, layout, source)
+    assert result.returncode != 0
+    assert message in result.stdout + result.stderr
+    assert 'Traceback' not in result.stdout + result.stderr
+    path = tmp_path / 'probe.gelb'
+    command = [sys.executable, '-m', 'gelb.gelbc', str(path), '-b', backend,
+               '--diagnostics-json']
+    if layout:
+        command.extend(['--storage-layout', layout])
+    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=60)
+    assert result.returncode == 1
+    errors = [d for d in json.loads(result.stdout)['diagnostics'] if d['severity'] == 'error']
+    assert len(errors) == 1
+    assert message in errors[0]['message']
+    assert errors[0]['range']['startLine'] > 0
+    assert '(internal)' not in errors[0]['message']
+
+
+@pytest.mark.parametrize('backend, layout', [
+    pytest.param(b, l, marks=m) for b, l, m in ALL_LAYOUTS])
+def test_constant_selectors_and_position_masks_match_on_every_backend(tmp_path, backend, layout):
+    from gelb.tests.integration.test_function_calls import V, _check, program
+    source = program('''
+        const int k = 1;
+        const int c = F(0);
+        array[real, 2] w = {2.0, 3.0};
+        array[real, 2] fi = f.in[x, y | :];
+        array[real, 2] sel = {real(mod(x, 2) == 0), real(mod(x, 2) == 1)};
+        f.out[x, y | ID(k)] = f.in[x, y | F(0)] * real(t)
+                            + w[ID(c)] + dot_prod(fi, sel);
+    ''', functions='''
+        function ID(int p) -> (int r) { r = p; }
+        function F(int p) -> (int r) { const int a = 0; r = a + p; }
+    ''')
+    _check(tmp_path, backend, layout, source, V + 2.0 + V * (np.arange(V.size) % 2 == 0))
