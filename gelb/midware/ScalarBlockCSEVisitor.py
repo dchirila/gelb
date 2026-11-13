@@ -135,6 +135,7 @@ class ScalarBlockCSEVisitor(ASTBaseVisitor, ProgramTraversalMixin):
     def _process_block(self, block):
         if not hasattr(block, 'stmts') or block.stmts is None:
             return block
+        self._cse_counter = 0
         self._block = block
         elements = block.stmts.elements
         new_elements = []

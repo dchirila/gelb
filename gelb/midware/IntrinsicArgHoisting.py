@@ -67,9 +67,8 @@ def hoist_intrinsic_args(ast: Program_N) -> None:
     """In-place rewrite: hoist non-identifier args of every
     ``dot_prod`` call into freshly-named local declarations placed
     immediately before the enclosing statement."""
-    counter = itertools.count(0)
-
     for block in _iter_blocks(ast):
+        counter = itertools.count(0)
         if block.stmts is None:
             continue
         new_stmts = []

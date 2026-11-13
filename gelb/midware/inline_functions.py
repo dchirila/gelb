@@ -74,38 +74,68 @@ def inline_functions(ast):
     # Build lookup: function_name -> FunctionBlock_N
     func_map = {func.name.name: func for func in ast.functions}
 
-    # Monotonically increasing counter for unique alpha-rename prefixes
-    # (a prefix no name of the program starts with), the calls inlined
-    # and the calls each statement comes from
-    counter = _State(_names_in(ast))
+    call_args = {}
 
-    # Process every block that can contain function calls
+    # Finish each program block against the original function bodies so
+    # nested calls get flat prefixes, independent of declaration order.
     for block_list in (ast.initializers, ast.dynamics, ast.gauges):
-        if block_list is None:
-            continue
-        for block in block_list:
-            if block.stmts is None:
-                continue
-            block.stmts.elements = _inline_block_stmts(
-                block.stmts.elements, func_map, counter, block)
+        for block in block_list or ():
+            _inline_owner(block, func_map, call_args, in_blocks=True)
 
-    # Also inline inside function bodies themselves (in case functions
-    # call other functions), then again in the program blocks (the
-    # bodies they copied held calls)
-    counter.in_blocks = False
-    _inline_until_done(ast.functions, func_map, counter)
-    counter.in_blocks = True
-    blocks = [block for block_list in (ast.initializers, ast.dynamics, ast.gauges)
-              if block_list is not None for block in block_list
-              if block.stmts is not None]
-    _inline_until_done(blocks, func_map, counter)
+    # Retain synchronized bodies for geometry evaluation. Callees must
+    # be complete before their callers copy them.
+    functions = _callee_order(func_map)
+    for func in functions:
+        _inline_owner(func, func_map, call_args, in_blocks=False)
 
-    # Remove function definitions -- they are fully inlined
-    ast._inlined_functions = tuple(ast.functions.elements)
+    ast._inlined_functions = tuple(functions)
     ast.functions = None
-    ast.inline_call_args = counter.call_args
+    ast.inline_call_args = call_args
 
     return ast
+
+
+def _inline_owner(owner, func_map, call_args, *, in_blocks):
+    if owner.stmts is None:
+        return
+    taken = _names_in(owner)
+    table = owner.symbol_defs
+    while table is not None:
+        taken.update(symbol.name for symbol in table)
+        table = table.parent_table
+    # Capture user names only once: synthesized destructuring targets
+    # must not be mistaken for caller variables on subsequent rounds.
+    state = _State(taken, call_args)
+    state.in_blocks = in_blocks
+    owner.stmts.elements = _inline_block_stmts(
+        owner.stmts.elements, func_map, state, owner)
+    _inline_until_done([owner], func_map, state)
+
+
+def _callee_order(func_map):
+    """Callees before callers, with alphabetical ties and cycle fallback."""
+    pending = {}
+    for name, func in func_map.items():
+        calls, stack = set(), [func.stmts]
+        while stack:
+            node = stack.pop()
+            if isinstance(node, UserFunctionCall_N):
+                calls.add(node.function_name.name)
+            if isinstance(node, Node_N):
+                stack.extend(node.get_children())
+        pending[name] = calls & func_map.keys()
+    ordered = []
+    while pending:
+        ready = sorted(name for name, calls in pending.items() if not calls)
+        if not ready:
+            ordered.extend(sorted(pending))
+            break
+        name = ready[0]
+        ordered.append(name)
+        del pending[name]
+        for calls in pending.values():
+            calls.discard(name)
+    return [func_map[name] for name in ordered]
 
 
 def _inline_until_done(owners, func_map, counter):
@@ -125,7 +155,7 @@ def _inline_until_done(owners, func_map, counter):
 
 
 class _Counter(list):
-    """The prefix counter (``counter[0]``) and the names of the program,
+    """The owner's prefix counter (``counter[0]``) and original visible names,
     which no prefix may start (a user may write ``__F_0_a``)."""
 
     def __init__(self, taken):
@@ -141,7 +171,7 @@ class _Counter(list):
 
 
 class _State(_Counter):
-    """The prefix counter and the program's names (``_Counter``); the
+    """The owner's prefix counter and names (``_Counter``); the
     calls inlined, each with the sources of its arguments (recorded on
     the program as ``inline_call_args``, for the folder that runs after
     inlining to tell whether the call is a call of constants: only the
@@ -149,9 +179,9 @@ class _State(_Counter):
     comes from, innermost first; and whether the statements being
     inlined are a program block's (a function body's otherwise)."""
 
-    def __init__(self, taken):
+    def __init__(self, taken, call_args):
         super().__init__(taken)
-        self.call_args = {}
+        self.call_args = call_args
         self.chain = ()
         self.in_blocks = True
 

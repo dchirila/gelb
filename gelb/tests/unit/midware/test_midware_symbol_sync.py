@@ -241,7 +241,7 @@ def test_deep_expression_uses_explicit_stack():
 
 @pytest.mark.parametrize('prefix,body', [
     ('_gelb_draw_0', 'val = random() - random() + _gelb_draw_0;'),
-    ('_gelb_call_1', 'val = 1.0 + R() + _gelb_call_1;'),
+    ('_gelb_call_0', 'val = 1.0 + R() + _gelb_call_0;'),
     ('_gelb_dpa_0', 'array[real, 3] w = {u,u,u}; val = dot_prod(w, w*w) + _gelb_dpa_0;'),
     ('_gelb_pre_cse_0', 'real a = u*u+1.0; real b = u*u+2.0; val = a+b+_gelb_pre_cse_0;'),
     ('_gelb_cse_0', 'val = _gelb_cse_0;'),

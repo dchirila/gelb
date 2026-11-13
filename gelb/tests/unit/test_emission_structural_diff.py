@@ -140,22 +140,31 @@ node_classes { node_class A(Init, StepA, G); node_class B(Init, StepB, G); }
 geometry { nodes[:, :] = A; nodes[10:19, :] = B; }
 '''
     emissions = []
-    for order in (blocks, blocks[::-1]):
+    for order, extra in ((blocks, ""), (blocks[::-1], ""),
+                         (blocks, "function __Mix_0_t(real a) -> (real r) { r = a; }")):
         path = tmp_path / "reorder.gelb"
         out = path.with_suffix(suffix)
-        path.write_text(prefix + "".join(order) + tail)
+        path.write_text(prefix + "".join(order) + tail + extra)
         args = [str(path), "-b", backend, "-o", str(out), "--nc-output", "out.nc"]
         if backend == "cpu_highway":
             args += ["--storage-layout", "aos"]
         result = CliRunner().invoke(cli, args)
         assert result.exit_code == 0, result.output
         emissions.append(out.read_text())
-    assert emissions[0] != emissions[1], "reorder must exercise a real temporary renumbering"
-    assert diff.equivalent(*emissions, suffix)
+    assert emissions[0] == emissions[1]
+    pushed = emissions[2]
+    assert pushed != emissions[0]
+    assert diff.equivalent(emissions[0], pushed, suffix)
+    name = next(t for t in diff.tokens(pushed, suffix == ".f90")
+                if diff.TEMP_RE.fullmatch(t))
+    corrupted = pushed.replace(name, name + "_broken", 1)
+    assert not diff.equivalent(emissions[0], corrupted, suffix)
     if suffix != ".f90":
-        reset = re.sub(r"g___Mix_\d+_", "g___Mix_0_", emissions[0])
-        assert reset != emissions[0]
-        assert diff.equivalent(emissions[0], reset, suffix)
+        head, sep, tail = emissions[0].rpartition("double g___Mix_0_a =")
+        assert sep
+        asymmetric = head + (sep + tail).replace("g___Mix_0_", "g___Mix_1_")
+        assert asymmetric != emissions[0]
+        assert diff.equivalent(emissions[0], asymmetric, suffix)
 
 
 @pytest.mark.parametrize("n_calls", (1, 10))
@@ -174,11 +183,25 @@ node_classes { node_class A(Init, StepA, G); node_class B(Init, StepB, G); }
 geometry { nodes[:, :] = A; nodes[10:19, :] = B; }
 '''
     emissions = []
-    for order in (blocks, blocks[::-1]):
+    occupied = "\n".join(f"function __Id_{i}_p(real a) -> (real p) {{ p = a; }}"
+                         for i in range(n_calls))
+    for order, extra in ((blocks, ""), (blocks[::-1], ""), (blocks, occupied)):
         path, out = tmp_path / "wrap.gelb", tmp_path / "wrap.f90"
-        path.write_text(prefix + "".join(order) + tail)
+        path.write_text(prefix + "".join(order) + tail + extra)
         result = CliRunner().invoke(cli, [str(path), "-b", "cpu_fortran_serial", "-o", str(out), "--nc-output", "out.nc"])
         assert result.exit_code == 0, result.output
         emissions.append(out.read_text())
-    assert emissions[0] != emissions[1]
-    assert diff.equivalent(*emissions, ".f90")
+    assert emissions[0] == emissions[1]
+    pushed = emissions[2]
+    assert pushed != emissions[0]
+    assert diff.equivalent(emissions[0], pushed, ".f90")
+    if n_calls == 10:
+        def wrap_tokens(text):
+            return [["temp" if diff.TEMP_RE.fullmatch(t) else t
+                     for t in diff.tokens(line, True)]
+                    for line in text.splitlines() if "&" in line]
+        assert "&" in pushed
+        assert wrap_tokens(emissions[0]) != wrap_tokens(pushed)
+    name = next(t for t in diff.tokens(pushed, True) if diff.TEMP_RE.fullmatch(t))
+    corrupted = pushed.replace(name, name + "_broken", 1)
+    assert not diff.equivalent(emissions[0], corrupted, ".f90")

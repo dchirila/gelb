@@ -83,9 +83,9 @@ def sequence_draws(ast: Program_N) -> None:
     if ast.functions is not None:
         functions = {func.name.name: func for func in ast.functions.elements}
     drawing = _drawing_functions(functions)
-    counter = itertools.count(0)
     blocks = list(functions.values()) + list(_iter_blocks(ast))
     for block in blocks:
+        counter = itertools.count(0)
         if block.stmts is None:
             continue
         new_stmts = []
