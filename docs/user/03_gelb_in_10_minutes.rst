@@ -209,8 +209,11 @@ with equal bounds (``| 3:3``) is the single DF ``| 3``, a scalar.
 ``| :`` (or ``| 0:``) is all DFs, an array of ``q`` elements even when
 ``q`` is 1.  The declared length must match the slice; the compiler
 reports a mismatch.
-The bounds are compile-time constants; a single index may be computed
-at run time (``| mod(x, 9)``) on the Fortran backend only.
+Every DF index and slice bound, in reads and writes, is a compile-time
+constant on all backends. Use literal indices, constants, or pure calls
+with constant arguments; ``| mod(x, 9)`` and mutable-variable indices
+are rejected. Values and coefficients over constant selectors may vary
+at run time.
 
 Each spatial index is relative to the current cell: its own
 coordinate plus or minus a constant integer (``x``, ``x + 2``, or
@@ -544,6 +547,15 @@ A variable declared inside an ``initializer``, ``dynamic`` or ``gauge``
 block belongs to that block.  Two blocks may give a local the same name
 with a different type or array length; each block computes with its own
 declaration.
+
+``const`` declares a compile-time constant in ``global_constants`` and
+inside ``initializer``, ``dynamic``, ``gauge`` and ``function`` blocks.
+A local initializer may use literals, global constants, earlier constants
+in that block, active grid dimensions, and pure calls with constant arguments.
+User functions remain unavailable in ``global_constants`` initializers.
+It cannot depend on coordinates, ``t``, mutable variables, function inputs
+or outputs, lattice values, or ``random()``. Use an ordinary typed variable
+for a value computed at run time.
 
 Expressions and control flow
 =============================
