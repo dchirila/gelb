@@ -23,7 +23,7 @@ from click.testing import CliRunner
 from gelb.compiler_pipeline import (
     PipelineOptions, PipelineProfile, compile_source)
 from gelb.gelbc import cli as gelbc_cli
-from gelb.utils.exceptions import GeLBExStencilError
+from gelb.utils.exceptions import GeLBExStencilError, GeLBExTypeError
 
 
 def _compile(code):
@@ -448,10 +448,10 @@ class TestCoverage:
 class TestDFSelection:
 
     def test_runtime_df_index_in_a_write_is_rejected(self):
-        with pytest.raises(GeLBExStencilError) as info:
+        with pytest.raises(GeLBExTypeError) as info:
             _compile(_program_1d(q=8, init="u.out[x | x] = 1.0;",
                                  dyn="u.out[x | :] = u.in[x | :];"))
-        assert "compile-time integer" in str(info.value)
+        assert "DF selector must be compile-time evaluable" in str(info.value)
 
     def test_constant_slices_and_full_range_are_fine(self):
         result = _compile(_program_1d(
@@ -460,14 +460,12 @@ class TestDFSelection:
         writes = result.stencils.blocks['I'].writes
         assert sorted(w.df_index for w in writes) == [0, 1, 2]
 
-    def test_runtime_df_index_in_a_read_needs_every_df_written(self):
-        # A read whose DF is not known may touch any DF: the writer must
-        # cover them all.  Here it does, so the program is accepted.
-        result = _compile(_program_1d(
-            q=3, init="u.out[x | :] = 1.0;",
-            dyn="u.out[x | :] = u.in[x | :];",
-            gauge="v = u.in[x | mod(x, 3)];"))
-        assert result.geometry is not None
+    def test_runtime_df_index_in_a_read_is_rejected(self):
+        with pytest.raises(GeLBExTypeError, match="DF selector must be compile-time evaluable"):
+            _compile(_program_1d(
+                q=3, init="u.out[x | :] = 1.0;",
+                dyn="u.out[x | :] = u.in[x | :];",
+                gauge="v = u.in[x | mod(x, 3)];"))
 
 
 # --------------------------------------------------------------------------
@@ -524,7 +522,7 @@ class TestDiagnosticsJson:
         code = _program_1d(q=8, init="u.out[x | x] = 1.0;", dyn="u.out[x | :] = u.in[x | :];")
         path, diags = _diagnostics(tmp_path, code)
         text, line = diags[0]
-        assert "compile-time integer" in text
+        assert "DF selector must be compile-time evaluable" in text
         assert line == _line_of(path, "u.out[x | x]")
 
 

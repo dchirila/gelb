@@ -252,7 +252,7 @@ IDENTITY = "function I(int a) -> (int b) { b = a; }"
 
 @pytest.mark.parametrize("store, message", [
     pytest.param("f.out[x, y | I(k)] = v + 1.0;",
-                 "with DF index 'I(k)', which is not a compile-time integer",
+                 "DF selector must be compile-time evaluable; depends on 'k'",
                  id="its DF selector"),
     pytest.param("f.out[x + I(k), y | 1] = v;",
                  "along x with 'x + I(k)', which is not x plus or minus a compile-time integer",
@@ -681,8 +681,8 @@ NOT_CALLS_OF_CONSTANTS = [
     pytest.param(A_GLOBAL + "\n" + S_ARRAY,
                  "array[real, 2] local_array = {v, 1.0}; f.out[x, y | 1] = S(local_array);",
                  id="a local array alongside a global constant one"),
-    pytest.param(S_ARRAY, "const array[real, 2] C = {v, 1.0}; f.out[x, y | 1] = S(C);",
-                 id="a block constant array holding a variable"),
+    pytest.param(S_ARRAY, "array[real, 2] C = {v, 1.0}; f.out[x, y | 1] = S(C);",
+                 id="a mutable block array holding a runtime value"),
     pytest.param(S_ARRAY + "\nfunction F(real p) -> (real r) {"
                  " array[real, 2] a = {p, 1.0}; a = {random(), 1.0}; r = S(a); }",
                  "f.out[x, y | 1] = F(2.0) + v * 0.0;",
@@ -708,6 +708,23 @@ def test_a_value_computed_at_run_time_makes_no_call_of_constants(functions, dyna
     parameter's copy, or a draw, makes the calls it reaches calls of
     variables, whose locals are variables (no compile-time error)."""
     _compile(program(dynamic, functions=functions))
+
+
+@pytest.mark.parametrize("profile", ["CODEGEN", "DIAGNOSTICS", "PROGRAM_ANALYSIS"])
+def test_a_constant_array_cannot_hold_a_runtime_value(profile):
+    from gelb.compiler_pipeline import (
+        PipelineOptions, PipelineProfile, compile_source)
+    from gelb.utils.exceptions import GeLBExTypeError
+
+    declaration = "const array[real, 2] C = {v, 1.0};"
+    source = program(declaration + " f.out[x, y | 1] = S(C);", functions=S_ARRAY)
+    with pytest.raises(GeLBExTypeError) as error:
+        compile_source(source, PipelineProfile[profile], PipelineOptions())
+    assert "Constant 'C' initializer must be compile-time evaluable" in error.value.error
+    assert "depends on 'v'" in error.value.error
+    line, column = error.value._source_location()
+    assert declaration in source.splitlines()[line - 1]
+    assert column is not None and column > 0
 
 
 def test_a_local_array_cannot_reuse_a_global_constant_name():

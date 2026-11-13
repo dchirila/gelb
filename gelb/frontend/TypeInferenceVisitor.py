@@ -5,7 +5,7 @@ from gelb.frontend.implicit_symbols import DIMENSION_CONSTANT_NAMES
 from gelb.frontend.visitor_mixins import BinaryOperationMixin, ArrayLiteralProcessingMixin, ProgramTraversalMixin
 from gelb.gelb_ast.ASTNodes import *
 from gelb.frontend.type_rules import arithmetic_result_type
-from gelb.midware.ast_eval import _typed, collect_lattice_info, eval_const_expr, plain
+from gelb.midware.ast_eval import _typed, collect_lattice_info, eval_const_expr, nonfatal_evaluation, plain
 from gelb.utils.exceptions import *
 
 
@@ -701,7 +701,7 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
             # (`| LO:HI`, `| 1+1:5`) to a literal, so that every later pass
             # and backend sees literals.  A bound that is not constant
             # (`| x`, `| mod(x, 3)`: a runtime DF index) stays as it is;
-            # the stencil pass decides what it may do.
+            # selector validation checks it after type inference.
             for attr in ('low', 'high'):
                 bound = getattr(df_range, attr)
                 if bound is not None and not isinstance(bound, IntLiteral_N):
@@ -711,7 +711,7 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
             # A range (two bounds) must be constant: its length is part of
             # the type.  A single index that is computed at run time
             # (`| mod(x, 9)`, the same expression as both bounds) is left
-            # to the stencil pass and the backends.
+            # to selector validation.
             if (df_range.low is not df_range.high
                     and not (isinstance(df_range.low, IntLiteral_N)
                              and isinstance(df_range.high, IntLiteral_N))
@@ -721,7 +721,7 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
                 raise GeLBExTypeError(
                     node, "The bounds of a DF range must be compile-time "
                     "constants", "Use literals or global constants for "
-                    "lo:hi; a single DF (| i) may be computed at run time")
+                    "lo:hi and for a single DF (| i)")
             # Every DF index must exist on the lattice, on both sides.
             if (isinstance(df_range.low, IntLiteral_N)
                     and isinstance(df_range.high, IntLiteral_N)
@@ -923,17 +923,18 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
     
     def _try_eval_df_bound(self, expr, ast_root_node):
         """The integer value of a DF-range bound that is a compile-time
-        constant, else None (without raising: a runtime index is legal
-        in a read)."""
+        constant, else None; selector validation reports unresolved indices."""
         try:
-            value = eval_const_expr(
-                expr,
-                bindings=self._compile_time_bindings(ast_root_node, None),
-                ast=ast_root_node,
-                lattice_info=self._lattice_info,
-            )
+            with nonfatal_evaluation():
+                value = eval_const_expr(
+                    expr,
+                    bindings=self._compile_time_bindings(ast_root_node, None),
+                    ast=ast_root_node,
+                    lattice_info=self._lattice_info,
+                )
         except (ValueError, TypeError, KeyError, IndexError,
-                ZeroDivisionError, OverflowError, AttributeError):
+                ZeroDivisionError, OverflowError, AttributeError, GeLBExStencilError,
+                RecursionError):
             return None
         # A narrow constant (``const int32 K``) evaluates to a NumPy
         # scalar; the literal stores the Python value it holds.
@@ -1054,14 +1055,15 @@ class TypeInferenceVisitor(ASTBaseVisitor, BinaryOperationMixin, ArrayLiteralPro
                 # The value as stored: a local constant has the width it
                 # is declared with (``const real P = 7`` is 7.0, so that
                 # ``P / 2`` is 3.5), as a global constant does.
-                bindings[name] = _typed(eval_const_expr(
-                    value_expr,
-                    bindings=bindings,
-                    ast=ast_root_node,
-                    lattice_info=self._lattice_info,
-                ), symbol_def.value.data_type)
+                with nonfatal_evaluation():
+                    bindings[name] = _typed(eval_const_expr(
+                        value_expr,
+                        bindings=bindings,
+                        ast=ast_root_node,
+                        lattice_info=self._lattice_info,
+                    ), symbol_def.value.data_type)
             except (IndexError, TypeError, ValueError, ZeroDivisionError,
-                    OverflowError):
+                    OverflowError, GeLBExStencilError, RecursionError):
                 # If this constant is actually used in a compile-time
                 # shape/range expression, evaluating that expression will
                 # raise a source-located GeLBExTypeError.  An overflowing

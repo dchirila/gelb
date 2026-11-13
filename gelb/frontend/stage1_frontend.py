@@ -360,6 +360,11 @@ def validate_types(ast):
     return ast
 
 
+def validate_static_selectors(ast):
+    from gelb.frontend.static_selectors import validate_static_selectors as validate
+    return validate(ast)
+
+
 def validate_constant_assignments(ast):
     """
     Validate that constants are not assigned to in variable assignment statements.

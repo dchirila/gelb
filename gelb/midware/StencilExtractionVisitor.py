@@ -243,22 +243,8 @@ class StencilExtractionVisitor:
         offsets = tuple(self._extract_offset(sr, axis, lattice_name)
                         for axis, sr in enumerate(spatial_ranges))
 
-        # Extract DF index/indices.  A write must name its DFs at compile
-        # time: the coverage and conflict checks reason
-        # about each DF, and "some DF" would prove nothing.  A read may
-        # select a DF at run time; it then counts as a read of every DF.
+        # Both reads and writes name their DFs at compile time.
         df_indices = self._extract_df_indices(df_range)
-        if is_write and None in df_indices:
-            text = _source_text(df_range) or "this index"
-            raise GeLBExStencilError(
-                f"Block '{self._block_name}' writes lattice "
-                f"'{lattice_name}' with DF index '{text}', which is not a "
-                f"compile-time integer",
-                "A write must name its DFs: use a literal or constant "
-                "index, a constant slice such as 0:2, or ':' for every DF.",
-                source_line=source_line_of(df_range),
-                source_end_line=source_line_of(df_range),
-            )
 
         return [
             StencilAccess(
@@ -316,8 +302,12 @@ class StencilExtractionVisitor:
             # Explicit range like 0:8
             return list(range(low, high + 1))
 
-        # Could not evaluate -- treat as all DFs
-        return [None]
+        text = _source_text(range_node) or "this index"
+        raise GeLBExStencilError(
+            f"DF index '{text}' is not a compile-time integer",
+            "Use a literal or constant index, a constant slice, or ':' for every DF.",
+            source_line=source_line_of(range_node),
+            source_end_line=source_line_of(range_node))
 
     # ------------------------------------------------------------------
     # Streaming intrinsics
