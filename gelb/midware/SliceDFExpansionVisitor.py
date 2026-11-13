@@ -176,6 +176,7 @@ class SliceDFExpansionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         # that the visitor will NOT expand (whole-array ops kept as-is).
         # These arrays must remain as whole arrays -- expanding them
         # would leave dangling references in the unexpanded stmts.
+        self._cse_counter = 0
         self._block = block
         forced_whole = _scan_forced_whole(block.stmts.elements)
         self._scope = _BlockScope(forced_whole=forced_whole)
