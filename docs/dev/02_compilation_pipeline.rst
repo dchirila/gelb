@@ -162,9 +162,17 @@ The seven statement mutators below use
 replace existing entries in place and remove dead entries. Each local symbol
 points to its live declaration and carries its canonical type; parameters,
 outputs, implicit symbols and parent tables stay intact. Temporary names skip
-names already in the local or parent table without resetting pass counters.
+names already in the local or parent table. Each block restarts its temporary
+counters at zero; successive straight-line CSE runs within a block share its
+counter.
 Slice expansion keeps an array whole when any of its scalar names is taken.
-The inliner retains synchronized function definitions for geometry evaluation.
+The inliner finishes each program block against the original function bodies,
+using flat prefixes from a counter local to that block. Its ``inline_call_args``
+IDs remain unique across the program, independently of these prefix counters.
+It then processes retained functions callees first, breaking call-graph ties
+alphabetically and restarting the prefix counter for each function. These
+synchronized definitions remain available for geometry evaluation. Both block
+and function declaration order therefore leave emitted temporary names unchanged.
 
 
 ``fold_constants``, ``validate_division_by_zero``, ``lower_local_constants``
