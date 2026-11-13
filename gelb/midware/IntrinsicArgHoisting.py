@@ -37,6 +37,8 @@ be the fold target -- but a non-foldable mix like
 
 import itertools
 
+from gelb.midware.BlockMutationHelper import declare_temp, fresh_name
+
 from gelb.gelb_ast.ASTNodes import (
     Array1DLiteral_N,
     ArrayDataType_N,
@@ -72,7 +74,7 @@ def hoist_intrinsic_args(ast: Program_N) -> None:
             continue
         new_stmts = []
         for stmt in block.stmts.elements:
-            hoisted, _ = _rewrite_stmt(stmt, counter)
+            hoisted, _ = _rewrite_stmt(stmt, counter, block)
             new_stmts.extend(hoisted)
             new_stmts.append(stmt)
         block.stmts.elements = new_stmts
@@ -97,37 +99,37 @@ def _iter_blocks(ast: Program_N):
                 yield blk
 
 
-def _rewrite_stmt(stmt, counter):
+def _rewrite_stmt(stmt, counter, block):
     """Walk ``stmt``'s sub-tree, hoisting non-identifier args of every
     matching intrinsic call into fresh decls.  Returns
     (hoisted_decls, mutated_stmt) where ``hoisted_decls`` is a list of
     new ``VariableDeclarationStmt_N`` to insert *before* ``stmt``."""
     hoisted = []
-    _walk_and_rewrite(stmt, hoisted, counter)
+    _walk_and_rewrite(stmt, hoisted, counter, block)
     return hoisted, stmt
 
 
-def _walk_and_rewrite(node, hoisted, counter):
+def _walk_and_rewrite(node, hoisted, counter, block):
     """Recursive walk that mutates ``IntrinsicFunctionCall_N`` nodes
     in-place by replacing their non-Identifier args with fresh
     Identifier_N references to hoisted temporaries.  ``hoisted``
     accumulates the new ``VariableDeclarationStmt_N`` decls."""
     if isinstance(node, IntrinsicFunctionCall_N) \
             and node.function_name in _HOIST_INTRINSICS:
-        _maybe_hoist_args(node, hoisted, counter)
+        _maybe_hoist_args(node, hoisted, counter, block)
 
     if isinstance(node, List_N):
         for elem in node.elements:
-            _walk_and_rewrite(elem, hoisted, counter)
+            _walk_and_rewrite(elem, hoisted, counter, block)
         return
     if isinstance(node, Node_N):
         for child_name in node.get_children_names():
             child = getattr(node, child_name, None)
             if child is not None:
-                _walk_and_rewrite(child, hoisted, counter)
+                _walk_and_rewrite(child, hoisted, counter, block)
 
 
-def _maybe_hoist_args(call: IntrinsicFunctionCall_N, hoisted, counter):
+def _maybe_hoist_args(call: IntrinsicFunctionCall_N, hoisted, counter, block):
     """For each arg of ``call`` that isn't an ``Identifier_N``
     (modulo type/broadcast wrappers), build a hoisted decl and
     substitute the call's arg with an Identifier_N to it."""
@@ -148,7 +150,7 @@ def _maybe_hoist_args(call: IntrinsicFunctionCall_N, hoisted, counter):
             # backend will still error, but we won't make matters
             # worse by emitting an untyped decl.
             continue
-        temp_name = f'_gelb_dpa_{next(counter)}'
+        temp_name = fresh_name(block, '_gelb_dpa_', counter)
         decl = VariableDeclarationStmt_N(
             call.code_range,
             temp_dtype,
@@ -159,6 +161,7 @@ def _maybe_hoist_args(call: IntrinsicFunctionCall_N, hoisted, counter):
         # inferred_type on identifier nodes find one.
         if hasattr(arg, 'inferred_type'):
             decl.name.inferred_type = arg.inferred_type
+        declare_temp(block, decl)
         hoisted.append(decl)
         # Replace the arg in-place with a reference to the temp.
         replacement = Identifier_N(call.code_range, temp_name)

@@ -274,7 +274,7 @@ def compile_source(
     initial_validation_geometry(ast)
     record("initial_validation_geometry")
 
-    from gelb.frontend.ASTInvariantValidator import check_stage1
+    from gelb.frontend.ASTInvariantValidator import check_stage1, check_stage2
     invariant(check_stage1, ast)
     record("check_stage1")
 
@@ -393,6 +393,11 @@ def compile_source(
             record("validate_df_coverage")
             if options.geometry_lint:
                 record("geometry_lint")
+
+    if not (profile is PipelineProfile.CODEGEN and options.require_stencils
+            and not options.require_geometry):
+        invariant(check_stage2, ast)
+        record("check_stage2")
 
     return CompilationResult(
         ast=ast,

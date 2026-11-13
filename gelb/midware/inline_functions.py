@@ -19,6 +19,8 @@ emitting separate function/subroutine definitions.
 
 import copy
 
+from gelb.midware.BlockMutationHelper import declare_temp
+
 from gelb.gelb_ast.ASTNodes import (
     Array1DLiteral_N,
     BinaryExpr_N,
@@ -85,7 +87,7 @@ def inline_functions(ast):
             if block.stmts is None:
                 continue
             block.stmts.elements = _inline_block_stmts(
-                block.stmts.elements, func_map, counter)
+                block.stmts.elements, func_map, counter, block)
 
     # Also inline inside function bodies themselves (in case functions
     # call other functions), then again in the program blocks (the
@@ -99,6 +101,7 @@ def inline_functions(ast):
     _inline_until_done(blocks, func_map, counter)
 
     # Remove function definitions -- they are fully inlined
+    ast._inlined_functions = tuple(ast.functions.elements)
     ast.functions = None
     ast.inline_call_args = counter.call_args
 
@@ -116,7 +119,7 @@ def _inline_until_done(owners, func_map, counter):
         inlined = counter[0]          # the prefixes given out so far
         for owner in owners:
             owner.stmts.elements = _inline_block_stmts(
-                owner.stmts.elements, func_map, counter)
+                owner.stmts.elements, func_map, counter, owner)
         if counter[0] == inlined:
             return
 
@@ -265,14 +268,18 @@ def _call_text(fname, code_range):
 # Statement-level inlining
 # ---------------------------------------------------------------------------
 
-def _inline_block_stmts(stmts, func_map, counter):
+def _inline_block_stmts(stmts, func_map, counter, block=None):
     """Process a list of statements, inlining function calls.
 
     Returns a new list of statements.
     """
     result = []
+    original = {id(stmt) for stmt in stmts}
     for stmt in stmts:
         _inline_one_stmt(stmt, func_map, counter, result)
+    for stmt in result:
+        if isinstance(stmt, VariableDeclarationStmt_N) and id(stmt) not in original:
+            declare_temp(block, stmt)
     return result
 
 

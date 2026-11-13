@@ -3,6 +3,8 @@
 import copy
 import math
 
+from gelb.midware.BlockMutationHelper import remove_decl
+
 from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
 from gelb.frontend.visitor_mixins import ProgramTraversalMixin
 from gelb.frontend.intrinsic_functions import (
@@ -307,6 +309,9 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
             return (isinstance(stmt, VariableAssignmentStmt_N)
                     and isinstance(stmt.lhs, Identifier_N)
                     and stmt.lhs.name in dead)
+        for stmt in node.stmts.elements:
+            if isinstance(stmt, VariableDeclarationStmt_N) and stores_dead(stmt):
+                remove_decl(node, stmt.name.name)
         node.stmts.elements = [stmt for stmt in node.stmts.elements
                                if not stores_dead(stmt)]
 

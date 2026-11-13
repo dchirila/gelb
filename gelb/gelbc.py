@@ -578,6 +578,8 @@ def cli(
         emit_warnings=True,
         geometry_lint=not no_geometry_lint,
     )
+    from gelb.frontend.ASTInvariantValidator import check_stage2
+    check_stage2(ast)
     backend_context = build_backend_context(
         compile_result,
         geometry=resolved_geometry,

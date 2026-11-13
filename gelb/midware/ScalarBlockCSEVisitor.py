@@ -53,6 +53,9 @@ prior temps it transitively depends on are already emitted.
 """
 
 
+from itertools import count
+from gelb.midware.BlockMutationHelper import declare_temp, replace_decl, fresh_name
+
 from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
 from gelb.frontend.visitor_mixins import ProgramTraversalMixin
 from gelb.gelb_ast.ASTNodes import (
@@ -84,6 +87,7 @@ class ScalarBlockCSEVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         # within the same emitted block -- both passes generate names
         # like ``_gelb_pre_cse_2``, but with different shapes and scopes.
         self._cse_counter = 0
+        self._block = None
         self.runs_processed = 0
         self.temps_hoisted = 0
 
@@ -131,6 +135,7 @@ class ScalarBlockCSEVisitor(ASTBaseVisitor, ProgramTraversalMixin):
     def _process_block(self, block):
         if not hasattr(block, 'stmts') or block.stmts is None:
             return block
+        self._block = block
         elements = block.stmts.elements
         new_elements = []
         run = []
@@ -261,13 +266,13 @@ class ScalarBlockCSEVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         # A declaration without a value has nothing to share.
         if any(self._stmt_rhs(s) is None for s in run):
             return list(run)
-        start = self._cse_counter
+        counter = count(self._cse_counter)
         temps, rewritten = hoist_common_subtrees(
             [self._stmt_rhs(s) for s in run],
-            lambda i: f'_gelb_pre_cse_{start + i}')
+            lambda i: fresh_name(self._block, '_gelb_pre_cse_', counter))
         if not temps:
             return list(run)
-        self._cse_counter = start + len(temps)
+        self._cse_counter = next(counter)
         self.temps_hoisted += len(temps)
         self.runs_processed += 1
         return self._emit_with_temps(run, temps, rewritten)
@@ -339,9 +344,14 @@ class ScalarBlockCSEVisitor(ASTBaseVisitor, ProgramTraversalMixin):
 
     def _rewrite_stmt(self, stmt, new_rhs):
         if isinstance(stmt, VariableDeclarationStmt_N):
-            return VariableDeclarationStmt_N(
+            decl = VariableDeclarationStmt_N(
                 stmt.code_range, stmt.data_type, stmt.name,
                 initial_value=new_rhs)
+            for attr in ('lowered_const', 'inline_calls', 'inline_binding', 'inferred_type'):
+                if hasattr(stmt, attr):
+                    setattr(decl, attr, getattr(stmt, attr))
+            replace_decl(self._block, decl)
+            return decl
         if isinstance(stmt, VariableAssignmentStmt_N):
             return VariableAssignmentStmt_N(
                 stmt.code_range, stmt.lhs, new_rhs)
@@ -355,8 +365,10 @@ class ScalarBlockCSEVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         name_id = Identifier_N(cr, name)
         if dtype is not None:
             name_id.inferred_type = dtype
-        return VariableDeclarationStmt_N(
+        decl = VariableDeclarationStmt_N(
             cr, dtype, name_id, initial_value=body)
+        declare_temp(self._block, decl)
+        return decl
 
     def _scalar_dtype_for(self, ref_stmt):
         """Best-effort scalar dtype for a hoisted CSE temp.  Use the

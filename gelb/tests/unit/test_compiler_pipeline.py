@@ -56,6 +56,7 @@ _CODEGEN_MIDWARE_SUFFIX = (
     "validate_boundary_access",
     "validate_write_destinations",
     "validate_df_coverage",
+    "check_stage2",
 )
 
 _OPTIMIZATION_PASSES = (
@@ -152,6 +153,7 @@ def test_program_analysis_profile_preserves_viewer_pass_sequence(tmp_path):
         *_FRONTEND_TYPED_SUFFIX,
         "resolve_geometry",
         "extract_stencils",
+        "check_stage2",
     )
     assert result.geometry is not None
     assert result.stencils is not None
@@ -208,3 +210,32 @@ def test_build_backend_context_reuses_pipeline_results(tmp_path):
     assert context.geometry is result.geometry
     assert context.lattice_info["f"]["d"] == 1
     assert context.lattice_info["f"]["q"] == 1
+
+
+def test_deferred_cli_checks_stage2_after_geometry(tmp_path, monkeypatch):
+    from click.testing import CliRunner
+    import gelb.compiler_pipeline as pipeline
+    import gelb.frontend.ASTInvariantValidator as validator
+    import gelb.gelbc as driver
+    from gelb.gelbc import cli
+    program = _write_program(tmp_path)
+    result = compile_file(program, PipelineProfile.CODEGEN,
+                          PipelineOptions(require_stencils=True, require_geometry=False))
+    assert "check_stage2" not in result.pass_names
+    events = []
+    original = pipeline.resolve_geometry_for_compile
+    def geometry(*args, **kwargs):
+        result = original(*args, **kwargs)
+        events.append("geometry")
+        return result
+    def check(ast):
+        events.append("invariant")
+        assert events == ["geometry", "invariant"]
+        raise RuntimeError("boundary reached")
+    monkeypatch.setattr(driver, "resolve_geometry_for_compile", geometry)
+    monkeypatch.setattr(validator, "check_stage2", check)
+    run = CliRunner().invoke(cli, [str(program), "-b", "cpu_fortran_serial",
+                                   "-o", str(tmp_path / "out.f90")])
+    assert isinstance(run.exception, RuntimeError)
+    assert str(run.exception) == "boundary reached"
+    assert events == ["geometry", "invariant"]
