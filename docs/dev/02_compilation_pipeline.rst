@@ -15,7 +15,7 @@ profile.  The frontend passes are wrapped by the functions of
 :source:`gelb/frontend/stage1_frontend.py` and the midware checks by
 those of :source:`gelb/midware/stage2_midware.py`;
 ``apply_constant_overrides``, ``sequence_draws``, ``inline_functions``,
-``hoist_intrinsic_args``, ``check_stage1``, the three rewrites and ``resolve_geometry``
+``hoist_intrinsic_args``, ``check_stage1``, ``check_stage2``, the three rewrites and ``resolve_geometry``
 are imported straight from their own modules (the two runs after
 inlining are ``fold_constants`` and ``validate_division_by_zero``
 again).  The module behind each
@@ -157,6 +157,16 @@ Frontend
 Midware
 =======
 
+The seven statement mutators below use
+:source:`gelb/midware/BlockMutationHelper.py` to register new declarations,
+replace existing entries in place and remove dead entries. Each local symbol
+points to its live declaration and carries its canonical type; parameters,
+outputs, implicit symbols and parent tables stay intact. Temporary names skip
+names already in the local or parent table without resetting pass counters.
+Slice expansion keeps an array whole when any of its scalar names is taken.
+The inliner retains synchronized function definitions for geometry evaluation.
+
+
 ``fold_constants``, ``validate_division_by_zero``, ``lower_local_constants``
    :source:`gelb/midware/ConstantFoldingVisitor.py` folds, evaluating
    with :source:`gelb/midware/ast_eval.py`;
@@ -224,6 +234,25 @@ Midware
    :source:`gelb/midware/geometry_lint.py` warns.  ``gelbc`` validates
    ``--output-mode`` first and gets the same checks from
    ``resolve_geometry_for_compile``.
+
+``check_stage2``
+   :source:`gelb/frontend/ASTInvariantValidator.py` checks the program and
+   every block table against live declarations, including retained functions,
+   parameters, outputs and implicit symbols. It rejects residual local
+   constants, stale or missing entries, duplicate names, dangling references
+   and inconsistent canonical types. Its explicit stacks also check retained
+   function trees and deterministic children without recursive expression
+   walks. Expressions whose inferred type is absent retain that behavior.
+
+   This check runs once at the end of ``compile_source``, after any requested
+   geometry and stencil passes. Normal CLI codegen defers it: ``gelbc`` calls
+   it immediately after ``resolve_geometry_for_compile`` and before
+   ``build_backend_context``. ``--stencils`` and ``--show-mapping`` use the
+   non-deferred pipeline check. With ``strict_invariants=True`` it raises
+   ``GeLBInternalInvariantError``; diagnostics and program-analysis entry
+   points disable strictness and report ``(internal)`` warnings instead.
+   Mutation-helper errors are ordinary internal exceptions, never user-error
+   constructors that terminate the process.
 
 How a diagnostic is produced
 ============================
