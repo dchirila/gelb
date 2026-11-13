@@ -34,7 +34,7 @@ behavior implicit in implementation details.
 
 **Where to define constants instead**:
 - **Global constants**: In the `global_constants` block (accessible throughout the program)
-- **Local constants**: Inside `initializer`, `dynamic`, or `gauge` blocks (scoped to that block)
+- **Local constants**: Inside `initializer`, `dynamic`, `gauge`, or `function` blocks (scoped to that block)
 
 **Example**:
 ```gelb
@@ -489,6 +489,11 @@ geometry {
 
 **Decision**: Use `|` (vertical bar) to separate spatial indices from the
 distribution function (DF) range in lattice access expressions.
+Every DF index and slice bound to the right of `|`, in both reads and
+writes, must be evaluable at compile time on every backend. Together with
+constant spatial offsets, this fixes the read and write stencils at compile
+time. A mutable variable or a coordinate-derived index such as `| mod(x, 9)`
+is rejected; values and coefficients over constant selectors may vary.
 
 **Rationale**: In kinetic theory, the distribution function `f(x, v)` lives
 in **phase space** — position × velocity. The `|` literally separates the
@@ -778,6 +783,16 @@ chapter lists them under "Not in this version".
 ### Const keyword syntax
 
 **Decision**: Use `const` keyword prefix instead of `_const` suffix for constants.
+Everywhere in GeLB — in `global_constants`, `initializer`, `dynamic`,
+`gauge`, and `function` blocks — `const` denotes a compile-time constant.
+Its initializer must be evaluable at compile time: literals, global constants,
+earlier constants of that block, active grid dimensions, and pure calls with
+constant arguments are permitted in local initializers. Calls to user-defined
+functions remain unavailable in `global_constants` initializers.
+Coordinates, the timestep, mutable locals,
+function inputs or outputs, lattice values and `random()` are not.
+Use ordinary typed variables for runtime values. Constants scoped near their
+uses allow blocks and functions to carry reusable compile-time parameters.
 
 **Rationale**:
 - More natural syntax for programmers familiar with C-like languages

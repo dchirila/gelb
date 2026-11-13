@@ -17,6 +17,11 @@ versions follow upstream end of life and can change in any release.
 
 ### Changed
 
+- Block and function `const` initializers must be evaluable at compile time.
+  Every DF index and slice bound in reads and writes must also be a
+  compile-time constant on every backend, including Fortran. Non-constant
+  dependencies now receive source-located frontend errors.
+
 - Names in `global_constants` are reserved in block locals, function
   inputs and outputs, and gauge outputs. Reusing one now reports a
   source-located error instead of silently capturing a different value.
@@ -272,10 +277,7 @@ versions follow upstream end of life and can change in any release.
   folded; a DF index outside the lattice or a reversed range is a
   located error, on both sides, and so is a range with run-time bounds.
   A single DF index computed at run time (`| mod(x, 9)`) is rejected
-  with a located message on the C++ backends, which cannot vectorise it
-  (inside a slice it used to be read at the loop index, silently;
-  outside, it stopped with an internal error); the Fortran backend runs
-  it. Verified bit-for-bit across Fortran,
+  with a located message on every backend. Verified bit-for-bit across Fortran,
   Highway (SoA and CBT) and CUDA on a probe that reads and writes such
   slices; the emission of every example is unchanged, as none uses one.
 - **`gelbc` never overwrites the program.** `-o` and `--nc-output` reject

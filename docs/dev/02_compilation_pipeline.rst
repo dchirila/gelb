@@ -120,6 +120,14 @@ Frontend
    declared element-type spelling. Assigning ``inferred_type`` synchronizes
    concrete expression metadata. This pass reads the already resolved
    shapes directly; unresolved shapes fail ``check_stage1``.
+``validate_static_selectors``
+   :source:`gelb/frontend/static_selectors.py` checks block and function
+   ``const`` initializers, DF read/write selectors, and array indices after
+   ``canonicalize_types`` and before ``validate_constant_assignments`` in
+   every profile. Expression and call-graph walks use explicit stacks;
+   recursive calls cannot qualify as constant selectors. DF bounds must
+   evaluate to integers in the lattice's DF range. Spatial indices retain
+   the stencil pass's coordinate-plus-constant check.
 ``validate_constant_assignments``, ``validate_lattice_consistency``
    :source:`gelb/frontend/ConstantAssignmentValidationVisitor.py`: no
    assignment to a constant;
