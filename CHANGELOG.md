@@ -50,6 +50,11 @@ versions follow upstream end of life and can change in any release.
 
 ### Fixed
 
+- Preserve bare `t` and grid-dimension arguments in user functions on every
+  backend. Resolve constant-assignment checks in the enclosing block and
+  `global_constants`, avoiding clashes with sibling locals or function outputs
+  while rejecting reassignment of function-local constants.
+
 - Constant array element and slice reads now fold, exposing zero divisors
   and simplifying the heat diffusion example's boundary weights. Open
   slices in global constants and row-major 2-D constant sums work across
