@@ -132,7 +132,9 @@ Frontend
    the stencil pass's coordinate-plus-constant check.
 ``validate_constant_assignments``, ``validate_lattice_consistency``
    :source:`gelb/frontend/ConstantAssignmentValidationVisitor.py`: no
-   assignment to a constant;
+   assignment to a constant. Store targets resolve in their enclosing block
+   (including functions), then its program/global constants, never in sibling
+   blocks;
    :source:`gelb/frontend/LatticeConsistencyValidator.py`: all
    lattices share one grid size and periodicity.
 ``validate_node_classes``, ``initial_validation_geometry``
@@ -192,7 +194,10 @@ and function declaration order therefore leave emitted temporary names unchanged
 ``inline_functions``, ``fold_constants_after_inlining``, ``validate_division_by_zero_after_inlining``, ``hoist_intrinsic_args``
    :source:`gelb/midware/inline_functions.py` replaces every user
    function call by the function body, copying every statement with
-   the caller's values; a parameter the body stores into is bound to a
+   the caller's values and identifier ``symbol_tag`` bindings. Implicit timestep,
+   dimension and coordinate arguments retain their tags; output-temporary reads
+   carry the declared output type and its canonical type, while declaration
+   names remain untyped. A parameter the body stores into is bound to a
    copy of the argument, and an output to a variable of its own where
    an argument reads its target, another output goes to the same
    target, it has another type, the body reads it, or the target is
