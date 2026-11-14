@@ -240,7 +240,14 @@ and function declaration order therefore leave emitted temporary names unchanged
    :source:`gelb/midware/SliceDFExpansionVisitor.py`
    (``--no-slice-simplify`` turns it off), the last two simplifying
    through :source:`gelb/midware/ast_simplify.py`
-   (:doc:`07_design_decisions`).
+   (:doc:`07_design_decisions`). Slice expansion decomposes elementwise
+   casts, scalar intrinsics on array elements, nested one-dimensional
+   array literals, and array selections per direction. Reductions retain
+   whole-array operands; streaming and matrix intrinsics remain opaque.
+   Scalarized expressions and array reads receive rank-zero canonical
+   types before exact simplification and common-subexpression elimination.
+   ``hoist_common_subtrees`` shares only typed rank-zero algebraic subtrees,
+   preserving their element widths; untyped and array-valued trees stay put.
 ``extract_stencils``, ``validate_initializer_coverage``, ``warn_writeonly_dynamics``, ``warn_unused_lattices``
    :source:`gelb/midware/StencilExtractionVisitor.py` collects the
    lattice reads and writes of every block into a ``ProgramStencils``

@@ -50,6 +50,13 @@ versions follow upstream end of life and can change in any release.
 
 ### Fixed
 
+- Programs that assign casts of arrays with nine or more elements, use cast
+  DF slices in arithmetic, read local array elements, slices or reductions
+  inside expanded statements, or nest one-dimensional array literals in
+  arithmetic or casts in nine-or-more-DF slice or array statements now compile
+  and run across all backends, instead of hitting an internal `gelbc` error
+  or a backend compiler failure.
+
 - Preserve bare `t` and grid-dimension arguments in user functions on every
   backend. Resolve constant-assignment checks in the enclosing block and
   `global_constants`, avoiding clashes with sibling locals or function outputs
