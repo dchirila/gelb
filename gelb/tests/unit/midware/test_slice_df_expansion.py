@@ -853,21 +853,97 @@ class TestStructuralCSE:
         assert temps == []
 
     def test_a_temporary_takes_the_element_width_of_its_subtree(self):
-        # In a per-direction tree, (u*u) on a real32 lattice still
-        # carries the statement's real32[9] type; the temporary holding it
-        # was declared real64, so t*t was a double product.
         from gelb.midware.ast_simplify import hoist_common_subtrees, scalar_type_of
-        narrow_array = lambda: ArrayDataType_N(_CR, 'real32', IntLiteral_N(_CR, 9))
-        square = lambda: _typed(Mul_N(_CR, _typed(_ident('u'), narrow_array()),
-                                      _typed(_ident('u'), narrow_array())), narrow_array())
-        product = _typed(Mul_N(_CR, square(), square()), narrow_array())
-        temps, rewritten = hoist_common_subtrees([product], lambda i: f't{i}')
-        assert [name for name, _ in temps] == ['t0']
-        declared = scalar_type_of(temps[0][1], _scalar_real())
-        assert declared.element_dtype == 'real32'
-        assert isinstance(declared.shape, List_N) and not declared.shape.elements
-        for ref in (rewritten[0].left, rewritten[0].right):
-            assert ref.name == 't0' and ref.inferred_type.element_dtype == 'real32'
-            assert not ref.inferred_type.shape.elements
-        # An untyped tree takes the fallback.
+        for shape in (List_N(_CR), _int(9), None):
+            dtype = ArrayDataType_N(_CR, 'real32', shape) if shape is not None else None
+            def square():
+                node = Mul_N(_CR, _ident('u'), _ident('u'))
+                return _typed(node, dtype) if dtype is not None else node
+            product = Mul_N(_CR, square(), square())
+            temps, rewritten = hoist_common_subtrees([product], lambda i: f't{i}')
+            if shape is None or isinstance(shape, IntLiteral_N):
+                assert temps == []
+                continue
+            assert [name for name, _ in temps] == ['t0']
+            assert scalar_type_of(temps[0][1], _scalar_real()).element_dtype == 'real32'
+            for ref in (rewritten[0].left, rewritten[0].right):
+                assert ref.name == 't0' and ref.inferred_type.element_dtype == 'real32'
+                assert ref.canonical_type.is_scalar
+                assert ref.symbol_tag == 'variable declaration'
         assert scalar_type_of(_ident('v'), _scalar_real()).element_dtype == 'real64'
+
+
+def _slice_nodes(source):
+    from gelb.gelb_ast.ASTNodes import Node_N
+    from gelb.compiler_pipeline import compile_source, PipelineProfile
+    ast = compile_source(source, PipelineProfile.DIAGNOSTICS).ast
+    stack = list(ast.dynamics[0].stmts)
+    while stack:
+        node = stack.pop()
+        yield node
+        stack.extend(child for child in node.get_children() if isinstance(child, Node_N))
+
+
+@pytest.mark.parametrize('initializer', [
+    'W * W', 'real(upstream_dfs(f, x, y, {EX, EY}))',
+])
+def test_whole_array_reads_have_scalar_selection_metadata(initializer):
+    from gelb.tests.test_utils import minimal_gelb_program_2d
+    source = minimal_gelb_program_2d(
+        global_constants_content='const int N = 8; '
+        'const array[real, 9] W = {1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0,9.0}; '
+        'const array[int, 9] EX = {0,1,0,-1,0,1,-1,-1,1}; '
+        'const array[int, 9] EY = {0,0,1,0,-1,1,1,-1,-1};',
+        dynamic_content=f'array[real, 9] q = {initializer}; '
+        'real s = sum(q); f.out[x,y|:] = q + s;')
+    source = source.replace('9, int,', '9, real,').replace('(int val)', '(real val)')
+    nodes = list(_slice_nodes(source))
+    reads = [n for n in nodes if isinstance(n, RectSelOfArrayElems_N)]
+    assert len(reads) == 9
+    assert {n.element_ranges[0].low.value for n in reads} == set(range(9))
+    for read in reads:
+        assert read.canonical_type.is_scalar
+        assert read.array_name.symbol_tag == 'variable declaration'
+        assert not hasattr(read.array_name, 'inferred_type')
+    assert any(isinstance(n, VariableDeclarationStmt_N) and n.name.name == 'q' for n in nodes)
+
+
+@pytest.mark.parametrize('bounds,index', [(None, 3), ((0, 8), 3), ((4, 12), 7), ((8, 8), 8)])
+def test_array_selection_uses_slice_offset_or_own_singleton_index(bounds, index):
+    from gelb.midware.SliceDFExpansionVisitor import _BlockScope
+    visitor = SliceDFExpansionVisitor({}, {'W': list(range(-9, 0))})
+    visitor._scope = _BlockScope()
+    visitor._scope.array_to_scalars['q'] = [f'q_{i}' for i in range(13)]
+    visitor._scope.remember_dtype('q', _scalar_real())
+    for name in ('W', 'q', 'kept'):
+        r = Range_N(_CR, *([None, None] if bounds is None else map(_int, bounds)))
+        sel = _typed(RectSelOfArrayElems_N(_CR, _ident(name), [r]), _array_real(9))
+        result = visitor._subst_array_elems(sel, 3)
+        assert result.canonical_type.is_scalar
+        if name == 'W':
+            assert isinstance(result, UnaryMinusExpr_N)
+            assert result.value.value == 9 - index
+            assert result.value.canonical_type.is_scalar
+        elif name == 'q':
+            assert result.name == f'q_{index}'
+            assert result.symbol_tag == 'variable declaration'
+        else:
+            assert result.element_ranges[0].low.value == index
+            assert result.element_ranges[0].high.value == index
+
+
+@pytest.mark.parametrize('function', ['upstream_dfs', 'bounce_back_dfs', 'matmul', 'transpose', 'inverse'])
+def test_array_casts_preserve_opaque_operands(function):
+    from gelb.midware.SliceDFExpansionVisitor import _is_opaque_only, _BlockScope
+    args = List_N(_CR)
+    args.append(_typed(_ident('W'), _array_real(9)))
+    opaque = _typed(IntrinsicFunctionCall_N(_CR, function, args), _array_real(9))
+    cast_args = List_N(_CR)
+    cast_args.append(opaque)
+    cast = _typed(IntrinsicFunctionCall_N(_CR, 'real', cast_args), _array_real(9))
+    assert _is_opaque_only(cast)
+    visitor = SliceDFExpansionVisitor({}, {'W': list(range(9))})
+    visitor._scope = _BlockScope()
+    assert visitor._subst_for_direction(opaque, 3, 9) is opaque
+    assert opaque.arguments[0].name == 'W'
+    assert not opaque.arguments[0].canonical_type.is_scalar

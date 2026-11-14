@@ -391,7 +391,7 @@ def hoist_common_subtrees(exprs, name_for):
     with each shared subtree replaced by an identifier of the
     temporary's name, typed like the subtree.  ``name_for(i)`` names
     the ``i``-th temporary.  A subtree is shared when it is an
-    algebraic node, other than a bare negation and other than one
+    typed rank-zero algebraic node, other than a bare negation and other than one
     containing a stateful call, that occurs at least twice; shared
     subtrees inside a shared subtree are hoisted first.  ``([], exprs)``
     when nothing
@@ -405,7 +405,7 @@ def hoist_common_subtrees(exprs, name_for):
         pure = True if slots else is_pure(node)
         for slot in slots:
             pure = count(getattr(node, slot)) and pure
-        if pure and is_algebraic(node) and not _trivial(node):
+        if pure and is_algebraic(node) and _is_scalar_typed(node) and not _trivial(node):
             key = structural_key(node)
             counts[key] = counts.get(key, 0) + 1
         return pure
@@ -419,7 +419,7 @@ def hoist_common_subtrees(exprs, name_for):
     temps, made = [], {}
 
     def rewrite(node):
-        key = structural_key(node) if is_algebraic(node) else None
+        key = structural_key(node) if is_algebraic(node) and _is_scalar_typed(node) else None
         for slot in _children_slots(node):
             setattr(node, slot, rewrite(getattr(node, slot)))
         if key is None or key not in shared:
@@ -430,6 +430,7 @@ def hoist_common_subtrees(exprs, name_for):
             made[key] = name
             temps.append((name, node))
         ident = Identifier_N(node.code_range, name)
+        ident.symbol_tag = "variable declaration"
         if getattr(node, 'inferred_type', None) is not None:
             ident.inferred_type = scalar_type_of(node, None)
         return ident
@@ -438,11 +439,17 @@ def hoist_common_subtrees(exprs, name_for):
     return temps, rewritten
 
 
+def _is_scalar_typed(node):
+    canonical = getattr(node, 'canonical_type', None)
+    return canonical is not None and canonical.is_scalar
+
+
 def scalar_type_of(node, fallback):
-    """The scalar type a temporary holding ``node`` is declared with:
-    the node's own inferred type, scalarised (a per-direction subtree
-    may still carry the statement's array type; its element type is
-    the width of its value), else ``fallback`` for an untyped tree."""
+    """Return the element type, preserving width, or the untyped fallback.
+
+    CSE only hoists rank-zero typed subtrees; other callers may still
+    request the scalar element type of an array expression.
+    """
     t = getattr(node, 'inferred_type', None)
     if isinstance(t, ArrayDataType_N):
         shape = t.shape

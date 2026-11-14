@@ -156,3 +156,18 @@ def test_random_draws_are_never_shared():
     temps = _temps(out)
     assert len(temps) == 1 and isinstance(temps[0].initial_value, Mul_N)
     assert temps[0].initial_value.left.name == 'v'
+
+
+def test_shared_array_or_untyped_subtree_cannot_borrow_a_scalar_occurrences_type():
+    from gelb.midware.ast_simplify import hoist_common_subtrees
+    scalar_a, scalar_b = _square('v'), _square('v')
+    array = _square('v')
+    array.inferred_type = _array()
+    untyped = Mul_N(_CR, _var('v'), _var('v'))
+    temps, result = hoist_common_subtrees(
+        [array, untyped, scalar_a, scalar_b], lambda i: f't{i}')
+    assert len(temps) == 1
+    assert result[:2] == [array, untyped]
+    assert all(isinstance(n, Identifier_N) and n.canonical_type.is_scalar
+               and n.symbol_tag == 'variable declaration' for n in result[2:])
+    assert hoist_common_subtrees([_square('w'), array, untyped], str)[0] == []

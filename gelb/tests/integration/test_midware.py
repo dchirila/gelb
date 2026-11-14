@@ -392,3 +392,111 @@ class TestTypeErrorIntegration:
             initializer_content="bool b; b = 1 && 2;\nf.out[x | 0] = 0;")
         with pytest.raises(GeLBExTypeError):
             get_fully_validated_ast(code)
+
+# Exercise executable values and both optimized and plain compilation paths.
+from gelb.tests.integration._toolchain import (
+    requires_compiler, requires_cpp_highway_compiler, requires_gpu_cuda_cpp_compiler,
+)
+import numpy as np
+
+
+_SLICE_CONFIGS = [
+    pytest.param('cpu_fortran_serial', None, marks=requires_compiler, id='fortran'),
+    *(pytest.param('cpu_highway', layout, marks=requires_cpp_highway_compiler, id=layout)
+      for layout in ('soa', 'aos', 'cbt')),
+    pytest.param('gpu_cuda_cpp', None, marks=[pytest.mark.gpu, requires_gpu_cuda_cpp_compiler], id='cuda'),
+]
+
+
+_ARRAY_WEIGHTS = '{1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0,9.0}'
+_RUNTIME_INTS = 'array[int, 9] k = A + x; '
+_LOCAL_SQUARE = 'array[real, 9] q = W * W; '
+_TAIL = ',1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0}'
+
+
+def _slice_program(body):
+    return f'''simulation_description("Slice scalarization");
+    global_constants {{
+      const array[real, 9] W = {_ARRAY_WEIGHTS};
+      const array[int, 9] A = {{1,2,3,4,5,6,7,8,9}};
+      const array[int, 9] EX = {{0,1,0,-1,0,1,-1,-1,1}};
+      const array[int, 9] EY = {{0,0,1,0,-1,1,1,-1,-1}};
+    }}
+    lattices {{ lattice f(2,9,real,{{8,4}},{{true,true}}); }}
+    initializer I {{ f.out[x,y|:] = real(x) + W; }}
+    dynamic D {{ {body} }}
+    gauge G -> ({', '.join(f'real v{i}' for i in range(9))}) {{
+      {' '.join(f'v{i} = f.in[x,y|{i}];' for i in range(9))}
+    }}
+    node_classes {{ node_class B(I,D,G); }}
+    geometry {{ nodes[:,:] = B; }}
+    function Cast(array[int,9] arg) -> (array[real,9] result) {{ result = real(arg); }}
+    '''
+
+
+# Each expected value depends on the direction; runtime casts also depend on x.
+_SLICE_CASES = [
+    ('cast-local', _RUNTIME_INTS + 'array[real,9] r; r = real(k); f.out[x,y|:] = r;', lambda w,x: w+x, 'all'),
+    ('cast-global', 'array[real,9] r; r = real(A); f.out[x,y|:] = r;', lambda w,x: w, 'all'),
+    ('cast-narrow', _RUNTIME_INTS + 'array[real32,9] r; r = real32(k); f.out[x,y|:] = r;', lambda w,x: w+x, 'all'),
+    ('cast-integer', 'array[int32,9] r; r = int32(W); f.out[x,y|:] = r;', lambda w,x: w, 'all'),
+    ('cast-function', _RUNTIME_INTS + 'array[real,9] r = Cast(k); f.out[x,y|:] = r;', lambda w,x: w+x, 'all'),
+    ('cast-whole', _RUNTIME_INTS + 'int s = sum(k); array[real,9] r; r = real(k); f.out[x,y|:] = r + real(s);', lambda w,x: w+10*x+45, 'all'),
+    ('cast-declaration', _RUNTIME_INTS + 'array[real,9] r = real(k); f.out[x,y|:] = r;', lambda w,x: w+x, 'all'),
+    ('cast-slice', 'f.out[x,y|:] = real(f.in[x,y|:]) * 0.5;', lambda w,x: (w+x)*0.5, 'all'),
+    ('cast-nested', 'f.out[x,y|:] = real(real32(f.in[x,y|:])) * 0.5;', lambda w,x: (w+x)*0.5, 'all'),
+    ('cast-bare', 'f.out[x,y|:] = real(f.in[x,y|:]);', lambda w,x: w+x, 'all'),
+    ('element-cast', 'array[int,9] q = A*A; f.out[x,y|:] = W + real(q[8]);', lambda w,x: w+81, 'all'),
+    ('element-math', 'array[int,9] q = A*A; f.out[x,y|:] = W + sqrt(real(q[8]));', lambda w,x: w+9, 'all'),
+    ('slice-open', _LOCAL_SQUARE + 'f.out[x,y|:] = f.in[x,y|:] + q[:];', lambda w,x: w+x+w*w, 'fortran'),
+    ('slice-explicit', _LOCAL_SQUARE + 'f.out[x,y|:] = f.in[x,y|:] + q[0:8];', lambda w,x: w+x+w*w, 'fortran'),
+    ('collision', 'array[real,9] a = W*W; real b_0 = 1.0; array[real,9] b = a*2.0; f.out[x,y|:] = b+b_0;', lambda w,x: 2*w*w+1, 'all'),
+    ('reduction-sum', _LOCAL_SQUARE + 'f.out[x,y|:] = q + sum(q);', lambda w,x: w*w+285, 'all'),
+    ('reduction-dot', _LOCAL_SQUARE + 'f.out[x,y|:] = W * dot_prod(W,q);', lambda w,x: w*2025, 'all'),
+    ('literal-store', 'f.out[x,y|:] = 2.0 * {f.in[x,y|0]' + _TAIL + ';', lambda w,x: np.where(w==1,2*(x+1),2*(w-1)), 'literal'),
+    ('literal-declaration', 'array[real,9] q = 2.0 * {f.in[x,y|0]' + _TAIL + '; f.out[x,y|:] = q;', lambda w,x: np.where(w==1,2*(x+1),2*(w-1)), 'literal'),
+    ('literal-cast', 'f.out[x,y|:] = real({x,1,2,3,4,5,6,7,8});', lambda w,x: np.where(w==1,x,w-1), 'all'),
+    ('literal-repeated', 'f.out[x,y|:] = 2.0 * {' + ','.join(['f.in[x,y|0]*3.0']*9) + '};', lambda w,x: 6*(x+1), 'literal'),
+    ('singleton', _LOCAL_SQUARE + 'array[real,9] c = {q[8:8]' + _TAIL + '; f.out[x,y|:] = f.in[x,y|:] + c;', lambda w,x: w+x+np.where(w==1,81,w-1), 'all'),
+    ('streaming', 'array[real,9] g = upstream_dfs(f,x,y,{EX,EY}); f.out[x,y|:] = g;', lambda w,x: (x-np.array([0,1,0,-1,0,1,-1,-1,1])[:,None,None])%8+w, 'all'),
+]
+
+
+@pytest.mark.parametrize('backend,layout', _SLICE_CONFIGS)
+@pytest.mark.parametrize('name,body,expected,plain', _SLICE_CASES, ids=[c[0] for c in _SLICE_CASES])
+def test_slice_scalarization_values(tmp_path, monkeypatch, backend, layout, name, body, expected, plain):
+    from gelb.backends.highway.common import _detect_avx512_available
+    from gelb.tests.integration.test_tutorial_regressions import run_source
+    if layout == 'cbt' and not _detect_avx512_available():
+        pytest.skip('the cbt layout needs AVX-512')
+    w = np.arange(1,10,dtype=float)[:,None,None]
+    x = np.arange(8,dtype=float)[None,None,:]
+    target = np.broadcast_to(expected(w,x), (9,4,8))
+    flags = f'--storage-layout {layout}' if layout else ''
+    results = []
+    modes = ['default']
+    if (plain == 'all' or (plain == 'fortran' and backend == 'cpu_fortran_serial')
+            or (plain == 'literal' and layout not in ('soa', 'cbt'))):
+        modes.append('plain')
+    for mode in modes:
+        monkeypatch.setenv('GELBC_EXTRA', flags + (' --no-slice-simplify --no-scalar-cse' if mode == 'plain' else ''))
+        directory = tmp_path / mode
+        directory.mkdir()
+        fields = run_source(directory, backend, _slice_program(body))
+        actual = np.stack([fields[f'v{i}'][-1] for i in range(9)])
+        np.testing.assert_array_equal(actual, target)
+        results.append(actual)
+    if len(results) == 2:
+        assert results[0].tobytes() == results[1].tobytes()
+
+
+@pytest.mark.parametrize('body,expected', [
+    (_LOCAL_SQUARE + 'f.out[x,y|:] = f.in[x,y|:] + W*sum(q*2.0) + dot_prod(q*2.0,W);', lambda w,x: w+x+570*w+4050),
+    ('array[real,9] a = W*W; array[real,9] b = W*2.0; real u = sum(a+b)*2.0; real v = sum(a+b)*2.0; f.out[x,y|:] = W+u+v;', lambda w,x: w+1500),
+])
+def test_reductions_keep_array_expression_operands(tmp_path, monkeypatch, body, expected):
+    from gelb.tests.integration._toolchain import HAS_GFORTRAN
+    if not HAS_GFORTRAN:
+        pytest.skip('gfortran is required')
+    test_slice_scalarization_values(tmp_path, monkeypatch, 'cpu_fortran_serial', None,
+                                    'reduction-expression', body, expected, 'all')
