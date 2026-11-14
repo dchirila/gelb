@@ -21,6 +21,20 @@ class ConstantAssignmentValidationVisitor(
     assignment statements.
     """
 
+    _CONSTANT_TAGS = {"constant definition", "constant",
+                      "implicit dimension constant", "implicit constant"}
+
+    def __init__(self):
+        self._current_block = None
+
+    def _visit_block_stmts(self, node, ast_root_node):
+        previous = self._current_block
+        self._current_block = node
+        try:
+            return super()._visit_block_stmts(node, ast_root_node)
+        finally:
+            self._current_block = previous
+
     def visitProgram_N(self, node, ast_root_node):
         """Visit all blocks in the program."""
         for block in [node.global_constants, node.lattices, node.node_classes, node.geometry]:
@@ -81,8 +95,7 @@ class ConstantAssignmentValidationVisitor(
                 symbol_name = str(target.name)
                 symbol_def = self._find_symbol_definition(symbol_name, ast_root_node)
                 if symbol_def:
-                    if (symbol_def.tag == "constant definition" or
-                        symbol_def.tag == "implicit dimension constant"):
+                    if symbol_def.tag in self._CONSTANT_TAGS:
                         raise GeLBExConstantAssignment(target, symbol_def)
         self.visit(node.rhs, ast_root_node)
         return node
@@ -104,8 +117,7 @@ class ConstantAssignmentValidationVisitor(
             
             if symbol_def:
                 # Check if this symbol is a constant
-                if (symbol_def.tag == "constant definition" or 
-                    symbol_def.tag == "implicit dimension constant"):
+                if symbol_def.tag in self._CONSTANT_TAGS:
                     raise GeLBExConstantAssignment(lhs_identifier, symbol_def)
         
         # Continue visiting the RHS
@@ -128,7 +140,7 @@ class ConstantAssignmentValidationVisitor(
             
             if symbol_def:
                 # Check if this symbol is a constant array
-                if (symbol_def.tag == "constant definition"):
+                if symbol_def.tag in self._CONSTANT_TAGS:
                     raise GeLBExConstantAssignment(node.lhs.array_name, symbol_def)
         
         # Continue visiting the RHS
@@ -141,48 +153,19 @@ class ConstantAssignmentValidationVisitor(
         return node
 
     def _find_symbol_definition(self, symbol_name, ast_root_node):
-        """
-        Find a symbol definition by searching through the symbol table hierarchy.
-        
-        This method searches through the global constants and all block symbol tables
-        to find the given symbol.
-        
-        Args:
-            symbol_name: Name of the symbol to find
-            ast_root_node: The root Program_N node containing all symbol tables
-            
-        Returns:
-            SymbolDefinition if found, None otherwise
-        """
-        # First check global constants
-        if ast_root_node.global_constants and ast_root_node.global_constants.symbol_defs:
-            symbol_def = ast_root_node.global_constants.symbol_defs.get_symbol_definition(symbol_name)
-            if symbol_def:
+        """Resolve a store in its owning block, then its lexical parents."""
+        table = getattr(self._current_block, 'symbol_defs', None)
+        if table is not None:
+            symbol_def = table.get_symbol_definition(symbol_name)
+            if symbol_def is not None or table.parent_table is not None:
                 return symbol_def
-        
-        # Then check all other blocks
-        all_blocks = []
-        
-        # Add individual blocks
-        if ast_root_node.lattices:
-            all_blocks.append(ast_root_node.lattices)
-        if ast_root_node.node_classes:
-            all_blocks.append(ast_root_node.node_classes)
-        if ast_root_node.geometry:
-            all_blocks.append(ast_root_node.geometry)
-            
-        # Add block lists
-        for block_list in [ast_root_node.initializers, ast_root_node.dynamics, ast_root_node.gauges]:
-            if block_list:
-                all_blocks.extend(block_list)
-        
-        # Search through all blocks
-        for block in all_blocks:
-            if block and hasattr(block, 'symbol_defs') and block.symbol_defs:
-                symbol_def = block.symbol_defs.get_symbol_definition(symbol_name)
-                if symbol_def:
+        # Standalone fixtures may have no active block or detached tables.
+        for owner in (ast_root_node, ast_root_node.global_constants):
+            table = getattr(owner, 'symbol_defs', None)
+            if table is not None:
+                symbol_def = table.get_symbol_definition(symbol_name)
+                if symbol_def is not None:
                     return symbol_def
-        
         return None
 
     # The following visit methods are needed because we might encounter these

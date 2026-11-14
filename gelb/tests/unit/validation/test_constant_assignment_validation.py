@@ -293,3 +293,46 @@ class TestConstantAssignmentValidation:
             assert result is not None
         except GeLBExConstantAssignment:
             pytest.fail("Variable array element assignment should be allowed")
+
+@pytest.mark.parametrize('profile', ['CODEGEN', 'DIAGNOSTICS', 'PROGRAM_ANALYSIS'])
+@pytest.mark.parametrize('scope', ['initializer', 'dynamic', 'gauge', 'function'])
+@pytest.mark.parametrize('body', [
+    'const int k = 2; k = 3;',
+    'const array[int, 2] k = {1, 2}; k[0] = 3;',
+    'const int k = 2; int other; {k, other} = Two(1);',
+])
+def test_const_stores_are_rejected_in_their_own_scope(profile, scope, body):
+    from gelb.compiler_pipeline import compile_source, PipelineOptions, PipelineProfile
+    functions = 'function Two(int a) -> (int p, int q) { p = a; q = a; }'
+    contents = dict(initializer_content='f.out[x | 0] = 0;',
+                    dynamic_content='f.out[x | 0] = f.in[x | 0];',
+                    gauge_content='val = f.in[x | 0];')
+    if scope == 'function':
+        functions += f'function F(int a) -> (int r) {{ {body} r = a; }}'
+    else:
+        contents[scope + '_content'] = body + contents[scope + '_content']
+    source = minimal_gelb_program_1d(**contents) + functions
+    with pytest.raises(GeLBExConstantAssignment) as error:
+        compile_source(source, PipelineProfile[profile], PipelineOptions())
+    line, column = error.value._source_location()
+    assert body in source.splitlines()[line - 1]
+    assert column > 0
+
+
+@pytest.mark.parametrize('tag', ['constant definition', 'constant',
+                                'implicit dimension constant', 'implicit constant'])
+@pytest.mark.parametrize('body', ['k = 3;', 'k[0] = 3;', '{k, other} = Two(1);'])
+def test_all_constant_tags_and_detached_table_fallback(tag, body):
+    from gelb.frontend.ConstantAssignmentValidationVisitor import ConstantAssignmentValidationVisitor
+    source = minimal_gelb_program_1d(
+        global_constants_content='const array[int, 2] k = {1, 2};' if '[' in body
+        else 'const int k = 2;', gauge_content='int other; ' + body + ' val = 0;')
+    source += 'function Two(int a) -> (int p, int q) { p = a; q = a; }'
+    ast = get_typed_ast(source)
+    ast.global_constants.symbol_defs.get_symbol_definition('k').tag = tag
+    block = ast.gauges[0]
+    block.symbol_defs.parent_table = None
+    visitor = ConstantAssignmentValidationVisitor()
+    with pytest.raises(GeLBExConstantAssignment):
+        visitor.visit(block, ast)
+    assert visitor._current_block is None
