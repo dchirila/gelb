@@ -93,7 +93,9 @@ Frontend
    :source:`gelb/frontend/ConstantsResolverVisitor.py` substitutes
    explicit and implicit constants into their uses;
    :source:`gelb/frontend/RangeResolverVisitor.py` fills omitted
-   range bounds with ``0`` and ``Nx-1`` (``Ny-1``, ``Nz-1``).
+   range bounds with ``0`` and ``Nx-1`` (``Ny-1``, ``Nz-1``), including
+   in ``global_constants``. Type inference resolves synthetic open array
+   bounds against the declared array extents.
 ``resolve_declared_shapes``
    :source:`gelb/frontend/declared_shapes.py` resolves all declared array
    extents before type inference, including function signatures regardless
@@ -209,14 +211,20 @@ and function declaration order therefore leave emitted temporary names unchanged
    in order, the folder decides at a call's first statement whether its
    arguments hold constants there (a constant array among them: any
    global constant, an array literal of constants, an array a name of
-   the inliner holds; an array is carried only into reductions, as a
-   literal); such a call is a constant
+   the inliner holds; constant arrays are carried into constant-index
+   element and slice selections as well as reductions); such a call is a constant
    expression, folded and checked like the rest, with the constants
    its names hold carried into their uses (an argument's always, its
    locals' and outputs' only in a call of constants, a block-local
    constant's (``lowered_const``) always, a user variable's never) and
    its names dropped where nothing reads them; an error found in
-   inlined code names the calls.
+   inlined code names the calls. Constant selections retain the array
+   element width and selected shape; 2-D ``sum`` folds row by row, left
+   to right. Folded indices on array reads and stores are checked against
+   declared extents after inlining. Unread inliner array copies are pruned;
+   block-local constant declarations stay. Overflowing narrow-real
+   conversions fold to signed infinities, while finite standalone
+   promotions remain explicit.
    :source:`gelb/midware/IntrinsicArgHoisting.py` gives ``dot_prod``
    bare identifiers as arguments.
 ``collinearity_rewrite``, ``scalar_block_cse``, ``slice_df_expansion``
