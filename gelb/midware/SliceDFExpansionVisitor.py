@@ -19,8 +19,10 @@ Per-direction substitution rules (in ``_subst_for_direction``):
 * ``Identifier_N(name)`` where ``name`` is a Q-element array we did NOT
   expand (e.g. ``fIn = upstream_dfs(...)``) -> ``RectSelOfArrayElems_N``
                                               indexed at literal i.
-* Bare ``RectSelOfArrayElems_N(name, [Range(L,L)])`` with literal L and
-  ``name`` a constexpr global array  -> literal substitution.
+* Array selections use their singleton index or slice offset plus i.
+* Elementwise casts, scalar calls, and nested Q-element literals recurse;
+  reductions retain their whole-array operands. Rebuilt values carry
+  rank-zero types before exact simplification and scalar CSE.
 * Otherwise (scalar identifier, etc.) -> unchanged.
 
 A statement triggers expansion when:
@@ -28,9 +30,9 @@ A statement triggers expansion when:
 * ``LatticeOutSelectionAssignmentStmt_N`` whose LHS DF range is a slice
   of length Q >= 9.
 * ``VariableDeclarationStmt_N`` whose ``data_type.shape`` is
-  ``IntLiteral_N(Q)`` with Q >= 9, EXCEPT when ``initial_value`` is a
-  bare ``IntrinsicFunctionCall_N`` (e.g. ``upstream_dfs(...)``) -- those
-  stay as a single Q-element array.
+  ``IntLiteral_N(Q)`` with Q >= 9, EXCEPT when ``initial_value`` is an
+  opaque whole-array call (e.g. ``upstream_dfs(...)``) -- those stay
+  whole, as do operands needed by reductions and unexpanded statements.
 * ``VariableAssignmentStmt_N`` whose LHS Identifier was previously
   expanded (i.e. is in the visitor's ``local_array_to_scalars`` map).
 
@@ -53,6 +55,7 @@ from gelb.midware.BlockMutationHelper import declare_temp, remove_decl, fresh_na
 
 from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
 from gelb.frontend.visitor_mixins import ProgramTraversalMixin
+from gelb.frontend.intrinsic_functions import CAST_INTRINSIC_NAMES
 from gelb.gelb_ast.ASTNodes import (
     Array1DLiteral_N,
     ArrayDataType_N,
@@ -60,6 +63,7 @@ from gelb.gelb_ast.ASTNodes import (
     ConstantDefinitionStmt_N,
     DynamicBlock_N,
     GaugeBlock_N,
+    Expr_N,
     Identifier_N,
     InitializerBlock_N,
     IntLiteral_N,
@@ -98,6 +102,9 @@ _Q_GATE = 9   # D2Q9 minimum -- smaller stencils don't justify the AST blow-up
 # lower.
 _KNOWN_ARRAY_INTRINSICS = {'upstream_dfs', 'bounce_back_dfs', 'matmul',
                            'transpose', 'inverse'}
+
+# Reductions return scalars but consume whole-array operands.
+_REDUCTION_INTRINSICS = {'sum', 'dot_prod', 'determinant'}
 
 
 class SliceDFExpansionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
@@ -178,7 +185,7 @@ class SliceDFExpansionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         # would leave dangling references in the unexpanded stmts.
         self._cse_counter = 0
         self._block = block
-        forced_whole = _scan_forced_whole(block.stmts.elements)
+        forced_whole = _scan_forced_whole(block.stmts.elements, block)
         self._scope = _BlockScope(forced_whole=forced_whole)
         new_elements = []
         for stmt in block.stmts.elements:
@@ -217,6 +224,7 @@ class SliceDFExpansionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         if q is None or q < _Q_GATE:
             return None
         name = stmt.name.name
+        self._scope.remember_dtype(name, _scalar_dtype_for(stmt.data_type))
         # Forced-whole (pre-scan): some downstream stmt references this
         # array as a whole-array operand and won't be per-direction
         # expanded.  Keep this decl whole too so the references resolve.
@@ -245,8 +253,6 @@ class SliceDFExpansionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
 
         cr = stmt.code_range
         scalar_dtype = _scalar_dtype_for(stmt.data_type)
-        self._scope.remember_dtype(name, scalar_dtype)
-
         if stmt.initial_value is None:
             # Decl without init -- emit Q scalar decls, no CSE pass.
             result = []
@@ -302,6 +308,7 @@ class SliceDFExpansionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         for i in range(q):
             new_lhs = Identifier_N(cr, scalar_names[i])
             new_lhs.inferred_type = scalar_dtype
+            new_lhs.symbol_tag = "variable declaration"
             result.append(VariableAssignmentStmt_N(
                 cr, new_lhs, _stored(ast_per_dir[i], scalar_dtype, cr)))
         self.expansions_applied += 1
@@ -401,23 +408,13 @@ class SliceDFExpansionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
 
     # --- Per-direction expansion core --------------------------------
 
-    def _prepare_per_direction_ast(self, rhs, i: int):
-        """Deep-copy ``rhs`` and apply per-direction substitution
-        (literal-indexed arrays, lattice-in slice narrowing, local
-        expanded-array refs).  The per-direction expression before
-        simplification."""
-        # Top-level Array1DLiteral_N: select element i directly (the
-        # whole literal would otherwise be one opaque operand --
-        # wrong for per-direction expansion).
-        if isinstance(rhs, Array1DLiteral_N):
-            elements = rhs.value.elements
-            if i < len(elements):
-                rhs_i = copy.deepcopy(elements[i])
-            else:
-                rhs_i = copy.deepcopy(rhs)
-        else:
-            rhs_i = copy.deepcopy(rhs)
-        return self._subst_for_direction(rhs_i, i)
+    def _prepare_per_direction_ast(self, rhs, i: int, q: int):
+        """Copy and scalarize one direction before simplification and CSE.
+
+        Elementwise calls and nested Q-element literals are decomposed;
+        whole-array operands of reductions and opaque calls stay intact.
+        """
+        return self._subst_for_direction(copy.deepcopy(rhs), i, q)
 
     def _build_q_simplified(self, rhs, q: int, scalar_dtype, code_range):
         """Return ``(cse_temp_decls, [ast_per_direction])``.
@@ -430,7 +427,7 @@ class SliceDFExpansionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         re-associates or rounds differently from the unexpanded form
         (user manual, Numerical semantics: What the optimizer promises).
         """
-        per_dir = [simplify_exact(self._prepare_per_direction_ast(rhs, i))
+        per_dir = [simplify_exact(self._prepare_per_direction_ast(rhs, i, q))
                    for i in range(q)]
         cse_temp_decls, per_dir = self._maybe_apply_cse(
             per_dir, code_range, scalar_dtype)
@@ -465,53 +462,48 @@ class SliceDFExpansionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         return VariableDeclarationStmt_N(
             code_range, scalar_dtype, name_id, initial_value=ast_rhs)
 
-    def _subst_for_direction(self, node, i: int):
-        """Walk an AST sub-tree and substitute Q-element references with
-        per-direction values for index ``i``.  Returns the (possibly
-        new) root node.
+    def _subst_for_direction(self, node, i: int, q: int):
+        """Select direction ``i`` and stamp scalar types on elementwise trees.
 
-        Opaque sub-trees (``IntrinsicFunctionCall_N``) are NOT recursed
-        into -- their arguments may contain Q-element-array identifiers
-        that should stay as whole-array references (e.g.
-        ``bounce_back_dfs(f, x, y, [EX, EY])`` -- substituting EX -> 0 inside
-        would silently break the intrinsic semantics).
-        ``RectSelOfLatticeInDFs_N`` with a slice DF range gets its DF
-        range narrowed to ``[i, i]`` so the bridge sees a single-DF
-        opaque sub-tree (distinct per direction via structural-key
-        interning).
+        Casts and scalar intrinsics recurse into their arguments, while
+        reductions and backend-specialized array calls retain whole operands.
+        Singleton coercions retain their own element, independent of ``i``.
         """
         if isinstance(node, TypePromotionNode_N) and node.is_singleton_coercion():
             # This value has its own sole element, independent of the
             # direction of the surrounding slice store.
             return node
-        # Identifier_N: the most common case -- references to W, EX, EY,
-        # local array variables, etc.
+        if isinstance(node, BroadcastNode_N):
+            return self._subst_for_direction(node.scalar_expr, i, q)
+        if isinstance(node, Array1DLiteral_N) and len(node.value.elements) == q:
+            if i < q:
+                return self._subst_for_direction(node.value.elements[i], i, q)
         if isinstance(node, Identifier_N):
             return self._subst_identifier(node, i)
-        # RectSelOfArrayElems_N(name, [Range(L,L)]): explicit array
-        # element access (rare post-inlining but possible).
         if isinstance(node, RectSelOfArrayElems_N):
             return self._subst_array_elems(node, i)
-        # f.in[x,y|:] (or f.in[x,y|0:8]) inside an expanded RHS:
-        # narrow the DF range to the per-direction index.
         if isinstance(node, RectSelOfLatticeInDFs_N):
             return self._subst_lattice_in(node, i)
-        # Opaque leaf-tree -- leave its internal structure intact.
         if isinstance(node, IntrinsicFunctionCall_N):
-            return node
-        # Lists: mutate elements in place.
-        if isinstance(node, List_N):
-            for k, elem in enumerate(node.elements):
-                node.elements[k] = self._subst_for_direction(elem, i)
-            return node
-        # Generic AST node: walk named children.
-        if isinstance(node, Node_N):
+            if node.function_name in _KNOWN_ARRAY_INTRINSICS | _REDUCTION_INTRINSICS:
+                return node
+            node.arguments = self._subst_for_direction(node.arguments, i, q)
+        elif isinstance(node, TypePromotionNode_N):
+            node.expr = self._subst_for_direction(node.expr, i, q)
+            node.target_type = _scalar_dtype_for(node.target_type)
+        elif isinstance(node, List_N):
+            node.elements = [self._subst_for_direction(elem, i, q)
+                             for elem in node.elements]
+        elif isinstance(node, Node_N):
             for child_name in node.get_children_names():
                 child = getattr(node, child_name)
-                if isinstance(child, (Node_N, List_N)):
+                if isinstance(child, Node_N):
                     setattr(node, child_name,
-                            self._subst_for_direction(child, i))
-            return node
+                            self._subst_for_direction(child, i, q))
+        if isinstance(node, Expr_N) and isinstance(
+                getattr(node, 'inferred_type', None), ArrayDataType_N):
+            if not node.canonical_type.is_scalar:
+                node.inferred_type = _scalar_dtype_for(node.inferred_type)
         return node
 
     def _subst_identifier(self, node: Identifier_N, i: int):
@@ -523,20 +515,27 @@ class SliceDFExpansionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         if name in self.array_constants:
             values = self.array_constants[name]
             if i < len(values):
-                return _make_literal_for_value(values[i], cr,
-                                               getattr(node, 'inferred_type', None))
+                dtype = getattr(node, 'inferred_type', None)
+                return _make_literal_for_value(
+                    values[i], cr, _scalar_dtype_for(dtype)
+                    if isinstance(dtype, ArrayDataType_N) else None)
         # Local array we expanded: substitute the per-direction scalar.
         scalar_names = self._scope.array_to_scalars.get(name)
         if scalar_names is not None and i < len(scalar_names):
             new_id = Identifier_N(cr, scalar_names[i])
             new_id.inferred_type = self._scope.scalar_dtype_for(name)
+            new_id.symbol_tag = "variable declaration"
             return new_id
         # Local array we did NOT expand: emit indexed access.
         if name in self._scope.unexpanded_arrays:
+            arr_id = Identifier_N(cr, name)
+            arr_id.symbol_tag = getattr(node, 'symbol_tag', None)
             sel = RectSelOfArrayElems_N(
-                cr,
-                Identifier_N(cr, name),
+                cr, arr_id,
                 [Range_N(cr, IntLiteral_N(cr, i), IntLiteral_N(cr, i))])
+            sel.inferred_type = (_scalar_dtype_for(node.inferred_type)
+                                 if isinstance(getattr(node, 'inferred_type', None), ArrayDataType_N)
+                                 else self._scope.scalar_dtype_for(name))
             return sel
         return node
 
@@ -566,40 +565,40 @@ class SliceDFExpansionVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         return node
 
     def _subst_array_elems(self, node: RectSelOfArrayElems_N, i: int):
-        """Substitute ``RectSelOfArrayElems_N(name, [Range(L,L)])``.
+        """Select a singleton at its own index, or slice element ``lo + i``.
 
-        Two cases handled (``i`` is the outer per-direction index, not
-        used for the inner literal lookup which uses ``L.value``):
-
-        * ``name`` is a constexpr global array (W, EX, EY, ...) -- replace
-          with the literal value at index ``L``.
-        * ``name`` is a local Q-element array we already expanded --
-          replace with the per-direction scalar identifier
-          ``Identifier_N(local_array_to_scalars[name][L])``.
+        Constants become scalar literals, expanded locals become scalar
+        identifiers, and other array selections narrow to rank zero.
         """
         name = _name_of(node.array_name)
         if len(node.element_ranges) != 1:
             return node
         r = node.element_ranges[0]
-        if not (isinstance(r.low, IntLiteral_N) and
-                isinstance(r.high, IntLiteral_N) and
-                r.low.value == r.high.value):
+        if r.low is None and r.high is None:
+            idx = i
+        elif isinstance(r.low, IntLiteral_N) and isinstance(r.high, IntLiteral_N):
+            idx = r.low.value if r.low.value == r.high.value else r.low.value + i
+        else:
             return node
-        idx = r.low.value
         cr = node.code_range
         # Constexpr global array.
         if name in self.array_constants:
             values = self.array_constants[name]
             if 0 <= idx < len(values):
+                dtype = getattr(node, 'inferred_type', None)
                 return _make_literal_for_value(
-                    values[idx], cr,
-                    getattr(node, 'inferred_type', None))
+                    values[idx], cr, _scalar_dtype_for(dtype)
+                    if isinstance(dtype, ArrayDataType_N) else None)
         # Local Q-element array we expanded into scalars.
         scalar_names = self._scope.array_to_scalars.get(name)
         if scalar_names is not None and 0 <= idx < len(scalar_names):
             new_id = Identifier_N(cr, scalar_names[idx])
             new_id.inferred_type = self._scope.scalar_dtype_for(name)
+            new_id.symbol_tag = "variable declaration"
             return new_id
+        node.element_ranges[0] = Range_N(cr, IntLiteral_N(cr, idx), IntLiteral_N(cr, idx))
+        if isinstance(getattr(node, 'inferred_type', None), ArrayDataType_N):
+            node.inferred_type = _scalar_dtype_for(node.inferred_type)
         return node
 
 
@@ -704,7 +703,7 @@ def _scalar_inferred_type(inferred, cr):
     return ArrayDataType_N(cr, 'real64', List_N(cr))
 
 
-def _scan_forced_whole(stmts) -> set:
+def _scan_forced_whole(stmts, block=None) -> set:
     """Pre-scan a block's statement list to identify Q-element-array
     names that MUST remain whole arrays.
 
@@ -729,6 +728,8 @@ def _scan_forced_whole(stmts) -> set:
                 continue
             name = stmt.name.name
             qarr_names.add(name)
+            if block is not None and not names_available(block, (f"{name}_{i}" for i in range(q))):
+                base_cant_expand.add(name)
             if stmt.initial_value is not None and (
                     _is_opaque_only(stmt.initial_value) or
                     _contains_known_array_intrinsic(stmt.initial_value)):
@@ -786,6 +787,8 @@ def _scan_forced_whole(stmts) -> set:
                     or getattr(stmt, 'initial_value', None)
                 if rhs is not None:
                     sources_to_scan.append(rhs)
+            rhs = getattr(stmt, 'rhs', None) or getattr(stmt, 'initial_value', None)
+            new_forced.update(_reduction_array_refs(rhs, qarr_names))
             if not will_expand:
                 for src in sources_to_scan:
                     for ref in _whole_array_refs(src, qarr_names):
@@ -794,6 +797,17 @@ def _scan_forced_whole(stmts) -> set:
             break
         forced = new_forced
     return forced
+
+
+def _reduction_array_refs(node, qarr_names):
+    """Find whole-array operands even inside otherwise expanded statements."""
+    if isinstance(node, IntrinsicFunctionCall_N) and node.function_name in _REDUCTION_INTRINSICS:
+        return _whole_array_refs(node.arguments, qarr_names)
+    refs = set()
+    if isinstance(node, Node_N):
+        for child in node.get_children():
+            refs.update(_reduction_array_refs(child, qarr_names))
+    return refs
 
 
 def _whole_array_refs(node, qarr_names: set) -> set:
@@ -858,9 +872,19 @@ def _is_opaque_only(node) -> bool:
     such slices as opaque preserves a per-direction loop in init/gauge
     bodies and blocks downstream SIMD vectorisation -- return False for
     those.  Same logic applies to ``RectSelOfArrayElems_N`` with a
-    slice element range."""
-    while isinstance(node, TypePromotionNode_N):
-        node = node.expr
+    slice element range. Array-ranked elementwise casts are transparent;
+    scalar broadcasts and backend-specialized array calls stay opaque."""
+    while True:
+        if isinstance(node, TypePromotionNode_N):
+            node = node.expr
+        elif (isinstance(node, IntrinsicFunctionCall_N)
+              and node.function_name in CAST_INTRINSIC_NAMES
+              and len(node.arguments.elements) == 1
+              and getattr(node, 'canonical_type', None) is not None
+              and not node.canonical_type.is_scalar):
+            node = node.arguments.elements[0]
+        else:
+            break
     while isinstance(node, BroadcastNode_N):
         node = node.scalar_expr
     if isinstance(node, IntrinsicFunctionCall_N):
