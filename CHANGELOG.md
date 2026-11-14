@@ -50,6 +50,12 @@ versions follow upstream end of life and can change in any release.
 
 ### Fixed
 
+- Constant array element and slice reads now fold, exposing zero divisors
+  and simplifying the heat diffusion example's boundary weights. Open
+  slices in global constants and row-major 2-D constant sums work across
+  backends; array bounds exposed by inlining receive located diagnostics,
+  and overflowing narrow-real constants fold to signed infinities.
+
 - Top-level blocks may appear in any order; references before a local
   declaration remain errors. Named lattice sizes and periodicity resolve
   consistently, including command-line overrides.

@@ -571,7 +571,9 @@ time, with these rules:
   constants are evaluated term by term in the expression's width, by
   the rules above: an integer sum is exact and its overflow an error; a
   ``real32`` dot product rounds each product and each sum to binary32;
-  a real result that overflows is the infinity.
+  a real result that overflows is the infinity. Compile-time ``sum``
+  and ``dot_prod`` add left to right in index order; a 2-D ``sum``
+  visits each row left to right, in row-major order.
   ``inverse`` and ``determinant`` of constants are evaluated by SymPy at
   binary64 precision and rounded once to the declared width.
 - A real narrowed past its range (``real32(1.0e300)``, or a ``real32``
@@ -598,13 +600,14 @@ time, with these rules:
   Sq(3037000500) on line 7``).  A call's value stored in a variable is
   a variable, as any stored value is: ``int a = Sq(0);`` then ``1 / a``
   is a run-time division.  An array a call of constants holds is
-  carried into the reductions that read it (``sum``, ``dot_prod``,
-  ``matmul``), in the body and after the call, where its value is
-  written as a literal of constants (an argument ``{0.0, 1.0}``, a
-  store ``m = {a, 1.0}``); one computed element by element, by
-  arithmetic on a named array, or as a named constant array converted
-  to another element type is not, and its reductions are left to run
-  time.
+  carried into constant-index element and slice selections and into
+  reductions (``sum``, ``dot_prod``, ``matmul``), in the body and after
+  the call, where its value is written as a literal of constants (an
+  argument ``{0.0, 1.0}``, a store ``m = {a, 1.0}``) or as a named
+  constant array of the parameter's element type; one computed element
+  by element, by arithmetic on a named array, or as a named constant
+  array converted to another element type is not, and its reductions
+  are left to run time.
 - A constant array's elements are the values its declared width
   stores, on every backend and in every reading: ``const array[int8,
   2] A = {300, 1}`` holds 44 and 1, a ``real32`` array holds the
