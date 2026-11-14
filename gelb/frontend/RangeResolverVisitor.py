@@ -35,6 +35,9 @@ class RangeResolverVisitor(ASTBaseVisitor, BinaryOperationMixin, ProgramTraversa
     def visitGeometryBlock_N(self, node, ast_root_node):
         """Visit paint_nodes statements."""
         return self._visit_block_stmts(node, ast_root_node)
+
+    def visitGlobalConstantsBlock_N(self, node, ast_root_node):
+        return self._visit_block_stmts(node, ast_root_node)
         
     def visitInitializerBlock_N(self, node, ast_root_node):
         """Visit all statements that might contain ranges."""

@@ -11,6 +11,7 @@ from gelb.frontend.intrinsic_functions import (
     CAST_INTRINSIC_NAMES, INT_CAST_NAMES, REAL_CAST_NAMES,
 )
 from gelb.gelb_ast.ASTNodes import *
+from gelb.gelb_ast.CanonicalType import canonical_from_ast
 from gelb.frontend.type_rules import SCALAR_INTRINSICS
 from gelb.midware.ast_eval import (
     NARROW_INT_WIDTHS, NARROW_REAL_WIDTHS, ConstantEvaluationError, add,
@@ -230,6 +231,9 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         constant = literal is None and value is not None \
             and self._is_constant_value(value)
         snapshot = self._constant_array_literal(value) if constant else None
+        if snapshot is not None:
+            snapshot = self._constant_array_literal(
+                TypePromotionNode_N(value.code_range, snapshot, declared))
         self._constant_names.pop(name, None)
         self._values.pop(name, None)
         if literal is not None:
@@ -237,10 +241,10 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
             return
         if value is None:
             return
-        kept.add(name)                  # never dropped: no literal writes it
+        if snapshot is None:
+            kept.add(name)              # no literal writes it
         if constant:
-            # a constant not carried (an array): an argument of a call of
-            # constants all the same, and an array literal for reductions
+            # Array snapshots feed constant selections and reductions.
             self._constant_names[name] = snapshot
 
     @staticmethod
@@ -725,7 +729,8 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         real slot becomes a real literal, rounded if the width is narrow."""
         code_range = code_range if code_range is not None else literal.code_range
         if dtype in _REAL_WIDTHS:
-            new = RealLiteral_N(code_range, float(convert_plain(literal.value, dtype)))
+            with ieee_special_values():
+                new = RealLiteral_N(code_range, float(convert_plain(literal.value, dtype)))
         elif dtype in _INT_WIDTHS:
             # a real payload truncates, and is an error out of range
             new = IntLiteral_N(code_range, int(convert_plain(literal.value, dtype)))
@@ -927,7 +932,7 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
     
     def visitArraySelectionAssignmentStmt_N(self, node: ArraySelectionAssignmentStmt_N, ast_root_node: Program_N):
         """Fold expressions in array assignments."""
-        node.lhs = self.visit(node.lhs, ast_root_node)
+        self._fold_array_selection(node.lhs, ast_root_node, store=True)
         node.rhs = self.visit(node.rhs, ast_root_node)
         return node
     
@@ -1093,7 +1098,7 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         """Check if node is a scalar constant (literal or negated literal)."""
         if isinstance(node, TypePromotionNode_N):
             return self._is_foldable_scalar(node.expr)
-        if isinstance(node, (IntLiteral_N, RealLiteral_N)):
+        if isinstance(node, (IntLiteral_N, RealLiteral_N, BoolLiteral_N)):
             return True
         if isinstance(node, UnaryMinusExpr_N):
             return self._is_foldable_scalar(node.value)
@@ -1107,6 +1112,8 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
                                   node.target_type)
         if isinstance(node, (IntLiteral_N, RealLiteral_N)):
             return typed_literal_value(node)
+        if isinstance(node, BoolLiteral_N):
+            return node.value == 'true'
         if isinstance(node, UnaryMinusExpr_N):
             return negate(self._scalar_value(node.value))
         raise ValueError(f"Not a scalar constant: {type(node).__name__}")
@@ -1166,7 +1173,9 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         """A literal element of an array of element width ``dtype``:
         an integer literal for an integer width, else a real one."""
         value = plain(value)
-        if dtype in _INT_WIDTHS:
+        if dtype == 'bool':
+            lit = BoolLiteral_N(code_range, self._bool_to_string(value))
+        elif dtype in _INT_WIDTHS:
             lit = IntLiteral_N(code_range, int(value))
         else:
             lit = RealLiteral_N(code_range, float(value))
@@ -1336,9 +1345,14 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
 
     def _constant_array_literal(self, node):
         """The literal array ``node`` denotes: a literal of constants
-        (promotions of the whole array kept on it), or the value of a
+        (promotions of the whole array applied), or the value of a
         named constant array, typed by its declaration.  None otherwise."""
         if self._is_constant_array(node):
+            if isinstance(node, TypePromotionNode_N):
+                if isinstance(self._unwrap_promotion(node), Array2DLiteral_N):
+                    return self._matrix_to_ast(self._typed_matrix(node), node.code_range, node)
+                return self._vector_to_ast(
+                    self._typed_vector(node, self._element_dtype(node)), node.code_range, node)
             return node
         if isinstance(node, Identifier_N) and \
                 self._constant_names.get(node.name) is not None:
@@ -1386,12 +1400,14 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
 
     def _try_fold_sum(self, node, args):
         arr = self._constant_array_literal(args[0])
-        if not isinstance(arr, Array1DLiteral_N):
+        if not isinstance(arr, (Array1DLiteral_N, Array2DLiteral_N)):
             return None
         if not arr.value.elements:
             return None
 
         def compute():
+            if isinstance(arr, Array2DLiteral_N):
+                return self._sum([v for row in self._typed_matrix(arr) for v in row])
             return self._sum(self._typed_vector(arr, self._element_dtype(arr)))
         return self._fold_reduction(node, compute)
 
@@ -1521,10 +1537,6 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
                             except ConstantEvaluationError as exc:
                                 raise self._diagnostic(const_stmt, exc)
                             except (OverflowError, ValueError):
-                                # ``const real32 R = 1.0e300;``: the
-                                # value is an infinity at run time;
-                                # the name stays, the backend
-                                # converts
                                 return node
                             new_literal.inferred_type = declared
                             return new_literal
@@ -1581,8 +1593,58 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         return node
     
     def visitRectSelOfArrayElems_N(self, node: RectSelOfArrayElems_N, ast_root_node: Program_N):
-        """Array selections don't contain expressions to fold."""
-        return node
+        return self._fold_array_selection(node, ast_root_node)
+
+    def _fold_array_selection(self, node, ast_root_node, store=False):
+        """Fold bounds on reads and stores; only reads may become values."""
+        ranges = node.element_ranges.elements
+        for r in ranges:
+            for attr in ('low', 'high'):
+                bound = getattr(r, attr)
+                if bound is not None:
+                    setattr(r, attr, self.visit(bound, ast_root_node))
+        arr = self._constant_array_literal(node.array_name)
+        array_type = getattr(arr if arr is not None else node.array_name, 'inferred_type', None)
+        if array_type is None and isinstance(node.array_name, Identifier_N):
+            table = getattr(self.current_block, 'symbol_defs', None)
+            symbol = table.get_symbol_definition(node.array_name.name) if table is not None else None
+            array_type = getattr(getattr(symbol, 'value', None), 'data_type', None)
+        array_type = canonical_from_ast(array_type)
+        if array_type is not None:
+            for r, size in zip(ranges, array_type.dims):
+                if all(isinstance(n, IntLiteral_N) for n in (r.low, r.high)):
+                    lo, hi = r.low.value, r.high.value
+                    if not 0 <= lo <= hi < size:
+                        raise GeLBExTypeError(
+                            r, f"Array index range {lo}:{hi} is outside 0..{size - 1} or reversed"
+                            f"{value_of_call_text(r.low)}{value_of_call_text(r.high)}"
+                            f"{call_chain_text(self._chain)}",
+                            "Use increasing bounds within the declared array extent.")
+        if store or arr is None or not all(
+                isinstance(b, IntLiteral_N) for r in ranges for b in (r.low, r.high)):
+            return node
+        spans = [range(r.low.value, r.high.value + 1) for r in ranges]
+        dtype = self._element_dtype(arr)
+        if isinstance(arr, Array2DLiteral_N):
+            values = self._typed_matrix(arr)
+            rows = [[values[i][j] for j in spans[1]] for i in spans[0]]
+            flat = [v for row in rows for v in row]
+        else:
+            values = self._typed_vector(arr, dtype)
+            flat = [values[i] for i in spans[0]]
+        rank = node.canonical_type.rank
+        if rank == 0:
+            result = self._create_literal_from_value(flat[0], node)
+        elif rank == 1:
+            result = self._vector_to_ast(flat, node.code_range, node)
+        else:
+            result = self._matrix_to_ast(rows, node.code_range, node)
+        binding = self._tracked.get(getattr(node.array_name, 'name', None))
+        if binding is not None and binding[1][0] == 'output':
+            call = binding[1][1]
+            if all(len(c) < 3 or c[2] != call[2] for c in self._chain):
+                result.inlined_from_call = call
+        return result
     
     # Type promotion nodes
     
@@ -1594,6 +1656,29 @@ class ConstantFoldingVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         enabling promotion expansion to work more effectively.
         """
         node.expr = self.visit(node.expr, ast_root_node)
+        dtype = self._element_dtype(node.target_type)
+        if dtype in NARROW_REAL_WIDTHS:
+            def overflow_literal(expr):
+                if not isinstance(expr, (IntLiteral_N, RealLiteral_N)):
+                    return expr
+                with ieee_special_values():
+                    value = plain(convert(expr.value, dtype))
+                if not math.isfinite(value):
+                    result = RealLiteral_N(expr.code_range, value)
+                    result.inferred_type = self._scalar_type(expr.code_range, dtype)
+                    return result
+                return expr
+
+            if isinstance(node.expr, (IntLiteral_N, RealLiteral_N)):
+                literal = overflow_literal(node.expr)
+                if literal is not node.expr:
+                    literal.inferred_type = node.target_type
+                    return literal
+            elif isinstance(node.expr, (Array1DLiteral_N, Array2DLiteral_N)):
+                rows = (node.expr.value.elements if isinstance(node.expr, Array2DLiteral_N)
+                        else [node.expr])
+                for row in rows:
+                    row.value.elements = [overflow_literal(e) for e in row.value.elements]
         return node
     
     def visitBroadcastNode_N(self, node: BroadcastNode_N, ast_root_node: Program_N):

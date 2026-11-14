@@ -186,11 +186,8 @@ def test_global_constants_fold_to_special_values_and_so_do_their_uses():
     for stmt in ast.global_constants.stmts.elements:
         if stmt.name.name == "F":
             assert stmt.value.inferred_type.element_dtype == "real32"
-    # the scalar uses are the values (an indexed read of a constant
-    # array, c0 and f0, stays a read of the emitted array, as before)
+    # Scalar and indexed uses hold the same special values.
     for name, expected in EVERYTHING_EXPECTED.items():
-        if name in ("c0", "f0"):
-            continue
         value = _gauge_value(ast, name)
         assert isinstance(value, RealLiteral_N), (name, value)
         assert _same(value.value, expected), name
@@ -217,8 +214,8 @@ def test_a_block_local_const_is_lowered_to_a_typed_declaration():
 
 
 def test_a_local_const_that_does_not_fold_is_lowered_too():
-    # A constant-array element stays unfolded until later lowering.
-    ast = _ast(program("const real a = C[0]; v = a;",
+    # A grid extent remains unfolded until later lowering.
+    ast = _ast(program("const real a = real(Nx); v = a;",
                        globals="global_constants { const array[real, 2] C = {2.0, 3.0}; }"))
     stmts = ast.gauges.elements[0].stmts.elements
     [decl] = [s for s in stmts if isinstance(s, VariableDeclarationStmt_N)
