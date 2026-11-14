@@ -128,9 +128,7 @@ def test_runtime_contract(tmp_path, case, config):
         np.testing.assert_array_equal(values[name], np.broadcast_to(value, values[name].shape))
 
 
-@pytest.mark.parametrize("case", [
-    pytest.param(case, marks=expected_failure("constant zero divisor is accepted"))
-    if case == "constant_element_zero_divisor" else case for case in REJECTIONS])
+@pytest.mark.parametrize("case", list(REJECTIONS))
 def test_required_diagnostic(tmp_path, case):
     path = tmp_path / "probe.gelb"
     path.write_text(REJECTIONS[case])
@@ -157,25 +155,20 @@ def emit(tmp_path, config, text):
 
 
 @requires_compiler
-@expected_failure("out-of-range real32 constant is not folded to infinity")
 def test_narrow_overflow_unflagged_syntax(tmp_path):
     out = emit(tmp_path, "fortran", PROGRAMS["narrow_overflow"])
     result = subprocess.run(["gfortran", "-fsyntax-only", "-ffree-line-length-none",
                              *shlex.split(NC_FFLAGS), str(out)], cwd=tmp_path,
                             capture_output=True, text=True, timeout=60)
-    if result.returncode and "Arithmetic overflow converting REAL(8) to REAL(4)" in result.stderr:
-        raise KnownDefect(result.stderr)
     assert result.returncode == 0, result.stderr
 
 
 @pytest.mark.parametrize("config", CONFIGS)
-@expected_failure("constant-index array elements remain runtime reads")
 def test_constant_element_folded(tmp_path, config):
     out = emit(tmp_path, config, source("v = u.in[x | 0] * A[1];",
                                       constants="const array[real, 2] A = {0.0, 1.0};"))
     pattern = r"\bg__a\(1\)" if config == "fortran" else r"\bg_A\[1\]"
-    if re.search(pattern, out.read_text()):
-        raise KnownDefect("constant-array element read was emitted")
+    assert not re.search(pattern, out.read_text())
 
 
 @pytest.mark.parametrize('config', CONFIGS)
@@ -278,3 +271,65 @@ def test_array_indices_rejected_before_backend_emission(tmp_path, config, case):
     assert len(errors) == 1 and context in errors[0]['message']
     line = errors[0]['range']['startLine']
     assert ('SZ[-1]' if case == 'negative_extent' else 'w[i]') in text.splitlines()[line]
+
+
+@pytest.mark.parametrize('config', CONFIGS)
+def test_constant_array_slices_and_carried_matrix_sum(tmp_path, config):
+    text = source('v = S(W[1:]) + det; ordered = SM(M);', constants='''
+        const array[real, 3] W = {1.0, 2.0, 4.0};
+        const array[real, {2, 2}] M = {{1.0, -1.0}, {1.0e-30, 0.0}};
+        const array[real, {2, 3}] A = {{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}};
+        const array[real, {2, 2}] sub = A[:, 1:];
+        const real det = determinant(sub);
+        ''', functions='''
+        function S(array[real, 2] a) -> (real r) { r = a[0] + a[1]; }
+        function SM(array[real, {2, 2}] m) -> (real r) { r = sum(m); }
+        ''', outputs='real v, real ordered')
+    result, data = run_program(tmp_path, config, text)
+    assert result.returncode == 0, result.stdout + result.stderr
+    np.testing.assert_array_equal(data['v'][1], 3.0)
+    np.testing.assert_array_equal(data['ordered'][1], 1.0e-30)
+
+
+@pytest.mark.parametrize('config', CONFIGS)
+def test_folded_zero_boundary_preserves_sign(tmp_path, config):
+    text = source('v = u.in[x | 0];', q=2, init='u.out[x | :] = 0.0;',
+        constants='const array[real, 2] W = {1.0/6.0, 1.0/6.0}; const real TR = 0.0;',
+        dynamic='u.out[x | 0] = -u.in[x | 1] + 2.0 * W[1] * TR; u.out[x | 1] = u.in[x | 0];')
+    text = text.replace('real, 4, false', 'real, 64, false')
+    result, data = run_program(tmp_path, config, text)
+    assert result.returncode == 0, result.stdout + result.stderr
+    values = data['v'][1]
+    assert (values == 0.0).all() and not np.signbit(values).any()
+
+
+NARROW_STORES = source('''
+    real32 a = 1.0e300;
+    real32 b = 0.0; b = -1.0e300;
+    array[real32, 2] c = {1.0e300, -1.0e300};
+    array[real32, 2] d = 1.0e300;
+    const real32 local = 1.0e300;
+    real32 product = 1.0e200 * 1.0e100;
+    v = real(a); neg = real(b); elem = real(c[0]); broadcast = real(d[0]);
+    stored = real(u.in[x | 0]); named = real(R); arrayelem = real(AR[0]);
+    folded = real(product); block = real(local); arg = F(1.0e300);
+    ''', kind='real32', init='u.out[x | 0] = 1.0e300;',
+    constants='const real32 R = 1.0e300; const array[real32, 2] AR = {1.0e300, 1.0};',
+    functions='function F(real32 a) -> (real r) { r = real(a); }',
+    outputs='real v, real neg, real elem, real broadcast, real stored, real named, real arrayelem, real folded, real block, real arg')
+
+
+@requires_compiler
+def test_narrow_constant_stores_pass_unflagged_fortran(tmp_path):
+    out = emit(tmp_path, 'fortran', NARROW_STORES)
+    result = subprocess.run(['gfortran', '-fsyntax-only', '-ffree-line-length-none',
+        *shlex.split(NC_FFLAGS), str(out)], cwd=tmp_path, capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize('config', CONFIGS)
+def test_narrow_constant_stores_execute_as_infinities(tmp_path, config):
+    result, data = run_program(tmp_path, config, NARROW_STORES)
+    assert result.returncode == 0, result.stdout + result.stderr
+    for name in ('v', 'neg', 'elem', 'broadcast', 'stored', 'named', 'arrayelem', 'folded', 'block', 'arg'):
+        np.testing.assert_array_equal(data[name][1], -np.inf if name == 'neg' else np.inf)
