@@ -374,19 +374,25 @@ def _inline_one_stmt(stmt, func_map, counter, out):
                         and store is None and target.name not in arg_names \
                         and target.name not in repeated and out_name not in reads:
                     subst[out_name] = Identifier_N(None, target.name)
+                    if getattr(target, 'symbol_tag', None) is not None:
+                        subst[out_name].symbol_tag = target.symbol_tag
                     continue
                 temp_name = f"{prefix}_{out_name}"
                 subst[out_name] = Identifier_N(None, temp_name)
+                subst[out_name].symbol_tag = "variable declaration"
                 out.append(_tagged(_bound(VariableDeclarationStmt_N(
                     None, _copy_tree(out_param.data_type),
                     Identifier_N(None, temp_name), None),
                     'output', call), site))
                 value = Identifier_N(None, temp_name)
-                _copy_inferred_type(out_param.name, value)
+                value.symbol_tag = "variable declaration"
+                value.inferred_type = out_param.data_type
                 if store is not None:
                     value = _subst_expr(store, {out_name: value})
                 target_id = Identifier_N(target.code_range, target.name)
                 _copy_inferred_type(target, target_id)
+                if getattr(target, "symbol_tag", None) is not None:
+                    target_id.symbol_tag = target.symbol_tag
                 final_stores.append(_tagged(VariableAssignmentStmt_N(
                     stmt.code_range, target_id, value), site))
 
@@ -419,6 +425,7 @@ def _bind_argument(param, arg, stored, prefix, call, site, counter, subst, out):
         Identifier_N(None, temp_name), arg), role, call), site))
     counter.argument(call, (role, temp_name))
     subst[pname] = Identifier_N(None, temp_name)
+    subst[pname].symbol_tag = "variable declaration"
 
 
 def _emit_body(func, subst, prefix, call, body_chain, counter, out):
@@ -433,6 +440,7 @@ def _emit_body(func, subst, prefix, call, body_chain, counter, out):
             vname = body_stmt.name.name
             if vname not in subst:
                 subst[vname] = Identifier_N(None, f"{prefix}_{vname}")
+                subst[vname].symbol_tag = "variable declaration"
                 locals_.add(vname)
     remap = {}
     for body_stmt in func.stmts:
@@ -524,6 +532,7 @@ def _transform_expr(expr, func_map, counter, prefix_stmts):
             out_param = func.outputs.elements[0]
             out_new_name = f"{prefix}_{out_param.name.name}"
             subst[out_param.name.name] = Identifier_N(None, out_new_name)
+            subst[out_param.name.name].symbol_tag = "variable declaration"
             prefix_stmts.append(_tagged(_bound(VariableDeclarationStmt_N(
                 None, copy.deepcopy(out_param.data_type),
                 Identifier_N(None, out_new_name), None),
@@ -534,6 +543,7 @@ def _transform_expr(expr, func_map, counter, prefix_stmts):
 
             # Return a reference to the output variable, at the call
             result_id = Identifier_N(expr.code_range, out_new_name)
+            result_id.symbol_tag = "variable declaration"
             # Preserve the inferred type from the original call
             if hasattr(expr, 'inferred_type') and expr.inferred_type is not None:
                 result_id.inferred_type = expr.inferred_type
@@ -703,6 +713,9 @@ def _subst_identifier(node, subst):
             result = Identifier_N(node.code_range, replacement.name)
             if hasattr(node, 'inferred_type'):
                 result.inferred_type = node.inferred_type
+            if (hasattr(node, 'inferred_type') or getattr(node, 'symbol_tag', None) is not None) \
+                    and getattr(replacement, 'symbol_tag', None) is not None:
+                result.symbol_tag = replacement.symbol_tag
             return result
         # Non-identifier replacement (literal, expression, etc.)
         result = copy.deepcopy(replacement)
@@ -713,6 +726,8 @@ def _subst_identifier(node, subst):
     result = Identifier_N(node.code_range, node.name)
     if hasattr(node, 'inferred_type'):
         result.inferred_type = node.inferred_type
+    if getattr(node, 'symbol_tag', None) is not None:
+        result.symbol_tag = node.symbol_tag
     return result
 
 

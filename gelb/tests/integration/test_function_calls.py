@@ -753,3 +753,72 @@ def test_an_output_read_in_its_own_body_is_the_calls_own_name():
             "function T1(int a) -> (int p) { p = a; p = p * 3037000500; }")))
     assert "in the call T1(3037000500) on line 12" in str(error.value)
     assert "the value of" not in str(error.value)
+
+
+@pytest.mark.parametrize('backend, layout', CONFIGS)
+def test_implicit_arguments_across_timesteps(tmp_path, backend, layout):
+    """Bare implicit arguments keep their width and advance on CPU and device."""
+    _skip_cbt_without_avx512(layout)
+    functions = '''
+    function Sq(int a) -> (int r) { r = a * a; }
+    function Cube(int a) -> (int r) { r = a * a * a; }
+    function Big(int a) -> (int r) { r = a * 100000000; }
+    function Area(int a, int b) -> (int r) { r = a * b; }
+    function Inner(int a) -> (int r) { r = 2 * a; }
+    function Outer(int a) -> (int r) { r = Inner(a); }
+    function Mut(int a) -> (int r) { a = a + 1; r = a; }
+    function Two(int a) -> (int p, int q) { p = a; q = a * a; }
+    function Rq(real a) -> (real r) { r = a * a; }
+    '''
+    source = program('''
+        int first; int second; {first, second} = Two(t);
+        int w = 3; int q; {w, q} = Two(w);
+        f.out[x, y | 1] = Sq(t) + Cube(Nx) + Area(Nx, Ny) + Big(Nx)
+            + Outer(t) + Mut(t) + Mut(Nx) + first + second + w + q + Rq(t);
+    ''', functions=functions).replace('f.out[x, y | 1] = 0.0;', 'f.out[x, y | 1] = Sq(t);')
+    path = tmp_path / 'implicit.gelb'
+    path.write_text(source)
+    env = dict(os.environ, GELB_PYTHON=sys.executable)
+    if layout is not None:
+        env['GELBC_EXTRA'] = f'--storage-layout {layout}'
+    result = subprocess.run([str(_GELB_RUN), '-b', backend, '-n', '3', '-w', '1', str(path)],
+                            cwd=tmp_path, env=env, capture_output=True, text=True, timeout=600)
+    assert result.returncode == 0, result.stdout + result.stderr
+    with netCDF4.Dataset(next(tmp_path.glob('*.nc'))) as nc:
+        values = np.asarray(nc.variables['val'][:])
+    expected = [0] + [3*t*t + 4*t + NX**3 + NX*NY + NX*100000000 + NX + 14
+                      for t in range(1, 4)]
+    np.testing.assert_array_equal(values, np.broadcast_to(np.array(expected)[:, None, None],
+                                                        (4, NY, NX)))
+
+
+@pytest.mark.parametrize('scope', ['initializer', 'dynamic', 'gauge', 'function'])
+@pytest.mark.parametrize('backend, layout', CONFIGS)
+def test_constant_names_do_not_escape_their_scope(tmp_path, backend, layout, scope):
+    """Sibling constants cannot capture output, parameter or local stores."""
+    functions = '''
+    function Pk(real a) -> (real k) { k = a + 1.0; }
+    function Uncalled(real a) -> (real k) { k = a; }
+    function Mut(real k) -> (real r) { k = k + 1.0; r = k; }
+    function Pair(real a) -> (real p, real q) { p = a; q = 1.0; }
+    function Local(real a) -> (real r) { real k = a; real q; {k, q} = Pair(k); r = k + q; }
+    '''
+    source = program('f.out[x, y | 1] = Pk(v) + Mut(v) + Local(v);', functions=functions)
+    header = {'initializer': 'initializer Init {', 'dynamic': 'dynamic Step {',
+              'gauge': 'gauge G -> (real val) {'}.get(scope)
+    if header:
+        source = source.replace(header, header + ' const int k = 2;')
+    else:
+        source += 'function Const(int a) -> (int r) { const int k = 2; r = a + k; }'
+        source = source.replace('Local(v);', 'Local(v) + Const(0) - 2;')
+    # Exercise a sibling mutable scalar and destructuring target too.
+    header = 'dynamic Step {' if scope == 'gauge' else 'gauge G -> (real val) {'
+    source = source.replace(header, header + ' real k = 1.0; k = 2.0; real s; {k, s} = Pair(k);')
+    _check(tmp_path, backend, layout, source, 3.0 * V + 3.0)
+
+
+@pytest.mark.parametrize('backend, layout', [FORTRAN])
+def test_sibling_constant_array_does_not_capture_element_store(tmp_path, backend, layout):
+    source = program('array[int, 2] k = {1, 2}; k[0] = 3; f.out[x, y | 1] = k[0];')
+    source = source.replace('initializer Init {', 'initializer Init { const array[int, 2] k = {1, 2};')
+    _check(tmp_path, backend, layout, source, 3.0)
