@@ -437,55 +437,6 @@ class StatementEmitMixin:
                 out.append(f' {sign} {body}')
         return ''.join(out)
 
-    def _maybe_lift_matmul_arg(self, rhs, df_lo: int, df_hi: int):
-        """If ``rhs`` is ``matmul(M, complex_expr)`` with a non-bare
-        second argument, emit a temp-array fill loop for the second
-        argument and return a substituted matmul-call referencing the
-        temp.  Otherwise return ``rhs`` unchanged.
-
-        The slice-DF emit hits ``_emit_intrinsic_call('matmul', ...)``
-        once per gelb_df iteration; lifting the complex expression
-        out of the loop avoids 9x duplication and the
-        ``bare-identifier-only`` constraint of the matmul handler."""
-        if not isinstance(rhs, IntrinsicFunctionCall_N):
-            return rhs
-        if rhs.function_name != 'matmul':
-            return rhs
-        if len(rhs.arguments) != 2:
-            return rhs
-        Marg, varg = rhs.arguments
-        if isinstance(varg, Identifier_N):
-            return rhs  # already trivial
-        if not isinstance(Marg, Identifier_N) \
-                or Marg.name not in self._array_constants_2d:
-            return rhs  # let downstream raise a clearer error
-        nrows, ncols = self._array_constants_2d[Marg.name]
-        # Inner df range covers ``ncols`` (the matmul's contracted
-        # axis).  We name temps uniquely so multiple matmul-lifts in
-        # the same scope don't collide.
-        self._matmul_temp_counter += 1
-        # The identifier name (used in the synthesized AST node)
-        # carries no prefix; _uname adds ``g_`` consistently at every
-        # reference point, including the C++ declaration line below.
-        tmp = f'gelb_matmul_in_{self._matmul_temp_counter}'
-        tmp_cpp = _uname(tmp)
-        cpp_type = 'V' if self._simd_mode == 'vec8d' else 'double'
-        self._emit(f'{cpp_type} {tmp_cpp}[{ncols}];')
-        self._emit(f'for (int gelb_df = 0; gelb_df < {ncols}; ++gelb_df) {{')
-        self._indent += 1
-        elem_str = self._emit_expression(varg, df_var='gelb_df')
-        self._emit(f'{tmp_cpp}[gelb_df] = {elem_str};')
-        self._indent -= 1
-        self._emit('}')
-        self._array_locals.add(tmp)
-        self._local_array_sizes[tmp] = ncols
-        # Synthesize a new IntrinsicFunctionCall_N referencing the
-        # temp; the caller will run it through the slice loop.
-        new_v = Identifier_N(varg.code_range, tmp)
-        return IntrinsicFunctionCall_N(rhs.code_range,
-                                        rhs.function_name,
-                                        [Marg, new_v])
-
     def _emit_matmul_into_array(self, name: str, n: int,
                                 call: IntrinsicFunctionCall_N) -> None:
         """Emit per-element initialisation of ``out[0..n-1]`` from
@@ -898,15 +849,6 @@ class StatementEmitMixin:
             # constants keep the rolled emit, where the extra
             # code size would otherwise regress perf.
             #
-            # Decision is made on ``stmt.rhs`` (pre-lift)
-            # because the post-lift AST contains a
-            # synthesised ``IntrinsicFunctionCall_N`` whose
-            # ``arguments`` is a plain Python list rather
-            # than a ``List_N``, and the (pre-existing)
-            # ``get_children`` for that node trips on a
-            # ``set.add(self.arguments)``.  Walking the
-            # pre-lift AST avoids the buggy node entirely.
-            #
             # The Q >= 16 gate restricts unrolling to large
             # stencils (D3Q19, D3Q27, D2Q21, ...) where the
             # register-keeping benefit dominates the
@@ -928,23 +870,18 @@ class StatementEmitMixin:
                 self._block_has_bounce_back(stmt.rhs) or
                 (n_slice >= 16
                  and self._expr_should_unroll_slice(stmt.rhs)))
-            # Lift any non-trivial matmul second argument into
-            # a temp array first (the matmul slice expression
-            # only accepts a bare identifier).
-            rhs_for_loop = self._maybe_lift_matmul_arg(
-                stmt.rhs, df_lo, df_hi)
             if should_unroll:
                 for df in range(0, n_slice):
                     lhs_addr = self._emit_lattice_out_lhs(
                         lhs, context, df_var=str(df))
                     rhs_expr = self._emit_expression(
-                        rhs_for_loop, df_var=str(df))
+                        stmt.rhs, df_var=str(df))
                     if self._simd_mode == 'vec8d':
                         # Same scalar-broadcast guard +
                         # layout-aware store dispatch as the
                         # single-DF site above.
                         if not self._yields_simd_vector(
-                                rhs_for_loop):
+                                stmt.rhs):
                             rhs_expr = f'hn::Set(d, {rhs_expr})'
                         self._emit(f'{{ V gelb_v = '
                                    f'{rhs_expr}; '
@@ -958,10 +895,10 @@ class StatementEmitMixin:
                 self._indent += 1
                 lhs_addr = self._emit_lattice_out_lhs(
                     lhs, context, df_var='gelb_df')
-                rhs_expr = self._emit_expression(rhs_for_loop,
+                rhs_expr = self._emit_expression(stmt.rhs,
                                                  df_var='gelb_df')
                 if self._simd_mode == 'vec8d':
-                    if not self._yields_simd_vector(rhs_for_loop):
+                    if not self._yields_simd_vector(stmt.rhs):
                         rhs_expr = f'hn::Set(d, {rhs_expr})'
                     self._emit(f'V gelb_v = {rhs_expr};')
                     self._emit(

@@ -216,8 +216,6 @@ class HighwayCodeGenerator(
         # lifts) included; reset per body with _array_locals.  The
         # only source for _lookup_local_array_size.
         self._local_array_sizes: dict[str, int] = {}
-        # Counter for unique matmul temp names.
-        self._matmul_temp_counter: int = 0
 
         # Registry for ``static constexpr`` index/coefficient arrays
         # that the dot_prod / matmul emit needs.  Hoisted to the top

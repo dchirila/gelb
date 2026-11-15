@@ -28,6 +28,7 @@ def _get_numbered_stage_name(stage_name):
         'types': '1_5_types',
         'promotions': '1_6_promotions',
         'constant_folding': '2_1_constant_folding',
+        'c_lowering': '2_5_c_lowering',
         # Future midware stages:
         'dead_code_elimination': '2_2_dead_code_elimination',
         'common_subexpression_elimination': '2_3_common_subexpression_elimination',

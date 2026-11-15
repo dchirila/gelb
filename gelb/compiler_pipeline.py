@@ -15,6 +15,14 @@ from typing import Callable
 
 import gelb.utils.config
 from gelb.utils.misc import load_file
+from gelb.midware.c_family_lowering import prepare_c_family_ast
+
+
+__all__ = [
+    "PipelineProfile", "PipelineOptions", "CompilationResult", "BackendContext",
+    "build_backend_context", "compile_file", "compile_source",
+    "resolve_geometry_for_compile", "prepare_c_family_ast",
+]
 
 
 class PipelineProfile(Enum):
