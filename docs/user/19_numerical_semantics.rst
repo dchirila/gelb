@@ -20,6 +20,7 @@ real powers and library functions may differ between backends);
 results across compilers, compiler versions, CPU and GPU models; a
 NaN's sign and payload; the sign of an exactly zero reduction; the
 order of a reduction's terms (fixed per backend, but not stated);
+whether constant-matrix zero entries in ``matmul`` are evaluated;
 integer overflow, an integer zero divisor and an out-of-range
 real-to-integer conversion at run time (a real divided by zero follows
 IEEE 754); and anything a fast-math build does.
@@ -62,10 +63,15 @@ whatever their position.  A ``dot_prod`` of a constant real array with
 an integer array does not use the helper: each integer element converts
 to the result's width, and GeLB fuses none of the products.  A
 ``dot_prod`` with an integer result is exact integer arithmetic in every
-build, so a fused multiply-add never enters it.  Every term
-of a reduction counts, including
-those with a zero coefficient, so an infinity or a NaN in any direction
-reaches the result.  On the CUDA backend a default build keeps nvcc's fusion,
+build, so a fused multiply-add never enters it.  Every term of ``sum``
+and ``dot_prod`` counts, including those with a zero coefficient, so an
+infinity or a NaN in any direction reaches the result.  In ``matmul``
+with a constant matrix, it is unspecified whether terms with a zero
+matrix entry are evaluated: an infinity or NaN multiplied by such an
+entry may reach the result as NaN or the term may be omitted.  This
+rule applies to every backend.
+
+On the CUDA backend a default build keeps nvcc's fusion,
 because it is worth 7–15 % on the GPU; all threads of a kernel run the
 same instructions, so identical cells agree, but a CUDA default build is
 bitwise reproducible only against another build of the same kernel code
