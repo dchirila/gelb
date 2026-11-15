@@ -11,6 +11,9 @@ versions follow upstream end of life and can change in any release.
 
 ### Added
 
+- `gelbc --visualize-ast --ast-stage c_lowering` shows the C-family lowered
+  AST before Highway and CUDA code generation.
+
 - `gelbc --version`.
 - Two geometry-lint warnings: a node class with no cells, and a paint
   range that runs backwards (`nodes[40:30, :]`, which paints nothing).
@@ -49,6 +52,11 @@ versions follow upstream end of life and can change in any release.
   type, and so do `real` and `real64`.
 
 ### Fixed
+
+- `matmul` on `cpu_highway` and `gpu_cuda_cpp` evaluates narrow and mixed-width
+  products in the promoted element width instead of using binary64
+  intermediates. Non-identifier one-dimensional vector arguments work in
+  array declarations, assignments and slice expressions, including nested calls.
 
 - Programs that assign casts of arrays with nine or more elements, use cast
   DF slices in arithmetic, read local array elements, slices or reductions

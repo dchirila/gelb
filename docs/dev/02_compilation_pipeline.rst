@@ -2,13 +2,13 @@
 The compilation pipeline
 ========================
 
-``compile_source`` in :source:`gelb/compiler_pipeline.py` is the one
-place that orders the passes.  ``gelbc`` calls it (through
+``compile_source`` in :source:`gelb/compiler_pipeline.py` orders the
+shared frontend and midware passes.  ``gelbc`` calls it (through
 ``compile_file``) with the ``CODEGEN`` profile, ``gelbc
 --diagnostics-json`` with ``DIAGNOSTICS``, and the ``gelb-view``
 analysis modes (through :source:`gelb/midware/program_analysis.py`)
 with ``PROGRAM_ANALYSIS``; the three are the ``PipelineProfile``
-enum.  Every pass is followed by ``record(name)``, so
+enum.  Each pass in that shared pipeline is followed by ``record(name)``, so
 ``CompilationResult.pass_names`` is the executed sequence, and
 :source:`gelb/tests/unit/test_compiler_pipeline.py` asserts it per
 profile.  The frontend passes are wrapped by the functions of
@@ -281,6 +281,42 @@ and function declaration order therefore leave emitted temporary names unchanged
    points disable strictness and report ``(internal)`` warnings instead.
    Mutation-helper errors are ordinary internal exceptions, never user-error
    constructors that terminate the process.
+
+C-family preparation (Stage 2.5)
+================================
+
+After Stage 2 and resolved-map validation, ``gelbc`` prepares a separate
+AST for ``cpu_highway`` and ``gpu_cuda_cpp``. ``prepare_c_family_ast`` in
+:source:`gelb/midware/c_family_lowering.py` (also exported by
+:source:`gelb/compiler_pipeline.py`) deep-copies its input. Fortran uses
+its unchanged Stage-2 AST and independent whole-array lowering.
+Diagnostics, program analysis, ``--stencils`` and ``--show-mapping`` stop
+before this preparation.
+
+Pass 47, ``lift_matmul_args``, walks statement expressions with an explicit
+post-order stack. It lifts every non-identifier one-dimensional vector
+argument of ``matmul`` into a preceding local declaration, including nested
+calls, declarations, assignments and slice expressions in initializers,
+dynamics and gauges. Inner calls are prepared first. The temporary keeps
+the argument's exact element width and shape; its name counter starts at
+zero in each block and skips occupied local and parent names.
+``BlockMutationHelper.declare_temp`` registers each declaration, and
+``canonicalize_types`` refreshes the copied tree's metadata.
+
+``gelbc --visualize-ast --ast-stage c_lowering`` captures this tree as
+``2_5_c_lowering``. The stage is also included by ``--ast-stage all`` for
+C-family code generation, and omitted for Fortran and report modes.
+Requesting ``c_lowering`` explicitly for Fortran or a report mode is an
+error before any output is written.
+
+Gate G2.5 runs ``check_c_lowering`` and ``check_stage2`` from
+:source:`gelb/frontend/ASTInvariantValidator.py`. The former requires each
+one-dimensional ``matmul`` vector to be a bare identifier resolving in the
+block or program table; the latter checks live symbols and types.
+Violations raise ``GeLBInternalInvariantError`` by default;
+``strict_invariants=False`` reports internal warnings. The C-family
+``BackendContext`` is built afterwards from this prepared AST, so its
+``ast`` is the exact tree handed to the generator.
 
 How a diagnostic is produced
 ============================
