@@ -33,6 +33,10 @@ from gelb.tests.integration._toolchain import (
     requires_gpu_cuda_cpp_compiler,
 )
 
+from gelb.tests.integration.test_constant_coefficients import (
+    CONFIGS as MATMUL_CONFIGS, _run as run_matmul_source, _skip_cbt_without_avx512,
+)
+
 netCDF4 = pytest.importorskip("netCDF4")
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
@@ -1711,3 +1715,46 @@ def test_an_overflowing_element_expression_is_an_infinity_on_every_backend(
               simplify=simplify, plain_flags=_ALL_OFF)
     for name, expected in _OVERFLOWING_ELEMENT_EXPECTED.items():
         assert np.asarray(nc[name][1]).tolist() == [expected] * 4, name
+
+
+@pytest.mark.parametrize('backend,layout', MATMUL_CONFIGS)
+@pytest.mark.parametrize('strict', [False, True], ids=['default', 'strict'])
+@pytest.mark.parametrize('matrix_kind,vector_kind,store_kind,rows,vector,expected', [
+    ('real32', 'real32', 'real32', '{{1,1,1},{1,-1,-1},{0,0,0}}',
+     '{1.0,0.000000059604644775390625,0.000000059604644775390625}',
+     [1.0, 0.9999998807907104, 0.0]),
+    ('real32', 'real32', 'real', '{{1,1,1},{1,-1,-1},{0,0,0}}',
+     '{1.0,0.000000059604644775390625,0.000000059604644775390625}',
+     [1.0, 0.9999998807907104, 0.0]),
+    ('real', 'real32', 'real', '{{1,1,-1},{1,1,1},{0,0,0}}',
+     '{1.0,0.000000059604644775390625,-0.000000059604644775390625}',
+     [1.0000001192092896, 1.0, 0.0]),
+    ('real32', 'real', 'real', '{{0.1,0,0},{0,0.3,0},{0,0,1}}',
+     '{1.0,1.0,1.0}', [0.10000000149011612, 0.30000001192092896, 1.0]),
+    ('int', 'real32', 'real32', '{{18014399583223809,0,0},{3,3,3},{0,0,0}}',
+     '{1.0,0.000000059604644775390625,0.000000059604644775390625}',
+     [18014400656965632.0, 3.000000476837158, 0.0]),
+    ('real32', 'int', 'real32', '{{1,-1,0},{1,1,0},{0,0,0}}',
+     '{16777217,1,0}', [16777215.0, 16777216.0, 0.0]),
+])
+def test_matmul_promoted_width(tmp_path, backend, layout, strict,
+                               matrix_kind, vector_kind, store_kind, rows, vector, expected):
+    """Each operand converts before arithmetic, independently of store width."""
+    _skip_cbt_without_avx512(layout)
+    source = f'''simulation_description("matrix arithmetic width");
+    global_constants {{ const int N = 3;
+        const array[{matrix_kind}, {{N,N}}] M = {rows}; }}
+    lattices {{ lattice f(1, 3, {vector_kind}, 67, true); }}
+    initializer I {{ f.out[x | :] = {vector}; }}
+    dynamic D {{ f.out[x | :] = f.in[x | :]; }}
+    gauge G -> (real p0, real p1, real p2) {{
+        array[{vector_kind}, N] a = f.in[x | :];
+        array[{store_kind}, N] r = matmul(M, a);
+        p0 = real(r[0]); p1 = real(r[1]); p2 = real(r[2]);
+    }}
+    node_classes {{ node_class B(I,D,G); }}
+    geometry {{ nodes[:] = B; }}
+    '''
+    data = run_matmul_source(tmp_path / 'run', backend, source, layout, strict=strict)
+    for i, value in enumerate(expected):
+        np.testing.assert_array_equal(data[f'p{i}'], np.full((2, 67), value))
