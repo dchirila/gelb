@@ -87,7 +87,7 @@ for case in PROGRAMS:
         config = cfg.values[0]
         marks = list(cfg.marks)
         if config != "fortran" and (
-                (case == "narrow_matmul_local" or case.startswith("mixed_dot")) or case == "integer_literal_division"):
+                case.startswith("mixed_dot") or case == "integer_literal_division"):
             marks.append(expected_failure(case.replace("_", " ")))
         PARAMS.append(pytest.param(case, config, marks=marks, id=f"{case}-{config}"))
 
@@ -105,7 +105,6 @@ def test_runtime_contract(tmp_path, case, config):
     if case.startswith("narrow_matmul"):
         assert all(values[name].dtype == np.dtype("float32") for name in ("p0", "p1"))
         expected = {"p0": np.float32(0.09999999403953552), "p1": np.float32(0.24000000953674316)}
-        wrong = {"p0": np.float32(0.10000000149011612), "p1": np.float32(0.23999999463558197)}
     elif case.startswith("mixed_dot"):
         assert values["r"].dtype == np.dtype("float64")
         expected = {"r": 1.0000000001 if case.endswith("_2") else 1.0000000008}
@@ -122,7 +121,7 @@ def test_runtime_contract(tmp_path, case, config):
         }[case]}
         wrong = {}
     assert values.keys() == expected.keys()
-    if config != "fortran" and wrong and all((values[k] == v).all() for k, v in wrong.items()):
+    if not case.startswith("narrow_matmul") and config != "fortran" and wrong and all((values[k] == v).all() for k, v in wrong.items()):
         raise KnownDefect(f"{case}: reproduced incorrect arithmetic width")
     for name, value in expected.items():
         np.testing.assert_array_equal(values[name], np.broadcast_to(value, values[name].shape))

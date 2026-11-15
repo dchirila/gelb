@@ -1020,6 +1020,9 @@ class ExpressionEmitMixin:
             terms = ' + '.join(
                 f'{Mg}[{df_var}][{j}] * {vg}[{j}]'
                 for j in range(ncols))
+        acc_cpp = _TYPE_MAP[call.canonical_type.dtype]
+        if self._simd_mode != 'vec8d' and acc_cpp in ('int8_t', 'int16_t'):
+            return f'static_cast<{acc_cpp}>({terms})'
         return f'({terms})'
 
     def _lookup_local_array_size(self, name: str) -> int:

@@ -14,6 +14,7 @@ import re
 
 from gelb.backends.highway.common import (
     _lname,
+    _TYPE_MAP,
     _CBT_TILE,
     _cbt_addr_to_tile_start,
     _uname,
@@ -42,7 +43,7 @@ from gelb.gelb_ast.ASTNodes import (
 from gelb.midware.StencilExtractionVisitor import affine_index
 from gelb.midware.ast_eval import (
     add as ev_add, mul as ev_mul, sub as ev_sub,
-    eval_const_expr,
+    eval_const_expr, convert_plain,
     is_periodic,
 )
 
@@ -494,6 +495,21 @@ class StatementEmitMixin:
         # the top of ``main()`` (de-duped by content), so the
         # generated source is one helper-call per row regardless of
         # how many dispatch sites the matmul appears in.
+        simd = (self._simd_mode == 'vec8d')
+        call_dtype = call.canonical_type.dtype
+        acc_cpp = _TYPE_MAP[call_dtype]
+        m_cpp = _TYPE_MAP[Marg.canonical_type.dtype]
+        v_cpp = _TYPE_MAP[varg.canonical_type.dtype]
+
+        def vector_entry(j):
+            value = f'{vg}[{j}]'
+            return (value if simd or v_cpp == acc_cpp
+                    else f'static_cast<{acc_cpp}>({value})')
+
+        def narrow_row(value):
+            return (f'static_cast<{acc_cpp}>({value})'
+                    if not simd and acc_cpp in ('int8_t', 'int16_t') else value)
+
         M_vals = self._array_constants_2d_values.get(Marg.name)
         if M_vals is None:
             # Fold-failure fallback: keep the original ``M[i][j]*v[j]``
@@ -501,9 +517,15 @@ class StatementEmitMixin:
             # through ``g_M[i][j]``, which it does for
             # ``static constexpr`` 2-D arrays.
             for i in range(n):
-                terms = ' + '.join(f'{Mg}[{i}][{j}] * {vg}[{j}]'
-                                   for j in range(ncols))
-                self._emit(f'{name}[{i}] = {terms};')
+                terms = []
+                for j in range(ncols):
+                    entry = f'{Mg}[{i}][{j}]'
+                    if simd:
+                        entry = f'hn::Set(d, {entry})'
+                    elif m_cpp != acc_cpp:
+                        entry = f'static_cast<{acc_cpp}>({entry})'
+                    terms.append(f'{entry} * {vector_entry(j)}')
+                self._emit(f'{name}[{i}] = {narrow_row(" + ".join(terms))};')
             return
         # Matmul row dispatch -- DELIBERATELY keeps the inline ``+``
         # chain here, NOT the multi-acc helpers.
@@ -522,7 +544,6 @@ class StatementEmitMixin:
         # comparable).  Leaving the matmul dispatch on the inline
         # ``+`` chain keeps MRT inside the +/-5 % bar without giving
         # up the BGK / multi-lattice wins.
-        simd = (self._simd_mode == 'vec8d')
         for i in range(n):
             row = M_vals[i]
             survived = [(c, j) for j, c in enumerate(row) if c != 0]
@@ -530,7 +551,9 @@ class StatementEmitMixin:
                 if simd:
                     self._emit(f'{name}[{i}] = hn::Zero(d);')
                 else:
-                    self._emit(f'{name}[{i}] = 0.0;')
+                    zero = {'double': '0.0', 'float': '0.0f', 'int64_t': '0LL'}.get(
+                        acc_cpp, f'static_cast<{acc_cpp}>(0)')
+                    self._emit(f'{name}[{i}] = {zero};')
                 continue
             pos_idx = [j for c, j in survived
                        if c > 0 and abs(c) == 1.0]
@@ -539,10 +562,10 @@ class StatementEmitMixin:
             all_unit = (len(pos_idx) + len(neg_idx)
                         == len(survived))
             if all_unit and pos_idx and neg_idx:
-                pos_terms = ' + '.join(f'{vg}[{j}]' for j in pos_idx)
-                neg_terms = ' + '.join(f'{vg}[{j}]' for j in neg_idx)
-                self._emit(f'{name}[{i}] = '
-                           f'(({pos_terms}) - ({neg_terms}));')
+                pos_terms = ' + '.join(vector_entry(j) for j in pos_idx)
+                neg_terms = ' + '.join(vector_entry(j) for j in neg_idx)
+                row_text = narrow_row(f'(({pos_terms}) - ({neg_terms}))')
+                self._emit(f'{name}[{i}] = {row_text};')
             else:
                 # General case (non-+/-1 coefficients OR all-positive
                 # +/-1 OR all-negative +/-1): inline coeff*v products
@@ -554,18 +577,23 @@ class StatementEmitMixin:
                         for c, j in survived)
                 else:
                     terms = ' + '.join(
-                        f'{self._matrix_entry_text(c)} * {vg}[{j}]'
+                        f'{self._matrix_entry_text(c, call_dtype)} * {vector_entry(j)}'
                         for c, j in survived)
-                self._emit(f'{name}[{i}] = ({terms});')
+                row_text = narrow_row(f'({terms})')
+                self._emit(f'{name}[{i}] = {row_text};')
 
     @staticmethod
-    def _matrix_entry_text(c) -> str:
-        """The C++ spelling of a folded 2-D constant's entry: its exact
-        value, with its int64 width, for an integer matrix (the product
-        with a per-cell int32 must not overflow a C++ int), a binary64
-        literal for a real one."""
-        return (int64_typed_literal(c) if isinstance(c, int)
-                else cpp_real(float(c)))
+    def _matrix_entry_text(c, dtype=None) -> str:
+        """Spell a coefficient in the product width, with one conversion."""
+        if dtype is None:  # Preserve the established double SIMD spelling.
+            return (int64_typed_literal(c) if isinstance(c, int)
+                    else cpp_real(float(c)))
+        cpp_type = _TYPE_MAP[dtype]
+        if cpp_type in ('double', 'float'):
+            return cpp_real(convert_plain(c, dtype), cpp_type)
+        if cpp_type == 'int64_t':
+            return int64_typed_literal(int(c))
+        return f'static_cast<{cpp_type}>({int(c)})'
 
     def _emit_upstream_dfs(self, name: str, n: int,
                            call: IntrinsicFunctionCall_N) -> None:
