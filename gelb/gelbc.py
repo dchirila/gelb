@@ -6,6 +6,7 @@ import numpy as np
 import os
 import re
 import sys
+from dataclasses import replace
 
 from gelb import __version__
 from gelb.utils.ast_visualization import generate_ast_visualization
@@ -15,7 +16,7 @@ from gelb.utils.ast_visualization import generate_ast_visualization
 # counter's maximum; gelb-run applies the same bounds.
 _STEP_COUNTER_MAX = int(np.iinfo(np.int32).max)
 from gelb.compiler_pipeline import (
-    PipelineOptions, PipelineProfile, build_backend_context, compile_file,
+    PipelineOptions, PipelineProfile, build_backend_context, compile_file, prepare_c_family_ast,
     resolve_geometry_for_compile)
 
 
@@ -214,7 +215,7 @@ def _run_diagnostics(input_file, define, show_traceback, no_geometry_lint):
 )
 @click.option(
     "--ast-stage",
-    type=click.Choice(['parsing', 'symbols', 'constants', 'ranges', 'types', 'promotions', 'constant_folding', 'midware', 'all']),
+    type=click.Choice(['parsing', 'symbols', 'constants', 'ranges', 'types', 'promotions', 'constant_folding', 'midware', 'c_lowering', 'all']),
     default='promotions',
     help="Which compilation stage to visualize (default: promotions)"
 )
@@ -488,6 +489,12 @@ def cli(
     if nc_output is not None:
         _check_output_path("'--nc-output'", nc_output, input_file)
 
+    if ast_stage == 'c_lowering' and (
+            backend == 'cpu_fortran_serial' or stencils or show_mapping):
+        raise click.ClickException(
+            "--ast-stage c_lowering requires C-family code generation "
+            "with cpu_highway or gpu_cuda_cpp.")
+
     # Diagnostics mode: frontend + midware only, no codegen, errors &
     # warnings are collected and emitted as a single JSON document on
     # stdout. Called by the VSCode extension to populate the Problems
@@ -580,10 +587,13 @@ def cli(
     )
     from gelb.frontend.ASTInvariantValidator import check_stage2
     check_stage2(ast)
-    backend_context = build_backend_context(
-        compile_result,
-        geometry=resolved_geometry,
-    )
+    if backend in ('cpu_highway', 'gpu_cuda_cpp'):
+        ast = prepare_c_family_ast(ast, capture_ast=report_and_capture_ast)
+        backend_context = build_backend_context(
+            replace(compile_result, ast=ast), geometry=resolved_geometry)
+    else:
+        backend_context = build_backend_context(
+            compile_result, geometry=resolved_geometry)
 
     if backend == 'cpu_fortran_serial':
         from gelb.backends.stage3_backend_cpu_fortran_serial import generate_fortran

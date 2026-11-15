@@ -699,3 +699,81 @@ geometry {{ nodes[:, :] = BULK; }}
         # The integer coefficients are the helper's binary64 array.
         assert re.search(r"static constexpr double gelb_dp_coeff_\d+\[\] = "
                          r"\{ 1\.0, 2\.0, 3\.0 \};", cpp)
+
+
+@pytest.mark.parametrize('backend, layout', CONFIGS)
+@pytest.mark.parametrize('initializer_last', [False, True])
+def test_matmul_vector_expressions_in_all_blocks(tmp_path, backend, layout, initializer_last):
+    """Declarations, assignments and nested slice expressions lift before use."""
+    _skip_cbt_without_avx512(layout)
+    initializer = '''initializer I {
+        array[real, 2] a = {real(x), 1.0};
+        array[real, 2] r = matmul(M, a + a);
+        f.out[x | :] = r;
+    }'''
+    source = '''simulation_description("matrix vector expressions");
+    global_constants { const array[real, {2,2}] M = {{1,0},{0,1}}; }
+    lattices { lattice f(1, 2, real, 67, true); }
+    dynamic D {
+        array[real, 2] a = f.in[x | :];
+        array[real, 2] r = matmul(M, a + a);
+        r = matmul(M, a + a);
+        f.out[x | :] = a - matmul(M, matmul(M, a + a));
+    }
+    gauge G -> (real p0, real p1) {
+        array[real, 2] a = f.in[x | :];
+        array[real, 2] r = matmul(M, a + a);
+        p0 = r[0]; p1 = r[1];
+    }
+    node_classes { node_class B(I,D,G); }
+    geometry { nodes[:] = B; }
+    '''
+    source = source + initializer if initializer_last else initializer + source
+    data = _run(tmp_path / 'run', backend, source, layout, strict=True)
+    np.testing.assert_array_equal(data['p0'], [4 * _X, -4 * _X])
+    np.testing.assert_array_equal(data['p1'], [np.full(NX, 4.0), np.full(NX, -4.0)])
+
+
+@pytest.mark.parametrize('backend, layout', CONFIGS)
+@pytest.mark.parametrize('strict', [False, True], ids=['default', 'strict'])
+@pytest.mark.parametrize('role', ['slice_store', 'declaration'])
+@pytest.mark.parametrize('form', ['bare', 'partial', 'shifted', 'negated', 'cast'])
+def test_matmul_slice_vectors(tmp_path, backend, layout, strict, role, form):
+    """Slice vectors retain their extent and element type when lifted."""
+    _skip_cbt_without_avx512(layout)
+    size = 9
+    dtype = 'real32' if form == 'cast' else 'real'
+    count = size + 2 if form == 'partial' else size
+    vector = {
+        'bare': 'f.in[x, y | :]',
+        'partial': f'f.in[x, y | 1:{size}]',
+        'shifted': 'f.in[x - 1, y | :]',
+        'negated': '-f.in[x, y | :]',
+        'cast': 'real32(f.in[x, y | :])',
+    }[form]
+    call = f'matmul(M, {vector})'
+    body = (f'array[{dtype}, {size}] r = {call}; g.out[x, y | :] = r;'
+            if role == 'declaration' else f'g.out[x, y | :] = {call};')
+    matrix = np.eye(size) * 2.0
+    matrix[0, -1] = -1.0
+    literal = '{' + ','.join('{' + ','.join(map(str, row)) + '}'
+                             for row in matrix) + '}'
+    initial = '{' + ','.join(f'real(x) + {j + 0.25}' for j in range(count)) + '}'
+    outputs = ', '.join(f'real p{j}' for j in range(size))
+    reads = ' '.join(f'p{j} = real(g.in[x, y | {j}]);' for j in range(size))
+    source = f'''simulation_description("slice-backed matrix vectors");
+    global_constants {{ const array[{dtype}, {{{size}, {size}}}] M = {literal}; }}
+    lattices {{ lattice f(2, {count}, real, {{{NX}, 4}}, {{true, true}});
+                lattice g(2, {size}, {dtype}, {{{NX}, 4}}, {{true, true}}); }}
+    initializer I {{ f.out[x, y | :] = {initial}; g.out[x, y | :] = 0.0; }}
+    dynamic D {{ f.out[x, y | :] = f.in[x, y | :]; {body} }}
+    gauge G -> ({outputs}) {{ {reads} }}
+    node_classes {{ node_class B(I, D, G); }}
+    geometry {{ nodes[:, :] = B; }}'''
+    data = _run(tmp_path / 'run', backend, source, layout, strict=strict)
+    x = np.roll(_X, 1) if form == 'shifted' else _X
+    offset = 1 if form == 'partial' else 0
+    values = np.array([x + j + offset + 0.25 for j in range(size)])
+    expected = matrix @ (-values if form == 'negated' else values)
+    for j in range(size):
+        _assert_last_step(data, f'p{j}', expected[j])

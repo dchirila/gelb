@@ -137,6 +137,26 @@ class ASTInvariantValidator:
 
 
     @staticmethod
+    def check_c_lowering(ast):
+        """Require every one-dimensional matmul vector to name a live symbol."""
+        for group in (ast.initializers, ast.dynamics, ast.gauges):
+            for block in group or ():
+                for node, _, _, _ in _walk(block.stmts):
+                    if not (isinstance(node, A.IntrinsicFunctionCall_N)
+                            and node.function_name == 'matmul' and len(node.arguments) == 2):
+                        continue
+                    arg = node.arguments[1]
+                    if arg.canonical_type is None or len(arg.canonical_type.dims) != 1:
+                        continue
+                    tables = (getattr(block, 'symbol_defs', None),
+                              getattr(ast, 'symbol_defs', None))
+                    if (not isinstance(arg, A.Identifier_N)
+                            or not any(table is not None and table.contains(arg.name)
+                                       for table in tables)):
+                        raise GeLBInternalInvariantError(
+                            'C-family matmul vector must name a declared array')
+
+    @staticmethod
     def check_stage2(ast):
         """Check live declarations, lexical references and types after midware."""
         from gelb.frontend.SymbolsTable import SymbolsTable
@@ -273,3 +293,5 @@ class ASTInvariantValidator:
 
 check_stage1 = ASTInvariantValidator.check_stage1
 check_stage2 = ASTInvariantValidator.check_stage2
+
+check_c_lowering = ASTInvariantValidator.check_c_lowering

@@ -87,7 +87,7 @@ for case in PROGRAMS:
         config = cfg.values[0]
         marks = list(cfg.marks)
         if config != "fortran" and (
-                case.startswith(("narrow_matmul", "mixed_dot")) or case == "integer_literal_division"):
+                (case == "narrow_matmul_local" or case.startswith("mixed_dot")) or case == "integer_literal_division"):
             marks.append(expected_failure(case.replace("_", " ")))
         PARAMS.append(pytest.param(case, config, marks=marks, id=f"{case}-{config}"))
 
