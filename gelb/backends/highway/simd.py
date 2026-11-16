@@ -42,6 +42,8 @@ from gelb.gelb_ast.ASTNodes import (
     UnaryMinusExpr_N,
 )
 
+from gelb.frontend.intrinsic_functions import CAST_INTRINSIC_NAMES
+
 from gelb.midware.ast_eval import (
     is_periodic,
 )
@@ -548,22 +550,23 @@ class SimdEmitMixin:
 
         return walk(block)
 
-    def _expr_contains_spatial_x(self, node) -> bool:
+    def _expr_contains_spatial_x(self, node, df_var=None) -> bool:
         """True iff ``node`` references the spatial-x identifier
         (which becomes ``gelb_xv`` Vec8d in the SIMD inner body).
         Any expression containing it propagates as Vec8d through
         arithmetic -- needed to detect when a user's scalar-int
         local declaration has a Vec-typed RHS and must be retyped."""
+        node, df_var = self._simd_element(node, df_var)
         if isinstance(node, Identifier_N) and node.name == 'x':
             return True
         if isinstance(node, List_N):
-            return any(self._expr_contains_spatial_x(e)
+            return any(self._expr_contains_spatial_x(e, df_var)
                        for e in node.elements)
         if isinstance(node, Node_N):
             for child_name in node.get_children_names():
                 child = getattr(node, child_name, None)
                 if child is not None and \
-                        self._expr_contains_spatial_x(child):
+                        self._expr_contains_spatial_x(child, df_var):
                     return True
         return False
 
@@ -612,7 +615,7 @@ class SimdEmitMixin:
             return 'vec8d'
         return None
 
-    def _inner_yields_simd_int(self, node) -> bool:
+    def _inner_yields_simd_int(self, node, df_var=None) -> bool:
         """Return True iff the inner expression evaluates to a Vec8q
         (int64 SIMD vector) in SIMD mode.  Used to gate the
         ``to_double(Vec8q)`` emit instead of ``static_cast<double>``.
@@ -632,6 +635,7 @@ class SimdEmitMixin:
         ``static_cast<double>`` handles correctly (and the
         surrounding Vec8d arithmetic broadcasts the scalar via
         ``hn::Set(d, ...)``)."""
+        node, df_var = self._simd_element(node, df_var)
         # An identifier referring to a user-level int local that has
         # been retyped to ``Vec8q`` in this SIMD body -- its name is
         # registered in ``_simd_int_locals`` with kind ``'vec8q'``.
@@ -645,10 +649,10 @@ class SimdEmitMixin:
                 or getattr(inf, 'name', None))
         if elem not in ('int', 'int8', 'int16', 'int32', 'int64'):
             return False
-        return self._expr_contains_simd_bool_op(node)
+        return self._expr_contains_simd_bool_op(node, df_var)
 
     def _emit_simd_aware_cast(self, inner_str: str, inner_node,
-                               cpp_target: str) -> str:
+                               cpp_target: str, df_var=None) -> str:
         """Emit a SIMD-correct cast of ``inner_str`` (the already-
         emitted C++ for ``inner_node``) to ``cpp_target``.
 
@@ -671,6 +675,7 @@ class SimdEmitMixin:
         Used by both ``TypePromotionNode_N`` and the ``real``/``int``
         type-cast intrinsics so the same fix applies to each.
         """
+        inner_node, df_var = self._simd_element(inner_node, df_var)
         if self._simd_mode != 'vec8d':
             return f'static_cast<{cpp_target}>({inner_str})'
         # Spatial-x is already Vec8d in SIMD mode.
@@ -694,7 +699,7 @@ class SimdEmitMixin:
         # Bool mask -> numeric, lane-wise.  Highway's ``Mask<D>`` is
         # an opaque type separate from ``Vec<D>``; ``hn::IfThenElse``
         # selects between two same-type vectors based on the mask.
-        if self._produces_simd_bool_mask(inner_node):
+        if self._produces_simd_bool_mask_at_df(inner_node, df_var):
             if cpp_target == 'double':
                 return (f'hn::IfThenElse({inner_str}, '
                         f'hn::Set(d, 1.0), hn::Set(d, 0.0))')
@@ -746,14 +751,14 @@ class SimdEmitMixin:
         #       0.0)))`` shape that the cast pipeline would
         #       otherwise emit.
         if (cpp_target == 'double'
-                and self._inner_yields_simd_int(inner_node)):
+                and self._inner_yields_simd_int(inner_node, df_var)):
             return inner_str
         # Arithmetic on the spatial x (``100 + x``, ``1 * x``) is
         # already a double vector: x is ``gelb_xv`` and the constants
         # are broadcast with ``hn::Set(d, ...)``, while
         # ``static_cast<double>`` of a vector does not compile.
         if (cpp_target == 'double'
-                and self._expr_contains_spatial_x(inner_node)):
+                and self._expr_contains_spatial_x(inner_node, df_var)):
             return inner_str
         # A binary64 value that is already a vector (an element of a
         # ``V[]`` array, a reduction over one, an expression of vectors)
@@ -761,31 +766,35 @@ class SimdEmitMixin:
         if (cpp_target == 'double'
                 and getattr(getattr(inner_node, 'inferred_type', None),
                             'element_dtype', None) in ('real', 'real64')
-                and self._yields_simd_vector(inner_node)):
+                and self._yields_simd_vector_at_df(inner_node, df_var)):
             return inner_str
         return f'static_cast<{cpp_target}>({inner_str})'
 
-    def _expr_contains_simd_bool_op(self, node) -> bool:
+    def _expr_contains_simd_bool_op(self, node, df_var=None) -> bool:
         """Recursively check whether ``node`` contains any
         comparison or boolean operator.  In SIMD mode such ops
         produce a ``Vec8db`` (mask) and propagate as a ``Vec8q``
         once cast to int via the ``select(...)`` lowering, which
         makes any enclosing arithmetic vector-typed."""
+        node, df_var = self._simd_element(node, df_var)
         from gelb.gelb_ast.ASTNodes import Node_N as _Node, List_N as _List
-        if self._produces_simd_bool_mask(node):
+        if self._produces_simd_bool_mask_at_df(node, df_var):
             return True
         if isinstance(node, _List):
-            return any(self._expr_contains_simd_bool_op(e)
+            return any(self._expr_contains_simd_bool_op(e, df_var)
                         for e in node.elements)
         if isinstance(node, _Node):
             for nm in node.get_children_names():
                 child = getattr(node, nm)
                 if isinstance(child, (_Node, _List)):
-                    if self._expr_contains_simd_bool_op(child):
+                    if self._expr_contains_simd_bool_op(child, df_var):
                         return True
         return False
 
     def _produces_simd_bool_mask(self, node) -> bool:
+        return self._produces_simd_bool_mask_at_df(node, None)
+
+    def _produces_simd_bool_mask_at_df(self, node, df_var) -> bool:
         """Whether this expression emits a Highway mask in the current body.
 
         A comparison of scalar operands stays scalar even inside a SIMD
@@ -799,28 +808,31 @@ class SimdEmitMixin:
             Equal_N as _Eq, NotEqual_N as _NE,
             And_N as _And, Or_N as _Or, NotExpr_N as _Not,
         )
+        node, df_var = self._simd_element(node, df_var)
+        if isinstance(node, BroadcastNode_N):
+            return self._produces_simd_bool_mask_at_df(node.scalar_expr, df_var)
         if isinstance(node, Identifier_N):
             return self._simd_int_locals.get(node.name) == 'mask'
         if isinstance(node, (_Eq, _NE)):
             # Also ``==`` / ``!=`` between per-cell bools, which are
             # masks, not vectors.
-            return (self._yields_simd_vector(node.left)
-                    or self._yields_simd_vector(node.right)
-                    or self._produces_simd_bool_mask(node.left)
-                    or self._produces_simd_bool_mask(node.right))
+            return (self._yields_simd_vector_at_df(node.left, df_var)
+                    or self._yields_simd_vector_at_df(node.right, df_var)
+                    or self._produces_simd_bool_mask_at_df(node.left, df_var)
+                    or self._produces_simd_bool_mask_at_df(node.right, df_var))
         if isinstance(node, (_Less, _LE, _Gr, _GE)):
-            return (self._yields_simd_vector(node.left)
-                    or self._yields_simd_vector(node.right))
+            return (self._yields_simd_vector_at_df(node.left, df_var)
+                    or self._yields_simd_vector_at_df(node.right, df_var))
         if isinstance(node, (_And, _Or)):
-            return (self._produces_simd_bool_mask(node.left)
-                    or self._produces_simd_bool_mask(node.right))
+            return (self._produces_simd_bool_mask_at_df(node.left, df_var)
+                    or self._produces_simd_bool_mask_at_df(node.right, df_var))
         if isinstance(node, _Not):
-            return self._produces_simd_bool_mask(node.value)
+            return self._produces_simd_bool_mask_at_df(node.value, df_var)
         return False
 
-    def _broadcast_simd_bool(self, node, emitted: str) -> str:
+    def _broadcast_simd_bool(self, node, emitted: str, df_var=None) -> str:
         """Broadcast a scalar bool when a SIMD mask is required."""
-        if self._produces_simd_bool_mask(node):
+        if self._produces_simd_bool_mask_at_df(node, df_var):
             return emitted
         return f'hn::FirstN(d, ({emitted}) ? hn::Lanes(d) : 0)'
 
@@ -1371,6 +1383,19 @@ class SimdEmitMixin:
                 f'hn::SetTableIndices(d, {idx_arr_name}))')
 
     def _yields_simd_vector(self, node) -> bool:
+        return self._yields_simd_vector_at_df(node, None)
+
+    @staticmethod
+    def _simd_element(node, df_var):
+        """Match literal-element emission, which clears the surrounding index."""
+        if (isinstance(node, Array1DLiteral_N) and df_var is not None
+                and df_var.lstrip('-').isdigit()):
+            index = int(df_var)
+            if 0 <= index < len(node.value):
+                return node.value[index], None
+        return node, df_var
+
+    def _yields_simd_vector_at_df(self, node, df_var) -> bool:
         """Return True iff ``node`` evaluates to a Highway ``V`` (vector
         of doubles) under the current ``_simd_mode == 'vec8d'`` context.
 
@@ -1387,6 +1412,7 @@ class SimdEmitMixin:
         """
         if self._simd_mode != 'vec8d' or node is None:
             return False
+        node, df_var = self._simd_element(node, df_var)
         if isinstance(node, Identifier_N):
             if node.name == 'x':
                 # Innermost-axis spatial coord becomes ``gelb_xv`` (V).
@@ -1399,14 +1425,14 @@ class SimdEmitMixin:
             return True
         if isinstance(node, RectSelOfArrayElems_N):
             # Local arrays may have been retyped to V[] (init yields V);
-            # global constant arrays are always scalar (double[]).
+            # global constant arrays are always scalar arrays of constants.
             arr_name = (node.array_name.name
                         if hasattr(node.array_name, 'name')
                         else str(node.array_name))
             return self._simd_int_locals.get(arr_name) == 'vec8d'
         if isinstance(node, (Add_N, Sub_N, Mul_N, Div_N)):
-            return (self._yields_simd_vector(node.left)
-                    or self._yields_simd_vector(node.right))
+            return (self._yields_simd_vector_at_df(node.left, df_var)
+                    or self._yields_simd_vector_at_df(node.right, df_var))
         if isinstance(node, Pow_N):
             # A power 0 is emitted as a scalar one in the power's type,
             # which the consuming operation broadcasts.
@@ -1415,9 +1441,9 @@ class SimdEmitMixin:
                 exponent = exponent.expr
             if isinstance(exponent, IntLiteral_N) and exponent.value == 0:
                 return False
-            return self._yields_simd_vector(node.left)
+            return self._yields_simd_vector_at_df(node.left, df_var)
         if isinstance(node, UnaryMinusExpr_N):
-            return self._yields_simd_vector(node.value)
+            return self._yields_simd_vector_at_df(node.value, df_var)
         if isinstance(node, TypePromotionNode_N):
             # When a TypePromotionNode_N wraps a comparison / bool-op
             # in SIMD mode, ``_emit_simd_aware_cast`` lowers it as
@@ -1426,18 +1452,20 @@ class SimdEmitMixin:
             # Without this branch the predicate would say "scalar"
             # for the cast and incorrectly broadcast the cast result
             # at the next binop up.
-            if self._produces_simd_bool_mask(node.expr):
+            if node.is_singleton_coercion():
+                df_var = '0'
+            if self._produces_simd_bool_mask_at_df(node.expr, df_var):
                 return True
-            return self._yields_simd_vector(node.expr)
+            return self._yields_simd_vector_at_df(node.expr, df_var)
         if isinstance(node, BroadcastNode_N):
-            return self._yields_simd_vector(node.scalar_expr)
+            return self._yields_simd_vector_at_df(node.scalar_expr, df_var)
         if isinstance(node, IntrinsicFunctionCall_N):
             fname = node.function_name
             # Math intrinsics: V iff at least one arg is V.
             if fname in ('sin', 'cos', 'tan', 'tanh', 'sqrt',
                          'exp', 'log', 'abs',
                          'min', 'max', 'atan2', 'mod'):
-                return any(self._yields_simd_vector(a)
+                return any(self._yields_simd_vector_at_df(a, df_var)
                            for a in node.arguments)
             # Lattice-driven intrinsics produce V in SIMD mode.
             # ``random()`` in SIMD mode lowers to
@@ -1449,14 +1477,14 @@ class SimdEmitMixin:
             if fname in ('upstream_dfs', 'bounce_back_dfs',
                          'sum', 'dot_prod', 'matmul', 'random'):
                 return True
-            if fname in ('real', 'int'):
+            if fname in CAST_INTRINSIC_NAMES:
                 # ``real(comparison)`` / ``int(comparison)`` lower
                 # to ``hn::IfThenElse(mask, V(1), V(0))`` (or the
                 # int64-shortcut double-V variant) via
                 # ``_emit_simd_aware_cast``.  Either form yields V.
-                if self._produces_simd_bool_mask(node.arguments[0]):
+                if self._produces_simd_bool_mask_at_df(node.arguments[0], df_var):
                     return True
-                return self._yields_simd_vector(node.arguments[0])
+                return self._yields_simd_vector_at_df(node.arguments[0], df_var)
             return False
         # Comparisons / boolean ops yield ``hn::Mask<D>`` rather than V.
         # The cast helper turns them into V via ``hn::IfThenElse``, but
@@ -1470,23 +1498,11 @@ class SimdEmitMixin:
         ``rhs`` and then need to decide whether to wrap the resulting
         scalar in ``hn::Set(d, ...)``.
 
-        For an ``Array1DLiteral_N`` RHS, each element has its own AST
-        node -- the i-th literal element drives the V-ness independently
-        (e.g. ``meq = {rho, -2*rho + 3*rho*usq, ...}`` has element 0 =
-        V (Identifier rho), element 1 = V (Mul of V and scalars), etc.,
-        but element 0 alone wouldn't tell us about element 7).  For
-        non-literal RHSs (constexpr-array refs that resolve per-i,
-        local-array refs, broadcast arithmetic), the whole-RHS
-        predicate already gives the right answer because every
-        substituted element shares the same broad type.
+        Composite arithmetic and casts can contain literals whose elements
+        have different scalar/vector representations. Carry the direction
+        through the expression and inspect only the selected elements.
         """
-        if isinstance(rhs, Array1DLiteral_N):
-            try:
-                elem = rhs.value.elements[i]
-            except (IndexError, AttributeError):
-                return False
-            return self._yields_simd_vector(elem)
-        return self._yields_simd_vector(rhs)
+        return self._yields_simd_vector_at_df(rhs, str(i))
 
     def _broadcast_for_binop(self, left, right, df_var, *,
                              int64_op: bool = False):
@@ -1519,21 +1535,3 @@ class SimdEmitMixin:
         elif b_vec and not a_vec:
             a = f'hn::Set(d, {a})'
         return a, b
-
-    def _yields_simd_vector_at_df(self, node, df_var):
-        """``_yields_simd_vector`` with df_var-aware Array1DLiteral
-        peeking.  When ``node`` is an Array1DLiteral_N and
-        ``df_var`` is a literal-digit string, inspect the resolved
-        element directly -- that's the value the surrounding
-        ``_emit_expression(node, df_var)`` actually returns.  For
-        any other shape, fall back to the AST-only predicate.
-        """
-        if (isinstance(node, Array1DLiteral_N)
-                and df_var is not None
-                and df_var.lstrip('-').isdigit()):
-            try:
-                elem = node.value.elements[int(df_var)]
-            except (IndexError, AttributeError):
-                return False
-            return self._yields_simd_vector(elem)
-        return self._yields_simd_vector(node)

@@ -389,3 +389,14 @@ def test_preparation_walks_deep_expression_iteratively():
     desugar_local_array_slices(ast)
     with pytest.raises(GeLBInternalInvariantError, match='Array1DLiteral'):
         check_c_lowering(ast)
+
+
+def test_direct_generator_rejects_unprepared_literal_store():
+    from gelb.backends.stage3_backend_cpu_highway import generate_cpu_highway
+    result = pipeline.compile_source(literal_source('f.out[x | 0] = f.in[x | 0]; f.out[x | 1:2] = {1.0, 2.0} + real(x);'),
+                                     pipeline.PipelineProfile.CODEGEN,
+                                     pipeline.PipelineOptions(require_stencils=True))
+    geometry, _ = pipeline.resolve_geometry_for_compile(result.ast, result.stencils)
+    context = pipeline.build_backend_context(result, geometry=geometry)
+    with pytest.raises(NotImplementedError, match='prepare the C-family AST'):
+        generate_cpu_highway(result.ast, backend_context=context)
