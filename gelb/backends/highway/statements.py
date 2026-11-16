@@ -1166,7 +1166,7 @@ class StatementEmitMixin:
                     init.name in self._array_locals
                     or init.name in self._array_constants):
                 # Array-to-array copy.  When the destination is
-                # V[] but the source is a scalar (double[])
+                # V[] but the source is a scalar compound-literal array
                 # global constant, broadcast each element.
                 src = _uname(init.name)
                 src_is_vec = (

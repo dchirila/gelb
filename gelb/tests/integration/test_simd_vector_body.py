@@ -234,3 +234,168 @@ def test_vector_body(case, config, reference, tmp_path):
             assert np.array_equal(a, b, equal_nan=True), (case, config, name)
             if np.issubdtype(a.dtype, np.floating):
                 assert np.array_equal(np.signbit(a), np.signbit(b)), (case, config, name)
+
+
+def run_literal_source(tmp_path, config, source, monkeypatch, *, plain=False, strict=True):
+    """Run an isolated literal/slice case with the requested build flags."""
+    path = tmp_path / 'probe.gelb'
+    path.write_text(source)
+    extra = ['--storage-layout', config] if config in ('soa', 'aos', 'cbt') else []
+    if plain:
+        extra += ['--no-slice-simplify', '--no-scalar-cse']
+    env = dict(os.environ, GELB_PYTHON=sys.executable, OMP_NUM_THREADS='4')
+    for key in ('GELB_FFLAGS', 'GELB_CXXFLAGS', 'GELB_NVCC_FLAGS', 'GELBC_EXTRA'):
+        env.pop(key, None)
+    env['GELBC_EXTRA'] = ' '.join(extra)
+    flags = ['--strict-fp'] if strict else []
+    result = subprocess.run([str(ROOT / 'scripts/gelb-run'), '--keep', *flags,
+                             '-b', BACKENDS.get(config, 'cpu_highway'), '-n', '1', '-w', '1',
+                             str(path)], cwd=tmp_path, env=env,
+                            capture_output=True, text=True, timeout=600)
+    (tmp_path / 'run.log').write_text(result.stdout + result.stderr)
+    assert result.returncode == 0, result.stdout + result.stderr
+    with netCDF4.Dataset(tmp_path / 'probe.nc') as nc:
+        nc.set_auto_mask(False)
+        values = {name: np.asarray(var[:]) for name, var in nc.variables.items()}
+    cpp = (tmp_path / 'probe.cpp').read_text() if config in ('soa', 'aos', 'cbt') else ''
+    return values, cpp
+
+
+def assert_literal_vector_block(cpp, config, kind='Dynamic', name='D'):
+    if config not in ('soa', 'aos', 'cbt'):
+        return
+    matches = list(BANNER.finditer(cpp))
+    found = False
+    for i, match in enumerate(matches):
+        if match.group(1) != kind or match.group(2) != name:
+            continue
+        found = True
+        body = cpp[match.end():matches[i+1].start() if i+1 < len(matches) else len(cpp)]
+        if config != 'aos':
+            assert match.group(4), match.group()
+        assert ('hn::' in body) == (config != 'aos')
+    assert found
+
+
+@pytest.mark.parametrize('config', CONFIGS)
+@pytest.mark.parametrize('cells', [4, 64])
+def test_local_slice_expressions_all_blocks(tmp_path, monkeypatch, config, cells):
+    source = program('''
+        array[real, 3] w = f.in[x | :];
+        array[real, 2] u = 2.0 * w[1:];
+        array[real, 2] v; v = -w[0:1];
+        array[real, 2] math_values = 2.0 * {sqrt(w[0] * w[0]), min(w[2], 10.0)};
+        array[real, 2] pw = w[0:1] ^ 2;
+        array[real, 2] c = real(w[0:1] > {10.0, 40.0});
+        real d = dot_prod(C, w[1:]);
+        array[real, 2] m = matmul(M, w[1:]);
+        f.out[x | 0] = u[0] + v[1] + math_values[0] + pw[0] + c[0] + d + m[0];
+        f.out[x | 1:2] = w[1:];''',
+        init='''array[real, 3] wi = {1.0 + real(x), 2.0 + real(x), 3.0 + real(x)};
+            f.out[x | 0] = wi[0]; f.out[x | 1:2] = wi[1:];''',
+        constants='''const array[real, 2] C = {2.0, 0.5};
+            const array[real, {2, 2}] M = {{1.0, 2.0}, {0.5, -1.0}};''',
+        gauge='''array[real, 3] wg = f.in[x | :]; array[real, 3] a = wg[:];
+            array[real, 2] b; b = wg[0:1]; p0 = a[0]; p1 = b[1]; p2 = a[2];''',
+        outputs='real p0, real p1, real p2').replace('67, true', f'{cells}, true')
+    values, cpp = run_literal_source(tmp_path, config, source, monkeypatch)
+    x = np.arange(cells)
+    np.testing.assert_array_equal(values['p0'][0], x + 1)
+    np.testing.assert_array_equal(values['p0'][-1],
+        (x+2) + 2*(x+1) + (x+1)**2 + (x+1 > 10) + 2*(x+2) + .5*(x+3) + (x+2) + 2*(x+3))
+    np.testing.assert_array_equal(values['p1'][-1], x + 2)
+    np.testing.assert_array_equal(values['p2'][-1], x + 3)
+    if cells == 64:
+        for kind, name in [('Initialiser', 'I'), ('Dynamic', 'D'), ('Gauge', 'G')]:
+            assert_literal_vector_block(cpp, config, kind, name)
+
+
+@pytest.mark.parametrize('config', CONFIGS)
+@pytest.mark.parametrize('q,plain', [(3, False), (9, True)])
+def test_literal_store_reductions_and_plain_expansion(tmp_path, monkeypatch, config, q, plain):
+    elements = ['dot_prod(C, v)', 'v[1]', 'v[2]'] + [f'v[{i}]' for i in range(3, q)]
+    source = program(f'''array[real, {q}] v = f.in[x | :];
+        f.out[x | :] = 2.0 * {{{', '.join(elements)}}};''', q=q,
+        constants=f"const array[real, {q}] C = {{{', '.join(['1.0'] * q)}}};",
+        init=' '.join(f'f.out[x | {i}] = {i+1}.0 + real(x);' for i in range(q)),
+        gauge='p0 = f.in[x | 0]; p1 = f.in[x | 1];', outputs='real p0, real p1').replace('67, true', '64, true')
+    values, cpp = run_literal_source(tmp_path, config, source, monkeypatch, plain=plain)
+    x = np.arange(64)
+    np.testing.assert_array_equal(values['p0'][-1], 2*(q*x + q*(q+1)//2))
+    np.testing.assert_array_equal(values['p1'][-1], 2*(x+2))
+    assert_literal_vector_block(cpp, config)
+
+
+@pytest.mark.parametrize('config', CONFIGS)
+@pytest.mark.parametrize('kind', ['int', 'int32', 'int16', 'int8', 'real32', 'bool'])
+def test_literal_store_element_widths(tmp_path, monkeypatch, config, kind):
+    if kind.startswith('int'):
+        start = 9007199254740993 if kind == 'int' else 3
+        local = f'{kind} k = {kind}({start} + x);'
+        expr = '{k, ' + kind + '(7)} / {' + kind + '(3), ' + kind + '(2)}'
+        lattice_type = kind
+        expected = (start + np.arange(64, dtype=np.int64)) // 3
+        other = 3
+    elif kind == 'real32':
+        local = 'int k = 18014399583223809 + x;'
+        expr, lattice_type = '{k, 7}', 'real32'
+        expected, other = np.full(64, 18014400656965632, dtype=np.float32), 7
+    else:
+        local = 'real k = f.in[x | 0];'
+        expr, lattice_type = 'real({k > 10.0, false})', 'real'
+        expected, other = np.arange(64) + 1 > 10, 0
+    output_type = 'int' if kind.startswith('int') else 'real'
+    source = f'''simulation_description("literal element widths");
+        lattices {{ lattice f(1, 3, {lattice_type}, 64, true); }}
+        initializer I {{ f.out[x | :] = x + 1; }}
+        dynamic D {{ {local} f.out[x | 0] = f.in[x | 0]; f.out[x | 1:2] = {expr}; }}
+        gauge G -> ({output_type} p0, {output_type} p1) {{ p0 = f.in[x | 1]; p1 = f.in[x | 2]; }}
+        node_classes {{ node_class B(I, D, G); }} geometry {{ nodes[:] = B; }}'''
+    values, cpp = run_literal_source(tmp_path, config, source, monkeypatch)
+    np.testing.assert_array_equal(values['p0'][-1], expected)
+    np.testing.assert_array_equal(values['p1'][-1], np.full(64, other))
+    if kind == 'int':
+        assert values['p0'].dtype == np.dtype('int64')
+    if kind == 'bool':
+        assert_literal_vector_block(cpp, config)
+
+
+@pytest.mark.parametrize('config', CONFIGS)
+def test_bounce_back_beside_local_slice(tmp_path, monkeypatch, config):
+    source = program('''array[real, 3] w = f.in[x | :];
+        f.out[x | :] = bounce_back_dfs(f, x, EX) + w[:];''',
+        constants='const array[real, 3] EX = {0.0, 1.0, -1.0};',
+        init='f.out[x | 0] = 1.0 + real(x); f.out[x | 1] = 2.0 + real(x); f.out[x | 2] = 3.0 + real(x);',
+        gauge='p0 = f.in[x | 0]; p1 = f.in[x | 1]; p2 = f.in[x | 2];',
+        outputs='real p0, real p1, real p2').replace('67, true', '64, true')
+    values, cpp = run_literal_source(tmp_path, config, source, monkeypatch)
+    x = np.arange(64)
+    for name, expected in [('p0', 2*(x+1)), ('p1', (x+1)%64 + 3 + x + 2), ('p2', (x-1)%64 + 2 + x + 3)]:
+        np.testing.assert_array_equal(values[name][-1], expected)
+    assert_literal_vector_block(cpp, config)
+
+
+@pytest.mark.parametrize('config', CONFIGS)
+@pytest.mark.parametrize('strict', [False, True])
+def test_literal_matmul_uses_bound_row_order(tmp_path, monkeypatch, config, strict):
+    # Inexact mixed-sign rows discriminate left-to-right from grouped sums.
+    constants = '''const array[real, {5, 5}] M = {
+        {1.0, 0.0, 0.0, 0.0, 0.0}, {0.0, 1.0, 0.0, 0.0, 0.0},
+        {0.0, 0.0, 1.0, 0.0, 0.0}, {0.0, 0.0, 0.0, 1.0, 0.0},
+        {0.0, 1.0, -1.0, 1.0, -1.0}};'''
+    template = program('''array[real, 5] v = f.in[x | :];
+        STORE''', q=5, constants=constants,
+        init=' '.join(f'f.out[x | {i}] = {i+1}.0 + 0.001 * real(x);' for i in range(5)),
+        gauge='p0 = f.in[x | 0]; p4 = f.in[x | 4];', outputs='real p0, real p4').replace('67, true', '64, true')
+    literal = '{v[0], 2.0, 3.0, 4.0, 5.0}'
+    inline = template.replace('STORE', f'f.out[x | :] = matmul(M, v) + {literal};')
+    bound = template.replace('STORE', 'array[real, 5] tm = matmul(M, v); ' +
+        ' '.join(f'f.out[x | {i}] = tm[{i}] + ' + ('v[0]' if i == 0 else f'{i+1}.0') + ';' for i in range(5)))
+    actual_dir, control_dir = tmp_path / 'inline', tmp_path / 'bound'
+    actual_dir.mkdir(); control_dir.mkdir()
+    actual, cpp = run_literal_source(actual_dir, config, inline, monkeypatch, strict=strict)
+    expected, _ = run_literal_source(control_dir, config, bound, monkeypatch, strict=strict)
+    for name in ('p0', 'p4'):
+        assert actual[name].dtype == expected[name].dtype
+        assert actual[name].tobytes() == expected[name].tobytes()
+    assert_literal_vector_block(cpp, config)

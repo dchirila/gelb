@@ -259,7 +259,7 @@ class ExpressionEmitMixin:
                 expr.value, df_var, int64_op=numeric_kind(
                     getattr(expr, 'inferred_type', None)) == 'int64')
             if self._simd_mode == 'vec8d' \
-                    and self._yields_simd_vector(expr.value):
+                    and self._yields_simd_vector_at_df(expr.value, df_var):
                 # Highway has no unary ``operator-`` overload on V --
                 # use ``hn::Neg`` for explicit lane-wise negation.
                 return f'hn::Neg({inner})'
@@ -294,27 +294,9 @@ class ExpressionEmitMixin:
                 idx = int(df_var)
                 if 0 <= idx < len(elements):
                     return self._emit_expression(elements[idx])
-            elem_strs = [self._emit_expression(e, df_var)
-                         for e in elements]
-            if df_var is None:
-                # Bare-literal use outside a slice loop -- typical for
-                # ``meq = {a, b, c, ...}`` whose surrounding statement
-                # branch unrolls element-wise.  We don't expect to be
-                # called here.
-                raise NotImplementedError(
-                    "cpu_highway: Array1DLiteral_N as a free-standing "
-                    "expression is unsupported; use it as the RHS of "
-                    "a whole-array assignment.")
-            # Inside a per-element loop: emit a C99 compound literal
-            # indexed at df_var.  GCC/Clang accept this in C++ as an
-            # extension and the optimiser hoists constant elements.
-            # NOTE: in SIMD mode, this only works when every element
-            # is a plain scalar -- which is why the whole-array assign
-            # path falls back to per-element unrolling whenever the
-            # RHS contains an Array1DLiteral_N (see _emit_statement).
-            return ('((double[]){ '
-                    + ', '.join(elem_strs)
-                    + ' })[' + df_var + ']')
+            raise NotImplementedError(
+                "cpu_highway: array literals require a constant element index; "
+                "prepare the C-family AST before code generation.")
         if isinstance(expr, BroadcastNode_N):
             return self._emit_expression(expr.scalar_expr, df_var)
         if isinstance(expr, IntrinsicFunctionCall_N):
@@ -327,8 +309,9 @@ class ExpressionEmitMixin:
             tgt_elem = (getattr(tgt, 'element_dtype', None)
                         or getattr(tgt, 'name', 'double'))
             cpp_tgt = _TYPE_MAP.get(tgt_elem, 'double')
-            inner = self._emit_expression(expr.expr, '0' if expr.is_singleton_coercion() else df_var)
-            return self._emit_simd_aware_cast(inner, expr.expr, cpp_tgt)
+            inner_df = '0' if expr.is_singleton_coercion() else df_var
+            inner = self._emit_expression(expr.expr, inner_df)
+            return self._emit_simd_aware_cast(inner, expr.expr, cpp_tgt, inner_df)
         # Comparison operators -- in scalar mode produce a C++ bool
         # (implicitly convertible to int / double in arithmetic
         # contexts); in SIMD mode lower to Highway's free-function
@@ -355,24 +338,24 @@ class ExpressionEmitMixin:
         cmp_kind = type(expr).__name__
         if cmp_kind in _CMP_OP:
             if self._simd_mode == 'vec8d' and (
-                    self._produces_simd_bool_mask(expr.left)
-                    or self._produces_simd_bool_mask(expr.right)):
+                    self._produces_simd_bool_mask_at_df(expr.left, df_var)
+                    or self._produces_simd_bool_mask_at_df(expr.right, df_var)):
                 # ``==`` / ``!=`` between per-cell bools (the frontend
                 # rejects an order on bool): both sides are masks, a
                 # uniform scalar bool broadcasts.  Highway has no
                 # ``Eq`` / ``Ne`` on masks; ``Xor`` is ``!=``.
                 a = self._broadcast_simd_bool(
-                    expr.left, self._emit_expression(expr.left, df_var))
+                    expr.left, self._emit_expression(expr.left, df_var), df_var)
                 b = self._broadcast_simd_bool(
-                    expr.right, self._emit_expression(expr.right, df_var))
+                    expr.right, self._emit_expression(expr.right, df_var), df_var)
                 if cmp_kind == 'NotEqual_N':
                     return f'hn::Xor({a}, {b})'
                 return f'hn::Not(hn::Xor({a}, {b}))'
             a, b = self._broadcast_for_binop(
                 expr.left, expr.right, df_var)
             if self._simd_mode == 'vec8d' and (
-                    self._yields_simd_vector(expr.left)
-                    or self._yields_simd_vector(expr.right)):
+                    self._yields_simd_vector_at_df(expr.left, df_var)
+                    or self._yields_simd_vector_at_df(expr.right, df_var)):
                 if cmp_kind == 'NotEqual_N':
                     # ``hn::Ne`` is the *ordered* comparison with
                     # AVX2 or AVX-512 (``_CMP_NEQ_OQ``): false when a
@@ -389,27 +372,27 @@ class ExpressionEmitMixin:
         if isinstance(expr, NotExpr_N):
             value = self._emit_expression(expr.value, df_var)
             if (self._simd_mode == 'vec8d'
-                    and self._produces_simd_bool_mask(expr.value)):
+                    and self._produces_simd_bool_mask_at_df(expr.value, df_var)):
                 return f'hn::Not({value})'
             return f'(!{value})'
         if isinstance(expr, And_N):
             a = self._emit_expression(expr.left, df_var)
             b = self._emit_expression(expr.right, df_var)
             if self._simd_mode == 'vec8d' and (
-                    self._produces_simd_bool_mask(expr.left)
-                    or self._produces_simd_bool_mask(expr.right)):
-                a = self._broadcast_simd_bool(expr.left, a)
-                b = self._broadcast_simd_bool(expr.right, b)
+                    self._produces_simd_bool_mask_at_df(expr.left, df_var)
+                    or self._produces_simd_bool_mask_at_df(expr.right, df_var)):
+                a = self._broadcast_simd_bool(expr.left, a, df_var)
+                b = self._broadcast_simd_bool(expr.right, b, df_var)
                 return f'hn::And({a}, {b})'
             return f'({a} && {b})'
         if isinstance(expr, Or_N):
             a = self._emit_expression(expr.left, df_var)
             b = self._emit_expression(expr.right, df_var)
             if self._simd_mode == 'vec8d' and (
-                    self._produces_simd_bool_mask(expr.left)
-                    or self._produces_simd_bool_mask(expr.right)):
-                a = self._broadcast_simd_bool(expr.left, a)
-                b = self._broadcast_simd_bool(expr.right, b)
+                    self._produces_simd_bool_mask_at_df(expr.left, df_var)
+                    or self._produces_simd_bool_mask_at_df(expr.right, df_var)):
+                a = self._broadcast_simd_bool(expr.left, a, df_var)
+                b = self._broadcast_simd_bool(expr.right, b, df_var)
                 return f'hn::Or({a}, {b})'
             return f'({a} || {b})'
         raise NotImplementedError(
@@ -541,7 +524,7 @@ class ExpressionEmitMixin:
                 f"{fname}(): 1 argument expected.")
         arg_node = call.arguments[0]
         inner = self._emit_expression(arg_node, df_var)
-        return self._emit_simd_aware_cast(inner, arg_node, target)
+        return self._emit_simd_aware_cast(inner, arg_node, target, df_var)
 
     def _emit_operand(self, expr, df_var: str | None = None, *,
                       int64_op: bool = False) -> str:
@@ -584,7 +567,7 @@ class ExpressionEmitMixin:
             arg_node, df_var, int64_op=fname == 'abs' and numeric_kind(
                 getattr(call, 'inferred_type', None)) == 'int64')
         vector_arg = (self._simd_mode == 'vec8d'
-                      and self._yields_simd_vector(arg_node))
+                      and self._yields_simd_vector_at_df(arg_node, df_var))
         if fname in _LIBRARY_FUNCTIONS and self.backend_name == 'cpu_highway' \
                 and self._cpp_type_of(arg_node) == 'double':
             # One implementation per function on this backend, in every
@@ -620,8 +603,8 @@ class ExpressionEmitMixin:
             # The vector overloads are lane-wise on V; only take the
             # SIMD path when at least one arg is V.  Pure scalar/scalar
             # still goes to the scalar helper even in SIMD mode.
-            a_vec = self._yields_simd_vector(a_node)
-            b_vec = self._yields_simd_vector(b_node)
+            a_vec = self._yields_simd_vector_at_df(a_node, df_var)
+            b_vec = self._yields_simd_vector_at_df(b_node, df_var)
             if a_vec or b_vec:
                 if a_vec and not b_vec:
                     b = f'hn::Set(d, {b})'
