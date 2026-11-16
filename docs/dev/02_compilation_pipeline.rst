@@ -293,6 +293,13 @@ its unchanged Stage-2 AST and independent whole-array lowering.
 Diagnostics, program analysis, ``--stencils`` and ``--show-mapping`` stop
 before this preparation.
 
+``desugar_local_array_slices`` first replaces constant-bound, one-dimensional
+local-array slice reads with typed literals of scalar element selections.
+The explicit stack visits value expressions in initializers, dynamics and
+gauges, leaving scalar selections and the left side of array writes intact.
+This makes slices available to declarations, reassignments, arithmetic,
+casts, reductions and matrix-vector arguments before lifting.
+
 Pass 47, ``lift_matmul_args``, walks statement expressions with an explicit
 post-order stack. It lifts every non-identifier one-dimensional vector
 argument of ``matmul`` into a preceding local declaration, including nested
@@ -301,7 +308,27 @@ dynamics and gauges. Inner calls are prepared first. The temporary keeps
 the argument's exact element width and shape; its name counter starts at
 zero in each block and skips occupied local and parent names.
 ``BlockMutationHelper.declare_temp`` registers each declaration, and
-``canonicalize_types`` refreshes the copied tree's metadata.
+``canonicalize_types`` refreshes the copied tree's metadata after preparation.
+
+Pass 48, ``expand_literal_slice_stores``, expands a literal-bearing lattice
+slice store into independent scalar stores, including partial slices and
+single-direction array-typed stores. Stores without a value literal stay
+unchanged. Before expansion, an explicit post-order stack hoists
+``matmul`` with a global constant matrix and ``bounce_back_dfs`` into typed,
+registered local arrays named ``gelb_tmp_k``, numbered per block while
+skipping occupied names. A hoisted ``matmul`` uses the declaration emitter's
+zero pruning and row-summation order, matching the local-array declaration
+form even on inexact inputs.
+
+Scalarization preserves each element's width and store conversion, offsets
+lattice reads from their own slice origin, and keeps scalar reductions'
+whole-array operands and singleton coercions intact. Streaming velocity
+sets and untyped multidimensional literal wrappers are syntax, not value
+literals. Unsupported inline literals and slices in reductions, matrix
+arguments, scalar statements, array-element stores or expressions containing
+unsupported array intrinsics receive a located ``GeLBExTypeError`` advising
+a local array binding. Multidimensional local arrays retain their existing
+backend rejection.
 
 ``gelbc --visualize-ast --ast-stage c_lowering`` captures this tree as
 ``2_5_c_lowering``. The stage is also included by ``--ast-stage all`` for
@@ -312,7 +339,10 @@ error before any output is written.
 Gate G2.5 runs ``check_c_lowering`` and ``check_stage2`` from
 :source:`gelb/frontend/ASTInvariantValidator.py`. The former requires each
 one-dimensional ``matmul`` vector to be a bare identifier resolving in the
-block or program table; the latter checks live symbols and types.
+block or program table. It also rejects residual value-position local-array
+slices, literals in lattice stores, and literals outside supported
+one-dimensional elementwise declarations or assignments, with the same
+syntax exemptions. The latter checks live symbols and types.
 Violations raise ``GeLBInternalInvariantError`` by default;
 ``strict_invariants=False`` reports internal warnings. The C-family
 ``BackendContext`` is built afterwards from this prepared AST, so its
