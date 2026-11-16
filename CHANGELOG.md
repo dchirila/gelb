@@ -53,6 +53,15 @@ versions follow upstream end of life and can change in any release.
 
 ### Fixed
 
+- `cpu_highway` and `gpu_cuda_cpp` support constant-bound one-dimensional
+  slices of local arrays (`w[lo:hi]`) and per-cell SIMD expressions in short
+  and `--no-slice-simplify` lattice slice-store literals. Such literals keep
+  their exact element widths, including integer division and real32 store
+  conversions. A `matmul` beside an array literal or local-array slice in a
+  lattice slice store uses the local-array declaration's row-summation order,
+  which may change low-order bits on inexact inputs. Unsupported inline
+  array-literal and slice expressions receive source-located errors.
+
 - `matmul` on `cpu_highway` and `gpu_cuda_cpp` evaluates narrow and mixed-width
   products in the promoted element width instead of using binary64
   intermediates. Non-identifier one-dimensional vector arguments work in
