@@ -83,6 +83,89 @@ def canonicalize_types(ast):
     return ast
 
 
+def c_value_edges(node):
+    """Yield writable expression edges, excluding names, types and velocity tuples."""
+    if not isinstance(node, A.Node_N) or isinstance(node, (A.ArrayDataType_N, *SELECTIONS)):
+        return
+    for field in node.get_children_names():
+        if field in NAME_SLOTS.get(type(node), ()) or field in ('target_type', 'target_array_type'):
+            continue
+        if isinstance(node, A.ArraySelectionAssignmentStmt_N) and field == 'lhs':
+            continue
+        child = getattr(node, field)
+        if isinstance(child, A.ArrayDataType_N):
+            continue
+        children = child.elements if isinstance(child, A.List_N) else child
+        if isinstance(children, list):
+            for i, value in enumerate(children):
+                if (isinstance(node, A.IntrinsicFunctionCall_N)
+                        and node.function_name in ('upstream_dfs', 'bounce_back_dfs')
+                        and field == 'arguments' and len(children) >= 3 and i == len(children) - 1):
+                    continue
+                if isinstance(value, A.Node_N):
+                    yield children, i, value
+        elif isinstance(child, A.Node_N):
+            yield node, field, child
+
+
+def c_value_nodes(root):
+    """Visit expression values without recursive descent or metadata edges."""
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, A.Node_N):
+            yield node
+            stack.extend(edge[2] for edge in reversed(list(c_value_edges(node))))
+
+
+def c_global_matrices(ast):
+    constants = getattr(ast.global_constants, 'stmts', ()) or ()
+    return {s.name.name for s in constants if isinstance(s, A.ConstantDefinitionStmt_N)
+            and s.data_type.canonical_type is not None
+            and len(s.data_type.canonical_type.dims) == 2}
+
+
+def c_literal_context(stmt, matrices):
+    """Return (first literal, unsupported context) for an executable statement."""
+    root = getattr(stmt, 'initial_value', getattr(stmt, 'rhs', None))
+    literal = invalid = None
+    stack = [(root, False, False)]
+    while stack:
+        node, forbidden, reduction = stack.pop()
+        if not isinstance(node, A.Node_N):
+            continue
+        if isinstance(node, A.Array1DLiteral_N) and getattr(node, 'inferred_type', None) is not None:
+            literal = literal or node
+            if forbidden:
+                invalid = invalid or node
+        if not reduction:
+            if isinstance(node, A.RectSelOfArrayElems_N) and len(node.element_ranges) != 1:
+                invalid = invalid or node
+            if isinstance(node, A.IntrinsicFunctionCall_N):
+                unsupported = node.function_name in ('upstream_dfs', 'transpose', 'inverse')
+                if node.function_name == 'matmul':
+                    matrix = node.arguments[0]
+                    unsupported |= not isinstance(matrix, A.Identifier_N) or matrix.name not in matrices
+                if unsupported:
+                    invalid = invalid or node
+        for _, _, child in reversed(list(c_value_edges(node))):
+            blocked = forbidden
+            reduced = reduction
+            if isinstance(node, A.IntrinsicFunctionCall_N):
+                blocked |= node.function_name in ('sum', 'determinant', 'transpose', 'inverse')
+                blocked |= node.function_name == 'matmul' and child is node.arguments[0]
+                reduced |= node.function_name in ('sum', 'dot_prod', 'determinant')
+            stack.append((child, blocked, reduced))
+    if literal is not None:
+        dtype = (stmt.data_type.canonical_type if isinstance(stmt, A.VariableDeclarationStmt_N)
+                 else getattr(getattr(stmt, 'lhs', None), 'canonical_type', None))
+        allowed = isinstance(stmt, (A.VariableDeclarationStmt_N, A.VariableAssignmentStmt_N,
+                                   A.LatticeOutSelectionAssignmentStmt_N))
+        if not allowed or dtype is None or len(dtype.dims) != 1:
+            invalid = invalid or literal
+    return literal, invalid
+
+
 class ASTInvariantValidator:
     @staticmethod
     def check_stage1(ast):
@@ -138,10 +221,23 @@ class ASTInvariantValidator:
 
     @staticmethod
     def check_c_lowering(ast):
-        """Require every one-dimensional matmul vector to name a live symbol."""
+        """Require prepared slices, supported literals and named matmul vectors."""
+        matrices = c_global_matrices(ast)
         for group in (ast.initializers, ast.dynamics, ast.gauges):
             for block in group or ():
-                for node, _, _, _ in _walk(block.stmts):
+                for stmt in block.stmts or ():
+                    literal, invalid = c_literal_context(stmt, matrices)
+                    if literal is not None and (invalid is not None or isinstance(
+                            stmt, A.LatticeOutSelectionAssignmentStmt_N)):
+                        raise GeLBInternalInvariantError('C-family residual Array1DLiteral_N context')
+                for node in c_value_nodes(block.stmts):
+                    if isinstance(node, A.RectSelOfArrayElems_N) and len(node.element_ranges) == 1:
+                        bounds = node.element_ranges[0]
+                        if (bounds.low is None or bounds.high is None
+                                or (isinstance(bounds.low, A.IntLiteral_N)
+                                    and isinstance(bounds.high, A.IntLiteral_N)
+                                    and bounds.low.value != bounds.high.value)):
+                            raise GeLBInternalInvariantError('C-family residual array slice')
                     if not (isinstance(node, A.IntrinsicFunctionCall_N)
                             and node.function_name == 'matmul' and len(node.arguments) == 2):
                         continue

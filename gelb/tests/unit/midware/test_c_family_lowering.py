@@ -181,3 +181,211 @@ def test_slice_vector_temporary_has_declared_shape(size, role, form):
     assert block.symbol_defs.get_symbol_definition(decl.name.name).value is decl
     check_c_lowering(lowered)
     check_stage2(lowered)
+
+
+def literal_source(body, *, q=3, dtype='real', gauge='p = f.in[x | 0];'):
+    return f'''simulation_description("literal preparation");
+    global_constants {{
+        const array[real, 2] C = {{2.0, 0.5}};
+        const array[real, {{2, 2}}] M = {{{{1.0, 2.0}}, {{0.5, -1.0}}}};
+        const array[real, 3] EX = {{0.0, 1.0, -1.0}};
+    }}
+    lattices {{ lattice f(1, {q}, {dtype}, 64, true);
+                lattice h(1, 1, real, 64, true); }}
+    initializer I {{ f.out[x | :] = 1.0; h.out[x | :] = 2.0; }}
+    dynamic D {{ {body} h.out[x | :] = h.in[x | :]; }}
+    gauge G -> (real p) {{ {gauge} }}
+    node_classes {{ node_class B(I, D, G); }}
+    geometry {{ nodes[:] = B; }}'''
+
+
+def prepared_unchanged(text, **options):
+    ast = stage2(text, **options)
+    before = pickle.dumps(ast)
+    result = prepare_c_family_ast(ast)
+    assert pickle.dumps(ast) == before
+    check_c_lowering(result)
+    check_stage2(result)
+    return ast, result
+
+
+def value_nodes(root):
+    # Independent structural traversal, including type and name slots.
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, A.Node_N):
+            yield node
+            stack.extend(node.get_children())
+        elif isinstance(node, (list, tuple)):
+            stack.extend(node)
+
+
+@pytest.mark.parametrize('expression,size,indices', [
+    ('w[1:]', 2, [1, 2]), ('w[0:2]', 3, [0, 1, 2]),
+    ('w[:]', 3, [0, 1, 2]), ('2.0 * w[1:]', 2, [1, 2]),
+    ('matmul(M, w[1:])', 2, [1, 2]),
+])
+def test_desugared_slice_elements(expression, size, indices):
+    before, after = prepared_unchanged(literal_source(f'''
+        array[real, 3] w = f.in[x | :];
+        array[real, {size}] u = {expression};
+        f.out[x | 0] = u[0]; f.out[x | 1:2] = f.in[x | 1:2];'''))
+    with pytest.raises(GeLBInternalInvariantError):
+        check_c_lowering(before)
+    literals = [n for n in value_nodes(after.dynamics[0]) if isinstance(n, A.Array1DLiteral_N)]
+    [literal] = literals
+    assert literal.canonical_type.dims == (size,)
+    assert [n.element_ranges[0].low.value for n in literal.value] == indices
+    assert all(n.canonical_type.is_scalar for n in literal.value)
+
+
+@pytest.mark.parametrize('lhs', ['w[1]', 'w[0:1]'])
+def test_array_store_lhs_and_scalar_reads_untouched(lhs):
+    text = literal_source(f'''array[real, 3] w = f.in[x | :];
+        {lhs} = 2.0; array[real, 1] w1 = h.in[x | :];
+        f.out[x | :] = w[1] + w1[:];''')
+    before, after = prepared_unchanged(text)
+    assert str(before.dynamics[0]) == str(after.dynamics[0])
+
+
+@pytest.mark.parametrize('q,lo', [(3, 0), (3, 1), (9, 0)])
+def test_literal_stores_are_independent_scalar_directions(q, lo):
+    n = q - lo
+    literal = '{' + ','.join(f'int(w[{i}])' for i in range(n)) + '}'
+    text = literal_source(f'''array[real, {q}] w = f.in[x | :];
+        f.out[x | {lo}:{q-1}] = real({literal});''', q=q)
+    before, after = prepared_unchanged(text, enable_slice_simplify=False, enable_scalar_cse=False)
+    with pytest.raises(GeLBInternalInvariantError, match='Array1DLiteral'):
+        check_c_lowering(before)
+    stores = [s for s in after.dynamics[0].stmts if isinstance(s, A.LatticeOutSelectionAssignmentStmt_N)
+              and s.lhs.lattice_name.name == 'f']
+    assert len(stores) == n
+    for i, s in enumerate(stores):
+        assert s.lhs.canonical_type.is_scalar and s.rhs.canonical_type.is_scalar
+        assert s.lhs.element_ranges[-1].low.value == lo + i
+        [read] = [v for v in value_nodes(s.rhs) if isinstance(v, A.RectSelOfArrayElems_N)]
+        assert read.element_ranges[0].low.value == i
+    node_sets = [{id(v) for v in value_nodes(s.rhs)} for s in stores]
+    assert all(not a.intersection(b) for i, a in enumerate(node_sets) for b in node_sets[i+1:])
+
+
+@pytest.mark.parametrize('in_lo,out_lo', [(1, 0), (2, 1), (1, 2)])
+def test_literal_store_reads_use_their_own_slice_origin(in_lo, out_lo):
+    text = literal_source(f'''f.out[x | {out_lo}:{out_lo + 1}] =
+        f.in[x | {in_lo}:{in_lo + 1}] * {{2.0, 3.0}};''', q=5)
+    _, after = prepared_unchanged(text, enable_slice_simplify=False, enable_scalar_cse=False)
+    stores = [s for s in after.dynamics[0].stmts if isinstance(s, A.LatticeOutSelectionAssignmentStmt_N)
+              and s.lhs.lattice_name.name == 'f']
+    assert len(stores) == 2
+    for offset, stmt in enumerate(stores):
+        out_range = stmt.lhs.element_ranges[-1]
+        assert out_range.low.value == out_range.high.value == out_lo + offset
+        [read] = [v for v in value_nodes(stmt.rhs) if isinstance(v, A.RectSelOfLatticeInDFs_N)]
+        in_range = read.element_ranges[-1]
+        assert in_range.low.value == in_range.high.value == in_lo + offset
+        assert read.canonical_type.is_scalar
+
+
+def test_synthetic_one_direction_full_slice():
+    from gelb.midware.c_family_lowering import expand_literal_slice_stores
+    from gelb.frontend.ASTInvariantValidator import canonicalize_types
+    ast = stage2(literal_source('f.out[x | :] = f.in[x | :];', q=1))
+    stmt = ast.dynamics[0].stmts[0]
+    values = A.List_N(stmt.code_range)
+    values.append(copy.deepcopy(stmt.rhs))
+    stmt.rhs = A.Array1DLiteral_N(stmt.code_range, values)
+    array_type = A.ArrayDataType_N(stmt.code_range, 'real', A.IntLiteral_N(stmt.code_range, 1))
+    stmt.rhs.inferred_type = array_type
+    stmt.lhs.inferred_type = copy.deepcopy(array_type)
+    stmt.lhs.element_ranges[-1] = A.Range_N(stmt.code_range, None, None)
+    expand_literal_slice_stores(ast)
+    canonicalize_types(ast)
+    check_c_lowering(ast)
+    check_stage2(ast)
+    stmt = ast.dynamics[0].stmts[0]
+    assert stmt.lhs.canonical_type.is_scalar
+    assert stmt.lhs.element_ranges[-1].low.value == 0
+
+
+@pytest.mark.parametrize('call,q', [('matmul(M, w)', 2), ('bounce_back_dfs(f, x, EX)', 3)])
+def test_store_call_is_registered_before_scalar_stores(call, q):
+    literal = '{' + ','.join(f'w[{i}]' for i in range(q)) + '}'
+    _, after = prepared_unchanged(literal_source(f'''array[real, {q}] w = f.in[x | :];
+        real gelb_tmp_0 = 1.0;
+        f.out[x | :] = {call} + {literal} * gelb_tmp_0;''', q=q))
+    block = after.dynamics[0]
+    [decl] = [s for s in block.stmts if isinstance(s, A.VariableDeclarationStmt_N)
+              and s.name.name == 'gelb_tmp_1']
+    assert decl.initial_value.function_name == call.split('(')[0]
+    assert isinstance(decl.data_type.shape, A.IntLiteral_N) and decl.data_type.shape.value == q
+    assert block.symbol_defs.get_symbol_definition('gelb_tmp_1').value is decl
+    stores = [s for s in block.stmts if isinstance(s, A.LatticeOutSelectionAssignmentStmt_N)
+              and s.lhs.lattice_name.name == 'f']
+    for i, stmt in enumerate(stores):
+        [read] = [v for v in value_nodes(stmt.rhs) if isinstance(v, A.RectSelOfArrayElems_N)
+                  and v.array_name.name == 'gelb_tmp_1']
+        assert read.element_ranges[0].low.value == i
+        assert block.stmts.elements.index(decl) < block.stmts.elements.index(stmt)
+
+
+def test_scalar_reductions_singletons_globals_and_store_conversion():
+    text = literal_source('''array[real, 2] w = f.in[x | :];
+        f.out[x | :] = C * {h.in[x | :], dot_prod(C, w)} + sum(w);''', q=2)
+    _, after = prepared_unchanged(text)
+    stores = [s for s in after.dynamics[0].stmts if isinstance(s, A.LatticeOutSelectionAssignmentStmt_N)
+              and s.lhs.lattice_name.name == 'f']
+    coercions = [v for v in value_nodes(stores[0].rhs)
+                 if isinstance(v, A.TypePromotionNode_N) and v.is_singleton_coercion()]
+    assert len(coercions) == 1
+    for stmt in stores:
+        for call in value_nodes(stmt.rhs):
+            if isinstance(call, A.IntrinsicFunctionCall_N) and call.function_name in ('sum', 'dot_prod'):
+                assert all(isinstance(a, A.Identifier_N) and a.canonical_type.is_array for a in call.arguments)
+    _, narrow = prepared_unchanged(literal_source('''int k = x + 18014399583223809;
+        f.out[x | :] = {k, 7};''', q=2, dtype='real32'))
+    for stmt in narrow.dynamics[0].stmts:
+        if isinstance(stmt, A.LatticeOutSelectionAssignmentStmt_N) and stmt.lhs.lattice_name.name == 'f':
+            assert stmt.lhs.canonical_type.dtype == 'real32'
+            assert stmt.rhs.canonical_type.dtype in ('int', 'real32')
+            assert all(n.canonical_type is None or n.canonical_type.dtype != 'real'
+                       for n in value_nodes(stmt.rhs))
+
+
+@pytest.mark.parametrize('body', [
+    'real s = sum({w[0], 2.0});', 'real s = sum(w[1:]);', 'real s = sum(2.0 * w[1:]);',
+    'array[real, 3] u = upstream_dfs(f, x, EX) + {1.0, 2.0, 3.0};',
+    'array[real, 3] u; u = upstream_dfs(f, x, EX) + {1.0, 2.0, 3.0};',
+    'w[0:1] = w[1:];', 'w[0:1] = {w[2], 2.0};',
+])
+def test_unsupported_inline_literals_are_located(body):
+    from gelb.utils.exceptions import GeLBExTypeError
+    ast = stage2(literal_source(f'array[real, 3] w = f.in[x | :];\n{body}\nf.out[x | :] = w;'))
+    before = pickle.dumps(ast)
+    with pytest.raises(GeLBExTypeError) as error:
+        prepare_c_family_ast(ast)
+    line, col = error.value._source_location()
+    assert line > 0 and col >= 0
+    assert 'local array[...] variable' in error.value.hint
+    assert pickle.dumps(ast) == before
+
+
+def test_multidimensional_syntax_rows_are_not_value_literals():
+    before, after = prepared_unchanged(literal_source('''array[real, 3] w = f.in[x | :];
+        array[real, {2, 2}] m = {{w[0], 1.0}, {2.0, w[1]}};
+        f.out[x | :] = w;'''))
+    assert str(after.dynamics[0]) == str(before.dynamics[0])
+
+
+def test_preparation_walks_deep_expression_iteratively():
+    from gelb.midware.c_family_lowering import desugar_local_array_slices, expand_literal_slice_stores
+    ast = stage2(literal_source('array[real, 3] w = f.in[x | :]; f.out[x | 1:2] = w[1:];'))
+    stmt = ast.dynamics[0].stmts[1]
+    for _ in range(2500):
+        node = A.Add_N(stmt.code_range, stmt.rhs, A.RealLiteral_N(stmt.code_range, 0.0))
+        node.inferred_type = stmt.rhs.inferred_type
+        stmt.rhs = node
+    # Only the traversal is under test; deepcopy itself is Python-recursive.
+    desugar_local_array_slices(ast)
+    with pytest.raises(GeLBInternalInvariantError, match='Array1DLiteral'):
+        check_c_lowering(ast)

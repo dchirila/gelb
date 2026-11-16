@@ -87,7 +87,7 @@ for case in PROGRAMS:
         config = cfg.values[0]
         marks = list(cfg.marks)
         if config != "fortran" and (
-                case.startswith("mixed_dot") or case == "integer_literal_division"):
+                case.startswith("mixed_dot")):
             marks.append(expected_failure(case.replace("_", " ")))
         PARAMS.append(pytest.param(case, config, marks=marks, id=f"{case}-{config}"))
 
@@ -110,7 +110,7 @@ def test_runtime_contract(tmp_path, case, config):
         expected = {"r": 1.0000000001 if case.endswith("_2") else 1.0000000008}
         wrong = {"r": 1.0}
     elif case == "integer_literal_division":
-        expected, wrong = {"a": 1.0, "b": 3.0}, {"a": 1.5, "b": 3.5}
+        expected, wrong = {"a": 1.0, "b": 3.0}, {}
     else:
         u = np.arange(1.0, 5.0)
         expected = {"v": {
