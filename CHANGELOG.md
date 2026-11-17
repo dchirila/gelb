@@ -53,6 +53,20 @@ versions follow upstream end of life and can change in any release.
 
 ### Fixed
 
+- `cpu_highway` preserves function-call parentheses
+  around folded integer arguments such as `abs(x - 5)` in regions with
+  a size-1 axis.
+- `cpu_fortran_serial` emits range-safe minimum-value literals (`-128`,
+  `-32768`, `-2147483648`) in 1-D and 2-D `int8`, `int16`, and `int32`
+  constant arrays without requiring `-fno-range-check`, and sets `t = 0`
+  before any initializer runs.
+- `cpu_fortran_serial`, `cpu_highway`, and `gpu_cuda_cpp` fill the second
+  buffer of static node classes with initializers, masked or unmasked,
+  by copying the first buffer. Initializers calling `random()` no longer
+  produce values that alternate between steps. They draw once per cell
+  rather than twice, so on `cpu_fortran_serial` and `cpu_highway` subsequent
+  draws in these programs change under a given `--seed`.
+
 - `cpu_highway` and `gpu_cuda_cpp` support constant-bound one-dimensional
   slices of local arrays (`w[lo:hi]`) and per-cell SIMD expressions in short
   and `--no-slice-simplify` lattice slice-store literals. Such literals keep
