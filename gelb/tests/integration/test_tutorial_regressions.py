@@ -167,3 +167,86 @@ geometry { nodes[:] = B; }
     for name, value in {"chained": 512, "left_grouped": 64, "right_grouped": 512,
                         "neg_power": -9, "power_of_neg": 9}.items():
         np.testing.assert_array_equal(data[name], np.full((2, 17), value), err_msg=name)
+
+
+INITIALIZATION_CONFIGS = [
+    pytest.param("cpu_fortran_serial", None, id="fortran", marks=requires_compiler),
+    pytest.param("cpu_highway", "soa", id="soa", marks=requires_cpp_highway_compiler),
+    pytest.param("cpu_highway", "aos", id="aos", marks=requires_cpp_highway_compiler),
+    pytest.param("cpu_highway", "cbt", id="cbt", marks=requires_cpp_highway_compiler),
+    pytest.param("gpu_cuda_cpp", None, id="cuda", marks=requires_gpu_cuda_cpp_compiler),
+]
+
+
+def configure_initialization_run(monkeypatch, layout):
+    from gelb.backends.highway import common
+
+    if layout == "cbt":
+        monkeypatch.setattr(common._detect_avx512_available, "_cached", None, raising=False)
+        if not common._detect_avx512_available():
+            pytest.skip("the cbt layout needs an AVX-512 host")
+    monkeypatch.setenv("GELBC_EXTRA", f"--storage-layout {layout}" if layout else "")
+    monkeypatch.setenv("OMP_NUM_THREADS", "4")
+
+
+@pytest.mark.parametrize("backend,layout", INITIALIZATION_CONFIGS)
+def test_single_cell_call_arguments(tmp_path, monkeypatch, backend, layout):
+    configure_initialization_run(monkeypatch, layout)
+    data = run_source(tmp_path, backend, """
+simulation_description("calls on a single cell region");
+lattices { lattice f(1, 1, real, 17, false); }
+initializer I { f.out[x | 0] = 1.0; }
+dynamic D { f.out[x | 0] = f.in[x | 0]; }
+gauge G -> (int minus, int plus, int zero) {
+    minus = abs(x - 5); plus = abs(x + 5); zero = abs(x);
+}
+node_classes { node_class B(I, D, G); node_class ONE(I, D, G); }
+geometry { nodes[:] = B; nodes[0:0] = ONE; }
+""")
+    for name, expected in [("minus", 5), ("plus", 5), ("zero", 0)]:
+        np.testing.assert_array_equal(data[name][:, 0], [expected, expected])
+
+
+@pytest.mark.parametrize("backend,layout", INITIALIZATION_CONFIGS)
+@pytest.mark.parametrize("kind,minimum", [("int8", -128), ("int16", -32768),
+                                         ("int32", -2147483648)])
+def test_narrow_constant_array_minima(tmp_path, monkeypatch, backend, layout, kind, minimum):
+    configure_initialization_run(monkeypatch, layout)
+    data = run_source(tmp_path, backend, f"""
+simulation_description("narrow constant array reads");
+global_constants {{
+    const array[{kind}, 2] K = {{{minimum}, 1}};
+    const array[{kind}, {{2, 2}}] K2 = {{{{{minimum}, 1}}, {{2, 3}}}};
+}}
+lattices {{ lattice f(1, 1, real, 17, false); }}
+initializer I {{ f.out[x | 0] = 1.0; }}
+dynamic D {{ f.out[x | 0] = f.in[x | 0]; }}
+gauge G -> (int one, int two, int control) {{
+    array[{kind}, 2] local = K;
+    array[{kind}, 2] basis = {{1, 0}};
+    array[{kind}, 2] product = matmul(K2, basis);
+    one = local[0]; two = product[0]; control = product[1];
+}}
+node_classes {{ node_class B(I, D, G); }}
+geometry {{ nodes[:] = B; }}
+""")
+    for name in ("one", "two"):
+        np.testing.assert_array_equal(data[name], np.full((2, 17), minimum))
+    np.testing.assert_array_equal(data["control"], np.full((2, 17), 2))
+
+
+@pytest.mark.parametrize("backend,layout", INITIALIZATION_CONFIGS)
+def test_initializer_reads_zero_timestep(tmp_path, monkeypatch, backend, layout):
+    configure_initialization_run(monkeypatch, layout)
+    if backend == "cpu_fortran_serial":
+        monkeypatch.setenv("GELB_FFLAGS", "-O2 -finit-integer=12345")
+    data = run_source(tmp_path, backend, """
+simulation_description("timestep before initialization");
+lattices { lattice f(1, 1, real, 17, false); }
+initializer I { f.out[x | 0] = real(t) + 5.0; }
+dynamic D { f.out[x | 0] = f.in[x | 0]; }
+gauge G -> (real value) { value = f.in[x | 0]; }
+node_classes { node_class B(I, D, G); }
+geometry { nodes[:] = B; }
+""", timesteps=3)
+    np.testing.assert_array_equal(data["value"], np.full((4, 17), 5.0))
