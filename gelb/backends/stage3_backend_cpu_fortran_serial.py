@@ -289,6 +289,7 @@ class FortranCodeGenerator:
             self._emit('')
 
         # --- initializer (one loop per region) ---
+        self._emit('gelb_timestep = 0')
         for region in regions:
             iblock = region['initializer']
             if iblock is None:
@@ -319,7 +320,6 @@ class FortranCodeGenerator:
 
         # --- pre-loop gauge (t=0 snapshot of initial conditions) ---
         self._emit('! ========== Gauge at t=0 (initial conditions) ==========')
-        self._emit('gelb_timestep = 0')
         self._emit('gelb_write_count = 1')
         self._emit_gauge_halo_updates()
         if self._partial_gauge_outputs and use_netcdf:
@@ -1003,6 +1003,9 @@ class FortranCodeGenerator:
             return self._emit_expr(node, 'global')
         if isinstance(converted, int):
             suffix = self._INT_KIND_SUFFIX[kind]
+            minimum = -(1 << (int(kind[3:]) - 1))
+            if converted == minimum:
+                return f'(-{-minimum - 1}{suffix} - 1{suffix})'
             return f'{converted}{suffix}' if converted >= 0 else f'(-{-converted}{suffix})'
         return self._fortran_real(float(converted), kind)
 

@@ -334,9 +334,10 @@ class HighwayCodeGenerator(
         # minus stands right in front of them (``(-(-1LL))``), because
         # ``--1LL`` is a decrement; elsewhere it is stripped as before,
         # so the wrap forms fold the same way.
-        parens_int = re.compile(rf'(?<![>-])\(\s*({int_pat})\s*\)')
+        # Identifier characters also protect function-call parentheses.
+        parens_int = re.compile(rf'(?<![a-zA-Z0-9_>-])\(\s*({int_pat})\s*\)')
         chain_pat = re.compile(
-            rf'(?<!>)\(\s*({int_pat}(?:\s*[+\-*%]\s*{int_pat})+)\s*\)')
+            rf'(?<![a-zA-Z0-9_>])\(\s*({int_pat}(?:\s*[+\-*%]\s*{int_pat})+)\s*\)')
         sanitiser = re.compile(
             rf'\s*{int_pat}(\s*[+\-*%]\s*{int_pat})*\s*')
 
