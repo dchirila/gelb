@@ -250,3 +250,38 @@ node_classes { node_class B(I, D, G); }
 geometry { nodes[:] = B; }
 """, timesteps=3)
     np.testing.assert_array_equal(data["value"], np.full((4, 17), 5.0))
+
+
+@pytest.mark.parametrize("backend,layout", INITIALIZATION_CONFIGS)
+@pytest.mark.parametrize("mode", ["static_random", "masked_random", "masked_deterministic"])
+def test_static_buffers_hold_initializer_values(tmp_path, monkeypatch, backend, layout, mode):
+    configure_initialization_run(monkeypatch, layout)
+    masked = mode.startswith("masked")
+    drawing = mode != "masked_deterministic"
+    initializer = "random()" if drawing else "37.25"
+    static = "M(InitRand) masked" if masked else "STATIC_R(InitRand, G)"
+    geometry = ("nodes[16:31] = M; nodes[32:32] = NB;" if masked
+                else "nodes[0:15] = STATIC_R;")
+    data = run_source(tmp_path, backend, f"""
+simulation_description("static populations across swaps");
+lattices {{ lattice f(1, 2, real, 64, false); }}
+initializer InitRand {{ f.out[x | :] = {initializer}; }}
+initializer InitZero {{ f.out[x | :] = 0.0; }}
+dynamic Copy {{ f.out[x | :] = f.in[x | :]; }}
+gauge G -> (real value) {{ value = f.in[x | 0]; }}
+gauge GN -> (real value) {{ value = f.in[x - 1 | 0]; }}
+node_classes {{
+    node_class {static}; node_class B(InitZero, Copy, G);
+    node_class NB(InitZero, Copy, GN);
+}}
+geometry {{ nodes[:] = B; {geometry} }}
+""", timesteps=4, write_every=1)
+    np.testing.assert_array_equal(data["time"], [0, 1, 2, 3, 4])
+    values = data["value"][:, 32:33] if masked else data["value"][:, :16]
+    if drawing:
+        assert np.all((values[0] > 0.0) & (values[0] < 1.0))
+        # Compare the bits, including the even/odd buffer swaps.
+        for record in values[1:]:
+            np.testing.assert_array_equal(record.view(np.uint64), values[0].view(np.uint64))
+    else:
+        np.testing.assert_array_equal(values, np.full((5, 1), 37.25))

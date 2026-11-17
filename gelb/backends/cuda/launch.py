@@ -230,20 +230,9 @@ class CudaLaunchEmitMixin:
                     iblock, 'init', nc_name, rect_info,
                     context='initializer')
 
-        # 2nd-buffer init for static-only NCs.  Programs with both init
-        # and dyn skip this loop via the `info.dynamic is not None`
-        # filter.  Kept symmetric with parent for static-only support.
-        for nc_name, info in self._geom.nc_info.items():
-            if info.initializer is None or info.dynamic is not None:
-                continue
-            iblock = self._find_block(self.ast.initializers,
-                                       info.initializer)
-            if iblock is None:
-                continue
-            for rect_info, _ in self._iter_dispatch_rects(info):
-                self._emit_kernel_for_block(
-                    iblock, 'init2nd', nc_name, rect_info,
-                    context='initializer_2nd_buffer')
+        if self._static_copy_classes():
+            self._emit('gelb_static_buffer_copy<<<gelb_grid, gelb_block>>>();')
+            self._emit('CUDA_CHECK(cudaGetLastError());')
         self._emit('')
 
     def _emit_masked_lattice_zero_init(self) -> None:

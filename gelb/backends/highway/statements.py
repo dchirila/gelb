@@ -1253,7 +1253,7 @@ class StatementEmitMixin:
                 f"dimensions but lattice is {self._d}-D.")
         df_idx_str = self._df_index_str(df, df_var)
         coord_strs = self._emit_lattice_coord_strs(spatial, for_write=True)
-        if context == 'dynamic' or context == 'initializer_2nd_buffer':
+        if context == 'dynamic':
             buf = f'{_lname(lname)}_new'
         else:  # initializer or gauge -> both target f_old's logical slot
             buf = f'{_lname(lname)}_old'

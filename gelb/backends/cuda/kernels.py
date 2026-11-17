@@ -171,6 +171,50 @@ class CudaKernelEmitMixin:
         self._emit_target = saved_target
         self._indent = saved_indent
 
+    def _static_copy_classes(self):
+        return [info for info in self._geom.nc_info.values()
+                if info.initializer is not None and info.dynamic is None
+                and info.bbox is not None]
+
+    def _emit_static_buffer_copy_kernel(self) -> None:
+        """Copy every initialized static cell, including masked classes."""
+        classes = self._static_copy_classes()
+        if not classes:
+            return
+        saved_target, saved_indent = self._emit_target, self._indent
+        self._emit_target, self._indent = 'device', 0
+        self._emit('__global__ void gelb_static_buffer_copy() {')
+        self._indent = 1
+        guards = []
+        for i, size in enumerate(self._grid_sizes()):
+            ax = self._axis(i)
+            self._emit(f'int g_{ax} = blockIdx.{ax} * blockDim.{ax} + threadIdx.{ax};')
+            guards.append(f'g_{ax} >= {size}')
+        self._emit(f'if ({" || ".join(guards)}) return;')
+        nc_subs = ''.join(f'[g_{self._axis(i)}]' for i in range(self._d))
+        terms = []
+        for info in classes:
+            if not info.bbox_dense:
+                terms.append(f'(gelb_nc_map{nc_subs} == {info.nc_id})')
+            else:
+                bounds = [f'g_{self._axis(i)} >= {lo} && g_{self._axis(i)} <= {hi}'
+                          for i, (lo, hi) in enumerate(info.bbox)]
+                terms.append(f'({" && ".join(bounds)})')
+        self._emit(f'if (!({" || ".join(terms)})) return;')
+        coord_strs = [f'g_{self._axis(i)}' for i in range(self._d)]
+        for lname, linfo in self._lattice_info.items():
+            subs = self._storage_subscript(coord_strs, 'gelb_df', lname)
+            self._emit(f'for (int gelb_df = 0; gelb_df < {linfo["q"]}; ++gelb_df) {{')
+            self._indent += 1
+            self._emit(f'{_lname(lname)}_storage[{_lname(lname)}_new]{subs}'
+                       f' = {_lname(lname)}_storage[{_lname(lname)}_old]{subs};')
+            self._indent -= 1
+            self._emit('}')
+        self._indent = 0
+        self._emit('}')
+        self._emit('')
+        self._emit_target, self._indent = saved_target, saved_indent
+
     def _emit_gauge_nan_init_kernel(self, gauge) -> None:
         """Initialize device outputs not produced by every node class.
 
@@ -687,7 +731,7 @@ class CudaKernelEmitMixin:
         unchanged inside ``__global__`` scope.
         """
         sig_args, call_exprs = [], []
-        if context in ('initializer', 'initializer_2nd_buffer'):
+        if context == 'initializer':
             # No params: body code references the device-side ping-
             # pong indices directly.
             pass

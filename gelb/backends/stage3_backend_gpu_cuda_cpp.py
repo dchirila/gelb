@@ -556,6 +556,7 @@ class CudaCppCodeGenerator(
         # is masked).  Definition here; launched once from main() via
         # the _emit_masked_lattice_zero_init override.
         self._emit_masked_zero_init_kernel()
+        self._emit_static_buffer_copy_kernel()
         # cuRAND state + init kernel + gelb_random (no-op when the
         # program doesn't use random()).
         self._emit_curand_decls()
