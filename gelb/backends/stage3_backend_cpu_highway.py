@@ -866,8 +866,8 @@ class HighwayCodeGenerator(
         # 2nd-buffer init: NCs without a dynamic are never written by the
         # time-loop's collide-and-stream pass, so their f_new slot stays
         # uninitialised and becomes garbage after the first ping-pong
-        # swap.  Mirror the Fortran backend by re-running the initialiser
-        # for static-only NCs into f_new as well.
+        # swap.  Copy the initialized slots so each cell draws random
+        # values only once, including static masked cells.
         had_2nd = False
         for nc_name, info in self._geom.nc_info.items():
             if info.initializer is None or info.dynamic is not None:
@@ -882,18 +882,20 @@ class HighwayCodeGenerator(
             for rect_info, is_synth in self._iter_dispatch_rects(info):
                 rect_suffix = (f' [rect bbox={rect_info.bbox}]'
                                if is_synth else '')
-                if self._block_simd_eligible(iblock, rect_info):
-                    self._emit(f'// Init (2nd buffer): {info.initializer} '
-                               f'({nc_name}) -- SIMD{rect_suffix}')
-                    self._emit_block_simd(iblock, rect_info,
-                                          context='initializer_2nd_buffer')
-                else:
-                    self._emit(f'// Init (2nd buffer): {info.initializer} '
-                               f'({nc_name}){rect_suffix}')
-                    self._emit_spatial_loop_open(rect_info)
-                    self._emit_block_body(iblock,
-                                           context='initializer_2nd_buffer')
-                    self._emit_spatial_loop_close()
+                self._emit(f'// Init (2nd buffer): {info.initializer} '
+                           f'({nc_name}){rect_suffix}')
+                self._emit_spatial_loop_open(rect_info)
+                coord_strs = [f'g_{self._axis(i)}' for i in range(self._d)]
+                for lname, linfo in self._lattice_info.items():
+                    subs = self._storage_subscript(coord_strs, 'gelb_df', lname)
+                    self._emit(f'for (int gelb_df = 0; gelb_df < {linfo["q"]};'
+                               f' ++gelb_df) {{')
+                    self._indent += 1
+                    self._emit(f'{_lname(lname)}_storage[{_lname(lname)}_new]{subs}'
+                               f' = {_lname(lname)}_storage[{_lname(lname)}_old]{subs};')
+                    self._indent -= 1
+                    self._emit('}')
+                self._emit_spatial_loop_close()
         self._emit('')
 
     def _any_masked_nc(self) -> bool:

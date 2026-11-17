@@ -313,8 +313,14 @@ class FortranCodeGenerator:
                 self._emit(
                     f'! ========== Init (2nd buffer): {iblock.name.name} '
                     f'({self._region_label(region)}) ==========')
-                self._emit_spatial_loop_start(region, iblock)
-                self._emit_block_statements(iblock, 'initializer_copy')
+                self._emit_spatial_loop_start(region)
+                coords = ', '.join(
+                    self._coord_subst.get(i, self._symbol_name(_DIM_NAMES[i]))
+                    for i in range(self._max_dim()))
+                for lname in self._lattice_info:
+                    flname = self._symbol_name(lname)
+                    self._emit(f'{flname}(:, {coords}, {flname}_new) = '
+                               f'{flname}(:, {coords}, {flname}_old)')
                 self._emit_spatial_loop_end()
                 self._emit('')
 
@@ -2008,8 +2014,6 @@ class FortranCodeGenerator:
         else:  # 'out'
             if context == 'initializer':
                 parts.append(f'{flname}_old')
-            elif context == 'initializer_copy':
-                parts.append(f'{flname}_new')
             else:
                 parts.append(f'{flname}_new')
 
