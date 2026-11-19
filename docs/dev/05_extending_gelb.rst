@@ -55,13 +55,12 @@ Adding an intrinsic
    Highway: ``_emit_intrinsic_call`` and
    ``_emit_intrinsic_bounce_back_dfs`` in
    :source:`gelb/backends/highway/expr.py`,
-   ``_collect_bounce_back_dfs_keys`` and
    ``_emit_bounce_back_dfs_tables`` in
-   :source:`gelb/backends/highway/statements.py`, the table cache, the
-   call of the tables emitter and the eligibility walk in
-   :source:`gelb/backends/stage3_backend_cpu_highway.py`, and the SIMD
-   case in :source:`gelb/backends/highway/simd.py`.  CUDA inherits these
-   (nothing under :source:`gelb/backends/cuda/` names the intrinsic).
+   :source:`gelb/backends/highway/statements.py`, and the SIMD
+   case in :source:`gelb/backends/highway/simd.py`. Opposite tables come
+   from ``build_backend_context`` in :source:`gelb/compiler_pipeline.py`;
+   read and write reach comes from ``BlockStencil.offset_bounds`` in
+   :source:`gelb/midware/stencil.py`. CUDA inherits these emission paths.
 7. **Tests.**  :source:`gelb/tests/unit/parsing/test_parse_intrinsic_functions.py`,
    :source:`gelb/tests/unit/type_inference/test_intrinsic_function_type_inference.py`,
    :source:`gelb/tests/unit/midware/test_intrinsic_folding.py`,

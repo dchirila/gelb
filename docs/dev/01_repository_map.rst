@@ -18,6 +18,8 @@ Top-level directories
    tables, types), :source:`gelb/midware/` (constant folding,
    stencils, geometry, the rewrites) and :source:`gelb/backends/` (the
    three generators and their runtime headers, :doc:`04_backends`).
+   :source:`gelb/type_table.py` supplies shared computational type families,
+   widths, aliases and target spellings to all three stages.
    :source:`gelb/gelb_ast/` holds the node classes,
    :source:`gelb/antlr_part/` the grammar and the generated parser,
    :source:`gelb/utils/` diagnostics and configuration,

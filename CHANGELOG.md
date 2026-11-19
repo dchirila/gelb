@@ -53,6 +53,9 @@ versions follow upstream end of life and can change in any release.
 
 ### Fixed
 
+- `dot_prod` on `cpu_highway` and `gpu_cuda_cpp` accepts lattice slices and
+  one-dimensional array expressions directly, matching `cpu_fortran_serial`.
+
 - `cpu_highway` preserves function-call parentheses
   around folded integer arguments such as `abs(x - 5)` in regions with
   a size-1 axis.
