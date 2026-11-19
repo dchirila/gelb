@@ -10,6 +10,8 @@ machinery (L3 detection + env overrides), the AVX-512 probe behind the
 
 from __future__ import annotations
 
+from gelb.type_table import UnifiedTypeTable as Types
+
 import os
 from pathlib import Path
 
@@ -48,18 +50,7 @@ def int64_typed_literal(value: int) -> str:
     return f'({value}LL)' if value < 0 else f'{value}LL'
 
 
-_TYPE_MAP = {
-    'int':    'int64_t',
-    'int8':   'int8_t',
-    'int16':  'int16_t',
-    'int32':  'int32_t',
-    'int64':  'int64_t',
-    'real':   'double',
-    'real16': 'float',  # no widely-portable half-float in C++; widen
-    'real32': 'float',
-    'real64': 'double',
-    'bool':   'bool',
-}
+_TYPE_MAP = Types.cpp
 
 # Tile width for the cell-block-tiled (CBT) storage layout.  Equals the
 # AVX-512 SIMD width (Vec8d = 8 doubles).  Storage shape under CBT:
@@ -321,17 +312,7 @@ def _cbt_addr_to_tile_start(addr: str) -> str:
         return addr
     return addr[:opening] + '[0]'
 
-_NETCDF_TYPE_MAP = {
-    'bool':   'NC_BYTE',
-    'int':    'NC_INT64',
-    'int8':   'NC_BYTE',
-    'int16':  'NC_SHORT',
-    'int32':  'NC_INT',
-    'int64':  'NC_INT64',
-    'real':   'NC_DOUBLE',
-    'real32': 'NC_FLOAT',
-    'real64': 'NC_DOUBLE',
-}
+_NETCDF_TYPE_MAP = Types.netcdf_c
 
 
 def _uname(name: str) -> str:

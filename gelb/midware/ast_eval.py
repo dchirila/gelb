@@ -10,6 +10,8 @@ and does not emit any target-language code.
 
 from __future__ import annotations
 
+from gelb.type_table import UnifiedTypeTable as Types
+
 import math
 from contextlib import contextmanager
 
@@ -253,11 +255,11 @@ def eval_function_body(ast, func_block, bindings=None, *, lattice_info=None):
 
 _INT_DTYPES = INTEGER_TYPES
 _REAL_DTYPES = REAL_TYPES
-_NARROW_INT = {'int8': np.int8, 'int16': np.int16, 'int32': np.int32}
+_NARROW_INT = {name: getattr(np, name) for name in Types.narrow_integer_types}
 _NARROW_REAL = {'real32': np.float32}
 NARROW_INT_WIDTHS = frozenset(_NARROW_INT)
 NARROW_REAL_WIDTHS = frozenset(_NARROW_REAL)
-_INT_BITS = {'int8': 8, 'int16': 16, 'int32': 32, 'int': 64, 'int64': 64}
+_INT_BITS = Types.integer_bits
 _INT_OF_NP = {np.int8: 'int8', np.int16: 'int16', np.int32: 'int32'}
 
 

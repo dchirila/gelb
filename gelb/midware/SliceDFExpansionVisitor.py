@@ -47,6 +47,8 @@ Common-subexpression elimination (``ast_simplify.hoist_common_subtrees``)
 is gated by the ``enable_cse`` flag.
 """
 
+from gelb.type_table import UnifiedTypeTable as Types
+
 import copy
 
 
@@ -968,8 +970,7 @@ def _make_literal_for_value(value, code_range, inferred_type):
 # real widths (an integer element becomes a real, a narrow one rounds)
 # and the narrow integer widths (wrap).  `int` and `bool` elements are
 # already what they say.
-_CONVERTED_ELEMENT_WIDTHS = frozenset(
-    ('real', 'real16', 'real32', 'real64', 'int8', 'int16', 'int32'))
+_CONVERTED_ELEMENT_WIDTHS = frozenset(Types.real_types + Types.narrow_integer_types)
 
 
 def _collect_constexpr_arrays(ast) -> dict:

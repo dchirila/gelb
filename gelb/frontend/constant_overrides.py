@@ -8,6 +8,8 @@ that derived constants (``const real K = 2*PI/dble(N);``) are
 automatically recomputed with the overridden values.
 """
 
+from gelb.type_table import UnifiedTypeTable as Types
+
 import math
 
 from gelb.gelb_ast.ASTNodes import (
@@ -21,8 +23,8 @@ from gelb.gelb_ast.ASTNodes import (
 from gelb.utils.exceptions import GeLBException
 
 
-_REAL_TYPES = frozenset({'real', 'real16', 'real32', 'real64'})
-_INT_TYPES = frozenset({'int', 'int8', 'int16', 'int32', 'int64'})
+_REAL_TYPES = frozenset(Types.real_types)
+_INT_TYPES = frozenset(Types.integer_types)
 
 
 def parse_overrides(define_tuple):

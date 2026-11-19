@@ -7,6 +7,8 @@ lattice allocation emission, and the periodic halo-update lambdas.
 
 from __future__ import annotations
 
+from gelb.type_table import UnifiedTypeTable as Types
+
 from gelb.backends.highway.common import (
     _lname,
     _CBT_TILE,
@@ -238,7 +240,7 @@ class StorageLayoutMixin:
                 continue
             q = info['q']
             dtype = info['dtype']
-            elem_bytes = 4 if dtype in ('real32', 'real16') else 8
+            elem_bytes = Types.bits[dtype] // 8 if dtype in Types.real_types else 8
             # CBT inner-x dim is ceil((N_x + 2) / TILE) * TILE.
             x_tiles = (grid[0] + 2 + _CBT_TILE - 1) // _CBT_TILE
             spatial_cells = x_tiles * _CBT_TILE

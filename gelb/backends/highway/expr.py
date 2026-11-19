@@ -7,6 +7,8 @@ in both scalar and SIMD modes.
 
 from __future__ import annotations
 
+from gelb.type_table import UnifiedTypeTable as Types
+
 import math
 
 from gelb.backends.real_literals import cpp_real
@@ -131,7 +133,7 @@ class ExpressionEmitMixin:
             return int64_literal(expr.value)
         if isinstance(expr, RealLiteral_N):
             kind = getattr(getattr(expr, 'inferred_type', None), 'element_dtype', None)
-            cpp_type = 'float' if kind in ('real16', 'real32') else 'double'
+            cpp_type = Types.cpp.get(kind, 'double')
             return cpp_real(expr.value, cpp_type)
         if isinstance(expr, BoolLiteral_N):
             return 'true' if expr.value in (True, 'true') else 'false'

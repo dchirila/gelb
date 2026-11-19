@@ -6,6 +6,8 @@ Generates a standalone Fortran 90 program from a GeLB AST that has
 passed through the frontend and midware stages.
 """
 
+from gelb.type_table import UnifiedTypeTable as Types
+
 import hashlib
 import math
 
@@ -28,50 +30,17 @@ from gelb.midware.ast_eval import (
 
 
 # GeLB type -> Fortran type
-_TYPE_MAP = {
-    'int': 'integer(8)',
-    'int8': 'integer(1)',
-    'int16': 'integer(2)',
-    'int32': 'integer(4)',
-    'int64': 'integer(8)',
-    'real': 'double precision',
-    'real16': 'real(2)',
-    'real32': 'real(4)',
-    'real64': 'real(8)',
-    'bool': 'logical(1)',
-}
+_TYPE_MAP = Types.fortran
 
 # Fortran format specifiers for gauge output
-_FORMAT_MAP = {
-    'int': "'(I0)'",
-    'int8': "'(I0)'",
-    'int16': "'(I0)'",
-    'int32': "'(I0)'",
-    'int64': "'(I0)'",
-    'real': "'(ES23.16)'",
-    'real16': "'(ES15.8)'",
-    'real32': "'(ES15.8)'",
-    'real64': "'(ES23.16)'",
-    'bool': "'(L1)'",
-}
+_FORMAT_MAP = Types.fortran_format
 
 _DIM_NAMES = ['x', 'y', 'z']
 _DIM_SIZE_NAMES = ['Nx', 'Ny', 'Nz']
 
 # GeLB type -> NetCDF type constant (int is int64; the C++ backends
 # use the same types)
-_NETCDF_TYPE_MAP = {
-    'int': 'NF90_INT64',
-    'int8': 'NF90_BYTE',
-    'int16': 'NF90_SHORT',
-    'int32': 'NF90_INT',
-    'int64': 'NF90_INT64',
-    'real': 'NF90_DOUBLE',
-    'real16': 'NF90_FLOAT',
-    'real32': 'NF90_FLOAT',
-    'real64': 'NF90_DOUBLE',
-    'bool': 'NF90_BYTE',
-}
+_NETCDF_TYPE_MAP = Types.netcdf_fortran
 
 
 def _is_array_typed(node):
@@ -464,14 +433,14 @@ class FortranCodeGenerator:
     # AST metadata collection
     # ------------------------------------------------------------------
 
-    _REAL_TYPES = frozenset({'real', 'real16', 'real32', 'real64'})
+    _REAL_TYPES = frozenset(Types.real_types)
     # A real literal is spelled in the width the type pass gave it: a
     # plain literal is `real`, double precision (the manual's contract:
     # `real` is an alias for `real64`, in a real32 program too), a folded
     # real32 constant is real(4).  Every numeric kind reaches the
     # emitted code as the type pass gave it; a per-program dominant
     # real kind would make `real` single precision in a real32 program.
-    _REAL_KINDS = ('real', 'real16', 'real32', 'real64')
+    _REAL_KINDS = Types.real_types
 
     @classmethod
     def _contains_nonfinite(cls, node):
@@ -690,7 +659,7 @@ class FortranCodeGenerator:
     @staticmethod
     def _is_real_kind(node):
         dtype = getattr(getattr(node, 'inferred_type', None), 'element_dtype', None)
-        return dtype in ('real', 'real32', 'real64')
+        return dtype in Types.real_types
 
     def _emit_real_minmax_functions(self):
         """IEEE 754-2019 minimum / maximum for reals (user manual,
@@ -950,7 +919,7 @@ class FortranCodeGenerator:
                     self._emit(f'{ftype}{qualifier} :: {fname}{initialization}')
         self._emit('')
 
-    _NARROW_ELEMENT_KINDS = ('real32', 'real16', 'int8', 'int16', 'int32')
+    _NARROW_ELEMENT_KINDS = Types.narrow_array_types
 
     def _emit_constant_array(self, stmt, kind):
         """A constant array of a narrow element kind as a constructor of
@@ -984,7 +953,7 @@ class FortranCodeGenerator:
             return f'reshape((/{", ".join(elements)}/), (/{nrows}, {ncols}/))'
         return None
 
-    _INT_KIND_SUFFIX = {'int8': '_1', 'int16': '_2', 'int32': '_4'}
+    _INT_KIND_SUFFIX = Types.fortran_integer_suffix
 
     def _fortran_constant_element(self, node, kind):
         from gelb.midware.ast_eval import convert_plain, eval_const_expr
@@ -1002,7 +971,7 @@ class FortranCodeGenerator:
         except OverflowError:
             # past the kind's range: the conversion, an infinity at run time
             wide = self._fortran_real(float(value), 'real')
-            return f'real({wide}, 2)' if kind == 'real16' else f'real({wide})'
+            return f'real({wide})'
         except Exception:
             return self._emit_cast(self._emit_expr(node, 'global'), None, kind)
         if isinstance(converted, bool):
@@ -1561,7 +1530,7 @@ class FortranCodeGenerator:
             if isinstance(decl, VariableDeclarationStmt_N):
                 vname = decl.name.name
                 dtype = decl.data_type.element_dtype
-                if dtype in ('real', 'real16', 'real32', 'real64'):
+                if dtype in Types.real_types:
                     zero_lit = self._fortran_real(
                         0.0, self._literal_kind(decl.data_type))
                     value = f'ieee_value({zero_lit}, ieee_quiet_nan)'
@@ -2084,7 +2053,7 @@ class FortranCodeGenerator:
         ``source`` is the source GeLB type-name (str) or None if unknown;
         ``target`` is the target GeLB type-name (str).
         """
-        if target in ('real', 'real64'):
+        if target in Types.wide_real_types:
             if source == 'bool':
                 return f'dble(merge(1, 0, {expr}))'
             return f'dble({expr})'
@@ -2092,11 +2061,7 @@ class FortranCodeGenerator:
             if source == 'bool':
                 return f'real(merge(1, 0, {expr}))'
             return f'real({expr})'
-        elif target == 'real16':
-            if source == 'bool':
-                return f'real(merge(1, 0, {expr}), 2)'
-            return f'real({expr}, 2)'
-        elif target in ('int', 'int64'):
+        elif target in Types.wide_integer_types:
             # Fortran int() cannot convert logical->integer; use merge()
             if source == 'bool':
                 return f'merge(1_8, 0_8, {expr})'
@@ -2610,15 +2575,14 @@ class FortranCodeGenerator:
 
         kind='real' or 'real64' -> double precision (d-exponent),
         kind='real32'           -> single precision (e-exponent),
-        kind='real16'           -> half precision (_2 kind parameter).
         """
         if not math.isfinite(float(value)):
-            zero = {'real16': '0.0_2', 'real32': '0.0_4'}.get(kind, '0.0_8')
+            zero = '0.0_4' if kind == 'real32' else '0.0_8'
             ieee_class = ('ieee_quiet_nan' if math.isnan(float(value)) else
                           'ieee_positive_inf' if float(value) > 0 else 'ieee_negative_inf')
             return f'ieee_value({zero}, {ieee_class})'
         s = repr(value)
-        if kind in ('real', 'real64'):
+        if kind in Types.wide_real_types:
             if 'e' in s or 'E' in s:
                 return s.replace('e', 'd').replace('E', 'd')
             if '.' in s:
@@ -2630,10 +2594,6 @@ class FortranCodeGenerator:
             if '.' in s:
                 return s + 'e0'
             return s + '.0e0'
-        elif kind == 'real16':
-            if '.' not in s:
-                s = s + '.0'
-            return s + '_2'
         else:
             if '.' in s:
                 return s + 'd0'

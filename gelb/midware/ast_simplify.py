@@ -39,6 +39,8 @@ subtree's identity, so a real32 product is never shared with a real one;
 a literal's identity includes the sign of a zero.
 """
 
+from gelb.type_table import UnifiedTypeTable as Types
+
 import math
 
 from gelb.gelb_ast.ASTNodes import (
@@ -64,10 +66,7 @@ from gelb.midware.ast_eval import convert_plain, eval_const_expr
 
 # --- numeric kinds ----------------------------------------------------
 
-_NUMERIC_KIND = {'real': 'real64', 'real64': 'real64',
-                 'real32': 'real32', 'real16': 'real16',
-                 'int': 'int64', 'int64': 'int64', 'int32': 'int32',
-                 'int16': 'int16', 'int8': 'int8'}
+_NUMERIC_KIND = Types.numeric_kind
 _REAL_WIDTH = {name: kind for name, kind in _NUMERIC_KIND.items()
                if kind.startswith('real')}
 
@@ -75,14 +74,14 @@ _ALGEBRAIC = (Add_N, Sub_N, Mul_N, Div_N, Pow_N, UnaryMinusExpr_N)
 
 
 def numeric_kind(type_node):
-    """The numeric kind ('real64', 'real32', 'real16', 'int64', 'int32',
+    """The numeric kind ('real64', 'real32', 'int64', 'int32',
     'int16', 'int8') of a type node, or None for a non-numeric or
     unknown type."""
     return _NUMERIC_KIND.get(getattr(type_node, 'element_dtype', None))
 
 
 def real_width(type_node):
-    """The real width class ('real64', 'real32', 'real16') of a type
+    """The real width class ('real64', 'real32') of a type
     node, or None for a non-real or unknown type."""
     return _REAL_WIDTH.get(getattr(type_node, 'element_dtype', None))
 
