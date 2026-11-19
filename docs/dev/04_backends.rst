@@ -10,6 +10,16 @@ in :source:`gelb/compiler_pipeline.py`, and returns the target program
 as one string, which ``gelbc`` writes to ``-o`` or to the input name
 with the backend's extension.
 
+The context is mandatory and belongs to the exact AST being emitted.
+``BackendContext.global_constants`` supplies constant element conversions and
+folded tables; ``opp_tables`` supplies velocity reversals; stencils supply
+read/write offset bounds; ``gauge_outputs`` supplies the ordered output layout;
+and ``program_facts`` supplies active-block and whole-program feature flags.
+Generators consume these facts without rerunning analysis. Local array sizes
+come from the active block's ``symbol_defs`` and ``CanonicalType``.
+:source:`gelb/type_table.py` holds ``UnifiedTypeTable``, the shared source of
+type families, widths and native type, format and NetCDF spellings.
+
 The three generators
 ====================
 

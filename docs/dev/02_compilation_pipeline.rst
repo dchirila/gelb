@@ -348,6 +348,38 @@ Violations raise ``GeLBInternalInvariantError`` by default;
 ``BackendContext`` is built afterwards from this prepared AST, so its
 ``ast`` is the exact tree handed to the generator.
 
+Backend analysis handoff
+========================
+
+``build_backend_context`` accepts a completed Stage-2 result for Fortran or
+its Stage-2.5 prepared copy for C-family emission. It requires the result's
+stencils and resolved geometry and binds the context to that exact AST.
+All generators require this context; omission, ``None`` or a different AST
+raises ``ValueError`` before emission.
+
+``global_constants`` stores immutable entries with declared types and shapes,
+exact raw element values, finite width conversions, IEEE special values and
+folded vector or matrix tables. Integer values retain their precision above
+2^53. Folded tables retain non-finite numeric values; an element that cannot
+be evaluated leaves its table unavailable. Backends render these facts
+without evaluating constant expressions or replacing AST elements.
+``opp_tables`` records opposite directions for velocity sets using the shared
+``compute_opposite_mapping`` in :source:`gelb/midware/stencil.py`.
+``BlockStencil.offset_bounds`` and ``ProgramStencils.offset_bounds`` expose
+per-axis negative and positive read or write reach.
+
+``gauge_outputs`` preserves active node-class order and partial-output
+information. ``ProgramFacts`` uses explicit stacks: active-block random and
+real min/max flags control Fortran helper emission, while whole-tree random,
+implicit timestep and non-finite literal flags describe the complete AST.
+Highway and CUDA query the active block's local symbol table and
+``CanonicalType`` for array dimensions, including lowering temporaries.
+
+:source:`gelb/type_table.py` defines ``UnifiedTypeTable``: the nine supported
+type names, seven canonical types, aliases, families, widths, integer bounds,
+promotion ranks and C++/Fortran/NetCDF spellings. Syntax types, frontend
+validation, constant evaluation and emission share this neutral module.
+
 How a diagnostic is produced
 ============================
 
