@@ -10,8 +10,13 @@ import re
 
 import pytest
 from gelb.backends.stage3_backend_cpu_fortran_serial import generate_fortran
-from gelb.frontend.constant_overrides import parse_overrides, apply_constant_overrides
-from gelb.tests.test_utils import get_fully_validated_ast, minimal_gelb_program_1d
+from gelb.frontend.constant_overrides import parse_overrides
+from gelb.compiler_pipeline import (
+    PipelineOptions, PipelineProfile, compile_source, build_backend_context,
+)
+from gelb.tests.test_utils import minimal_gelb_program_1d
+from gelb.midware.geometry import resolve_geometry
+from gelb.frontend.ASTInvariantValidator import check_stage2
 
 
 # ---------------------------------------------------------------------------
@@ -20,9 +25,14 @@ from gelb.tests.test_utils import get_fully_validated_ast, minimal_gelb_program_
 
 def _generate(gelb_code, output_mode='netcdf', num_timesteps=1,
               output_filename='test_output.nc'):
-    """Run full pipeline and generate Fortran code."""
-    ast = get_fully_validated_ast(gelb_code)
-    return generate_fortran(ast, num_timesteps=num_timesteps,
+    """Run emission fixtures through Stage 2 with separately resolved geometry."""
+    result = compile_source(gelb_code, PipelineProfile.CODEGEN,
+                            PipelineOptions(require_stencils=True))
+    geometry = resolve_geometry(result.ast)
+    check_stage2(result.ast)
+    context = build_backend_context(result, geometry=geometry)
+    return generate_fortran(result.ast, backend_context=context,
+                            num_timesteps=num_timesteps,
                             output_mode=output_mode,
                             output_filename=output_filename)
 
@@ -1080,25 +1090,11 @@ def _2d_program_with_derived():
 
 def _generate_with_overrides(gelb_code, overrides_dict, **kwargs):
     """Run the pipeline with constant overrides applied."""
-    from gelb.frontend.stage1_frontend import (
-        get_ast, build_symbols_tables, add_implicit_symbols,
-        resolve_all_constants, resolve_ranges, infer_types,
-        promote_types, validate_types,
-    )
-    from gelb.midware.inline_functions import inline_functions
-    import gelb.utils.config as config
-    config.GELB_SRC_RAW = gelb_code
-    ast = get_ast("gelb_program", gelb_code)
-    ast = build_symbols_tables(ast)
-    ast = add_implicit_symbols(ast)
-    ast = apply_constant_overrides(ast, overrides_dict)
-    ast = resolve_all_constants(ast)
-    ast = resolve_ranges(ast)
-    ast = infer_types(ast)
-    ast = promote_types(ast)
-    validate_types(ast)
-    ast = inline_functions(ast)
-    return generate_fortran(ast, **kwargs)
+    result = compile_source(gelb_code, PipelineProfile.CODEGEN, PipelineOptions(
+        defines=tuple(f'{name}={value}' for name, value in overrides_dict.items()),
+        require_stencils=True, require_geometry=True))
+    return generate_fortran(result.ast, backend_context=build_backend_context(result), **kwargs)
+
 
 
 class TestConstantOverrides:
@@ -1170,18 +1166,16 @@ class TestConstantOverrides:
 def test_no_line_exceeds_132_chars_mrt():
     """D3Q19 MRT with 19x19 constant matrices must wrap correctly."""
     import os
-    from gelb.midware.stage2_midware import fold_constants
-    from gelb.midware.inline_functions import inline_functions
     mrt_path = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(
             os.path.dirname(os.path.abspath(__file__))))),
         'examples', 'lbm', '3d', 'poiseuille_flow_3d_mrt.gelb')
     with open(mrt_path) as f:
         gelb_code = f.read()
-    ast = get_fully_validated_ast(gelb_code)
-    ast = fold_constants(ast)
-    ast = inline_functions(ast)
-    code = generate_fortran(ast, num_timesteps=10,
+    result = compile_source(gelb_code, PipelineProfile.CODEGEN,
+                            PipelineOptions(require_stencils=True, require_geometry=True))
+    code = generate_fortran(result.ast, backend_context=build_backend_context(result),
+                            num_timesteps=10,
                             output_mode='netcdf',
                             output_filename='test.nc')
     for i, line in enumerate(code.split('\n'), 1):

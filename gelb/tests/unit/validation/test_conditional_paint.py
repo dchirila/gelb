@@ -20,7 +20,7 @@ import pytest
 from click.testing import CliRunner
 
 from gelb.compiler_pipeline import (
-    PipelineOptions, PipelineProfile, compile_source)
+    PipelineOptions, PipelineProfile, compile_source, build_backend_context)
 from gelb.gelb_ast.ASTNodes import ConditionalPaintStmt_N
 from gelb.gelbc import cli as gelbc_cli
 from gelb.midware.program_analysis import compile_to_program_analysis
@@ -519,10 +519,10 @@ class TestFortranClassMap:
 
     def _generate(self, code):
         from gelb.backends.stage3_backend_cpu_fortran_serial import generate_fortran
-        from gelb.midware.inline_functions import inline_functions
-        ast = get_typed_ast(code)
-        ast = inline_functions(ast)
-        return generate_fortran(ast, num_timesteps=1)
+        result = compile_source(code, PipelineProfile.CODEGEN,
+                                PipelineOptions(require_stencils=True, require_geometry=True))
+        return generate_fortran(result.ast, num_timesteps=1,
+                                backend_context=build_backend_context(result))
 
     def test_point_paint_after_a_predicate_is_emitted_after_it(self):
         fortran = self._generate(_program_2d(

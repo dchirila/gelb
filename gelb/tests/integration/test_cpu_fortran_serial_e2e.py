@@ -25,7 +25,9 @@ from gelb.tests.integration._toolchain import (
     NC_FLIBS as _NC_FLIBS,
     requires_compiler,
 )
-from gelb.tests.test_utils import get_fully_validated_ast
+from gelb.compiler_pipeline import (
+    PipelineOptions, PipelineProfile, compile_source, build_backend_context,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -44,9 +46,10 @@ def _compile_and_run(gelb_code, num_timesteps, write_every=None,
     if write_every is None:
         write_every = num_timesteps
 
-    ast = get_fully_validated_ast(gelb_code)
+    result = compile_source(gelb_code, PipelineProfile.CODEGEN,
+                            PipelineOptions(require_stencils=True, require_geometry=True))
     fortran_code = generate_fortran(
-        ast, num_timesteps=num_timesteps,
+        result.ast, backend_context=build_backend_context(result), num_timesteps=num_timesteps,
         output_filename='out.nc',
         write_every=write_every,
         random_seed=random_seed)
@@ -315,9 +318,10 @@ class TestCPUSerialE2E:
         """write_every captures intermediate snapshots correctly."""
         # Run 4 steps, writing every 2 -- should have snapshots at t=0,2,4
         gelb_code = _INCREMENT
-        ast = get_fully_validated_ast(gelb_code)
+        result = compile_source(gelb_code, PipelineProfile.CODEGEN,
+                                PipelineOptions(require_stencils=True, require_geometry=True))
         fortran_code = generate_fortran(
-            ast, num_timesteps=4,
+            result.ast, backend_context=build_backend_context(result), num_timesteps=4,
             output_filename='out.nc', write_every=2)
 
         with tempfile.TemporaryDirectory() as tmpdir:

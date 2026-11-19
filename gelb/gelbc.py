@@ -20,12 +20,12 @@ from gelb.compiler_pipeline import (
     resolve_geometry_for_compile)
 
 
-def _print_identifier_mapping(ast):
+def _print_identifier_mapping(ast, *, geometry=None):
     """Print per-scope tables mapping GeLB identifiers to Fortran encodings."""
     from gelb.utils.identifier_mapping import (
         collect_identifier_mapping, format_identifier_mapping
     )
-    sections = collect_identifier_mapping(ast)
+    sections = collect_identifier_mapping(ast, geometry=geometry)
     click.echo(format_identifier_mapping(sections))
 
 
@@ -552,7 +552,7 @@ def cli(
         return
 
     if show_mapping:
-        _print_identifier_mapping(ast)
+        _print_identifier_mapping(ast, geometry=resolved_geometry)
         return
 
     # Stage 3 :: BackEnd

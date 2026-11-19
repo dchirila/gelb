@@ -12,7 +12,6 @@ import hashlib
 import math
 
 from gelb.gelb_ast.ASTNodes import *
-from gelb.backends.gauge_outputs import collect_gauge_outputs
 from gelb.backends.string_literals import description_text, fortran_string
 from gelb.frontend.intrinsic_functions import CAST_INTRINSIC_NAMES
 from gelb.backends.fortran.common import (
@@ -23,8 +22,6 @@ from gelb.backends.fortran.common import (
 )
 from gelb.midware.StencilExtractionVisitor import affine_index
 from gelb.midware.ast_eval import (
-    collect_lattice_info,
-    eval_const_expr,
     get_max_dim,
 )
 
@@ -51,7 +48,7 @@ def _is_array_typed(node):
 def generate_fortran(ast, num_timesteps=1, output_mode='netcdf',
                      output_filename=None, write_every=1,
                      random_seed=None, source_file=None,
-                     resolved_geometry=None, backend_context=None,
+                     backend_context=None,
                      poison_uninit=False, strict_fp=False):
     """Generate Fortran 90 source code from a GeLB AST.
 
@@ -70,12 +67,7 @@ def generate_fortran(ast, num_timesteps=1, output_mode='netcdf',
             PRNG instead of the system clock.  Enables reproducible runs of
             programs that call ``random()``.
         source_file: Original .gelb source filename (for header comment).
-        resolved_geometry: Optional ``ResolvedGeometry`` computed by the
-            compiler driver.  When omitted, the backend resolves geometry
-            itself to preserve direct generator-call behavior.
-        backend_context: Optional shared backend analysis context.  When
-            supplied, it provides lattice metadata and resolved geometry;
-            ``resolved_geometry`` is retained for direct-call compatibility.
+        backend_context: Required analysis context from build_backend_context.
 
     Returns:
         Complete Fortran program as a string.
@@ -83,22 +75,129 @@ def generate_fortran(ast, num_timesteps=1, output_mode='netcdf',
     gen = FortranCodeGenerator(ast, num_timesteps, output_mode,
                                output_filename, write_every,
                                random_seed, source_file,
-                               resolved_geometry=resolved_geometry,
                                backend_context=backend_context,
                                poison_uninit=poison_uninit,
                                strict_fp=strict_fp)
     return gen.generate()
 
 
-class FortranCodeGenerator:
+class FortranIdentifierScope:
+    """Allocate bounded, block-scoped names without code-generation analysis."""
+
+    def __init__(self):
+        self._local_names = {}
+        self._bounded_names = {}
+        self._bounded_name_owners = {}
+
+    def _collect_variables(self, regions):
+        """Collect declarations by computational block, preserving identity."""
+        result = []
+        for region in regions:
+            for key in ('initializer', 'dynamic', 'gauge'):
+                block = region[key]
+                if block is None or id(block) in self._local_names:
+                    continue
+                block_index = len(self._local_names)
+                names = self._local_names[id(block)] = {}
+                declarations = list(getattr(block, 'outputs', ())) + list(block.stmts)
+                for decl in declarations:
+                    if isinstance(decl, VariableDeclarationStmt_N):
+                        name = decl.name.name
+                        if name not in names:
+                            encoded = self._bounded_name(
+                                f'gelb_b{block_index}_{self._symbol_name(name)}')
+                            names[name] = encoded
+                            result.append((encoded, decl.data_type))
+        return result
+
+    def _bounded_name(self, name):
+        """Leave room for the longest derived name, ``gelb_halo_update_``.
+
+        Hash names use a namespace disjoint from ordinary ``g_`` names.
+        Record ownership and disambiguate even a truncated-hash collision.
+        """
+        if len(name) <= 46:
+            return name
+        if name not in self._bounded_names:
+            digest = hashlib.sha256(name.encode('utf-8')).hexdigest()[:20]
+            candidate = self._hashed_name(name)
+            index = 0
+            while candidate in self._bounded_name_owners:
+                index += 1
+                candidate = f'g0_{digest}_{index}'
+            self._bounded_names[name] = candidate
+            self._bounded_name_owners[candidate] = name
+        return self._bounded_names[name]
+
+    @staticmethod
+    def _hashed_name(name):
+        digest = hashlib.sha256(name.encode('utf-8')).hexdigest()[:20]
+        return f'g0_{name[:20]}_{digest}'
+
+    @classmethod
+    def _uname(cls, name):
+        """Stateless spelling for external identifier-mapping consumers."""
+        encoded = cls._encode_name(name)
+        return encoded if len(encoded) <= 46 else cls._hashed_name(encoded)
+
+    def _symbol_name(self, name):
+        return self._bounded_name(self._encode_name(name))
+
+    @staticmethod
+    def _encode_name(name):
+        """Encode a GeLB identifier for case-insensitive Fortran emission.
+
+        Fortran is case-insensitive, so GeLB names that differ only in
+        case (e.g. ``m`` vs ``M``, ``fIn`` vs ``fin``) must map to
+        distinct Fortran identifiers.  The encoding uses underscore
+        escaping:
+
+        - lowercase letter ``x``   ->  ``x``
+        - uppercase letter ``X``   ->  ``_`` + lowercase(``X``)
+        - literal underscore ``_`` ->  ``__``
+        - digit ``d``              ->  ``d``
+
+        The result is prefixed with ``g_`` to avoid clashes with Fortran
+        reserved words and intrinsics.
+
+        Examples::
+
+            m       ->  g_m
+            M       ->  g__m
+            TAU     ->  g__t_a_u
+            fIn     ->  g_f_in
+            M_INV   ->  g__m___i_n_v
+            rho     ->  g_rho
+            NX      ->  g__n_x
+            ux      ->  g_ux
+
+        The encoding is injective: distinct GeLB names always produce
+        distinct Fortran names under case-folding.  Backend-internal
+        names (``gelb_*``) are never passed through here.
+        """
+        encoded = []
+        for ch in name:
+            if ch == '_':
+                encoded.append('__')
+            elif ch.isupper():
+                encoded.append('_')
+                encoded.append(ch.lower())
+            else:
+                encoded.append(ch)
+        return 'g_' + ''.join(encoded)
+
+
+class FortranCodeGenerator(FortranIdentifierScope):
     """Generates a standalone Fortran 90 program from a GeLB AST."""
 
     def __init__(self, ast, num_timesteps=1, output_mode='netcdf',
                  output_filename=None, write_every=1,
                  random_seed=None, source_file=None,
-                 resolved_geometry=None, backend_context=None,
+                 backend_context=None,
                  poison_uninit=False, strict_fp=False):
-        if backend_context is not None and backend_context.ast is not ast:
+        if backend_context is None:
+            raise ValueError("BackendContext is required for code generation.")
+        if backend_context.ast is not ast:
             raise ValueError(
                 "BackendContext AST does not match the AST passed to "
                 "FortranCodeGenerator.")
@@ -123,16 +222,13 @@ class FortranCodeGenerator:
         self._border_corrections = []  # [(coords_tuple, nc_name), ...]
         self._lines = []
         self._indent = 0
-        if backend_context is not None:
-            self._lattice_info = backend_context.lattice_info
-            self._resolved_geometry = backend_context.geometry
-            self._stencils = backend_context.stencils
-        else:
-            self._lattice_info = collect_lattice_info(ast)
-            self._resolved_geometry = resolved_geometry
-            self._stencils = None
-        self._uses_random = False  # set True when random() intrinsic is emitted
-        self._uses_real_minmax = False  # real min/max: the IEEE 754-2019 helpers
+        self.backend_context = backend_context
+        self._lattice_info = backend_context.lattice_info
+        self._resolved_geometry = backend_context.geometry
+        self._stencils = backend_context.stencils
+
+        self._uses_random = backend_context.program_facts.active_uses_random
+        self._uses_real_minmax = backend_context.program_facts.active_uses_real_minmax
         self._use_nc_mask = False
         self._nc_ids = None
         self._grid_sizes = None
@@ -156,10 +252,8 @@ class FortranCodeGenerator:
         # Identifier_N coord refs) and _emit_streaming_dfs (for upstream
         # read coord computation).  Cleared by _emit_spatial_loop_end.
         self._coord_subst = {}
-        self._local_names = {}
+        super().__init__()
         self._active_local_names = {}
-        self._bounded_names = {}
-        self._bounded_name_owners = {}
         self._deferred_constant_initializers = []
 
     # ------------------------------------------------------------------
@@ -169,12 +263,10 @@ class FortranCodeGenerator:
     def generate(self):
         regions = self._resolve_geometry_via_midware()
         all_vars = self._collect_variables(regions)
-        self._scan_for_random_usage(regions)
-        self._scan_for_real_minmax(regions)
         use_netcdf = self.output_mode == 'netcdf'
         self._any_masked = any(r.get('masked') for r in regions)
 
-        output_layout = collect_gauge_outputs(r['gauge'] for r in regions)
+        output_layout = self.backend_context.gauge_outputs
         self._partial_gauge_outputs = bool(output_layout and output_layout.partial)
 
         # --- header comment ---
@@ -187,7 +279,7 @@ class FortranCodeGenerator:
         if use_netcdf:
             self._emit('use netcdf')
         if (self._partial_gauge_outputs or self._poison_uninit
-                or self._uses_real_minmax or self._contains_nonfinite(self.ast)):
+                or self._uses_real_minmax or self.backend_context.program_facts.uses_nonfinite):
             self._emit('use ieee_arithmetic')
         self._emit('implicit none')
         self._emit('')
@@ -407,7 +499,6 @@ class FortranCodeGenerator:
         self._emit('contains')
         self._emit('')
         self._indent += 1
-        self._emit_user_function_definitions()
         self._emit_swap_subroutine()
         self._emit('')
         self._emit_halo_update_subroutines()
@@ -442,17 +533,6 @@ class FortranCodeGenerator:
     # real kind would make `real` single precision in a real32 program.
     _REAL_KINDS = Types.real_types
 
-    @classmethod
-    def _contains_nonfinite(cls, node):
-        if isinstance(node, RealLiteral_N):
-            return not math.isfinite(float(node.value))
-        if isinstance(node, Node_N):
-            return any(cls._contains_nonfinite(value)
-                       for value in vars(node).values())
-        if isinstance(node, (list, tuple)):
-            return any(cls._contains_nonfinite(value) for value in node)
-        return False
-
     # An integer literal is spelled bare, a default-kind integer, unless
     # its magnitude does not fit the default kind: then it carries the
     # kind suffix of the width that holds it, ``9007199254740993_8``
@@ -482,23 +562,6 @@ class FortranCodeGenerator:
             return f'(-{-(v + 1)}_8 - 1_8)'
         return f'{v}_8' if v >= 0 else f'(-{-v}_8)'
 
-    @staticmethod
-    def _int_literal_value(node):
-        """The value of an integer literal, negated or wrapped in a
-        promotion; None for anything else."""
-        negate = False
-        while True:
-            if isinstance(node, TypePromotionNode_N):
-                node = node.expr
-            elif isinstance(node, UnaryMinusExpr_N):
-                negate = not negate
-                node = node.value
-            else:
-                break
-        if isinstance(node, IntLiteral_N):
-            return -node.value if negate else node.value
-        return None
-
     @classmethod
     def _literal_kind(cls, node):
         """The real kind of ``node``: a literal's inferred width, or a
@@ -509,18 +572,11 @@ class FortranCodeGenerator:
         return kind if kind in cls._REAL_KINDS else 'real'
 
     def _resolve_geometry_via_midware(self):
-        """Resolve geometry using the midware analysis pass.
-
-        Delegates to ``gelb.midware.geometry.resolve_geometry()`` and
-        populates the backend's internal fields from the result.
+        """Populate emission fields from the supplied resolved geometry.
         Returns a list of region dicts in the format the emission
         layer expects.
         """
-        if self._resolved_geometry is None:
-            from gelb.midware.geometry import resolve_geometry
-            geo = resolve_geometry(self.ast)
-        else:
-            geo = self._resolved_geometry
+        geo = self._resolved_geometry
 
         self._grid_sizes = geo.grid_sizes
         self._nc_boundary_dims = geo.boundary_contacts
@@ -593,68 +649,15 @@ class FortranCodeGenerator:
             'masked': nc.masked,
         }
 
-    def _eval_range_expr(self, expr):
-        """Evaluate an AST expression to an integer (for paint ranges)."""
-        result = eval_const_expr(
-            expr, ast=self.ast, lattice_info=self._lattice_info)
-        return int(result)
-
     def _find_block(self, block_list, name):
         for block in block_list:
             if block.name.name == name:
                 return block
         raise ValueError(f"Block '{name}' not found")
 
-    def _collect_variables(self, regions):
-        """Collect declarations by computational block, preserving identity."""
-        result = []
-        for region in regions:
-            for key in ('initializer', 'dynamic', 'gauge'):
-                block = region[key]
-                if block is None or id(block) in self._local_names:
-                    continue
-                block_index = len(self._local_names)
-                names = self._local_names[id(block)] = {}
-                declarations = list(getattr(block, 'outputs', ())) + list(block.stmts)
-                for decl in declarations:
-                    if isinstance(decl, VariableDeclarationStmt_N):
-                        name = decl.name.name
-                        if name not in names:
-                            encoded = self._bounded_name(
-                                f'gelb_b{block_index}_{self._symbol_name(name)}')
-                            names[name] = encoded
-                            result.append((encoded, decl.data_type))
-        return result
-
     def _vname(self, name):
         """Resolve a block-local name without affecting lattice/global names."""
         return self._active_local_names.get(name) or self._symbol_name(name)
-
-    def _scan_for_real_minmax(self, regions):
-        """Pre-scan all blocks for a real-typed ``min``/``max`` call, which
-        is emitted as the IEEE 754-2019 helper (user manual, Numerical
-        semantics: Types and promotion) and needs ``ieee_arithmetic``."""
-        def _walk(node):
-            if isinstance(node, IntrinsicFunctionCall_N) \
-                    and node.function_name in ('min', 'max') \
-                    and self._is_real_kind(node):
-                self._uses_real_minmax = True
-                return
-            for child in getattr(node, '__dict__', {}).values():
-                if isinstance(child, Node_N):
-                    _walk(child)
-                elif isinstance(child, list):
-                    for item in child:
-                        if isinstance(item, Node_N):
-                            _walk(item)
-
-        for region in regions:
-            for key in ('initializer', 'dynamic', 'gauge'):
-                block = region[key]
-                if block is not None:
-                    _walk(block)
-                if self._uses_real_minmax:
-                    return
 
     @staticmethod
     def _is_real_kind(node):
@@ -692,29 +695,6 @@ class FortranCodeGenerator:
                 self._emit(f'end function gelb_{name}_{suffix}')
                 self._emit('')
 
-    def _scan_for_random_usage(self, regions):
-        """Pre-scan all blocks for random() intrinsic calls."""
-        def _walk(node):
-            if isinstance(node, IntrinsicFunctionCall_N):
-                if node.function_name == 'random':
-                    self._uses_random = True
-                    return
-            for child in getattr(node, '__dict__', {}).values():
-                if isinstance(child, Node_N):
-                    _walk(child)
-                elif isinstance(child, list):
-                    for item in child:
-                        if isinstance(item, Node_N):
-                            _walk(item)
-
-        for region in regions:
-            for key in ('initializer', 'dynamic', 'gauge'):
-                block = region[key]
-                if block is not None:
-                    _walk(block)
-                if self._uses_random:
-                    return
-
     # ------------------------------------------------------------------
     # Emission helpers
     # ------------------------------------------------------------------
@@ -724,82 +704,6 @@ class FortranCodeGenerator:
             self._lines.append('')
         else:
             self._lines.append('  ' * self._indent + line)
-
-    def _bounded_name(self, name):
-        """Leave room for the longest derived name, ``gelb_halo_update_``.
-
-        Hash names use a namespace disjoint from ordinary ``g_`` names.
-        Record ownership and disambiguate even a truncated-hash collision.
-        """
-        if len(name) <= 46:
-            return name
-        if name not in self._bounded_names:
-            digest = hashlib.sha256(name.encode('utf-8')).hexdigest()[:20]
-            candidate = self._hashed_name(name)
-            index = 0
-            while candidate in self._bounded_name_owners:
-                index += 1
-                candidate = f'g0_{digest}_{index}'
-            self._bounded_names[name] = candidate
-            self._bounded_name_owners[candidate] = name
-        return self._bounded_names[name]
-
-    @staticmethod
-    def _hashed_name(name):
-        digest = hashlib.sha256(name.encode('utf-8')).hexdigest()[:20]
-        return f'g0_{name[:20]}_{digest}'
-
-    @classmethod
-    def _uname(cls, name):
-        """Stateless spelling for external identifier-mapping consumers."""
-        encoded = cls._encode_name(name)
-        return encoded if len(encoded) <= 46 else cls._hashed_name(encoded)
-
-    def _symbol_name(self, name):
-        return self._bounded_name(self._encode_name(name))
-
-    @staticmethod
-    def _encode_name(name):
-        """Encode a GeLB identifier for case-insensitive Fortran emission.
-
-        Fortran is case-insensitive, so GeLB names that differ only in
-        case (e.g. ``m`` vs ``M``, ``fIn`` vs ``fin``) must map to
-        distinct Fortran identifiers.  The encoding uses underscore
-        escaping:
-
-        - lowercase letter ``x``   ->  ``x``
-        - uppercase letter ``X``   ->  ``_`` + lowercase(``X``)
-        - literal underscore ``_`` ->  ``__``
-        - digit ``d``              ->  ``d``
-
-        The result is prefixed with ``g_`` to avoid clashes with Fortran
-        reserved words and intrinsics.
-
-        Examples::
-
-            m       ->  g_m
-            M       ->  g__m
-            TAU     ->  g__t_a_u
-            fIn     ->  g_f_in
-            M_INV   ->  g__m___i_n_v
-            rho     ->  g_rho
-            NX      ->  g__n_x
-            ux      ->  g_ux
-
-        The encoding is injective: distinct GeLB names always produce
-        distinct Fortran names under case-folding.  Backend-internal
-        names (``gelb_*``) are never passed through here.
-        """
-        encoded = []
-        for ch in name:
-            if ch == '_':
-                encoded.append('__')
-            elif ch.isupper():
-                encoded.append('_')
-                encoded.append(ch.lower())
-            else:
-                encoded.append(ch)
-        return 'g_' + ''.join(encoded)
 
     def _max_dim(self):
         return get_max_dim(self._lattice_info)
@@ -934,45 +838,26 @@ class FortranCodeGenerator:
         which keep the general emission."""
         if kind not in self._NARROW_ELEMENT_KINDS:
             return None
-        value = stmt.value
-        while isinstance(value, TypePromotionNode_N):
-            value = value.expr
-        if isinstance(value, Array1DLiteral_N):
+        constant = self.backend_context.global_constants[stmt.name.name]
+        if len(constant.dims) == 1:
             elements = [self._fortran_constant_element(e, kind)
-                        for e in value.value.elements]
+                        for e in constant.elements]
             return f'(/{", ".join(elements)}/)'
-        if isinstance(value, Array2DLiteral_N):
-            rows = value.value.elements
-            nrows = len(rows)
-            ncols = len(rows[0].value.elements)
-            elements = []
-            for col in range(ncols):          # column-major, as reshape wants
-                for row in range(nrows):
-                    elements.append(self._fortran_constant_element(
-                        rows[row].value.elements[col], kind))
+        if len(constant.dims) == 2:
+            nrows, ncols = constant.dims
+            elements = [self._fortran_constant_element(constant.rows[row][col], kind)
+                        for col in range(ncols) for row in range(nrows)]
             return f'reshape((/{", ".join(elements)}/), (/{nrows}, {ncols}/))'
         return None
 
     _INT_KIND_SUFFIX = Types.fortran_integer_suffix
 
-    def _fortran_constant_element(self, node, kind):
-        from gelb.midware.ast_eval import convert_plain, eval_const_expr
-        try:
-            value = eval_const_expr(node, ast=self.ast)
-        except Exception:
-            # not a constant, or an expression that overflows
-            # (``real32(1.0e300)``, ``1.0e300 * 1.0e300``): the expression
-            # itself, converted; gfortran folds it to an infinity under
-            # ``-fno-range-check``, the IEEE value the operation gives at
-            # run time (user manual, Numerical semantics: Special values)
-            return self._emit_cast(self._emit_expr(node, 'global'), None, kind)
-        try:
-            converted = convert_plain(value, kind)
-        except OverflowError:
-            # past the kind's range: the conversion, an infinity at run time
-            wide = self._fortran_real(float(value), 'real')
+    def _fortran_constant_element(self, element, kind):
+        node, converted = element.node, element.converted_value
+        if element.conversion_overflow and element.raw_value is not None:
+            wide = self._fortran_real(float(element.raw_value), 'real')
             return f'real({wide})'
-        except Exception:
+        if converted is None:
             return self._emit_cast(self._emit_expr(node, 'global'), None, kind)
         if isinstance(converted, bool):
             return self._emit_expr(node, 'global')
@@ -1616,12 +1501,8 @@ class FortranCodeGenerator:
         """Refresh the ghost cells a gauge reads.  The time loop updates
         the halo before the dynamics only; gauges run after the swap and
         at t=0, so a gauge reading a neighbour across a periodic axis
-        needs its own refresh.  Without stencil information every
-        periodic lattice is refreshed."""
-        if self._stencils is not None:
-            wanted = self._stencils.gauge_halo_lattices()
-        else:
-            wanted = set(self._lattice_info)
+        needs its own refresh."""
+        wanted = self._stencils.gauge_halo_lattices()
         for lname, info in self._lattice_info.items():
             if lname in wanted and any(
                     self._is_periodic(info, i) for i in range(info['d'])):
@@ -1860,10 +1741,6 @@ class FortranCodeGenerator:
         elif isinstance(node, IntrinsicFunctionCall_N):
             return self._emit_intrinsic_call(node, context)
 
-        # --- user-defined function calls ---
-        elif isinstance(node, UserFunctionCall_N):
-            return self._emit_user_function_call(node, context)
-
         # --- array literals ---
         elif isinstance(node, Array1DLiteral_N):
             elements = [self._emit_array_element(elem, node, context)
@@ -2003,12 +1880,6 @@ class FortranCodeGenerator:
                 v = el.value
                 return v is True or str(v).lower() == 'true'
         return False
-
-    def _has_offset(self, range_node):
-        """Check if a range is a simple coordinate (x) or has an offset (x+1)."""
-        # If range is just an Identifier, no offset needed
-        from gelb.gelb_ast.ASTNodes import Identifier_N
-        return not isinstance(range_node.low, Identifier_N)
 
     def _emit_array_access(self, node, context):
         farray_name = self._vname(node.array_name.name)
@@ -2152,21 +2023,16 @@ class FortranCodeGenerator:
         # alone stays bare.
         coords = [self._emit_index(c, context) for c in coord_args]
 
-        # Extract velocity vectors (constant-folded to literal arrays)
-        vel_arrays = []
-        if isinstance(vel_set, Array1DLiteral_N):
-            # 2D/3D: {EX, EY} or {EX, EY, EZ}
-            for vel_node in vel_set.value.elements:
-                vel_arrays.append(self._extract_constant_array(vel_node))
-        else:
-            # 1D: single velocity array passed directly (no braces)
-            vel_arrays.append(self._extract_constant_array(vel_set))
+        from gelb.midware.stencil import velocity_names
+        names = velocity_names(vel_set)
+        vel_arrays = [self.backend_context.global_constants[name].folded for name in names]
 
         # Determine buffer variable
         buffer_var = self._current_buffer_var(lattice_name, 'in', context)
 
         if node.function_name == 'bounce_back_dfs':
-            opp_map = self._compute_opposite_mapping(vel_arrays, q)
+            from gelb.midware.stencil import compute_opposite_mapping
+            opp_map = compute_opposite_mapping(vel_arrays, q)
             elements = []
             for i in range(q):
                 shifted, guards = [], []
@@ -2251,139 +2117,18 @@ class FortranCodeGenerator:
         # formatter will handle line splitting if needed.
         return f'(/{", ".join(elements)}/)'
 
-    def _extract_constant_array(self, node):
-        """Extract numeric values from a constant-folded array node."""
-        if isinstance(node, TypePromotionNode_N):
-            return self._extract_constant_array(node.expr)
-        if isinstance(node, Identifier_N):
-            # Look up the constant definition in global constants
-            for stmt in self.ast.global_constants.stmts:
-                if isinstance(stmt, ConstantDefinitionStmt_N):
-                    if stmt.name.name == node.name:
-                        return self._extract_constant_array(stmt.value)
-            raise ValueError(f"Cannot resolve constant array '{node.name}'")
-        if isinstance(node, Array1DLiteral_N):
-            return [self._extract_scalar_value(e)
-                    for e in node.value.elements]
-        raise ValueError(
-            f"Cannot extract constant array from {type(node).__name__}")
-
-    def _extract_scalar_value(self, node):
-        """Extract a numeric value from a constant-folded scalar node."""
-        if isinstance(node, TypePromotionNode_N):
-            return self._extract_scalar_value(node.expr)
-        if isinstance(node, IntLiteral_N):
-            return node.value
-        if isinstance(node, RealLiteral_N):
-            return node.value
-        if isinstance(node, UnaryMinusExpr_N):
-            return -self._extract_scalar_value(node.value)
-        raise ValueError(
-            f"Cannot extract scalar from {type(node).__name__}")
-
-    def _compute_opposite_mapping(self, vel_arrays, q):
-        """Compute opposite DF index mapping from velocity vectors.
-
-        For each i, find j such that vel_d[j] = -vel_d[i] for all d.
-        """
-        nd = len(vel_arrays)
-        opp = [None] * q
-        for i in range(q):
-            vi = tuple(vel_arrays[dim][i] for dim in range(nd))
-            neg_vi = tuple(-v for v in vi)
-            for j in range(q):
-                vj = tuple(vel_arrays[dim][j] for dim in range(nd))
-                if vj == neg_vi:
-                    opp[i] = j
-                    break
-            if opp[i] is None:
-                raise ValueError(
-                    f"No opposite DF found for DF {i} with velocity {vi}")
-        return opp
-
     def _current_buffer_var(self, lattice_name, direction, context):
         """Get the Fortran buffer variable for lattice read/write."""
         flname = self._symbol_name(lattice_name)
         return f'{flname}_old' if direction == 'in' else f'{flname}_new'
 
     # ------------------------------------------------------------------
-    # User-defined functions
+    # Array destructuring
     # ------------------------------------------------------------------
 
-    def _emit_user_function_call(self, node, context):
-        """Emit a user-defined function call expression (single-output only).
-
-        Multi-output calls must go through _emit_destructuring_call as
-        statements, not expressions.
-        """
-        ffunc_name = self._symbol_name(node.function_name.name)
-
-        # Check if any argument is a multi-output UserFunctionCall_N
-        # that needs to be expanded into a subroutine call + temp vars
-        expanded_args = []
-        for i, arg in enumerate(node.arguments):
-            if isinstance(arg, UserFunctionCall_N) and hasattr(arg, 'function_block'):
-                # Multi-output inner call -- expand into temp vars
-                inner_func = arg.function_block
-                finner_name = self._symbol_name(arg.function_name.name)
-                inner_args = [self._emit_expr(a, context) for a in arg.arguments]
-                temps = []
-                for out in inner_func.outputs.elements:
-                    tname = f'gelb_tmp_{out.name.name}'
-                    temps.append(tname)
-                self._emit(f'call {finner_name}({", ".join(inner_args + temps)})')
-                expanded_args.extend(temps)
-            else:
-                expanded_args.append(self._emit_expr(arg, context))
-
-        return f'{ffunc_name}({", ".join(expanded_args)})'
-
     def _emit_destructuring_call(self, stmt, context):
-        """Emit a destructuring assignment.
-
-        Two RHS shapes are supported:
-
-        1. ``UserFunctionCall_N`` -- multi-output function call.
-           Emitted as: ``call g_Func(args..., g_a, g_b, g_c)``.
-
-        2. Any 1D array expression (literal, variable, slice).
-           Emitted as a series of element-wise assignments
-           (with a temp for non-literal expressions to avoid
-           recomputation).
-        """
-        rhs = stmt.rhs
-        if isinstance(rhs, UserFunctionCall_N):
-            self._emit_destructuring_function_call(stmt, context)
-        else:
-            self._emit_destructuring_array(stmt, context)
-
-    def _emit_destructuring_function_call(self, stmt, context):
-        """Emit a multi-output function-call destructuring.
-
-        Emitted as: ``call g_Func(args..., g_a, g_b, g_c)``
-        """
-        rhs = stmt.rhs
-        ffunc_name = self._symbol_name(rhs.function_name.name)
-
-        # Handle chained multi-output calls in arguments
-        in_args = []
-        for arg in rhs.arguments:
-            if isinstance(arg, UserFunctionCall_N) and hasattr(arg, 'function_block'):
-                # Multi-output inner call -- expand
-                inner_func = arg.function_block
-                finner_name = self._symbol_name(arg.function_name.name)
-                inner_args = [self._emit_expr(a, context) for a in arg.arguments]
-                temps = []
-                for out in inner_func.outputs.elements:
-                    tname = f'gelb_tmp_{out.name.name}'
-                    temps.append(tname)
-                self._emit(f'call {finner_name}({", ".join(inner_args + temps)})')
-                in_args.extend(temps)
-            else:
-                in_args.append(self._emit_expr(arg, context))
-
-        out_args = [self._vname(t.name) for t in stmt.targets]
-        self._emit(f'call {ffunc_name}({", ".join(in_args + out_args)})')
+        """Emit element assignments for a lowered array expression."""
+        self._emit_destructuring_array(stmt, context)
 
     def _emit_destructuring_array(self, stmt, context):
         """Emit a 1D-array destructuring.
@@ -2427,143 +2172,6 @@ class FortranCodeGenerator:
                 f'{ftarget} = gelb_destr_tmp(lbound(gelb_destr_tmp, 1) + {i})')
         self._indent -= 1
         self._emit('end associate')
-
-    def _emit_user_function_definitions(self):
-        """Emit Fortran function/subroutine definitions for all user-defined
-        function blocks in the AST.
-        """
-        if self.ast.functions is None:
-            return
-
-        for func in self.ast.functions:
-            self._emit('')
-            inputs = func.inputs.elements
-            outputs = func.outputs.elements
-
-            if len(outputs) == 1:
-                self._emit_fortran_function(func, inputs, outputs[0])
-            else:
-                self._emit_fortran_subroutine(func, inputs, outputs)
-
-    def _user_function_attr_prefix(self):
-        """Fortran attribute prefix for user-defined functions / subroutines.
-
-        Empty on host-only CPU backends.  CUDA-style backends override this
-        to emit ``attributes(device)`` so the same function is callable
-        from device kernels.
-        """
-        return ''
-
-    def _emit_fortran_function(self, func, inputs, output):
-        """Emit a single-output user function as a Fortran function."""
-        fname = self._symbol_name(func.name.name)
-        fparam_names = [self._symbol_name(p.name.name) for p in inputs]
-        fresult_name = self._symbol_name(output.name.name)
-
-        prefix = self._user_function_attr_prefix()
-        self._emit(f'{prefix}function {fname}'
-                   f'({", ".join(fparam_names)}) result({fresult_name})')
-        self._indent += 1
-        self._emit('implicit none')
-
-        # Declare input parameters
-        for param in inputs:
-            ftype = self._fortran_type_from_decl(param)
-            self._emit(f'{ftype}, intent(in) :: {self._symbol_name(param.name.name)}')
-
-        # Declare result variable
-        ftype = self._fortran_type_from_decl(output)
-        self._emit(f'{ftype} :: {fresult_name}')
-
-        # Declare local variables
-        self._emit_function_local_vars(func, inputs, [output])
-
-        self._emit('')
-
-        # Emit body statements
-        for stmt in func.stmts:
-            self._emit_statement(stmt, 'function')
-
-        self._indent -= 1
-        self._emit(f'end function {fname}')
-
-    def _emit_fortran_subroutine(self, func, inputs, outputs):
-        """Emit a multi-output user function as a Fortran subroutine."""
-        fname = self._symbol_name(func.name.name)
-        fparam_names = [self._symbol_name(p.name.name) for p in inputs]
-        fout_names = [self._symbol_name(o.name.name) for o in outputs]
-        all_params = fparam_names + fout_names
-
-        prefix = self._user_function_attr_prefix()
-        self._emit(f'{prefix}subroutine {fname}({", ".join(all_params)})')
-        self._indent += 1
-        self._emit('implicit none')
-
-        # Declare input parameters
-        for param in inputs:
-            ftype = self._fortran_type_from_decl(param)
-            self._emit(f'{ftype}, intent(in) :: {self._symbol_name(param.name.name)}')
-
-        # Declare output parameters
-        for param in outputs:
-            ftype = self._fortran_type_from_decl(param)
-            self._emit(f'{ftype}, intent(out) :: {self._symbol_name(param.name.name)}')
-
-        # Declare local variables
-        self._emit_function_local_vars(func, inputs, outputs)
-
-        self._emit('')
-
-        # Emit body statements
-        for stmt in func.stmts:
-            self._emit_statement(stmt, 'function')
-
-        self._indent -= 1
-        self._emit(f'end subroutine {fname}')
-
-    def _emit_function_local_vars(self, func, inputs, outputs):
-        """Emit declarations for local variables in a function body."""
-        param_names = set(p.name.name for p in inputs)
-        param_names.update(o.name.name for o in outputs)
-
-        for stmt in func.stmts:
-            if isinstance(stmt, VariableDeclarationStmt_N):
-                if stmt.name.name not in param_names:
-                    ftype = self._fortran_type_from_decl(stmt)
-                    self._emit(f'{ftype} :: {self._symbol_name(stmt.name.name)}')
-            elif isinstance(stmt, ConstantDefinitionStmt_N):
-                if stmt.name.name not in param_names:
-                    dtype = stmt.data_type
-                    ftype = self._gelb_type_to_fortran(dtype)
-                    self._emit(f'{ftype} :: {self._symbol_name(stmt.name.name)}')
-
-    def _fortran_type_from_decl(self, decl):
-        """Get the Fortran type string from a VariableDeclarationStmt_N."""
-        dtype = decl.data_type
-        return self._gelb_type_to_fortran(dtype)
-
-    def _gelb_type_to_fortran(self, dtype):
-        """Convert a GeLB data type to a Fortran type string."""
-        if isinstance(dtype, ArrayDataType_N):
-            base = _TYPE_MAP.get(dtype.element_dtype, 'double precision')
-            # Get array shape
-            if isinstance(dtype.shape, List_N) and len(dtype.shape.elements) == 0:
-                return base  # scalar
-            elif isinstance(dtype.shape, IntLiteral_N):
-                return f'{base}, dimension({dtype.shape.value})'
-            elif isinstance(dtype.shape, Array1DLiteral_N):
-                dims = ', '.join(
-                    str(e.value) for e in dtype.shape.value.elements)
-                return f'{base}, dimension({dims})'
-            elif isinstance(dtype.shape, List_N):
-                dims = ', '.join(str(e.value) for e in dtype.shape.elements)
-                return f'{base}, dimension({dims})'
-            return base
-        elif isinstance(dtype, ScalarDataType_N):
-            return _TYPE_MAP.get(dtype.name, 'double precision')
-        else:
-            # Plain string data type name
-            return _TYPE_MAP.get(str(dtype), 'double precision')
 
     # ------------------------------------------------------------------
     # Fortran literal helpers

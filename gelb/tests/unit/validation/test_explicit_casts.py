@@ -13,6 +13,9 @@ implicit-promotion system rejects.  Behavior:
 """
 
 import pytest
+from gelb.compiler_pipeline import (
+    PipelineOptions, PipelineProfile, compile_source, build_backend_context,
+)
 from gelb.tests.test_utils import get_typed_ast
 from gelb.gelb_ast.ASTNodes import (
     IntrinsicFunctionCall_N, IntLiteral_N, RealLiteral_N, BoolLiteral_N,
@@ -172,12 +175,10 @@ class TestCastCodeGen:
 
     def _generate(self, source):
         from gelb.backends.stage3_backend_cpu_fortran_serial import generate_fortran
-        from gelb.midware.inline_functions import inline_functions
-        from gelb.midware.ConstantFoldingVisitor import ConstantFoldingVisitor
-        ast = get_typed_ast(source)
-        ast = ConstantFoldingVisitor().visit(ast, ast)
-        ast = inline_functions(ast)
-        return generate_fortran(ast, num_timesteps=1)
+        result = compile_source(source, PipelineProfile.CODEGEN,
+                                PipelineOptions(require_stencils=True, require_geometry=True))
+        return generate_fortran(result.ast, num_timesteps=1,
+                                backend_context=build_backend_context(result))
 
     def test_int_cast_of_runtime_value_emits_int8(self):
         """Casting a non-foldable expression must emit Fortran int(...,8)."""

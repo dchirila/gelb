@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Callable
+from types import MappingProxyType
+import math
 
 import gelb.utils.config
 from gelb.utils.misc import load_file
@@ -73,6 +75,139 @@ class CompilationResult:
 
 
 @dataclass(frozen=True)
+class ConstantElement:
+    """A written element and its exact numeric and IEEE conversion results."""
+
+    node: object
+    raw_value: int | float | bool | None
+    converted_value: int | float | bool | None
+    special_value: float | None
+    conversion_overflow: bool = False
+
+
+@dataclass(frozen=True)
+class GlobalConstant:
+    """Declared constant metadata; folded tables retain exact integer values."""
+
+    dtype: str
+    dims: tuple[int, ...]
+    elements: tuple[ConstantElement, ...] = ()
+    rows: tuple[tuple[ConstantElement, ...], ...] = ()
+    folded: tuple[int | float, ...] | None = None
+    matrix: tuple[tuple[int | float, ...], ...] | None = None
+
+
+def _walk_nodes(roots):
+    """Walk syntax with an explicit stack, excluding symbol-table back-links."""
+    from gelb.gelb_ast.ASTNodes import Node_N
+    stack, seen = list(roots), set()
+    while stack:
+        node = stack.pop()
+        if not isinstance(node, Node_N) or id(node) in seen:
+            continue
+        seen.add(id(node))
+        yield node
+        stack.extend(reversed(node.get_children()))
+
+
+@dataclass(frozen=True)
+class ProgramFacts:
+    active_uses_random: bool
+    active_uses_real_minmax: bool
+    uses_random: bool
+    uses_implicit_t: bool
+    uses_nonfinite: bool = False
+
+    @classmethod
+    def collect(cls, ast, active_blocks):
+        from gelb.gelb_ast.ASTNodes import IntrinsicFunctionCall_N, Identifier_N, RealLiteral_N
+        from gelb.type_table import UnifiedTypeTable
+        active_random = active_minmax = random = timestep = nonfinite = False
+        for node in _walk_nodes(active_blocks):
+            if isinstance(node, IntrinsicFunctionCall_N):
+                active_random |= node.function_name == 'random'
+                kind = getattr(getattr(node, 'inferred_type', None), 'element_dtype', None)
+                active_minmax |= (node.function_name in ('min', 'max')
+                                  and kind in UnifiedTypeTable.real_types)
+        for node in _walk_nodes((ast,)):
+            nonfinite |= (isinstance(node, RealLiteral_N)
+                          and not math.isfinite(float(node.value)))
+            random |= (isinstance(node, IntrinsicFunctionCall_N)
+                       and node.function_name.lower() == 'random')
+            timestep |= (isinstance(node, Identifier_N)
+                         and getattr(node, 'symbol_tag', None) == 'implicit timestep variable')
+        return cls(active_random, active_minmax, random, timestep, nonfinite)
+
+
+def _global_constant_metadata(ast, lattice_info):
+    from gelb.gelb_ast.ASTNodes import (
+        Array1DLiteral_N, Array2DLiteral_N, TypePromotionNode_N,
+    )
+    from gelb.midware.ast_eval import eval_const_expr, convert_plain, ieee_special_values, plain
+    from gelb.type_table import UnifiedTypeTable
+
+    def element(node, dtype):
+        raw = converted = special = None
+        overflow = False
+        try:
+            raw = plain(eval_const_expr(node, ast=ast, lattice_info=lattice_info))
+        except (ValueError, ArithmeticError):
+            pass
+        if raw is not None:
+            try:
+                converted = convert_plain(raw, dtype)
+                if isinstance(converted, float) and not math.isfinite(converted):
+                    special = converted
+            except OverflowError:
+                overflow = True
+            except (ValueError, ArithmeticError):
+                pass
+        if converted is None and dtype in UnifiedTypeTable.real_types:
+            try:
+                with ieee_special_values():
+                    value = raw if raw is not None else eval_const_expr(
+                        node, ast=ast, lattice_info=lattice_info)
+                    ieee = float(convert_plain(value, dtype))
+                if not math.isfinite(ieee):
+                    special = ieee
+            except (ValueError, ArithmeticError):
+                pass
+        return ConstantElement(node, raw, converted, special, overflow)
+
+    def folded(elements, dtype):
+        values = []
+        for item in elements:
+            value = (item.converted_value
+                     if dtype in UnifiedTypeTable.narrow_array_types
+                     and item.converted_value is not None else item.raw_value)
+            if value is None:
+                return None
+            values.append(int(value) if dtype in UnifiedTypeTable.integer_types else float(value))
+        return tuple(values)
+
+    constants = {}
+    for stmt in ast.global_constants.stmts if ast.global_constants is not None else ():
+        dtype, dims = stmt.data_type.element_dtype, stmt.data_type.canonical_type.dims
+        node = stmt.value
+        while isinstance(node, TypePromotionNode_N):
+            node = node.expr
+        elements, rows, vector, matrix = (), (), None, None
+        if isinstance(node, Array1DLiteral_N):
+            elements = tuple(element(e, dtype) for e in node.value.elements)
+            vector = folded(elements, dtype)
+        elif isinstance(node, Array2DLiteral_N):
+            rows = tuple(tuple(element(e, dtype) for e in row.value.elements)
+                         for row in node.value.elements)
+            matrix = tuple(folded(row, dtype) for row in rows)
+            if any(row is None for row in matrix):
+                matrix = None
+        elif not dims:
+            elements = (element(node, dtype),)
+        constants[stmt.name.name] = GlobalConstant(dtype, dims, elements, rows, vector, matrix)
+    return MappingProxyType(constants)
+
+
+@dataclass(frozen=True)
 class BackendContext:
     """Shared analysis facts consumed by code-generation backends."""
 
@@ -80,6 +215,10 @@ class BackendContext:
     lattice_info: dict
     stencils: object
     geometry: object
+    global_constants: object
+    opp_tables: object
+    gauge_outputs: object
+    program_facts: ProgramFacts
 
 
 def build_backend_context(
@@ -102,11 +241,35 @@ def build_backend_context(
             "run the pipeline with require_geometry=True.")
 
     from gelb.midware.ast_eval import collect_lattice_info
+    from gelb.midware.stencil import compute_opposite_mapping, velocity_names
+    from gelb.gelb_ast.ASTNodes import IntrinsicFunctionCall_N, Array1DLiteral_N
+    from gelb.backends.gauge_outputs import collect_gauge_outputs
+    ast = result.ast
+    lattice_info = collect_lattice_info(ast)
+    constants = _global_constant_metadata(ast, lattice_info)
+    opposite = {}
+    for node in _walk_nodes((ast,)):
+        if isinstance(node, IntrinsicFunctionCall_N) and node.function_name == 'bounce_back_dfs':
+            velocities = node.arguments[-1]
+            names = velocity_names(velocities)
+            if names not in opposite:
+                arrays = [constants[name].folded for name in names]
+                opposite[names] = tuple(compute_opposite_mapping(arrays, len(arrays[0])))
+    blocks = {block.name.name: block for group in (ast.initializers, ast.dynamics, ast.gauges)
+              for block in group or ()}
+    active = [blocks[name] for info in resolved_geometry.nc_info.values()
+              for name in (info.initializer, info.dynamic, info.gauge) if name is not None]
     return BackendContext(
-        ast=result.ast,
-        lattice_info=collect_lattice_info(result.ast),
+        ast=ast,
+        lattice_info=lattice_info,
         stencils=result.stencils,
         geometry=resolved_geometry,
+        global_constants=constants,
+        opp_tables=MappingProxyType(opposite),
+        gauge_outputs=collect_gauge_outputs(
+            blocks[info.gauge] if info.gauge is not None else None
+            for info in resolved_geometry.nc_info.values()),
+        program_facts=ProgramFacts.collect(ast, active),
     )
 
 

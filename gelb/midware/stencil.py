@@ -18,6 +18,38 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
+def velocity_names(node) -> tuple[str, ...]:
+    """Read global velocity identifiers through width-promotion wrappers."""
+    from gelb.gelb_ast.ASTNodes import Array1DLiteral_N, TypePromotionNode_N
+
+    def unwrap(value):
+        while isinstance(value, TypePromotionNode_N):
+            value = value.expr
+        return value
+
+    node = unwrap(node)
+    entries = node.value.elements if isinstance(node, Array1DLiteral_N) else (node,)
+    return tuple(unwrap(entry).name for entry in entries)
+
+
+def compute_opposite_mapping(vel_arrays, q) -> list[int]:
+    """Compute opposite DF index mapping from velocity vectors."""
+    nd = len(vel_arrays)
+    opp = [None] * q
+    for i in range(q):
+        vi = tuple(vel_arrays[dim][i] for dim in range(nd))
+        neg_vi = tuple(-v for v in vi)
+        for j in range(q):
+            vj = tuple(vel_arrays[dim][j] for dim in range(nd))
+            if vj == neg_vi:
+                opp[i] = j
+                break
+        if opp[i] is None:
+            raise ValueError(
+                f"No opposite DF found for DF {i} with velocity {vi}")
+    return opp
+
+
 def source_line_of(node) -> int | None:
     """1-based first line of an AST node, or None if it has no code range."""
     code_range = getattr(node, "code_range", None)
@@ -70,6 +102,13 @@ class BlockStencil:
     def write_offsets(self) -> set[tuple[int, ...]]:
         """Unique spatial offsets written to."""
         return {a.spatial_offsets for a in self.writes}
+
+    def offset_bounds(self, dimensions, *, writes=False):
+        """Per-axis negative and positive reach, including zero for unused axes."""
+        offsets = self.write_offsets if writes else self.read_offsets
+        return tuple((max((max(0, -off[axis]) for off in offsets), default=0),
+                      max((max(0, off[axis]) for off in offsets), default=0))
+                     for axis in range(dimensions))
 
     @property
     def is_local(self) -> bool:
@@ -184,6 +223,10 @@ class ProgramStencils:
         for bs in self.blocks.values():
             parts.append(bs.format_report())
         return "\n\n".join(parts)
+
+    def offset_bounds(self, block_name, dimensions, *, writes=False):
+        """Read or write bounds of a block in the program's spatial dimensions."""
+        return self.blocks[block_name].offset_bounds(dimensions, writes=writes)
 
     def periodic_reach(self) -> int:
         """The largest |offset| of any read or write along a periodic
