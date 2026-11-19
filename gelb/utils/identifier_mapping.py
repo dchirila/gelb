@@ -8,7 +8,7 @@ to Fortran identifiers in the generated code.  Used by ``gelbc
 extension) for go-to-definition and hover tooltips.
 """
 
-from gelb.backends.stage3_backend_cpu_fortran_serial import FortranCodeGenerator
+from gelb.backends.stage3_backend_cpu_fortran_serial import FortranIdentifierScope
 from gelb.frontend.implicit_symbols import (
     active_coordinate_names,
     active_dimension_names,
@@ -20,7 +20,7 @@ from gelb.gelb_ast.ASTNodes import (
 )
 
 # Re-export the encoding function for external consumers
-uname = FortranCodeGenerator._uname
+uname = FortranIdentifierScope._uname
 
 
 def _is_user_written(name):
@@ -43,7 +43,7 @@ def _collect_block_locals(block, encode=uname):
     return entries
 
 
-def collect_identifier_mapping(ast):
+def collect_identifier_mapping(ast, *, geometry=None):
     """Collect all user-written GeLB -> Fortran identifier mappings.
 
     Returns a list of sections, each being a dict with:
@@ -53,8 +53,16 @@ def collect_identifier_mapping(ast):
     sections = []
     # Use the backend's scope allocation so --show-mapping agrees with
     # block-qualified declarations, including bounded long identifiers.
-    generator = FortranCodeGenerator(ast)
-    generator._collect_variables(generator._resolve_geometry_via_midware())
+    from gelb.midware.geometry import resolve_geometry
+
+    geometry = geometry if geometry is not None else resolve_geometry(ast)
+    blocks = {block.name.name: block for group in (ast.initializers, ast.dynamics, ast.gauges)
+              for block in group or ()}
+    regions = [{key: blocks.get(getattr(geometry.nc_info[name], key))
+                for key in ('initializer', 'dynamic', 'gauge')}
+               for name in geometry.nc_order]
+    generator = FortranIdentifierScope()
+    generator._collect_variables(regions)
 
     def local_encoder(block):
         names = generator._local_names.get(id(block), {})

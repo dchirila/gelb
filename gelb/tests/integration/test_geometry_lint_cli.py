@@ -4,14 +4,11 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from click.testing import CliRunner
 
-from gelb.compiler_pipeline import BackendContext
 from gelb.gelbc import cli as gelbc_cli
-from gelb.midware.ast_eval import collect_lattice_info
-from gelb.midware.geometry import resolve_geometry
-from gelb.midware.stage2_midware import extract_stencils
-from gelb.tests.test_utils import get_fully_validated_ast
 
 
 _DISCONNECTED_SOURCE = """
@@ -137,101 +134,47 @@ def test_diagnostics_json_no_geometry_lint_suppresses_warning(tmp_path):
 
 
 def test_backends_reuse_resolved_geometry(monkeypatch):
-    ast = get_fully_validated_ast(_BACKEND_HANDOFF_SOURCE)
-    geometry = resolve_geometry(ast)
+    from gelb.compiler_pipeline import PipelineOptions, PipelineProfile, compile_source
+    from gelb.backends.stage3_backend_cpu_fortran_serial import FortranCodeGenerator, generate_fortran
+    from gelb.backends.stage3_backend_cpu_highway import HighwayCodeGenerator, generate_cpu_highway
+    from gelb.backends.stage3_backend_gpu_cuda_cpp import CudaCppCodeGenerator, generate_cuda_cpp
 
-    def fail_resolve_geometry(_ast):
-        raise AssertionError("backend should reuse the supplied geometry")
-
-    from gelb.backends.stage3_backend_cpu_fortran_serial import (
-        FortranCodeGenerator,
-    )
-    monkeypatch.setattr(
-        "gelb.midware.geometry.resolve_geometry",
-        fail_resolve_geometry,
-    )
-    fortran = FortranCodeGenerator(ast, resolved_geometry=geometry)
-    fortran._resolve_geometry_via_midware()
-
-    from gelb.backends import stage3_backend_cpu_highway as highway_backend
-    monkeypatch.setattr(
-        highway_backend,
-        "resolve_geometry",
-        fail_resolve_geometry,
-    )
-
-    highway = highway_backend.HighwayCodeGenerator(
-        ast,
-        resolved_geometry=geometry,
-    )
-    assert highway._geom is geometry
-
-    from gelb.backends.stage3_backend_gpu_cuda_cpp import CudaCppCodeGenerator
-    cuda = CudaCppCodeGenerator(ast, resolved_geometry=geometry)
-    assert cuda._geom is geometry
+    result = compile_source(_BACKEND_HANDOFF_SOURCE, PipelineProfile.CODEGEN,
+                            PipelineOptions(require_stencils=True, require_geometry=True))
+    for generate in (FortranCodeGenerator, HighwayCodeGenerator, CudaCppCodeGenerator,
+                     generate_fortran, generate_cpu_highway, generate_cuda_cpp):
+        with pytest.raises(ValueError, match='BackendContext is required'):
+            generate(result.ast)
+        with pytest.raises(ValueError, match='BackendContext is required'):
+            generate(result.ast, backend_context=None)
 
 
 def test_backends_reuse_backend_context(monkeypatch):
-    ast = get_fully_validated_ast(_BACKEND_HANDOFF_SOURCE)
-    geometry = resolve_geometry(ast)
-    lattice_info = collect_lattice_info(ast)
-    # Real stencils, not a bare sentinel: a backend asks them for the
-    # periodic and write reach while deciding its storage layout (CBT
-    # gates on both), so a typeless object crashes ``__init__`` wherever
-    # ``auto`` resolves to CBT.  Identity still proves the reuse.
-    context = BackendContext(
-        ast=ast,
-        lattice_info=lattice_info,
-        stencils=extract_stencils(ast),
-        geometry=geometry,
+    from gelb.compiler_pipeline import (
+        PipelineOptions, PipelineProfile, compile_source, build_backend_context,
     )
-
-    def fail_collect_lattice_info(_ast):
-        raise AssertionError("backend should reuse supplied lattice info")
-
-    def fail_resolve_geometry(_ast):
-        raise AssertionError("backend should reuse supplied geometry")
-
-    from gelb.backends import stage3_backend_cpu_fortran_serial as fortran_backend
-    monkeypatch.setattr(
-        fortran_backend,
-        "collect_lattice_info",
-        fail_collect_lattice_info,
-    )
-    monkeypatch.setattr(
-        "gelb.midware.geometry.resolve_geometry",
-        fail_resolve_geometry,
-    )
-    fortran = fortran_backend.FortranCodeGenerator(
-        ast,
-        backend_context=context,
-    )
-    assert fortran._lattice_info is lattice_info
-    assert fortran._stencils is context.stencils
-    fortran._resolve_geometry_via_midware()
-
-    from gelb.backends import stage3_backend_cpu_highway as highway_backend
-    monkeypatch.setattr(
-        highway_backend,
-        "collect_lattice_info",
-        fail_collect_lattice_info,
-    )
-    monkeypatch.setattr(
-        highway_backend,
-        "resolve_geometry",
-        fail_resolve_geometry,
-    )
-
-    highway = highway_backend.HighwayCodeGenerator(
-        ast,
-        backend_context=context,
-    )
-    assert highway._lattice_info is lattice_info
-    assert highway._stencils is context.stencils
-    assert highway._geom is geometry
-
+    from gelb.midware.c_family_lowering import prepare_c_family_ast
+    from gelb.backends.stage3_backend_cpu_fortran_serial import FortranCodeGenerator
+    from gelb.backends.stage3_backend_cpu_highway import HighwayCodeGenerator
     from gelb.backends.stage3_backend_gpu_cuda_cpp import CudaCppCodeGenerator
-    cuda = CudaCppCodeGenerator(ast, backend_context=context)
-    assert cuda._lattice_info is lattice_info
-    assert cuda._stencils is context.stencils
-    assert cuda._geom is geometry
+
+    result = compile_source(_BACKEND_HANDOFF_SOURCE, PipelineProfile.CODEGEN,
+                            PipelineOptions(require_stencils=True, require_geometry=True))
+    result.ast = prepare_c_family_ast(result.ast)
+    context = build_backend_context(result)
+
+    def fail_analysis(*args, **kwargs):
+        raise AssertionError('backend must reuse the supplied analysis')
+
+    for name in ('gelb.midware.ast_eval.collect_lattice_info',
+                 'gelb.midware.ast_eval.eval_const_expr',
+                 'gelb.midware.geometry.resolve_geometry',
+                 'gelb.midware.stage2_midware.extract_stencils',
+                 'gelb.backends.gauge_outputs.collect_gauge_outputs'):
+        monkeypatch.setattr(name, fail_analysis)
+    for generator in (FortranCodeGenerator, HighwayCodeGenerator, CudaCppCodeGenerator):
+        backend = generator(result.ast, backend_context=context)
+        assert backend._lattice_info is context.lattice_info
+        assert backend._stencils is context.stencils
+        assert backend.backend_context.geometry is result.geometry
+        backend.generate()

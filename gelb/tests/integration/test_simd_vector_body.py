@@ -399,3 +399,26 @@ def test_literal_matmul_uses_bound_row_order(tmp_path, monkeypatch, config, stri
         assert actual[name].dtype == expected[name].dtype
         assert actual[name].tobytes() == expected[name].tobytes()
     assert_literal_vector_block(cpp, config)
+
+
+@pytest.mark.parametrize('operand', ['W', 'A * B'])
+@pytest.mark.parametrize('backend,layout', [
+    pytest.param('cpu_fortran_serial', None, marks=requires_compiler),
+    pytest.param('cpu_highway', 'soa', marks=requires_cpp_highway_compiler),
+    pytest.param('cpu_highway', 'aos', marks=requires_cpp_highway_compiler),
+    pytest.param('cpu_highway', 'cbt', marks=requires_cpp_highway_compiler),
+    pytest.param('gpu_cuda_cpp', None, marks=requires_gpu_cuda_cpp_compiler),
+])
+def test_dot_product_hoisted_slice_and_expression(tmp_path, monkeypatch, backend, layout, operand):
+    from gelb.tests.integration.test_tutorial_regressions import (
+        configure_initialization_run, run_source,
+    )
+    configure_initialization_run(monkeypatch, layout)
+    source = program(
+        f'f.out[x|0] = dot_prod({operand}, f.in[x|:]);' + KEEP,
+        constants='''const array[real,3] W={2.0,6.0,12.0};
+        const array[real,3] A={1.0,2.0,3.0};
+        const array[real,3] B={2.0,3.0,4.0};''',
+        init='f.out[x|:]={real(x),2.0,3.0};')
+    data = run_source(tmp_path, backend, source)
+    np.testing.assert_array_equal(data['a'][-1], 2.0 * np.arange(67) + 48.0)

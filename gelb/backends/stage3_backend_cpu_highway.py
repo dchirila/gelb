@@ -64,14 +64,9 @@ from gelb.gelb_ast.ASTNodes import (
 )
 
 from gelb.midware.ast_eval import (
-    collect_lattice_info,
-    eval_const_expr,
-    get_grid_size,
-    get_grid_sizes,
     get_max_dim,
     is_periodic,
 )
-from gelb.midware.geometry import resolve_geometry
 
 from gelb.backends.highway.expr import ExpressionEmitMixin
 from gelb.backends.highway.layout import StorageLayoutMixin
@@ -110,9 +105,11 @@ class HighwayCodeGenerator(
     def __init__(self, ast, num_timesteps=1, output_filename='output.nc',
                  write_every=1, use_openmp=False, random_seed=None,
                  source_file='', storage_layout='auto',
-                 resolved_geometry=None, backend_context=None,
+                 backend_context=None,
                  poison_uninit=False, strict_fp=False):
-        if backend_context is not None and backend_context.ast is not ast:
+        if backend_context is None:
+            raise ValueError("BackendContext is required for code generation.")
+        if backend_context.ast is not ast:
             raise ValueError(
                 "BackendContext AST does not match the AST passed to "
                 "HighwayCodeGenerator.")
@@ -148,22 +145,11 @@ class HighwayCodeGenerator(
         self._axis_substitutions: dict[str, str] = {}
         self._axis_subst_stack: list = []
 
-        # Reuse midware: lattice info + geometry resolution.  The
-        # compiler driver passes a BackendContext built from the canonical
-        # pipeline; direct backend calls still compute these facts here to
-        # preserve the public generator behavior.
-        if backend_context is not None:
-            self._lattice_info = backend_context.lattice_info
-            self._geom = backend_context.geometry
-            self._stencils = backend_context.stencils
-        else:
-            self._lattice_info = collect_lattice_info(ast)
-            self._geom = (
-                resolved_geometry
-                if resolved_geometry is not None
-                else resolve_geometry(ast)
-            )
-            self._stencils = None
+        # The pipeline supplies all analysis facts before emission.
+        self.backend_context = backend_context
+        self._lattice_info = backend_context.lattice_info
+        self._geom = backend_context.geometry
+        self._stencils = backend_context.stencils
 
         # Per-lattice storage-layout decision: True => AoS, False => SoA.
         # Driven by ``--storage-layout`` and the periodicity flags on
@@ -181,28 +167,7 @@ class HighwayCodeGenerator(
                     f"lattice {ln!r}: AoS and CBT layouts are mutually "
                     "exclusive (got both True)")
 
-        # Constant + variable tracking.
-        # _array_constants[name] = list of folded scalar values (for EX, EY, W
-        #   etc).  Lets us fold EX[i] to a literal when emitting upstream_dfs.
-        # _array_locals = set of variable names that are array-typed in the
-        #   block body being emitted (reset per body by _emit_block_body).
-        #   Used when an Identifier appears inside a for-df loop:
-        #   array -> name[gelb_df]; scalar -> name.
-        self._array_constants: dict[str, list] = {}
-        # _array_constant_dtypes[name] = the declared element dtype of a
-        #   1-D constant: its folded values are exact in that type.
-        self._array_constant_dtypes: dict[str, str] = {}
-        # 2-D constants: name -> (nrows, ncols).  Used by matmul to
-        # fold the inner dimension at codegen time.
-        self._array_constants_2d: dict[str, tuple[int, int]] = {}
-        # Folded values for 2-D constants -- populated alongside
-        # ``_array_constants_2d`` when we successfully fold every
-        # entry to a numeric.  Indexed as ``[row][col]``.  Used by
-        # the matmul emit to prune zero coefficients and recognise
-        # the +/-1 case per row.
-        self._array_constants_2d_values: dict[
-            str, list[list[float]]] = {}
-        self._array_locals: set[str] = set()
+        self._current_block = None
         # Tracks user-level int-typed scalar locals that have been
         # retyped to a SIMD vector in the currently-emitting block
         # because their RHS evaluates to a Vec-typed expression
@@ -213,12 +178,6 @@ class HighwayCodeGenerator(
         # ``double`` for a lattice-out store) emit the right Highway
         # spelling rather than a compile-failing ``static_cast``.
         self._simd_int_locals: dict[str, str] = {}
-        # Lengths of the 1-D local arrays declared in the block body
-        # being emitted, the runtime-lifted temps (matmul second-arg
-        # lifts) included; reset per body with _array_locals.  The
-        # only source for _lookup_local_array_size.
-        self._local_array_sizes: dict[str, int] = {}
-
         # Registry for ``static constexpr`` index/coefficient arrays
         # that the dot_prod / matmul emit needs.  Hoisted to the top
         # of ``main()`` and de-duplicated by content so repeated calls
@@ -231,11 +190,6 @@ class HighwayCodeGenerator(
             tuple[str, tuple], str] = {}
         self._deferred_constexpr_counter: int = 0
         self._main_body_start_idx: int = -1
-
-        # bounce_back_dfs table cache: (ex_name,) or (ex_name, ey_name) ->
-        # (var_name, opp_indices_list).  Filled on first reference; the
-        # constexpr table is emitted alongside the lattice constants.
-        self._opp_tables: dict[tuple[str, ...], tuple[str, list[int]]] = {}
 
         # SIMD emission mode toggled by the time-loop emitter.  When
         # 'vec8d', leaf emitters (_emit_lattice_in, the slice-assign
@@ -274,11 +228,6 @@ class HighwayCodeGenerator(
         # the per-NC dispatch in the time loop already skips them.
         # The gauge buffer cells at those positions are NaN-filled
         # before each per-NC gauge fill (see _emit_gauge_nan_init).
-        if self.ast.functions and len(self.ast.functions) > 0:
-            raise NotImplementedError(
-                "cpu_highway: user-defined functions are not yet "
-                "supported.")
-
     # ------------------------------------------------------------------
     # Convenience emit
     # ------------------------------------------------------------------
@@ -394,21 +343,11 @@ class HighwayCodeGenerator(
         return f'firstprivate({", ".join(names)})'
 
     @property
-    def _lattice_name(self) -> str:
-        return next(iter(self._lattice_info))
-
-    def _lattice(self):
-        return self._lattice_info[self._lattice_name]
-
-    def _grid_n(self) -> int:
-        return get_grid_size(self._lattice_info, 0, ast=self.ast)
-
-    @property
     def _d(self) -> int:
         return get_max_dim(self._lattice_info)
 
     def _grid_sizes(self) -> tuple[int, ...]:
-        return get_grid_sizes(self._lattice_info, ast=self.ast)
+        return self._geom.grid_sizes
 
     @staticmethod
     def _axis(i: int) -> str:
@@ -576,208 +515,49 @@ class HighwayCodeGenerator(
         self._emit_bounce_back_dfs_tables()
         self._emit('')
 
-    _NARROW_ELEMENT_WIDTHS = Types.narrow_array_types
-
-    def _constant_elements_in_width(self, elements, elem):
-        """The literal elements of a constant array of a narrow element
-        width ``elem``, each replaced by a literal of the value that
-        width stores (user manual, Numerical semantics: Types and
-        promotion; through the one evaluator: an integer wraps, a real
-        rounds), so that the declaration, the element reads and the
-        folds agree.  An element the width cannot hold (a real past its
-        range) and a non-constant element are kept as written and
-        converted where the declaration is emitted (an infinity at run
-        time; a constant expression never writes one).  A constant array
-        is emitted in its declared width; a wide width holds each element
-        as written, so wide widths keep their nodes."""
-        if elem not in self._NARROW_ELEMENT_WIDTHS:
-            return list(elements)
-        from gelb.midware.ast_eval import convert_plain
-        out = []
-        for e in elements:
-            try:
-                value = eval_const_expr(e, ast=self.ast,
-                                        lattice_info=self._lattice_info)
-                converted = convert_plain(value, elem)
-            except Exception:
-                out.append(e)
-                continue
-            if isinstance(converted, bool) or not isinstance(converted, (int, float)):
-                out.append(e)
-                continue
-            cr = e.code_range
-            if isinstance(converted, int):
-                lit = IntLiteral_N(cr, int(converted))
-            else:
-                lit = RealLiteral_N(cr, float(converted))
-            lit.inferred_type = ArrayDataType_N(cr, elem, List_N(cr))
-            out.append(lit)
-        return out
-
-    def _constant_element_text(self, e, elem, cpp_type):
-        """The C++ spelling of one element of a constant array: a literal
-        of the declared width as is; an element the width cannot hold
-        (``1.0e300``, ``real32(1.0e300)``, ``1.0e300 * 1.0e300`` in a
-        ``real32`` array) as the IEEE 754 value the conversion or the
-        operation gives at run time (user manual, Numerical semantics:
-        Special values), ``std::numeric_limits<float>::infinity()``,
-        which is a constant expression on every compiler where a cast of
-        an overflowing product is not (nvcc rejects it in a ``__device__
-        constexpr`` array); anything else of a narrow width through an
-        explicit conversion."""
-        text = self._emit_expression(e)
-        if elem not in self._NARROW_ELEMENT_WIDTHS:
+    def _constant_element_text(self, element, dtype, cpp_type):
+        if dtype not in Types.narrow_array_types:
+            return self._emit_expression(element.node)
+        value = element.converted_value
+        if isinstance(value, int) and not isinstance(value, bool):
+            return int64_literal(value)
+        if isinstance(value, float):
+            return cpp_real(value, cpp_type)
+        if element.special_value is not None:
+            return cpp_real(element.special_value, cpp_type)
+        text = self._emit_expression(element.node)
+        kind = getattr(getattr(element.node, 'inferred_type', None), 'element_dtype', None)
+        if isinstance(element.node, (IntLiteral_N, RealLiteral_N)) and kind == dtype:
             return text
-        kind = getattr(getattr(e, 'inferred_type', None), 'element_dtype', None)
-        if isinstance(e, (IntLiteral_N, RealLiteral_N)) and kind == elem:
-            return text
-        special = self._ieee_special_value(e, elem)
-        if special is not None:
-            return cpp_real(special, cpp_type)
         return f'static_cast<{cpp_type}>({text})'
 
-    def _ieee_special_value(self, e, elem):
-        """The non-finite value a constant element has in the width
-        ``elem`` under IEEE 754 (an infinity, a NaN), or None when it is
-        finite or not a constant."""
-        from gelb.midware.ast_eval import convert_plain, ieee_special_values
-        try:
-            with ieee_special_values():
-                value = float(convert_plain(
-                    eval_const_expr(e, ast=self.ast, lattice_info=self._lattice_info),
-                    elem))
-        except Exception:
-            return None
-        return None if math.isfinite(value) else value
-
     def _emit_global_constant(self, stmt: ConstantDefinitionStmt_N) -> None:
-        dtype = stmt.data_type
-        # All declarations carry an ArrayDataType_N in modern GeLB.
-        # Scalars have shape = empty List_N; arrays have shape = IntLiteral_N
-        # (1-D) or List_N of IntLiterals (multi-D).
-        shape = getattr(dtype, 'shape', None)
-        elem = (getattr(dtype, 'element_dtype', None)
-                or getattr(dtype, 'name', 'real'))
-        cpp_type = _TYPE_MAP.get(elem, 'double')
-        is_array = (shape is not None
-                    and not (isinstance(shape, List_N) and len(shape) == 0))
-
-        if not is_array:
-            value_expr = self._emit_expression(stmt.value)
-            self._emit(f'static constexpr {cpp_type} '
-                       f'{_uname(stmt.name.name)} = {value_expr};')
+        constant = self.backend_context.global_constants[stmt.name.name]
+        cpp_type = _TYPE_MAP[constant.dtype]
+        name = _uname(stmt.name.name)
+        if not constant.dims:
+            value = self._emit_expression(stmt.value)
+            self._emit(f'static constexpr {cpp_type} {name} = {value};')
             return
-
-        # Array constant.  Two shapes supported:
-        #   1-D: shape is IntLiteral_N (q)
-        #   2-D: shape is Array1DLiteral_N (rows, cols) -- used by MRT
-        #        transformation matrices (M, M_inv).
-        if isinstance(shape, IntLiteral_N):
-            n = shape.value
-            # The frontend wraps the initializer in a
-            # ``TypePromotionNode_N`` when an explicit ``array[real32, ...]``
-            # declaration coerces a literal whose default type is real64.
-            # Unwrap it here so the underlying ``Array1DLiteral_N``
-            # element list is reachable.
-            value_node = stmt.value
-            while isinstance(value_node, TypePromotionNode_N):
-                value_node = value_node.expr
-            if not hasattr(value_node, 'value'):
-                raise NotImplementedError(
-                    f"unexpected 1-D array constant initialiser "
-                    f"({type(value_node).__name__}) for {stmt.name.name}.")
-            elements = value_node.value.elements
-            if len(elements) != n:
-                raise NotImplementedError(
-                    f"Array constant {stmt.name.name}: shape {n} != "
-                    f"{len(elements)} elements")
-            elements = self._constant_elements_in_width(elements, elem)
-            value_node.value.elements = elements
-            emitted_elems = [self._constant_element_text(e, elem, cpp_type)
-                             for e in elements]
-            self._emit(f'static constexpr {cpp_type} '
-                       f'{_uname(stmt.name.name)}[{n}] = '
-                       f'{{ {", ".join(emitted_elems)} }};')
-            # Record for later folding (e.g. when emitting upstream_dfs).
-            self._array_constants[stmt.name.name] = list(elements)
-            self._array_constant_dtypes[stmt.name.name] = elem
-            return
-        # 2-D array constant -- extract rows and cols from the shape
-        # literal (Array1DLiteral_N or List_N of two IntLiterals).
-        nrows = ncols = None
-        if isinstance(shape, Array1DLiteral_N):
-            shape_elems = shape.value.elements
-        elif isinstance(shape, List_N):
-            shape_elems = shape.elements
+        render = lambda e: self._constant_element_text(e, constant.dtype, cpp_type)
+        if len(constant.dims) == 1:
+            n, = constant.dims
+            if len(constant.elements) != n:
+                raise NotImplementedError(f'Array constant {stmt.name.name}: shape mismatch')
+            value = ', '.join(render(e) for e in constant.elements)
+            self._emit(f'static constexpr {cpp_type} {name}[{n}] = {{ {value} }};')
+        elif len(constant.dims) == 2:
+            nrows, ncols = constant.dims
+            if len(constant.rows) != nrows or any(len(row) != ncols for row in constant.rows):
+                raise NotImplementedError(f'Array constant {stmt.name.name}: shape mismatch')
+            value = ', '.join('{ ' + ', '.join(render(e) for e in row) + ' }'
+                              for row in constant.rows)
+            self._emit(f'static constexpr {cpp_type} {name}[{nrows}][{ncols}] = {{ {value} }};')
         else:
-            shape_elems = None
-        if shape_elems is not None and len(shape_elems) == 2 \
-                and all(isinstance(e, IntLiteral_N) for e in shape_elems):
-            nrows, ncols = shape_elems[0].value, shape_elems[1].value
-        if nrows is None:
+            shape = stmt.data_type.shape
             raise NotImplementedError(
-                f"cpu_highway: only 1-D and 2-D array constants are "
-                f"supported (got shape {type(shape).__name__} "
-                f"for {stmt.name.name}).")
-        # Same TypePromotionNode_N unwrap as the 1-D path: the frontend
-        # wraps the literal when the declared element type forces a
-        # promotion (e.g. ``array[real32, ...]`` initialised from a
-        # default-real64 literal).
-        value_node = stmt.value
-        while isinstance(value_node, TypePromotionNode_N):
-            value_node = value_node.expr
-        if not isinstance(value_node, Array2DLiteral_N):
-            raise NotImplementedError(
-                f"2-D array constant {stmt.name.name}: expected "
-                f"Array2DLiteral_N initialiser, got "
-                f"{type(value_node).__name__}.")
-        rows = value_node.value.elements  # List_N of Array1DLiteral_N
-        if len(rows) != nrows:
-            raise NotImplementedError(
-                f"Array constant {stmt.name.name}: declared {nrows} "
-                f"rows, got {len(rows)}.")
-        # Emit row-major C++ literal (row-major matches both the
-        # source-text order in `{{...}, {...}}` and the natural C++
-        # layout of `T[nrows][ncols]`).
-        out_lines = []
-        for r in rows:
-            row_elems = r.value.elements
-            if len(row_elems) != ncols:
-                raise NotImplementedError(
-                    f"Array constant {stmt.name.name}: row width "
-                    f"{len(row_elems)} != declared {ncols}.")
-            row_elems = self._constant_elements_in_width(row_elems, elem)
-            r.value.elements = row_elems
-            out_lines.append('{ '
-                             + ', '.join(self._constant_element_text(e, elem, cpp_type)
-                                         for e in row_elems)
-                             + ' }')
-        self._emit(f'static constexpr {cpp_type} '
-                   f'{_uname(stmt.name.name)}[{nrows}][{ncols}] = '
-                   f'{{ {", ".join(out_lines)} }};')
-        # Track 2-D constants separately from 1-D for matmul lookups.
-        self._array_constants_2d[stmt.name.name] = (nrows, ncols)
-        # Try to fold every (row, col) to a numeric, exact in the
-        # declared element type (ints for an integer matrix, floats
-        # for a real one).  If all entries fold, cache them so the
-        # matmul emit can prune zero coefficients and recognise the
-        # +/-1 case per row.  If any entry fails to fold (rare --
-        # typically every M / M_inv in MRT examples is a literal
-        # numeric matrix), fall back: the matmul emit will skip the
-        # helper path and use the original 19-term ``+`` chain.
-        integer = str(elem).startswith('int')
-        try:
-            folded = []
-            for r in rows:
-                folded_row = []
-                for e in r.value.elements:
-                    value = eval_const_expr(e, ast=self.ast,
-                                            lattice_info=self._lattice_info)
-                    folded_row.append(int(value) if integer else float(value))
-                folded.append(folded_row)
-            self._array_constants_2d_values[stmt.name.name] = folded
-        except Exception:
-            pass  # leave unset; matmul emit will fall back
+                'cpu_highway: only 1-D and 2-D array constants are supported '
+                f'(got shape {type(shape).__name__} for {stmt.name.name}).')
 
     def _emit_aux_variables(self) -> None:
         # MLUPS timer + NetCDF state come from the runtime header.
@@ -823,11 +603,7 @@ class HighwayCodeGenerator(
     # ------------------------------------------------------------------
 
     def _gauge_output_layout(self):
-        from gelb.backends.gauge_outputs import collect_gauge_outputs
-        return collect_gauge_outputs(
-            self._find_block(self.ast.gauges, info.gauge)
-            if info.gauge is not None else None
-            for info in self._geom.nc_info.values())
+        return self.backend_context.gauge_outputs
 
     def _find_block(self, container, name: str):
         # ``container`` is a List_N for ast.initializers / .dynamics /
@@ -962,10 +738,8 @@ class HighwayCodeGenerator(
         """Refresh the ghost cells a gauge reads.  The time loop updates
         the halo before the dynamics only; gauges run after the swap and
         at t=0, so a gauge reading a neighbour across a periodic axis
-        needs its own refresh.  Without stencil information every
-        periodic lattice is refreshed."""
-        wanted = (self._stencils.gauge_halo_lattices()
-                  if self._stencils is not None else set(self._lattice_info))
+        needs its own refresh."""
+        wanted = self._stencils.gauge_halo_lattices()
         for lname, info in self._lattice_info.items():
             if lname in wanted and any(is_periodic(self._lattice_info, i)
                                        for i in range(info['d'])):
@@ -1232,9 +1006,6 @@ class HighwayCodeGenerator(
         index themselves (CBT cross-tile loads, CUDA shared tiles) are
         only taken when this is at most 1."""
         stencils = self._stencils
-        if stencils is None:
-            from gelb.midware.stage2_midware import extract_stencils
-            stencils = extract_stencils(self.ast)
         return stencils.periodic_reach()
 
     def _write_reach(self) -> int:
@@ -1243,109 +1014,7 @@ class HighwayCodeGenerator(
         CBT layout's aligned and streaming stores, the CUDA shared tiles)
         are only taken when this is 0."""
         stencils = self._stencils
-        if stencils is None:
-            from gelb.midware.stage2_midware import extract_stencils
-            stencils = extract_stencils(self.ast)
         return stencils.write_reach()
-
-    def _compute_write_offsets(self, block):
-        """Per-axis ``(max_neg_off, max_pos_off)`` over every lattice
-        *write* of ``block`` (``f.out[x +/- k, ...]``).  A push needs the
-        full reach peeled at a periodic edge, since the halo cannot
-        absorb a write; see ``_emit_block_simd``."""
-        from gelb.gelb_ast.ASTNodes import Node_N
-        d = self._d
-        max_neg = [0] * d
-        max_pos = [0] * d
-
-        def walk(n):
-            if not isinstance(n, Node_N):
-                return
-            if isinstance(n, RectSelOfLatticeOutDFs_N):
-                spatial = n.element_ranges[:-1]
-                for axis_idx, sr in enumerate(spatial):
-                    parsed = self._split_axis_offset(self._range_scalar(sr))
-                    if parsed is None:
-                        continue
-                    _, off = parsed
-                    if off > 0:
-                        max_pos[axis_idx] = max(max_pos[axis_idx], off)
-                    elif off < 0:
-                        max_neg[axis_idx] = max(max_neg[axis_idx], -off)
-            for c in n.get_children():
-                walk(c)
-        walk(block)
-        return list(zip(max_neg, max_pos))
-
-    def _compute_stencil_offsets(self, dblock):
-        """Walk a dynamic block and return per-axis ``(max_neg_off,
-        max_pos_off)`` covering every neighbour-cell read it does:
-          * upstream_dfs calls (offsets folded from EX/EY constants);
-          * direct ``f.in[x +/- k, y +/- k | df]`` reads parsed from the
-            spatial coord expressions.
-        The two together let _emit_dynamic_simd compute correct
-        head/body/tail bounds even for examples that use both styles
-        (e.g. poiseuille_flow_2d_mrt's BounceBack walls)."""
-        from gelb.gelb_ast.ASTNodes import Node_N
-        d = self._d
-        max_neg = [0] * d
-        max_pos = [0] * d
-
-        def bump(axis, off):
-            if off > 0:
-                max_pos[axis] = max(max_pos[axis], off)
-            elif off < 0:
-                max_neg[axis] = max(max_neg[axis], -off)
-
-        def walk(n):
-            if not isinstance(n, Node_N):
-                return
-            if isinstance(n, IntrinsicFunctionCall_N) \
-                    and n.function_name in ('upstream_dfs', 'bounce_back_dfs'):
-                args = n.arguments
-                expected = d + 2
-                ev_lists = []
-                if len(args) == expected:
-                    if d == 1:
-                        ev_lists = [(args[2], 0)]
-                    else:
-                        ev = args[1 + d]
-                        elems = (ev.elements
-                                 if isinstance(ev, List_N)
-                                 else getattr(ev, 'value', None))
-                        if elems is not None and len(elems) == d:
-                            ev_lists = [(elems[axis], axis)
-                                        for axis in range(d)]
-                for ev_id, axis in ev_lists:
-                    if not isinstance(ev_id, Identifier_N):
-                        continue
-                    vals = self._array_constants.get(ev_id.name)
-                    if vals is None:
-                        continue
-                    for v in vals:
-                        try:
-                            off_val = int(eval_const_expr(
-                                v, ast=self.ast,
-                                lattice_info=self._lattice_info))
-                        except Exception:
-                            continue
-                        # upstream_dfs at direction i reads the
-                        # *upstream* cell (- offset).
-                        bump(axis, off_val if n.function_name ==
-                             'bounce_back_dfs' else -off_val)
-            elif isinstance(n, RectSelOfLatticeInDFs_N):
-                # Direct stencil read: parse each spatial coord.
-                spatial = n.element_ranges[:-1]
-                for axis_idx, sr in enumerate(spatial):
-                    scalar = self._range_scalar(sr)
-                    parsed = self._split_axis_offset(scalar)
-                    if parsed is not None:
-                        _, off_val = parsed
-                        bump(axis_idx, off_val)
-            for c in n.get_children():
-                walk(c)
-        walk(dblock)
-        return list(zip(max_neg, max_pos))
 
     # Back-compat alias for any external caller / test that used the
     # dyn-specific name.
@@ -1529,7 +1198,7 @@ class HighwayCodeGenerator(
 def generate_cpu_highway(ast, num_timesteps=1, output_filename='output.nc',
                     write_every=1, use_openmp=False, random_seed=None,
                     source_file='', storage_layout='auto',
-                    resolved_geometry=None, backend_context=None,
+                    backend_context=None,
                     poison_uninit=False, strict_fp=False):
     """Generate C++17 + Google Highway code from a GeLB AST.
 
@@ -1539,9 +1208,8 @@ def generate_cpu_highway(ast, num_timesteps=1, output_filename='output.nc',
     otherwise.  ``'soa'`` / ``'aos'`` force the choice for every
     lattice.  Both layouts produce bit-identical output.
 
-    ``backend_context`` may be supplied by the compiler driver to reuse
+    ``backend_context`` is required from the compiler driver to reuse
     facts already produced by the canonical compiler pipeline.
-    ``resolved_geometry`` is retained for direct-call compatibility.
 
     Returns a string with the full ``.cpp`` source.  Raises
     :class:`NotImplementedError` with a precise message if the program
@@ -1554,7 +1222,7 @@ def generate_cpu_highway(ast, num_timesteps=1, output_filename='output.nc',
                               random_seed=random_seed,
                               source_file=source_file,
                               storage_layout=storage_layout,
-                              resolved_geometry=resolved_geometry,
+
                               backend_context=backend_context,
                               poison_uninit=poison_uninit,
                               strict_fp=strict_fp)

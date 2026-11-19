@@ -43,7 +43,7 @@ from gelb.gelb_ast.ASTNodes import (
 from gelb.midware.StencilExtractionVisitor import affine_index
 from gelb.midware.ast_eval import (
     add as ev_add, mul as ev_mul, sub as ev_sub,
-    eval_const_expr, convert_plain,
+    convert_plain,
     is_periodic,
 )
 
@@ -66,17 +66,14 @@ class StatementEmitMixin:
         # or a scalar of the same name) must not be visible here.
         # Save/restore so a parent caller's sets (if any) are preserved.
         prev_simd_int_locals = self._simd_int_locals
-        prev_array_locals = self._array_locals
-        prev_local_array_sizes = self._local_array_sizes
+        prev_block = self._current_block
         self._simd_int_locals = {}
-        self._array_locals = set()
-        self._local_array_sizes = {}
+        self._current_block = block
         try:
             self._emit_block_body_inner(block, context=context)
         finally:
             self._simd_int_locals = prev_simd_int_locals
-            self._array_locals = prev_array_locals
-            self._local_array_sizes = prev_local_array_sizes
+            self._current_block = prev_block
 
     def _emit_block_body_inner(self, block, *, context: str) -> None:
         # Emit declarations for gauge outputs explicitly so
@@ -155,18 +152,6 @@ class StatementEmitMixin:
             f"cpu_highway: DF range bound must be a resolved int literal "
             f"(got {type(node).__name__}).")
 
-    def _array_decl_size(self, stmt) -> int | None:
-        """Return the array size if ``stmt.data_type`` is an array, else None."""
-        dt = stmt.data_type
-        shape = getattr(dt, 'shape', None)
-        if shape is None:
-            return None
-        if isinstance(shape, IntLiteral_N):
-            return shape.value
-        if isinstance(shape, List_N) and len(shape) == 0:
-            return None  # scalar
-        return None  # not 1-D
-
     def _emit_intrinsic_into_array(self, name: str, n: int,
                                    call: IntrinsicFunctionCall_N) -> None:
         """Emit per-element initialisation of a local array from an
@@ -213,7 +198,7 @@ class StatementEmitMixin:
             values, which lets the compiler eliminate
             zero-coefficient terms gcc otherwise keeps per IEEE-754.
           - Identifier_N reference to a local array (registered in
-            ``self._array_locals``).  These appear in slice-LHS
+            the active block's symbol table).  These appear in slice-LHS
             collisions like ``f.out[x,y,z|:] = fIn - tau_inv * (fIn -
             feq)`` where ``fIn`` and ``feq`` are temp arrays
             populated by an upstream_dfs read or an inlined
@@ -239,10 +224,10 @@ class StatementEmitMixin:
         if isinstance(expr, Array1DLiteral_N):
             return True
         if isinstance(expr, Identifier_N):
-            if expr.name in self._array_constants \
-                    and self._fold_array_constants(expr.name) is not None:
+            if self._constant_vector(expr.name) is not None \
+                    and self._constant_values(expr.name) is not None:
                 return True
-            if expr.name in self._array_locals:
+            if self._local_array_type(expr.name) is not None:
                 return True
         for c in expr.get_children():
             if self._expr_should_unroll_slice(c):
@@ -346,25 +331,6 @@ class StatementEmitMixin:
         except (OverflowError, ValueError, ZeroDivisionError):
             return written
 
-    def _fold_array_constants(self, name: str):
-        """If ``name`` is a constexpr array constant whose elements
-        all fold to numeric values at codegen time, return them as a
-        list of their exact values in the array's declared element
-        type: Python ints for an integer array (an int64 above 2^53
-        keeps its low bits), floats for a real one.  Otherwise return
-        None.  Used by dot_prod, the constant-index read and the
-        slice-unrolling test."""
-        if name not in self._array_constants:
-            return None
-        integer = self._array_constant_dtypes.get(name, 'real').startswith('int')
-        try:
-            values = [eval_const_expr(v, ast=self.ast,
-                                      lattice_info=self._lattice_info)
-                      for v in self._array_constants[name]]
-            return [int(v) if integer else float(v) for v in values]
-        except Exception:
-            return None
-
     @staticmethod
     def _operand_for_coeff(coef, runtime_expr: str):
         """Decide how to render an operand whose coefficient ``coef``
@@ -458,23 +424,18 @@ class StatementEmitMixin:
                 not isinstance(varg, Identifier_N):
             raise NotImplementedError(
                 "matmul: both arguments must be bare identifiers.")
-        if Marg.name not in self._array_constants_2d:
+        matrix = self.backend_context.global_constants.get(Marg.name)
+        if matrix is None or len(matrix.dims) != 2:
             raise NotImplementedError(
                 f"matmul: first argument {Marg.name} must be a 2-D "
                 f"array constant.")
-        nrows, ncols = self._array_constants_2d[Marg.name]
+        nrows, ncols = matrix.dims
         if nrows != n:
             raise NotImplementedError(
                 f"matmul: M has {nrows} rows but output array "
                 f"{name} declared with {n} elements.")
         # Resolve v's length.
-        if varg.name in self._array_locals:
-            v_len = self._lookup_local_array_size(varg.name)
-        elif varg.name in self._array_constants:
-            v_len = len(self._array_constants[varg.name])
-        else:
-            raise NotImplementedError(
-                f"matmul: unknown vector argument '{varg.name}'.")
+        v_len = self._array_size(varg.name)
         if v_len != ncols:
             raise NotImplementedError(
                 f"matmul: M has {ncols} cols but vector {varg.name} "
@@ -510,7 +471,7 @@ class StatementEmitMixin:
             return (f'static_cast<{acc_cpp}>({value})'
                     if not simd and acc_cpp in ('int8_t', 'int16_t') else value)
 
-        M_vals = self._array_constants_2d_values.get(Marg.name)
+        M_vals = matrix.matrix
         if M_vals is None:
             # Fold-failure fallback: keep the original ``M[i][j]*v[j]``
             # ``+``-chain.  This still relies on gcc to const-propagate
@@ -643,7 +604,7 @@ class StatementEmitMixin:
                     "(e.g. EX, EY).")
         ev_values_list = []
         for ex_node in ex_nodes:
-            vals = self._array_constants.get(ex_node.name)
+            vals = self._constant_values(ex_node.name)
             if vals is None or len(vals) != n:
                 raise NotImplementedError(
                     f"upstream_dfs needs {ex_node.name} declared as a "
@@ -657,9 +618,7 @@ class StatementEmitMixin:
             offsets = []
             for vals, ex_node in zip(ev_values_list, ex_nodes):
                 try:
-                    offsets.append(int(eval_const_expr(
-                        vals[i], ast=self.ast,
-                        lattice_info=self._lattice_info)))
+                    offsets.append(int(vals[i]))
                 except Exception:
                     raise NotImplementedError(
                         f"upstream_dfs: could not fold "
@@ -946,8 +905,8 @@ class StatementEmitMixin:
         # per-element loop, like Fortran's array-assignment
         # semantics.  Detect array-typed LHS via the local-array
         # registry.
-        if lhs.name in self._array_locals:
-            n = self._lookup_local_array_size(lhs.name)
+        if self._local_array_type(lhs.name) is not None:
+            n = self._array_size(lhs.name)
             # If the RHS *contains* an Array1DLiteral_N
             # anywhere -- either as the whole RHS (``meq =
             # {a, b, c, ...}``) or embedded in an arithmetic
@@ -1010,7 +969,8 @@ class StatementEmitMixin:
         """Local declaration (scalar or array), including the
         SIMD V-retyping rules and the array-initialiser forms
         (upstream_dfs / matmul / literal / rolled loop)."""
-        arr_size = self._array_decl_size(stmt)
+        kind = stmt.data_type.canonical_type
+        arr_size = kind.dims[0] if kind.rank == 1 else None
         cpp_type = self._decl_cpp_type(stmt)
         # In SIMD mode, retype real-valued *scalar* locals as
         # ``V`` so subsequent arithmetic with V-typed lattice
@@ -1122,8 +1082,6 @@ class StatementEmitMixin:
                 self._emit(f'{cpp_type} {name} = 0;')
         else:
             # Array: T name[N];  followed by per-element init if any.
-            self._array_locals.add(stmt.name.name)
-            self._local_array_sizes[stmt.name.name] = arr_size
             self._emit(f'{cpp_type} {name}[{arr_size}];')
             init = stmt.initial_value
             # Unwrap a TypePromotionNode_N wrapper so that the
@@ -1163,8 +1121,8 @@ class StatementEmitMixin:
                         elem_str = f'hn::Set(d, {elem_str})'
                     self._emit(f'{name}[{i}] = {elem_str};')
             elif isinstance(init, Identifier_N) and (
-                    init.name in self._array_locals
-                    or init.name in self._array_constants):
+                    self._local_array_type(init.name) is not None
+                    or self._constant_vector(init.name) is not None):
                 # Array-to-array copy.  When the destination is
                 # V[] but the source is a scalar compound-literal array
                 # global constant, broadcast each element.
@@ -1414,76 +1372,16 @@ class StatementEmitMixin:
         raise NotImplementedError(
             "cpu_highway: DF index must be a literal int outside a slice loop.")
 
-    def _collect_bounce_back_dfs_keys(self):
-        """Walk the AST and collect every velocity-set tuple used in
-        a bounce_back_dfs() call.  The tuple has length d (1 in 1-D,
-        2 in 2-D, 3 in 3-D)."""
-        from gelb.gelb_ast.ASTNodes import Node_N
-        d = self._d
-        expected_args = d + 2
-        keys: set[tuple[str, ...]] = set()
-        def walk(node):
-            if not isinstance(node, Node_N):
-                return
-            if isinstance(node, IntrinsicFunctionCall_N) and \
-                    node.function_name == 'bounce_back_dfs':
-                args = node.arguments
-                if len(args) == expected_args:
-                    if d == 1:
-                        if isinstance(args[2], Identifier_N):
-                            keys.add((args[2].name,))
-                    else:
-                        ev = args[1 + d]
-                        elems = (ev.elements
-                                 if isinstance(ev, List_N)
-                                 else getattr(ev, 'value', None))
-                        if elems is not None and len(elems) == d \
-                                and all(isinstance(e, Identifier_N)
-                                        for e in elems):
-                            keys.add(tuple(e.name for e in elems))
-            for child in node.get_children():
-                walk(child)
-        walk(self.ast)
-        return keys
-
-    def _build_opp_table(self, key) -> list[int]:
-        """For a tuple of velocity-set constant names (one per spatial
-        axis), compute the opposite-direction permutation: ``opp[i] =
-        j`` such that ``EX[j] = -EX[i]`` (and the same for any extra
-        axes).  Raises if the stencil is not symmetric."""
-        # Resolve each per-axis EX/EY/EZ array to a list of integer
-        # offsets (one per direction).
-        per_axis_vals = []
-        for axis_name in key:
-            per_axis_vals.append([
-                int(eval_const_expr(v, ast=self.ast,
-                                     lattice_info=self._lattice_info))
-                for v in self._array_constants[axis_name]])
-        n = len(per_axis_vals[0])
-        opp = [-1] * n
-        for i in range(n):
-            for j in range(n):
-                if all(per_axis_vals[a][j] == -per_axis_vals[a][i]
-                       for a in range(len(key))):
-                    opp[i] = j
-                    break
-            if opp[i] == -1:
-                raise NotImplementedError(
-                    f"bounce_back_dfs: stencil {key} is not symmetric "
-                    f"(no opposite for direction {i}).")
-        return opp
-
     def _opp_var_name(self, key) -> str:
         return 'gelb_opp_' + '_'.join(key)
 
     def _emit_bounce_back_dfs_tables(self) -> None:
-        keys = self._collect_bounce_back_dfs_keys()
+        keys = self.backend_context.opp_tables
         if not keys:
             return
         for key in sorted(keys):
-            opp = self._build_opp_table(key)
+            opp = self.backend_context.opp_tables[key]
             var = self._opp_var_name(key)
-            self._opp_tables[key] = (var, opp)
             n = len(opp)
             self._emit(f'// Opposite-direction lookup for {{{", ".join(key)}}}')
             self._emit(f'static constexpr int {var}[{n}] = '

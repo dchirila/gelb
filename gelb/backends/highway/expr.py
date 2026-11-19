@@ -50,7 +50,7 @@ from gelb.gelb_ast.ASTNodes import (
     UnaryMinusExpr_N,
     VariableDeclarationStmt_N,
 )
-from gelb.midware.ast_eval import eval_const_expr, is_periodic
+from gelb.midware.ast_eval import is_periodic
 from gelb.midware.ast_simplify import is_pure, numeric_kind
 
 
@@ -128,6 +128,29 @@ class ExpressionEmitMixin:
     ``HighwayCodeGenerator`` (stage3_backend_cpu_highway).
     """
 
+    def _local_array_type(self, name):
+        block = self._current_block
+        sdef = block.symbol_defs.get_symbol_definition_local(name) if block is not None else None
+        kind = sdef.canonical_type if sdef is not None else None
+        return kind if kind is not None and kind.is_array else None
+
+    def _constant_vector(self, name):
+        constant = self.backend_context.global_constants.get(name)
+        return constant if constant is not None and len(constant.dims) == 1 else None
+
+    def _constant_values(self, name):
+        constant = self._constant_vector(name)
+        return constant.folded if constant is not None else None
+
+    def _array_size(self, name):
+        local = self._local_array_type(name)
+        if local is not None and local.rank == 1:
+            return local.dims[0]
+        constant = self._constant_vector(name)
+        if constant is not None:
+            return constant.dims[0]
+        raise NotImplementedError(f"cpu_highway: no one-dimensional array '{name}' in this scope.")
+
     def _emit_expression(self, expr, df_var: str | None = None) -> str:
         if isinstance(expr, IntLiteral_N):
             return int64_literal(expr.value)
@@ -164,8 +187,8 @@ class ExpressionEmitMixin:
             # operation (e.g. sum(EX) -- handled at the IntrinsicFunctionCall
             # level, never reached here as a bare identifier).
             base = _uname(expr.name)
-            is_array = (expr.name in self._array_locals
-                        or expr.name in self._array_constants)
+            is_array = (self._local_array_type(expr.name) is not None
+                        or self._constant_vector(expr.name) is not None)
             if is_array and df_var is not None:
                 # Constant-fold accesses into a constexpr array
                 # constant when the index is a literal integer.
@@ -179,8 +202,8 @@ class ExpressionEmitMixin:
                 # int64 width into the expression; a real one is a
                 # literal of the array's width.
                 if (df_var.lstrip('-').isdigit()
-                        and expr.name in self._array_constants):
-                    vals = self._fold_array_constants(expr.name)
+                        and self._constant_vector(expr.name) is not None):
+                    vals = self._constant_values(expr.name)
                     if vals is not None:
                         idx = int(df_var)
                         if 0 <= idx < len(vals):
@@ -660,20 +683,16 @@ class ExpressionEmitMixin:
                 and isinstance(b, Identifier_N)):
             raise NotImplementedError(
                 "cpu_highway: dot_prod() arguments must be bare identifiers.")
-        n_a = (len(self._array_constants[a.name])
-               if a.name in self._array_constants
-               else self._lookup_local_array_size(a.name))
-        n_b = (len(self._array_constants[b.name])
-               if b.name in self._array_constants
-               else self._lookup_local_array_size(b.name))
+        n_a = self._array_size(a.name)
+        n_b = self._array_size(b.name)
         if n_a != n_b:
             raise NotImplementedError(
                 f"cpu_highway: dot_prod() length mismatch "
                 f"({a.name}: {n_a} vs {b.name}: {n_b}).")
         n = n_a
         ba, bb = _uname(a.name), _uname(b.name)
-        a_vals = self._fold_array_constants(a.name)
-        b_vals = self._fold_array_constants(b.name)
+        a_vals = self._constant_values(a.name)
+        b_vals = self._constant_values(b.name)
         mixed = self._emit_dot_prod_real_coeffs_int_array(
             call, a, b, a_vals, b_vals, n)
         if mixed is not None:
@@ -789,9 +808,9 @@ class ExpressionEmitMixin:
                                          'element_dtype', None))
                 not in ('int8_t', 'int16_t', 'int32_t', 'int64_t')):
             return values
-        exact = [eval_const_expr(v, ast=self.ast,
-                                 lattice_info=self._lattice_info)
-                 for v in self._array_constants[operand.name]]
+        constant = self.backend_context.global_constants[operand.name]
+        exact = [e.converted_value if e.converted_value is not None else e.raw_value
+                 for e in constant.elements]
         return [_int_to_binary32(int(e))
                 if isinstance(e, int) and float(e) != e else v
                 for e, v in zip(exact, values)]
@@ -922,11 +941,8 @@ class ExpressionEmitMixin:
         else:
             elems = vel.elements if isinstance(vel, List_N) else vel.value
             key = tuple(e.name for e in elems)
-        offsets = [int(eval_const_expr(self._array_constants[name][i],
-                                       ast=self.ast,
-                                       lattice_info=self._lattice_info))
-                   for name in key]
-        opposite = self._opp_tables[key][1][i]
+        offsets = [int(self.backend_context.global_constants[name].folded[i]) for name in key]
+        opposite = self.backend_context.opp_tables[key][i]
         coords = [self._emit_coord_scalar(c) for c in args[1:-1]]
         targets, guards = [], []
         for axis, (coord, off, size) in enumerate(
@@ -975,18 +991,13 @@ class ExpressionEmitMixin:
                 not isinstance(varg, Identifier_N):
             raise NotImplementedError(
                 "matmul: both args must be bare identifiers.")
-        if Marg.name not in self._array_constants_2d:
+        matrix = self.backend_context.global_constants.get(Marg.name)
+        if matrix is None or len(matrix.dims) != 2:
             raise NotImplementedError(
                 f"matmul: first argument {Marg.name} must be a "
                 f"2-D array constant.")
-        _, ncols = self._array_constants_2d[Marg.name]
-        if varg.name in self._array_locals:
-            v_len = self._lookup_local_array_size(varg.name)
-        elif varg.name in self._array_constants:
-            v_len = len(self._array_constants[varg.name])
-        else:
-            raise NotImplementedError(
-                f"matmul: unknown vector argument '{varg.name}'.")
+        _, ncols = matrix.dims
+        v_len = self._array_size(varg.name)
         if v_len != ncols:
             raise NotImplementedError(
                 f"matmul: M cols ({ncols}) != v len ({v_len}).")
@@ -1009,21 +1020,3 @@ class ExpressionEmitMixin:
         if self._simd_mode != 'vec8d' and acc_cpp in ('int8_t', 'int16_t'):
             return f'static_cast<{acc_cpp}>({terms})'
         return f'({terms})'
-
-    def _lookup_local_array_size(self, name: str) -> int:
-        """The length of the local array ``name`` declared in the block
-        being emitted (``_local_array_sizes`` is filled by the
-        declaration emit and by the matmul lifts, and reset for every
-        block body).  Used when emitting ``dot_prod``, ``matmul`` and a
-        whole-array assignment, which unroll over the length.  A name
-        that no declaration of this block registered is an internal
-        error: the frontend has checked that every local is declared
-        before its use, so the walk over the other blocks that used to
-        stand here could only return another block's array of the same
-        name, and did.
-        """
-        if name in self._local_array_sizes:
-            return self._local_array_sizes[name]
-        raise NotImplementedError(
-            f"cpu_highway: local array '{name}' is not declared in the "
-            f"block being emitted.")

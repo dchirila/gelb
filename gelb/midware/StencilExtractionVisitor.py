@@ -38,6 +38,7 @@ from gelb.gelb_ast.ASTNodes import (
 )
 
 from gelb.midware.stencil import (
+    compute_opposite_mapping,
     BlockStencil,
     GeometryPaint,
     LatticeMetadata,
@@ -356,7 +357,7 @@ class StencilExtractionVisitor:
         nd = len(vel_arrays)
 
         if node.function_name == 'bounce_back_dfs':
-            opp_map = self._compute_opposite_mapping(vel_arrays, q)
+            opp_map = compute_opposite_mapping(vel_arrays, q)
             return [
                 StencilAccess(
                     lattice_name=lattice_name,
@@ -414,24 +415,6 @@ class StencilExtractionVisitor:
             return -StencilExtractionVisitor._eval_scalar(node.value)
         raise ValueError(
             f"Cannot extract scalar from {type(node).__name__}")
-
-    @staticmethod
-    def _compute_opposite_mapping(vel_arrays, q) -> list[int]:
-        """Compute opposite DF index mapping from velocity vectors."""
-        nd = len(vel_arrays)
-        opp = [None] * q
-        for i in range(q):
-            vi = tuple(vel_arrays[dim][i] for dim in range(nd))
-            neg_vi = tuple(-v for v in vi)
-            for j in range(q):
-                vj = tuple(vel_arrays[dim][j] for dim in range(nd))
-                if vj == neg_vi:
-                    opp[i] = j
-                    break
-            if opp[i] is None:
-                raise ValueError(
-                    f"No opposite DF found for DF {i} with velocity {vi}")
-        return opp
 
     # ------------------------------------------------------------------
     # Node classes

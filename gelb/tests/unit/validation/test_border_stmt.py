@@ -13,6 +13,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from gelb.compiler_pipeline import (
+    PipelineOptions, PipelineProfile, compile_source, build_backend_context,
+)
 from gelb.tests.test_utils import get_typed_ast
 from gelb.gelb_ast.ASTNodes import BorderStmt_N, PaintNodesStmt_N
 from gelb.midware.geometry import resolve_geometry
@@ -259,10 +262,10 @@ class TestBorderStmtCodeGen:
 
     def _generate(self, code):
         from gelb.backends.stage3_backend_cpu_fortran_serial import generate_fortran
-        from gelb.midware.inline_functions import inline_functions
-        ast = get_typed_ast(code)
-        ast = inline_functions(ast)
-        return generate_fortran(ast, num_timesteps=1)
+        result = compile_source(code, PipelineProfile.CODEGEN,
+                                PipelineOptions(require_stencils=True, require_geometry=True))
+        return generate_fortran(result.ast, num_timesteps=1,
+                                backend_context=build_backend_context(result))
 
     def test_2d_square_obstacle_border(self):
         """A 4x4 SOLID block in a 10x10 grid: border cells become WALL."""
@@ -302,8 +305,8 @@ class TestBorderStmtCodeGen:
         """)
         # Should not raise -- just verify it generates successfully
         from gelb.backends.stage3_backend_cpu_fortran_serial import generate_fortran
-        from gelb.midware.inline_functions import inline_functions
-        ast = get_typed_ast(code)
-        ast = inline_functions(ast)
-        fortran = generate_fortran(ast, num_timesteps=1)
+        result = compile_source(code, PipelineProfile.CODEGEN,
+                                PipelineOptions(require_stencils=True, require_geometry=True))
+        fortran = generate_fortran(result.ast, num_timesteps=1,
+                                backend_context=build_backend_context(result))
         assert 'program gelb_simulation' in fortran

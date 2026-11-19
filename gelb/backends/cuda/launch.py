@@ -331,10 +331,8 @@ class CudaLaunchEmitMixin:
         like the gauges.  The time loop updates the halo before the
         dynamics only; gauges run after the swap and at t=0, so a gauge
         reading a neighbour across a periodic axis needs its own
-        refresh.  Without stencil information every periodic lattice is
-        refreshed."""
-        wanted = (self._stencils.gauge_halo_lattices()
-                  if self._stencils is not None else set(self._lattice_info))
+        refresh."""
+        wanted = self._stencils.gauge_halo_lattices()
         if wanted:
             self._emit_halo_launches(only=wanted, default_stream=True)
 

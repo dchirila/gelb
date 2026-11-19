@@ -6,7 +6,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from gelb.compiler_pipeline import compile_source, PipelineProfile
+from gelb.compiler_pipeline import (
+    PipelineOptions, PipelineProfile, compile_source, build_backend_context,
+)
 from gelb.utils.exceptions import GeLBExSyntaxError
 
 from gelb.tests.integration.test_tutorial_regressions import (
@@ -184,7 +186,7 @@ import runpy
 import sys
 from gelb.gelb_ast.ASTNodes import Node_N, RealLiteral_N
 
-def inject(original, ast, *args, **kwargs):
+def inject(original, result, *args, **kwargs):
     seen = set()
     def visit(node):
         if isinstance(node, Node_N):
@@ -198,14 +200,11 @@ def inject(original, ast, *args, **kwargs):
         elif isinstance(node, (list, tuple)):
             for child in node:
                 visit(child)
-    visit(ast)
-    return original(ast, *args, **kwargs)
+    visit(result.ast)
+    return original(result, *args, **kwargs)
 
-for suffix, entry in [('cpu_fortran_serial', 'generate_fortran'),
-                      ('cpu_highway', 'generate_cpu_highway'),
-                      ('gpu_cuda_cpp', 'generate_cuda_cpp')]:
-    module = importlib.import_module('gelb.backends.stage3_backend_' + suffix)
-    setattr(module, entry, functools.partial(inject, getattr(module, entry)))
+import gelb.compiler_pipeline as pipeline
+pipeline.build_backend_context = functools.partial(inject, pipeline.build_backend_context)
 while sys.argv[1:2] == ['-P']:
     del sys.argv[1]
 assert sys.argv[1] == '-m'
@@ -278,15 +277,16 @@ geometry { nodes[:,:] = BULK; }
 
 @pytest.mark.parametrize('backend', BACKENDS[:1])
 def test_identifier_mapping_matches_scoped_emission(tmp_path, backend):
-    from gelb.tests.test_utils import get_typed_ast
     from gelb.utils.identifier_mapping import collect_identifier_mapping
     from gelb.backends.stage3_backend_cpu_fortran_serial import generate_fortran
 
     source = program('real a = u.in[x | 0]; v = a;',
                      initializer='real a = 1.0; u.out[x | 0] = a;',
                      dynamic='bool a = x >= 0; u.out[x | 0] = real(a);')
-    ast = get_typed_ast(source)
-    code = generate_fortran(ast)
+    result = compile_source(source, PipelineProfile.CODEGEN,
+                            PipelineOptions(require_stencils=True, require_geometry=True))
+    ast = result.ast
+    code = generate_fortran(ast, backend_context=build_backend_context(result))
     names = [native for section in collect_identifier_mapping(ast)
              for original, native in section['entries'] if original == 'a']
     assert len(names) == len(set(names)) == 3

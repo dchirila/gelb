@@ -36,7 +36,7 @@ def generate_cuda_cpp(ast, num_timesteps=1, output_filename='output.nc',
                       source_file='', cuda_block_size=None,
                       cuda_coarsening=1, cuda_ldg=False,
                       cuda_stwt=False, cuda_tiled=False,
-                      cuda_graphs=False, resolved_geometry=None,
+                      cuda_graphs=False,
                       backend_context=None, poison_uninit=False,
                       strict_fp=False):
     """Generate CUDA C++ source code from a GeLB AST.
@@ -51,11 +51,7 @@ def generate_cuda_cpp(ast, num_timesteps=1, output_filename='output.nc',
         source_file: Original ``.gelb`` source filename (header comment).
         cuda_block_size: CUDA threads per block (default:
             ``_CUDA_BLOCK_SIZE``).
-        backend_context: Optional shared backend analysis context produced by
-            the compiler pipeline.
-        resolved_geometry: Optional ``ResolvedGeometry`` computed by the
-            compiler driver.  When omitted, the inherited Highway layer
-            resolves geometry itself. Retained for direct-call compatibility.
+        backend_context: Required analysis context from build_backend_context.
 
     Returns:
         Complete CUDA C++ program as a string (``.cu`` source).
@@ -77,7 +73,7 @@ def generate_cuda_cpp(ast, num_timesteps=1, output_filename='output.nc',
         cuda_stwt=cuda_stwt,
         cuda_tiled=cuda_tiled,
         cuda_graphs=cuda_graphs,
-        resolved_geometry=resolved_geometry,
+
         backend_context=backend_context,
         poison_uninit=poison_uninit,
         strict_fp=strict_fp,
@@ -103,7 +99,7 @@ class CudaCppCodeGenerator(
                  source_file='', cuda_block_size=None,
                  cuda_coarsening=1, cuda_ldg=False, cuda_stwt=False,
                  cuda_tiled=False, cuda_graphs=False,
-                 resolved_geometry=None, backend_context=None,
+                 backend_context=None,
                  poison_uninit=False, strict_fp=False):
         # Parent constructor: ``use_openmp=False`` (no OpenMP on
         # the GPU) and ``storage_layout='soa'`` (no AoS, no CBT --
@@ -118,7 +114,7 @@ class CudaCppCodeGenerator(
             random_seed=random_seed,
             source_file=source_file,
             storage_layout='soa',
-            resolved_geometry=resolved_geometry,
+
             backend_context=backend_context,
             poison_uninit=poison_uninit,
             # Inherited ``_emit_includes`` then defines GELB_STRICT_FP
@@ -239,7 +235,7 @@ class CudaCppCodeGenerator(
         # Scan AST once for ``random()`` usage.  Drives the cuRAND
         # emit (state array + init kernel + gelb_random device fn)
         # and the seed-init launch in main().
-        self._uses_random = self._ast_uses_intrinsic('random')
+        self._uses_random = backend_context.program_facts.uses_random
 
         # Programs that read the implicit ``t`` symbol need it as
         # a ``__device__`` int instead of a kernel argument: under
@@ -253,7 +249,7 @@ class CudaCppCodeGenerator(
         # ``gelb_inc_t`` 1-thread kernel that increments it; the
         # kernel-body emit for ``t`` then resolves to the device
         # global rather than the kernel parameter.
-        self._uses_t = self._ast_uses_implicit_t()
+        self._uses_t = backend_context.program_facts.uses_implicit_t
 
         # Emit a per-cell ``nc_map`` array iff any node-class in the
         # resolved geometry is non-dense (e.g. a masked obstacle inside
@@ -329,82 +325,6 @@ class CudaCppCodeGenerator(
     # AST scanning helpers used by the scope guard
     # ------------------------------------------------------------------
 
-    def _ast_uses_intrinsic(self, name: str) -> bool:
-        """Recursively scan the AST for any
-        ``IntrinsicFunctionCall_N`` whose ``function_name`` matches
-        ``name`` (case-insensitive).
-
-        Uses the AST's ``get_children()`` API plus a visited-set
-        (AST nodes carry parent links -> naive __dict__ walk
-        infinite-recurses).
-        """
-        from gelb.gelb_ast.ASTNodes import IntrinsicFunctionCall_N
-
-        target = name.lower()
-        seen: set[int] = set()
-
-        def visit(node) -> bool:
-            if node is None:
-                return False
-            nid = id(node)
-            if nid in seen:
-                return False
-            seen.add(nid)
-            if isinstance(node, IntrinsicFunctionCall_N):
-                fn = getattr(node, 'function_name', None)
-                if fn is not None and str(fn).lower() == target:
-                    return True
-            getter = getattr(node, 'get_children', None)
-            if callable(getter):
-                try:
-                    children = getter() or ()
-                except Exception:
-                    children = ()
-                for child in children:
-                    if visit(child):
-                        return True
-            return False
-
-        return visit(self.ast)
-
-    def _ast_uses_implicit_t(self) -> bool:
-        """Recursively scan the AST for any ``Identifier_N`` whose
-        ``symbol_tag == "implicit timestep variable"`` -- i.e., a
-        block-body reference to the per-step timestep ``t``.
-
-        Same shape as ``_ast_uses_intrinsic`` but for the implicit
-        symbol.  Used to gate the ``__device__ int gelb_timestep_d``
-        + ``gelb_inc_t`` emit so programs that don't read ``t``
-        don't pay for an unused device global / extra kernel.
-        """
-        from gelb.gelb_ast.ASTNodes import Identifier_N
-
-        seen: set[int] = set()
-
-        def visit(node) -> bool:
-            if node is None:
-                return False
-            nid = id(node)
-            if nid in seen:
-                return False
-            seen.add(nid)
-            if isinstance(node, Identifier_N):
-                if (getattr(node, 'symbol_tag', None)
-                        == "implicit timestep variable"):
-                    return True
-            getter = getattr(node, 'get_children', None)
-            if callable(getter):
-                try:
-                    children = getter() or ()
-                except Exception:
-                    children = ()
-                for child in children:
-                    if visit(child):
-                        return True
-            return False
-
-        return visit(self.ast)
-
     def _emit_expression(self, expr, df_var=None) -> str:
         """Override only the implicit-``t`` resolution.
 
@@ -423,20 +343,6 @@ class CudaCppCodeGenerator(
                     == "implicit timestep variable"):
             return 'static_cast<int64_t>(gelb_timestep_d)'
         return super()._emit_expression(expr, df_var)
-
-    def _ast_uses_real32(self) -> bool:
-        """Check if any lattice declares ``df_type=real32``.
-
-        The lattice info dict carries each lattice's df_type as a
-        string-or-equivalent; a stringified comparison is robust to
-        the precise type of the entry (string token vs AST node).
-        """
-        for info in self._lattice_info.values():
-            df_type = info.get('dtype') if isinstance(info, dict) \
-                else getattr(info, 'df_type', None)
-            if df_type is not None and 'real32' in str(df_type):
-                return True
-        return False
 
     def _block_simd_eligible(self, block, info) -> bool:
         # Hard-disable parent's SIMD emit path everywhere.  Even with

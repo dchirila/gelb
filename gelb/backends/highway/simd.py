@@ -139,13 +139,13 @@ class SimdEmitMixin:
         x_lo, x_hi = info.bbox[0]
         # After deducting head/tail along x, the SIMD interior must
         # still span >= VW cells for the vector body to fire even once.
-        offsets = self._compute_stencil_offsets(block)
+        offsets = self._stencils.offset_bounds(block.name.name, self._d)
         if (self._block_has_bounce_back(block) and self._any_cbt_lattice()
                 and max(offsets[0]) >= _CBT_TILE):
             # The cross-tile loader covers adjacent tiles. Wider links
             # still work through scalar addressing (including modulo).
             return False
-        woffs = self._compute_write_offsets(block)
+        woffs = self._stencils.offset_bounds(block.name.name, self._d, writes=True)
         neg_x = max(offsets[0][0], woffs[0][0])
         pos_x = max(offsets[0][1], woffs[0][1])
         periodic_x = is_periodic(self._lattice_info, 0)
@@ -876,8 +876,8 @@ class SimdEmitMixin:
         dblock = block  # alias kept for readability in the body
         d = self._d
         sizes = self._grid_sizes()
-        offsets = self._compute_stencil_offsets(dblock)
-        woffs = self._compute_write_offsets(dblock)
+        offsets = self._stencils.offset_bounds(dblock.name.name, self._d)
+        woffs = self._stencils.offset_bounds(dblock.name.name, self._d, writes=True)
         bbox = info.bbox
         # Per-axis head/tail peel counts.  The halo-update kernel
         # pre-stages the periodic wrap into one ghost cell per axis

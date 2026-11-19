@@ -8,6 +8,9 @@ a multi-output function call.  This test file covers the array forms.
 """
 
 import pytest
+from gelb.compiler_pipeline import (
+    PipelineOptions, PipelineProfile, compile_source, build_backend_context,
+)
 from gelb.tests.test_utils import get_typed_ast, get_fully_validated_ast
 from gelb.utils.exceptions import GeLBExTypeError
 
@@ -34,12 +37,10 @@ def _make_program(init_body):
 
 def _generate(source):
     from gelb.backends.stage3_backend_cpu_fortran_serial import generate_fortran
-    from gelb.midware.inline_functions import inline_functions
-    from gelb.midware.ConstantFoldingVisitor import ConstantFoldingVisitor
-    ast = get_typed_ast(source)
-    ast = ConstantFoldingVisitor().visit(ast, ast)
-    ast = inline_functions(ast)
-    return generate_fortran(ast, num_timesteps=1)
+    result = compile_source(source, PipelineProfile.CODEGEN,
+                            PipelineOptions(require_stencils=True, require_geometry=True))
+    return generate_fortran(result.ast, num_timesteps=1,
+                            backend_context=build_backend_context(result))
 
 
 # ----------------------------------------------------------------------

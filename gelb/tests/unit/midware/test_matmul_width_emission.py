@@ -1,19 +1,30 @@
 """Promoted matmul arithmetic and the non-finite coefficient fallback."""
 
+from types import MappingProxyType, SimpleNamespace
+
 import pytest
 
 from gelb.backends.stage3_backend_cpu_highway import HighwayCodeGenerator
 from gelb.gelb_ast import ASTNodes as A
 from gelb.gelb_ast.CanonicalType import CanonicalType
+from gelb.compiler_pipeline import BackendContext, GlobalConstant, ProgramFacts
+from gelb.frontend.SymbolsTable import SymbolsTable
+from gelb.gelb_ast.SymbolDefinition import SymbolDefinition
 
 
 def emitter(matrix_type, vector_type, result_type, values, simd=False):
     gen = object.__new__(HighwayCodeGenerator)
     gen._simd_mode = 'vec8d' if simd else None
-    gen._array_constants_2d = {'M': (3, 3)}
-    gen._array_constants_2d_values = {'M': values}
-    gen._array_locals = {'v'}
-    gen._local_array_sizes = {'v': 3}
+    matrix = None if values is None else tuple(tuple(row) for row in values)
+    gen.backend_context = BackendContext(
+        None, {}, None, None,
+        MappingProxyType({'M': GlobalConstant(matrix_type, (3, 3), matrix=matrix)}),
+        MappingProxyType({}), None, ProgramFacts(False, False, False, False))
+    symbols = SymbolsTable()
+    vector = SymbolDefinition('v', 'variable', None)
+    vector.canonical_type = CanonicalType(vector_type, (3,))
+    symbols.append(vector)
+    gen._current_block = SimpleNamespace(symbol_defs=symbols)
     lines = []
     gen._emit = lines.append
     args = A.List_N(None)

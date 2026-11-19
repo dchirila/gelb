@@ -4,11 +4,18 @@ expressions, on a collapsed axis too.  No compiler needed, the generated
 C++ is inspected."""
 
 from gelb.backends.stage3_backend_cpu_highway import generate_cpu_highway
-from gelb.tests.test_utils import get_fully_validated_ast
+from gelb.compiler_pipeline import (
+    PipelineOptions, PipelineProfile, compile_source, build_backend_context,
+)
+from gelb.midware.c_family_lowering import prepare_c_family_ast
 
 
 def _generate(source):
-    return generate_cpu_highway(get_fully_validated_ast(source), num_timesteps=1)
+    result = compile_source(source, PipelineProfile.CODEGEN,
+                            PipelineOptions(require_stencils=True, require_geometry=True))
+    result.ast = prepare_c_family_ast(result.ast)
+    return generate_cpu_highway(result.ast, num_timesteps=1,
+                                backend_context=build_backend_context(result))
 
 
 _IMPLICIT_INTEGERS = """
