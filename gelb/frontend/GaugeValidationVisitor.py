@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+from gelb.type_table import UnifiedTypeTable as Types
+
 from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
 from gelb.frontend import type_rules
 from gelb.gelb_ast.ASTNodes import *
@@ -20,7 +22,7 @@ class GaugeValidationVisitor(ASTBaseVisitor):
 
     # ``int64`` is ``int`` and ``real64`` is ``real`` (type_rules): one
     # type, one output buffer and one NetCDF type on every backend.
-    _SAME_TYPE = {'int64': 'int', 'real64': 'real'}
+    _SAME_TYPE = Types.aliases
 
     # The variable in which every backend's output file stores each
     # record's time step (stage3_backend_cpu_fortran_serial.py,

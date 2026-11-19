@@ -16,6 +16,8 @@ containing the full ``.cpp`` source.
 
 from __future__ import annotations
 
+from gelb.type_table import UnifiedTypeTable as Types
+
 import math
 import os
 
@@ -574,7 +576,7 @@ class HighwayCodeGenerator(
         self._emit_bounce_back_dfs_tables()
         self._emit('')
 
-    _NARROW_ELEMENT_WIDTHS = ('real32', 'real16', 'int8', 'int16', 'int32')
+    _NARROW_ELEMENT_WIDTHS = Types.narrow_array_types
 
     def _constant_elements_in_width(self, elements, elem):
         """The literal elements of a constant array of a narrow element

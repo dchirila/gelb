@@ -7,6 +7,8 @@ aligned/NT store selection.
 
 from __future__ import annotations
 
+from gelb.type_table import UnifiedTypeTable as Types
+
 from gelb.backends.highway.common import (
     _lname,
     _CBT_TILE,
@@ -212,7 +214,7 @@ class SimdEmitMixin:
             RectSelOfLatticeInDFs_N as _LIn,
             RectSelOfLatticeOutDFs_N as _LOut, RectSelOfArrayElems_N as _ASel,
         )
-        narrow = ('real32', 'int8', 'int16', 'int32')
+        narrow = Types.narrow_array_types
         selections = (_LIn, _LOut, _ASel)
 
         def width_of(data_type):
@@ -258,7 +260,7 @@ class SimdEmitMixin:
         )
         selections = (_LIn, _LOut, _ASel)
         scalar_only = ('mod', 'atan2')
-        width_casts = ('real32', 'real64', 'int8', 'int16', 'int32', 'int64')
+        width_casts = Types.width_casts
 
         def children(n):
             if isinstance(n, _List):
@@ -303,7 +305,7 @@ class SimdEmitMixin:
             VariableDeclarationStmt_N as _Decl,
             VariableAssignmentStmt_N as _Assign,
         )
-        int_kinds = ('int', 'int64', 'int32', 'int16', 'int8')
+        int_kinds = Types.integer_types
         ops = (_Add, _Sub, _Mul, _Div, _Pow, _Neg)
         selections = (_LIn, _LOut, _ASel)
 
@@ -375,7 +377,7 @@ class SimdEmitMixin:
             RectSelOfLatticeInDFs_N as _LIn,
             RectSelOfLatticeOutDFs_N as _LOut, RectSelOfArrayElems_N as _ASel,
         )
-        int_kinds = ('int', 'int64', 'int32', 'int16', 'int8')
+        int_kinds = Types.integer_types
         selections = (_LIn, _LOut, _ASel)
         # The calls the vector body holds as vectors whatever their
         # arguments (``_yields_simd_vector``): an int local declared from
@@ -478,7 +480,7 @@ class SimdEmitMixin:
             IntrinsicFunctionCall_N as _Call,
             VariableDeclarationStmt_N as _Decl,
         )
-        int_kinds = ('int', 'int64', 'int32', 'int16', 'int8')
+        int_kinds = Types.integer_types
         stmts = getattr(getattr(block, 'stmts', None), 'elements', None) or []
         locals_ = {stmt.name.name for stmt in stmts if isinstance(stmt, _Decl)}
 
@@ -647,7 +649,7 @@ class SimdEmitMixin:
             return False
         elem = (getattr(inf, 'element_dtype', None)
                 or getattr(inf, 'name', None))
-        if elem not in ('int', 'int8', 'int16', 'int32', 'int64'):
+        if elem not in Types.integer_types:
             return False
         return self._expr_contains_simd_bool_op(node, df_var)
 
@@ -765,7 +767,7 @@ class SimdEmitMixin:
         # is its own conversion to ``real``.
         if (cpp_target == 'double'
                 and getattr(getattr(inner_node, 'inferred_type', None),
-                            'element_dtype', None) in ('real', 'real64')
+                            'element_dtype', None) in Types.wide_real_types
                 and self._yields_simd_vector_at_df(inner_node, df_var)):
             return inner_str
         return f'static_cast<{cpp_target}>({inner_str})'

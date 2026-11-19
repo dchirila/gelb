@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+from gelb.type_table import UnifiedTypeTable as Types
+
 import copy
 import math
 
@@ -18,8 +20,8 @@ from gelb.midware.ast_eval import (
     convert, convert_plain, divide, ieee_special_values, intrinsic, mul,
     narrow_scalar, negate, plain, power, sub, typed_literal_value)
 
-_REAL_WIDTHS = frozenset(('real', 'real64')) | NARROW_REAL_WIDTHS
-_INT_WIDTHS = frozenset(('int', 'int64')) | NARROW_INT_WIDTHS
+_REAL_WIDTHS = frozenset(Types.real_types)
+_INT_WIDTHS = frozenset(Types.integer_types)
 from gelb.utils.exceptions import GeLBException, GeLBExTypeError
 from gelb.utils.CodeRange import CodeRange
 from gelb.midware.inline_functions import (

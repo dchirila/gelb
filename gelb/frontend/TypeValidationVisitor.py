@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+from gelb.type_table import UnifiedTypeTable as Types
+
 from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
 from gelb.frontend.visitor_mixins import ProgramTraversalMixin
 from gelb.gelb_ast.ASTNodes import *
@@ -24,8 +26,7 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         Define what operations are valid on what types.
         Returns a dict mapping operation categories to allowed types.
         """
-        _numeric = {'int', 'int8', 'int16', 'int32', 'int64',
-                    'real', 'real16', 'real32', 'real64'}
+        _numeric = Types.numeric_types
         return {
             'arithmetic': _numeric,
             'comparison': _numeric | {'bool', 'string'},
@@ -96,7 +97,7 @@ class TypeValidationVisitor(ASTBaseVisitor, ProgramTraversalMixin):
         else:
             return str(type(data_type).__name__)
     
-    _REAL_FAMILY = {'real', 'real16', 'real32', 'real64'}
+    _REAL_FAMILY = frozenset(Types.real_types)
 
     def _types_match(self, type1, type2):
         """Check if two types match (exact or same-family real precision)."""

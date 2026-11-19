@@ -18,9 +18,10 @@ import sys
 import numpy as np
 import pytest
 
-from gelb.backends.highway.common import _NETCDF_TYPE_MAP as CPP_TYPES
-from gelb.backends.stage3_backend_cpu_fortran_serial import (
-    _NETCDF_TYPE_MAP as FORTRAN_TYPES)
+from gelb.type_table import UnifiedTypeTable
+
+CPP_TYPES = UnifiedTypeTable.netcdf_c
+FORTRAN_TYPES = UnifiedTypeTable.netcdf_fortran
 from gelb.tests.integration.test_tutorial_regressions import BACKENDS
 
 netCDF4 = pytest.importorskip("netCDF4")

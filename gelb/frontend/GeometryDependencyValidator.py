@@ -14,6 +14,8 @@ Runs after the symbol tables and implicit symbols exist, before type
 inference.
 """
 
+from gelb.type_table import UnifiedTypeTable as Types
+
 from gelb.frontend.implicit_symbols import (
     COORDINATE_SYMBOL_NAMES,
     TIMESTEP_SYMBOL_NAME,
@@ -47,10 +49,7 @@ _FIXED_GEOMETRY_HINT = (
 # are deterministic scalar functions; everything else is rejected here.
 PREDICATE_INTRINSICS = frozenset(
     ('abs', 'min', 'max', 'mod', 'sqrt', 'sin', 'cos', 'tan', 'tanh',
-     'exp', 'log', 'atan2',
-     # numeric conversions
-     'int', 'int8', 'int16', 'int32', 'int64',
-     'real', 'real16', 'real32', 'real64'))
+     'exp', 'log', 'atan2')) | Types.numeric_types
 
 
 def _walk(node):

@@ -33,21 +33,20 @@ type maps treat identically anyway.  ``real16`` is not in this version
 where it builds the type.
 """
 
+from gelb.type_table import UnifiedTypeTable as Types
+
 from gelb.utils.exceptions import GeLBExTypeError
 
 # Display order; the backends and the cast intrinsics iterate these.
-INTEGER_TYPES = ('int', 'int8', 'int16', 'int32', 'int64')
-REAL_TYPES = ('real', 'real32', 'real64')
-NUMERIC_TYPES = frozenset(INTEGER_TYPES + REAL_TYPES)
-ARITHMETIC_TYPES = NUMERIC_TYPES | {'bool'}
+INTEGER_TYPES = Types.integer_types
+REAL_TYPES = Types.real_types
+NUMERIC_TYPES = Types.numeric_types
+ARITHMETIC_TYPES = Types.all_types
 
 # Widths, narrowest first.  ``int`` is ``int64`` and ``real`` is
 # ``real64``; the alias ranks just above its bare spelling so that a
 # tie between the two keeps the explicit one.
-_WIDTH_RANK = {
-    'int8': 1, 'int16': 2, 'int32': 3, 'int': 4, 'int64': 5,
-    'real32': 1, 'real': 2, 'real64': 3,
-}
+_WIDTH_RANK = Types.width_rank
 
 # Types a later version may add.  The parser rejects them where the
 # type is built, with the diagnostic below, so no pass ever sees one.

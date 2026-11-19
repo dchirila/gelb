@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+from gelb.type_table import UnifiedTypeTable as Types
+
 import copy
 
 from gelb.frontend.ASTBaseVisitor import ASTBaseVisitor
@@ -81,8 +83,7 @@ class ConstantsResolverVisitor(ASTBaseVisitor):
     # every element (`ARR + {0.0, 0.0}` adds binary32 values when ARR is
     # `array[real32, 2]`, however ARR was initialized).  An `int` or
     # `bool` constant is substituted as it is written.
-    _CONVERTED_WIDTHS = frozenset(
-        ('real', 'real16', 'real32', 'real64', 'int8', 'int16', 'int32'))
+    _CONVERTED_WIDTHS = frozenset(Types.real_types + Types.narrow_integer_types)
 
     @classmethod
     def _substitute_for(cls, const_stmt):

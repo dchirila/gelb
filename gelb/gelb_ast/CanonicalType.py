@@ -1,5 +1,7 @@
 """Immutable computational types, independent of the AST's shape spelling."""
 
+from gelb.type_table import UnifiedTypeTable as Types
+
 from dataclasses import dataclass
 from math import prod
 
@@ -10,8 +12,8 @@ class CanonicalType:
     dims: tuple[int, ...]
 
     def __post_init__(self):
-        object.__setattr__(self, 'dtype', {'int64': 'int', 'real64': 'real'}.get(self.dtype, self.dtype))
-        if self.dtype not in {'bool', 'int8', 'int16', 'int32', 'int', 'real32', 'real'}:
+        object.__setattr__(self, 'dtype', Types.aliases.get(self.dtype, self.dtype))
+        if self.dtype not in Types.canonical_types:
             raise ValueError(f'unknown computational type: {self.dtype}')
         if not isinstance(self.dims, tuple) or any(type(n) is not int or n <= 0 for n in self.dims):
             raise ValueError('dimensions must be a tuple of positive Python integers')
