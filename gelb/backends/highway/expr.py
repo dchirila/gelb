@@ -54,6 +54,17 @@ from gelb.midware.ast_eval import is_periodic
 from gelb.midware.ast_simplify import is_pure, numeric_kind
 
 
+class ConstantOperand(str):
+    """Rendered scalar operand retaining its exact, already typed value."""
+
+    def __new__(cls, text, value, *, int64=False):
+        assert type(value) in (int, float)
+        result = super().__new__(cls, text)
+        result.constant = value if type(value) is int or math.isfinite(value) else None
+        result.int64 = int64
+        return result
+
+
 def _int_to_binary32(n: int) -> float:
     """The binary32 value nearest the integer ``n``, ties to even."""
     m = abs(n)
@@ -153,11 +164,12 @@ class ExpressionEmitMixin:
 
     def _emit_expression(self, expr, df_var: str | None = None) -> str:
         if isinstance(expr, IntLiteral_N):
-            return int64_literal(expr.value)
+            return ConstantOperand(int64_literal(expr.value), int(expr.value))
         if isinstance(expr, RealLiteral_N):
             kind = getattr(getattr(expr, 'inferred_type', None), 'element_dtype', None)
             cpp_type = Types.cpp.get(kind, 'double')
-            return cpp_real(expr.value, cpp_type)
+            text = cpp_real(expr.value, cpp_type)
+            return ConstantOperand(text, float(expr.value)) if cpp_type == 'double' else text
         if isinstance(expr, BoolLiteral_N):
             return 'true' if expr.value in (True, 'true') else 'false'
         if isinstance(expr, Identifier_N):
@@ -207,27 +219,19 @@ class ExpressionEmitMixin:
                     if vals is not None:
                         idx = int(df_var)
                         if 0 <= idx < len(vals):
-                            return (cpp_real(vals[idx], _TYPE_MAP.get(
-                                getattr(expr.inferred_type, 'element_dtype', 'real'), 'double'))
-                                if isinstance(vals[idx], float)
-                                else int64_typed_literal(vals[idx]))
+                            value = vals[idx]
+                            cpp = _TYPE_MAP.get(getattr(expr.inferred_type, 'element_dtype', 'real'), 'double')
+                            text = (cpp_real(value, cpp) if type(value) is float
+                                    else int64_typed_literal(value))
+                            return (ConstantOperand(text, value, int64=type(value) is int)
+                                    if type(value) is int or cpp == 'double' else text)
                 return f'{base}[{df_var}]'
             return base
         if isinstance(expr, (Add_N, Sub_N, Mul_N)):
-            # The zero peepholes depend on the operation's kind: a real
-            # zero has a sign, which a fold must keep.
             kind = numeric_kind(getattr(expr, 'inferred_type', None))
-            integer = kind is not None and kind.startswith('int')
-            # An integer product with zero folds to 0 only when the
-            # dropped operand makes no call to random().
-            if integer and isinstance(expr, Mul_N) and not is_pure(expr):
-                integer = False
             a, b = self._broadcast_for_binop(expr.left, expr.right, df_var,
                                              int64_op=kind == 'int64')
-            if isinstance(expr, Mul_N):
-                return self._fold_mul(a, b, integer, int64=kind == 'int64')
-            fold = self._fold_add if isinstance(expr, Add_N) else self._fold_sub
-            return fold(a, b, integer)
+            return self._constant_binop(expr, a, b, kind)
         if isinstance(expr, Div_N):
             kind = numeric_kind(getattr(expr, 'inferred_type', None))
             a, b = self._broadcast_for_binop(expr.left, expr.right, df_var,
@@ -262,7 +266,7 @@ class ExpressionEmitMixin:
                                         'element_dtype', None)
                         cpp0 = _TYPE_MAP.get(kind0)
                         if cpp0 == 'double':
-                            return '1.0'
+                            return ConstantOperand('1.0', 1.0)
                         if cpp0 == 'float':
                             return '1.0f'
                         return f'static_cast<{cpp0 or "int64_t"}>(1)'
@@ -576,7 +580,7 @@ class ExpressionEmitMixin:
                 node = elements[int(df_var)]
         if (int64_op and not getattr(self, '_in_coord_scalar', False)
                 and isinstance(node, IntLiteral_N)):
-            return int64_typed_literal(int(node.value))
+            return ConstantOperand(int64_typed_literal(int(node.value)), int(node.value), int64=True)
         return self._emit_expression(expr, df_var)
 
     def _emit_intrinsic_unary_math(self, call: IntrinsicFunctionCall_N,

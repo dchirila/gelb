@@ -8,9 +8,10 @@ lowering), and the literal-folding helpers used during emission.
 from __future__ import annotations
 
 from gelb.backends.real_literals import cpp_real
+from gelb.backends.highway.expr import ConstantOperand
+from gelb.midware.ast_simplify import is_pure, numeric_kind
 
 import math
-import re
 
 from gelb.backends.highway.common import (
     _lname,
@@ -248,88 +249,66 @@ class StatementEmitMixin:
     # A negative literal is emitted bare (``EX[3]`` -> ``-1.0``, a
     # negative ``-D`` value), so a minus put in front of it would read
     # ``--0.05``: a decrement to C++ and CUDA.
-    _NEGATIVE_LITERAL = re.compile(r'-(?:\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?')
-
-    @classmethod
-    def _negate(cls, s: str, integer: bool = False) -> str:
-        """``-s``, spelled so that the minus reads as one negation.  An
-        operand whose text starts with a minus is the only one that
-        changes: a real literal becomes its exact negation (``-0.05`` ->
-        ``0.05``, ``-0.0`` -> ``0.0``), anything else, an integer
-        literal included, is parenthesized (``(-(-2))``).  Every other
-        operand keeps ``(-s)``."""
-        if not s.startswith('-'):
-            return f'(-{s})'
-        if (not integer and cls._NEGATIVE_LITERAL.fullmatch(s)
-                and any(c in s for c in '.eE')):
-            return cpp_real(-float(s))
-        return f'(-({s}))'
 
     @staticmethod
-    def _is_zero(v, negative=None) -> bool:
-        """``v`` is a zero; of the given sign unless ``negative`` is None."""
-        if v is None or v != 0.0:
-            return False
-        return negative is None or (math.copysign(1.0, v) < 0) == negative
+    def _negate(s: str, integer: bool = False) -> str:
+        value = getattr(s, 'constant', None)
+        if not integer and type(value) is float and math.copysign(1.0, value) < 0:
+            return ConstantOperand(cpp_real(-value), -value)
+        text = f'(-({s}))' if s.startswith('-') else f'(-{s})'
+        # Normalize int64 negation, except the minimum whose negation overflows.
+        # Parenthesized real and narrow-integer negations remain runtime operands.
+        if type(value) is int and getattr(s, 'int64', False) and value > -(1 << 63):
+            return ConstantOperand(int64_typed_literal(-value), -value, int64=True)
+        return text
 
-    @classmethod
-    def _fold_add(cls, a: str, b: str, integer: bool = False) -> str:
-        va = cls._try_parse_lit(a)
-        vb = cls._try_parse_lit(b)
-        if cls._is_zero(va, None if integer else True):
-            return b
-        if cls._is_zero(vb, None if integer else True):
-            return a
-        if va is not None and vb is not None and not integer:
-            return cls._fold_literals(ev_add, va, vb, f'({a} + {b})')
-        return f'({a} + {b})'
-
-    @classmethod
-    def _fold_sub(cls, a: str, b: str, integer: bool = False) -> str:
-        va = cls._try_parse_lit(a)
-        vb = cls._try_parse_lit(b)
-        if cls._is_zero(vb, None if integer else False):
-            return a
-        if cls._is_zero(va, None if integer else True):
-            return cls._negate(b, integer)
-        if va is not None and vb is not None and not integer:
-            return cls._fold_literals(ev_sub, va, vb, f'({a} - {b})')
-        return f'({a} - {b})'
-
-    @classmethod
-    def _fold_mul(cls, a: str, b: str, integer: bool = False,
-                  int64: bool = False) -> str:
-        va = cls._try_parse_lit(a)
-        vb = cls._try_parse_lit(b)
-        if integer and (cls._is_zero(va) or cls._is_zero(vb)):
-            # The zero of an int64 product with its width, like every
-            # literal operand of an int64 operation (``_emit_operand``):
-            # a bare ``0`` would be a 32-bit C++ ``int`` in
-            # ``(0 / 1) + ...``.  A narrower product's zero stays bare.
-            return '0LL' if int64 else '0'
-        if va == 1.0:
-            return b
-        if vb == 1.0:
-            return a
-        if va == -1.0:
-            return cls._negate(b, integer)
-        if vb == -1.0:
-            return cls._negate(a, integer)
-        if va is not None and vb is not None and not integer:
-            return cls._fold_literals(ev_mul, va, vb, f'({a} * {b})')
-        return f'({a} * {b})'
-
-    @staticmethod
-    def _fold_literals(operation, va, vb, written: str) -> str:
-        """Two binary64 literals folded with the one evaluator (user
-        manual, Numerical semantics: Types and promotion, Special
-        values): the written expression is kept when the result would be
-        an infinity or a NaN, which the generated code cannot spell; a
-        constant expression never writes one, run time produces it."""
-        try:
-            return cpp_real(float(operation(float(va), float(vb))))
-        except (OverflowError, ValueError, ZeroDivisionError):
+    def _constant_binop(self, expr, a, b, kind):
+        """Apply width-aware identities without interpreting C++ source text."""
+        va, vb = getattr(a, 'constant', None), getattr(b, 'constant', None)
+        integer = (kind is not None and kind.startswith('int')) or (
+            kind is None and type(va) is int and type(vb) is int)
+        op = '+' if isinstance(expr, Add_N) else '-' if isinstance(expr, Sub_N) else '*'
+        written = f'({a} {op} {b})'
+        if kind == 'real32' or any(numeric_kind(getattr(node, 'inferred_type', None)) == 'real32'
+                                   for node in (expr.left, expr.right)):
             return written
+
+        def zero(value, negative):
+            if integer:
+                return type(value) is int and value == 0
+            return (type(value) is float and value == 0.0
+                    and (math.copysign(1.0, value) < 0) == negative)
+
+        if op == '+':
+            if zero(va, True):
+                return b
+            if zero(vb, True):
+                return a
+        elif op == '-':
+            if zero(vb, False):
+                return a
+            if zero(va, True):
+                return self._negate(b, integer)
+        else:
+            if integer and (zero(va, False) or zero(vb, False)) and is_pure(expr):
+                return ConstantOperand('0LL' if kind == 'int64' else '0', 0, int64=kind == 'int64')
+            required = int if integer else float
+            if type(va) is required and va == 1:
+                return b
+            if type(vb) is required and vb == 1:
+                return a
+            if type(va) is required and va == -1:
+                return self._negate(b, integer)
+            if type(vb) is required and vb == -1:
+                return self._negate(a, integer)
+        if not integer and type(va) is float and type(vb) is float:
+            try:
+                value = {'+': ev_add, '-': ev_sub, '*': ev_mul}[op](va, vb)
+                if math.isfinite(value):
+                    return ConstantOperand(cpp_real(value), value)
+            except (OverflowError, ValueError, ZeroDivisionError):
+                pass
+        return written
 
     @staticmethod
     def _operand_for_coeff(coef, runtime_expr: str):
