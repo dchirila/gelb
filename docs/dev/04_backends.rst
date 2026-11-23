@@ -44,7 +44,15 @@ The three generators
    ``simd.py`` (vector bodies, peeled edges and scalar tails),
    ``layout.py`` (storage layout, allocation, halo updates),
    ``output.py`` (NetCDF and gauges) and ``common.py`` (type maps,
-   identifier encoding, host probes).
+   identifier encoding, host probes). ``addressing.py`` represents axis
+   coordinates and lattice addresses, including halo shifts and CBT tile
+   alignment. Singleton loops bind their axis to an integer in a scoped
+   environment. Expressions, gauge buffers and lattice subscripts resolve
+   those bindings before rendering C++; periodic bound coordinates wrap
+   into the interior and non-periodic reads clamp to the grid. Bounce-back
+   reads outside a bound non-periodic axis select the local cell directly.
+   Constant operands retain their integer or binary64 values through
+   expression emission, preserving integer widths and signed-zero rules.
 
 ``gpu_cuda_cpp``
    ``generate_cuda_cpp`` and ``CudaCppCodeGenerator`` in
