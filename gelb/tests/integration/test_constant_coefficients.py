@@ -571,7 +571,7 @@ def test_the_peepholes_fire_on_the_suffixed_literals(tmp_path):
     zero of x0 keeps the int64 width."""
     cpp = _source(tmp_path, PEEP, "cpu_highway", "aos")
     assert re.search(r"\w+\[0\] = 7LL;", cpp)
-    assert re.search(r"\w+\[1\] = \(-\(-3LL\)\);", cpp)
+    assert re.search(r"\w+\[1\] = 3LL;", cpp)
     assert re.search(r"\w+\[2\] = 0LL;", cpp)
     assert re.search(r"\w+\[3\] = \(2LL \* 5LL\);", cpp)
     assert re.search(r"\w+\[1\] = \w+\[1\];", cpp)

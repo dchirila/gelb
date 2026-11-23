@@ -1171,25 +1171,6 @@ class HighwayCodeGenerator(
         elem = getattr(dt, 'element_dtype', None) or getattr(dt, 'name', 'real')
         return _TYPE_MAP.get(elem, 'double')
 
-    @staticmethod
-    def _try_parse_lit(s: str):
-        """If ``s`` is a literal-looking C++ number (no operators or
-        identifiers: a binary64 literal, or an int64 one with its LL
-        suffix, in parentheses when negative), return its value as a
-        float; otherwise return None.  Used by the arithmetic-folding
-        helpers below to recognise pre-evaluated constexpr-array
-        substitutions (e.g. ``EX[3]`` -> ``-1.0`` or ``(-1LL)``)."""
-        text = s.strip()
-        if text.startswith('(') and text.endswith('LL)'):
-            text = text[1:-1]
-        if text.endswith('LL'):
-            text = text[:-2]
-        try:
-            return float(text)
-        except (ValueError, TypeError):
-            return None
-
-
 # ----------------------------------------------------------------------
 # Module entry point
 # ----------------------------------------------------------------------
