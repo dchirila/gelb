@@ -173,7 +173,7 @@ class OutputEmitMixin:
     def _emit_gauge_buffer_fill(self, gauge: GaugeBlock_N) -> None:
         # Buffer index order: x fastest (innermost), so 1-D = [g_x],
         # 2-D = [g_y][g_x].
-        idx = ''.join(f'[g_{self._axis(i)}]'
+        idx = ''.join(f'[{self._axis_coord(self._axis(i))}]'
                       for i in reversed(range(self._d)))
         for decl in gauge.outputs:
             if isinstance(decl, VariableDeclarationStmt_N):

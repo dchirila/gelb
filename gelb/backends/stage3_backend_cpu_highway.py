@@ -79,7 +79,6 @@ from gelb.backends.highway.common import (
     _NETCDF_TYPE_MAP,
     _NT_STORE_THRESHOLD_BYTES,
     _TYPE_MAP,
-    _cbt_addr_to_tile_start,
     int64_literal,
     _detect_avx512_available,
     _uname,
@@ -136,14 +135,9 @@ class HighwayCodeGenerator(
         self._lines: list[str] = []
         self._indent = 0
 
-        # Singleton-axis literal-substitution state.  When a 1-cell
-        # axis sub-region is opened via ``_emit_axis_loop_open`` with
-        # ``lo == hi``, we register ``g_<axis> -> str(lo)`` here; the
-        # ``_emit`` method substitutes those identifiers in subsequent
-        # body lines and folds simple integer arithmetic.  The stack
-        # tracks open scopes so close-pop restores the outer binding.
-        self._axis_substitutions: dict[str, str] = {}
-        self._axis_subst_stack: list = []
+        # Singleton bindings are consumed by expressions and addresses.
+        self._axis_bindings: dict[str, int] = {}
+        self._axis_binding_stack: list = []
 
         # The pipeline supplies all analysis facts before emission.
         self.backend_context = backend_context
@@ -233,90 +227,10 @@ class HighwayCodeGenerator(
     # ------------------------------------------------------------------
 
     def _emit(self, line: str = '') -> None:
-        if line and self._axis_substitutions:
-            line = self._apply_axis_substitutions(line)
         if line:
             self._lines.append('  ' * self._indent + line)
         else:
             self._lines.append('')
-
-    def _apply_axis_substitutions(self, line: str) -> str:
-        """Apply singleton-axis substitutions ``g_<axis> -> literal``
-        followed by integer-arithmetic folding to a single emit line.
-        Replaces e.g. ``g_z`` with ``0`` and folds wrap-modulo
-        expressions like ``((g_z - 1 + 64) % 64)`` to ``63`` at
-        codegen time so the generated source reads as concrete
-        literal coordinates at axis-singleton sub-regions instead of
-        symbolic ``g_<axis>`` references that the C++ compiler would
-        only fold at compile time.
-
-        Word-boundary substitution avoids hitting other identifiers
-        that share the prefix (e.g. ``g_z_storage`` is left alone)."""
-        import re
-        for k, v in self._axis_substitutions.items():
-            line = re.sub(rf'\b{re.escape(k)}\b', v, line)
-        return self._fold_int_arith(line)
-
-    @staticmethod
-    def _fold_int_arith(s: str) -> str:
-        """Fold purely-numeric paren-wrapped arithmetic in a string.
-
-        Recognises two patterns and applies them iteratively until
-        the string stabilises:
-
-          * ``(N)`` (single integer in parens) -> ``N``
-          * ``(N op M op K op ...)`` (a chain of integers and the
-            operators ``+ - * %``) -> the evaluated result, when the
-            entire chain is purely numeric.
-
-        Used by ``_apply_axis_substitutions`` to clean up wrap-modulo
-        expressions after axis-singleton substitution.  Sanitisation
-        guarantees only digit / op / whitespace tokens reach
-        ``eval``; identifiers, function calls, etc. are rejected and
-        left untouched.  Python's ``%`` semantics agree with C's for
-        non-negative operands, which is the case here (the wrap form
-        is always ``(... + N) % N`` with the inner sum >= 0)."""
-        import re
-        int_pat = r'-?\d+(?:LL)?'
-        # Negative lookbehind ``(?<!>)`` skips parens immediately
-        # preceded by ``>`` -- those are part of ``static_cast<TYPE>(N)``
-        # where the parens are required syntax, not a redundant wrap.
-        # ``(?<!-)``: a negative literal keeps its parentheses when a
-        # minus stands right in front of them (``(-(-1LL))``), because
-        # ``--1LL`` is a decrement; elsewhere it is stripped as before,
-        # so the wrap forms fold the same way.
-        # Identifier characters also protect function-call parentheses.
-        parens_int = re.compile(rf'(?<![a-zA-Z0-9_>-])\(\s*({int_pat})\s*\)')
-        chain_pat = re.compile(
-            rf'(?<![a-zA-Z0-9_>])\(\s*({int_pat}(?:\s*[+\-*%]\s*{int_pat})+)\s*\)')
-        sanitiser = re.compile(
-            rf'\s*{int_pat}(\s*[+\-*%]\s*{int_pat})*\s*')
-
-        def eval_chain(m):
-            expr = m.group(1)
-            if not sanitiser.fullmatch(expr):
-                return m.group(0)
-            suffix = 'LL' if 'LL' in expr else ''
-            try:
-                result = eval(expr.replace('LL', ''), {'__builtins__': {}}, {})
-            except Exception:
-                return m.group(0)
-            if isinstance(result, int):
-                # The int64 minimum has no literal of its own (its
-                # magnitude is unsigned), so its chain stays as written;
-                # a negative result keeps its parentheses as above.
-                if result == -2 ** 63:
-                    return m.group(0)
-                return (f'({result}{suffix})' if result < 0
-                        else f'{result}{suffix}')
-            return m.group(0)
-
-        while True:
-            new = parens_int.sub(lambda m: m.group(1), s)
-            new = chain_pat.sub(eval_chain, new)
-            if new == s:
-                return s
-            s = new
 
     def _omp_firstprivate_clause(self) -> str:
         """Return the ``firstprivate(...)`` clause listing every lattice's
@@ -663,7 +577,7 @@ class HighwayCodeGenerator(
                 self._emit(f'// Init (2nd buffer): {info.initializer} '
                            f'({nc_name}){rect_suffix}')
                 self._emit_spatial_loop_open(rect_info)
-                coord_strs = [f'g_{self._axis(i)}' for i in range(self._d)]
+                coord_strs = [self._axis_coord(self._axis(i)) for i in range(self._d)]
                 for lname, linfo in self._lattice_info.items():
                     subs = self._storage_subscript(coord_strs, 'gelb_df', lname)
                     self._emit(f'for (int gelb_df = 0; gelb_df < {linfo["q"]};'
@@ -709,7 +623,7 @@ class HighwayCodeGenerator(
                 self._emit(f'// Masked zero-init: {nc_name}'
                            f'{rect_suffix}')
                 self._emit_spatial_loop_open(rect_info)
-                coord_strs = [f'g_{self._axis(i)}'
+                coord_strs = [self._axis_coord(self._axis(i))
                               for i in range(self._d)]
                 for lname, linfo in self._lattice_info.items():
                     q = linfo['q']
@@ -1031,47 +945,16 @@ class HighwayCodeGenerator(
     def _emit_axis_loop_open(self, axis: str, lo: int, hi: int,
                               *, label: str = None,
                               omp: bool = False) -> None:
-        """Emit a loop opener for ``g_<axis>`` over the inclusive
-        range ``[lo, hi]``.  Two forms:
-
-          * When ``lo == hi``, the loop is a single-iteration loop
-            and collapses to a brace-scoped declaration::
-
-                // <label>
-                { int g_axis = lo;
-
-            **And** the binding ``g_<axis> = lo`` is pushed onto
-            ``_axis_substitutions``: subsequent body emits replace
-            every ``\\bg_<axis>\\b`` with the literal ``lo`` and fold
-            simple integer arithmetic at codegen time (so e.g.
-            cross-axis reads at the boundary like
-            ``((g_y - 1 + 64) % 64)`` collapse to ``63``).  The push
-            happens *after* the declaration line is emitted so the
-            decl itself keeps the ``g_<axis>`` identifier (otherwise
-            we'd produce ``int 0 = 0;``).
-
-          * Otherwise, a normal ``for (...; ...; ++...)`` loop with
-            an optional ``#pragma omp parallel for`` directive
-            preceding it (suppressed in the collapsed case, where
-            there's no parallelism available).
-
-        ``label`` is an optional comment line emitted just before
-        the loop opener -- used by the dyn / gauge / initialiser emit
-        to label region roles like ``'scalar head (x wrap)'``,
-        ``'SIMD body (Vec8d x 8 cells/iter)'``, ``'y = first'``."""
+        """Open an axis scope, binding a singleton or hiding an outer binding."""
         if label:
             self._emit(f'// {label}')
         # A coordinate is a GeLB `int`, int64: `x + 2147483647` must
         # not overflow.
         if lo == hi:
             self._emit(f'{{ int64_t g_{axis} = {lo};')
-            key = f'g_{axis}'
-            prior = self._axis_substitutions.get(key)
-            # The literal is an int64, `LL`, so that arithmetic on the
-            # collapsed coordinate stays 64-bit, as on a loop coordinate;
-            # the folder below understands the suffix.
-            self._axis_substitutions[key] = f'{lo}LL'
-            self._axis_subst_stack.append(('singleton', key, prior))
+            prior = self._axis_bindings.get(axis)
+            self._axis_bindings[axis] = lo
+            self._axis_binding_stack.append((axis, prior))
         else:
             if omp:
                 fp = self._omp_firstprivate_clause()
@@ -1079,21 +962,17 @@ class HighwayCodeGenerator(
                            f'schedule(static){" " + fp if fp else ""}')
             self._emit(f'for (int64_t g_{axis} = {lo}; '
                        f'g_{axis} <= {hi}; ++g_{axis}) {{')
-            self._axis_subst_stack.append(('loop',))
+            prior = self._axis_bindings.pop(axis, None)
+            self._axis_binding_stack.append((axis, prior))
         self._indent += 1
 
     def _emit_axis_loop_close(self) -> None:
-        """Close a loop or singleton-brace block opened by
-        ``_emit_axis_loop_open``.  Pops any singleton binding from
-        ``_axis_substitutions`` so subsequent emits see the outer
-        scope's bindings again.  Symmetric: one ``}`` either way."""
-        entry = self._axis_subst_stack.pop()
-        if entry[0] == 'singleton':
-            _, key, prior = entry
-            if prior is None:
-                del self._axis_substitutions[key]
-            else:
-                self._axis_substitutions[key] = prior
+        """Restore the enclosing axis scope before emitting its closing brace."""
+        axis, prior = self._axis_binding_stack.pop()
+        if prior is None:
+            self._axis_bindings.pop(axis, None)
+        else:
+            self._axis_bindings[axis] = prior
         self._indent -= 1
         self._emit('}')
 

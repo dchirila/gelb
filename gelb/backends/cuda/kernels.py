@@ -148,7 +148,7 @@ class CudaKernelEmitMixin:
             # A masked NC with no cells has no term: it zeroes nothing.
         self._emit(f'if (!({" || ".join(masked_terms)})) return;')
 
-        coord_strs = [f'g_{self._axis(i)}' for i in range(self._d)]
+        coord_strs = [self._axis_coord(self._axis(i)) for i in range(self._d)]
         for lname, linfo in self._lattice_info.items():
             q = linfo['q']
             subs = self._storage_subscript(coord_strs, 'gelb_df', lname)
@@ -201,7 +201,7 @@ class CudaKernelEmitMixin:
                           for i, (lo, hi) in enumerate(info.bbox)]
                 terms.append(f'({" && ".join(bounds)})')
         self._emit(f'if (!({" || ".join(terms)})) return;')
-        coord_strs = [f'g_{self._axis(i)}' for i in range(self._d)]
+        coord_strs = [self._axis_coord(self._axis(i)) for i in range(self._d)]
         for lname, linfo in self._lattice_info.items():
             subs = self._storage_subscript(coord_strs, 'gelb_df', lname)
             self._emit(f'for (int gelb_df = 0; gelb_df < {linfo["q"]}; ++gelb_df) {{')

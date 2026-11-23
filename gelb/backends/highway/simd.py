@@ -7,6 +7,8 @@ aligned/NT store selection.
 
 from __future__ import annotations
 
+from gelb.backends.highway.addressing import LatticeAddress, spatial_subscript
+
 from gelb.type_table import UnifiedTypeTable as Types
 
 from gelb.backends.highway.common import (
@@ -56,7 +58,7 @@ class SimdEmitMixin:
     ``HighwayCodeGenerator`` (stage3_backend_cpu_highway).
     """
 
-    def _emit_simd_store(self, vname: str, lhs_addr: str) -> str:
+    def _emit_simd_store(self, vname: str, lhs_addr: LatticeAddress) -> str:
         """Return the C++ source for a SIMD-mode lattice-store call,
         dispatching on the active layout's alignment / NT-store
         decision:
@@ -69,10 +71,8 @@ class SimdEmitMixin:
           * CBT-no-NT (``_cbt_store_suffix() == '_a'``) -> ``hn::Store(v, d, &cbt_addr)``.
             Tile-aligned iteration guarantees the lane subscript
             folds to 0 at runtime; ``hn::Store`` is the aligned
-            variant.  The address is rewritten via
-            ``_cbt_aligned_addr`` to drop the trailing ``[(...)%8]``
-            lane subscript and replace it with ``[0]``, giving gcc
-            a static alignment hint.
+            variant. The structured address renders a lane-zero
+            subscript, giving gcc a static alignment hint.
           * CBT+NT (``_cbt_store_suffix() == '_nt'``)    -> ``hn::Stream(v, d, &cbt_addr)``.
             NT-store path.  The gate (``_should_use_nt_stores()``)
             decides when the backend can safely use streaming stores;
@@ -84,10 +84,10 @@ class SimdEmitMixin:
         suffix = self._cbt_store_suffix()
         if suffix == '_nt':
             return (f'hn::Stream({vname}, d, '
-                    f'&{self._cbt_aligned_addr(lhs_addr)})')
+                    f'&{lhs_addr.aligned()})')
         if suffix == '_a':
             return (f'hn::Store({vname}, d, '
-                    f'&{self._cbt_aligned_addr(lhs_addr)})')
+                    f'&{lhs_addr.aligned()})')
         return f'hn::StoreU({vname}, d, &{lhs_addr})'
 
     def _block_simd_eligible(self, block, info) -> bool:
@@ -886,13 +886,13 @@ class SimdEmitMixin:
         # extends over the whole bbox.  A block reaching k > 1 cells
         # along a periodic axis peels the k - 1 cells per side whose
         # reads would leave the halo; they run scalar, where
-        # _coord_with_wrap wraps those reads with a modulo.  A write at
+        # _coordinate wraps those reads with a modulo.  A write at
         # offset k (a push) peels the full k cells per side: a ghost
         # cell is never copied back, so the destination must be in the
         # interior; the peeled cells wrap their stores with a modulo.
         # Non-periodic axes never peel (their bboxes are restricted to
         # interior regions -- walls live in a separate NC), and the
-        # clamp ternary in _coord_with_wrap handles boundary reads
+        # clamp ternary in _coordinate handles boundary reads
         # (writes off a wall are rejected by the validators).
         head = [0] * d
         tail = [0] * d
@@ -1370,8 +1370,7 @@ class SimdEmitMixin:
         else:  # x_offset > 0
             tile_lo_expr = 'g_x_tile'
             tile_hi_expr = '(g_x_tile + 1)'
-        non_x_spatial = ''.join(
-            f'[({c}) + 1]' for c in reversed(coord_strs[1:]))
+        non_x_spatial = spatial_subscript(coord_strs[1:])
         addr_lo = (f'{_lname(lname)}_storage[{_lname(lname)}_old]'
                    f'{non_x_spatial}[{tile_lo_expr}][{df_idx_str}][0]')
         addr_hi = (f'{_lname(lname)}_storage[{_lname(lname)}_old]'

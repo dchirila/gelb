@@ -295,23 +295,6 @@ def _nt_store_threshold_bytes() -> int:
 _NT_STORE_THRESHOLD_BYTES = _nt_store_threshold_bytes()
 
 
-def _cbt_addr_to_tile_start(addr: str) -> str:
-    """Given a CBT storage address ending with ``[(expr) % TILE]`` (the
-    x_within lane subscript), strip the lane subscript and replace it
-    with ``[0]`` so the address points at lane 0 of the tile (the
-    aligned tile-start).  Used by the SIMD-CBT load/store emit when
-    the iteration's tile-aligned ``g_x`` guarantees the lane subscript
-    folds to ``0``; we rewrite it in source to give gcc the clearest
-    possible alignment hint.
-    """
-    # The CBT subscript ends with `[(<x_expr>) % <TILE>]`; replace the
-    # last bracketed group with `[0]`.
-    closing = addr.rfind(']')
-    opening = addr.rfind('[', 0, closing)
-    if opening < 0:
-        return addr
-    return addr[:opening] + '[0]'
-
 _NETCDF_TYPE_MAP = Types.netcdf_c
 
 

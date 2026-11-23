@@ -20,30 +20,44 @@ def emit_fortran(tmp_path, source):
     return out
 
 
-@pytest.mark.parametrize("expression,expected", [
-    ("std::abs(-5LL)", "std::abs(-5LL)"),
-    ("std::abs(5LL)", "std::abs(5LL)"),
-    ("std::abs(0)", "std::abs(0)"),
-    ("std::abs(0 - 5LL)", "std::abs(0 - 5LL)"),
-    ("std::abs(0 + 5LL)", "std::abs(0 + 5LL)"),
-    ("fn_2(0 + 5LL)", "fn_2(0 + 5LL)"),
-    ("f_1(7)", "f_1(7)"),
-    ("gelb_x9(5LL)", "gelb_x9(5LL)"),
-    ("(((0 + (-1)) % 64 + 64) % 64)", "63"),
-    ("a[(0 + 1)]", "a[1]"),
-    ("static_cast<int>(5)", "static_cast<int>(5)"),
-    ("-(-1LL)", "-(-1LL)"),
+@requires_compiler
+@pytest.mark.parametrize("expression,spelling", [
+    ("real(abs(x - 5))", "std::abs("),
+    ("real(abs(x + 5))", "std::abs("),
+    ("real(abs(x))", "std::abs(0LL)"),
+    ("real(x)", "static_cast<double>(0LL)"),
+    ("real(-(x - 1))", "(-"),
+    ("real(-(-1))", "1.0"),
+    ("real(f_1(x))", "std::abs("),
+    ("f.in[x - 1 | 0]", "g0_1_f_storage[g0_1_f_old][0][64]"),
+    ("sqrt(real(x))", "sqrt("),
 ])
-def test_integer_folder_keeps_call_parentheses(expression, expected):
-    assert HighwayCodeGenerator._fold_int_arith(expression) == expected
-
-
-def test_singleton_axis_substitution_keeps_call_parentheses():
-    generator = HighwayCodeGenerator.__new__(HighwayCodeGenerator)
-    generator._axis_substitutions = {"g_x": "0"}
-    assert generator._apply_axis_substitutions(
-        "std::abs((g_x - 5LL)) + std::abs((g_x + 5LL)) + std::abs(g_x)"
-    ) == "std::abs(-5LL) + std::abs(5LL) + std::abs(0)"
+def test_singleton_expression_call_parentheses(tmp_path, expression, spelling):
+    from pathlib import Path
+    from gelb.tests.integration._toolchain import NC_CFLAGS
+    source = f"""
+simulation_description("singleton expressions");
+lattices {{ lattice f(1, 1, real, 64, true); }}
+function f_1(int a) -> (int result) {{ result = abs(a - 5); }}
+initializer I {{ f.out[x | 0] = 1.0; }}
+dynamic D {{ f.out[x | 0] = {expression}; }}
+dynamic Copy {{ f.out[x | 0] = f.in[x | 0]; }}
+gauge G -> (real val) {{ val = f.in[x | 0]; }}
+node_classes {{ node_class B(I, D, G); node_class E(I, Copy, G); }}
+geometry {{ nodes[:] = E; nodes[0:0] = B; nodes[63:63] = B; }}
+"""
+    path, out = tmp_path / "literal.gelb", tmp_path / "literal.cpp"
+    path.write_text(source)
+    run = CliRunner().invoke(cli, [str(path), "-b", "cpu_highway", "-o", str(out),
+                                  "--storage-layout", "soa", "--nc-output", "out.nc"])
+    assert run.exit_code == 0, run.output
+    assert spelling in out.read_text()
+    root = Path(__file__).resolve().parents[3]
+    run = subprocess.run(["g++", "-std=c++17", "-fsyntax-only", "-fopenmp",
+                          *shlex.split(NC_CFLAGS), "-I", str(root / "third_party/highway"),
+                          "-I", str(root / "gelb/backends"), str(out)],
+                         cwd=tmp_path, capture_output=True, text=True)
+    assert run.returncode == 0, run.stdout + run.stderr
 
 
 @requires_compiler
