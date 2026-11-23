@@ -7,6 +7,8 @@ in both scalar and SIMD modes.
 
 from __future__ import annotations
 
+from gelb.backends.highway.addressing import ConstCoord
+
 from gelb.type_table import UnifiedTypeTable as Types
 
 import math
@@ -191,6 +193,9 @@ class ExpressionEmitMixin:
                 # iteration of the inner x-loop.
                 if expr.name == 'x' and self._simd_mode == 'vec8d':
                     return 'gelb_xv'
+                if expr.name in self._axis_bindings:
+                    return ConstantOperand(int64_typed_literal(self._axis_bindings[expr.name]),
+                                           self._axis_bindings[expr.name], int64=True)
                 return f'g_{expr.name}'
             # Array variables -- local or global -- referenced inside a
             # for-df slice loop become element accesses.  Outside such a
@@ -947,18 +952,21 @@ class ExpressionEmitMixin:
             key = tuple(e.name for e in elems)
         offsets = [int(self.backend_context.global_constants[name].folded[i]) for name in key]
         opposite = self.backend_context.opp_tables[key][i]
-        coords = [self._emit_coord_scalar(c) for c in args[1:-1]]
+        coords = [self._coordinate(c, axis, bounce=True)
+                  for axis, c in enumerate(args[1:-1])]
         targets, guards = [], []
-        for axis, (coord, off, size) in enumerate(
-                zip(coords, offsets, self._grid_sizes())):
-            target = f'({coord} + ({off}))' if off else coord
-            if off and is_periodic(self._lattice_info, axis):
-                if abs(off) > 1 and axis not in self._wrap_safe_axes:
-                    target = f'(({target} % {size} + {size}) % {size})'
-            elif off and not (axis == 0 and self._simd_mode == 'vec8d'):
+        lname = args[0].name
+        for axis, (coord, node, off, size) in enumerate(
+                zip(coords, args[1:-1], offsets, self._grid_sizes())):
+            target = self._coordinate(node, axis, off, bounce=True)
+            if isinstance(target, ConstCoord):
+                if not 0 <= target.value < size:
+                    return self._emit_simd_lattice_load(
+                        lname, coords, df_idx_str=str(opposite), x_offset=0)
+            elif off and not is_periodic(self._lattice_info, axis) and not (
+                    axis == 0 and self._simd_mode == 'vec8d'):
                 guards.append(f'({target} >= 0 && {target} < {size})')
             targets.append(target)
-        lname = args[0].name
         neighbour = self._emit_simd_lattice_load(
             lname, targets, df_idx_str=str(opposite), x_offset=offsets[0])
         if not guards:

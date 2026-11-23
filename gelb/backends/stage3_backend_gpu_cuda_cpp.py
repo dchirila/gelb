@@ -386,10 +386,6 @@ class CudaCppCodeGenerator(
         applied within the kernel body, not the file-scope
         positioning of the kernel itself.
         """
-        # Apply axis substitutions exactly like parent (preserves the
-        # singleton-axis literal-folding pass for boundary/elided regions).
-        if line and self._axis_substitutions:
-            line = self._apply_axis_substitutions(line)
         if self._emit_target == 'device':
             # File-scope target: indent is honoured (so kernel bodies
             # at indent>=1 read as proper nested code).

@@ -7,6 +7,8 @@ lattice allocation emission, and the periodic halo-update lambdas.
 
 from __future__ import annotations
 
+from gelb.backends.highway.addressing import AxisOffset, LatticeAddress
+
 from gelb.type_table import UnifiedTypeTable as Types
 
 from gelb.backends.highway.common import (
@@ -14,7 +16,6 @@ from gelb.backends.highway.common import (
     _CBT_TILE,
     _NT_STORE_THRESHOLD_BYTES,
     _TYPE_MAP,
-    _cbt_addr_to_tile_start,
     _detect_avx512_available,
 )
 
@@ -41,47 +42,20 @@ class StorageLayoutMixin:
         # populated each timestep by the halo-update kernel.
         return tuple(n + 2 for n in self._grid_sizes())
 
-    def _storage_subscript(self, coord_strs, df_idx_str=None,
-                           lattice_name=None) -> str:
-        """Build the storage subscript chain from a list of user-coord
-        strings.  Applies the +1 halo shift per axis so the subscript
-        addresses the interior [1, N] of the halo'd storage.  Spatial
-        axes are reversed so the contiguous (x) axis is innermost
-        within the spatial portion.
+    def _axis_coord(self, axis):
+        return AxisOffset(axis).resolve(self._axis_bindings)
 
-        ``df_idx_str``: index expression for the DF dimension (e.g.
-        ``'3'``, ``'gelb_df'``).  If omitted, the returned subscript
-        omits the DF dimension entirely (callers that prepend the DF
-        index themselves -- historic behaviour preserved).
-        ``lattice_name``: looked up in ``self._use_aos`` /
-        ``self._use_cbt`` to decide AoS vs SoA vs CBT dimension order.
-        Only consulted when ``df_idx_str`` is provided.
+    def _lattice_address(self, lname, buffer, coords, df=None,
+                         *, aligned_tile_start=False):
+        layout = ('cbt' if self._use_cbt.get(lname, False) else
+                  'aos' if self._use_aos.get(lname, False) else 'soa')
+        return LatticeAddress(lname, buffer, tuple(coords), df, layout,
+                              aligned_tile_start)
 
-        SoA: ``[df][c_d-1]...[c_0]``           (DF outermost spatial-wise)
-        AoS: ``[c_d-1]...[c_0][df]``           (DF innermost -- co-located cell DFs)
-        CBT: ``[c_d-1]...[c_1][x_tile][df][x_within]``
-            where x_tile = (c_0 + 1) / TILE, x_within = (c_0 + 1) % TILE.
-            Note CBT splits the x (innermost) coord into two subscripts
-            and inserts the DF dimension between them.
-        """
-        if df_idx_str is not None and self._use_cbt.get(lattice_name, False):
-            # CBT: split x into x_tile + x_within, insert df between them
-            # and the rest of the spatial dims.  ``coord_strs[0]`` is x.
-            x_str = f'({coord_strs[0]}) + 1'
-            non_x_spatial = ''.join(
-                f'[({c}) + 1]' for c in reversed(coord_strs[1:]))
-            return (f'{non_x_spatial}'
-                    f'[({x_str}) / {_CBT_TILE}]'
-                    f'[{df_idx_str}]'
-                    f'[({x_str}) % {_CBT_TILE}]')
-        spatial = ''.join(f'[({c}) + 1]' for c in reversed(coord_strs))
-        if df_idx_str is None:
-            # Called without a DF index: the caller prepends it.
-            # This is the SoA spatial portion only.
-            return spatial
-        if self._use_aos.get(lattice_name, False):
-            return f'{spatial}[{df_idx_str}]'
-        return f'[{df_idx_str}]{spatial}'
+    def _storage_subscript(self, coords, df_idx_str=None, lattice_name=None,
+                           *, aligned_tile_start=False):
+        return self._lattice_address(lattice_name, '', coords, df_idx_str,
+                                    aligned_tile_start=aligned_tile_start).subscript()
 
     def _any_aos_lattice(self) -> bool:
         """True iff at least one lattice in the program uses AoS
@@ -250,16 +224,6 @@ class StorageLayoutMixin:
             if buf_bytes > max_bytes:
                 max_bytes = buf_bytes
         return max_bytes
-
-    def _cbt_aligned_addr(self, addr: str) -> str:
-        """In SIMD-CBT mode, rewrite a CBT lattice address whose lane
-        subscript is ``[(...) % TILE]`` to ``[0]`` (lane-0 aligned).
-        The tile-aligned iteration guarantees the lane subscript folds
-        to 0 at runtime; the rewrite gives gcc a static alignment hint
-        and matches the ``Store`` / ``Load`` (aligned) semantics."""
-        if self._simd_mode == 'vec8d' and self._any_cbt_lattice():
-            return _cbt_addr_to_tile_start(addr)
-        return addr
 
     def _emit_lattice_declarations(self) -> None:
         # Per-lattice storage allocation.  Layout chosen by

@@ -7,6 +7,8 @@ lowering), and the literal-folding helpers used during emission.
 
 from __future__ import annotations
 
+from gelb.backends.highway.addressing import LatticeAddress, AxisOffset, ConstCoord, ExprCoord, spatial_subscript
+
 from gelb.backends.real_literals import cpp_real
 from gelb.backends.highway.expr import ConstantOperand
 from gelb.midware.ast_simplify import is_pure, numeric_kind
@@ -17,7 +19,6 @@ from gelb.backends.highway.common import (
     _lname,
     _TYPE_MAP,
     _CBT_TILE,
-    _cbt_addr_to_tile_start,
     _uname,
     int64_typed_literal,
 )
@@ -243,8 +244,8 @@ class StatementEmitMixin:
     # ``u + 0.0`` is +0 for u = -0 and ``0.0 - u`` is +0 for u = +0, so
     # only ``x + (-0)``, ``x - (+0)`` and ``(-0) - x`` fold; ``integer``
     # (the operation's kind) allows every zero identity.  Two literals
-    # fold only in real arithmetic, where the tokens are doubles and
-    # Python's float arithmetic is the native one.
+    # fold in binary64 arithmetic, or as in-range int64 arithmetic inside
+    # a singleton-axis scope.
 
     # A negative literal is emitted bare (``EX[3]`` -> ``-1.0``, a
     # negative ``-D`` value), so a minus put in front of it would read
@@ -271,6 +272,15 @@ class StatementEmitMixin:
         written = f'({a} {op} {b})'
         if kind == 'real32' or any(numeric_kind(getattr(node, 'inferred_type', None)) == 'real32'
                                    for node in (expr.left, expr.right)):
+            return written
+
+        if (kind == 'int64' and self._axis_bindings
+                and type(va) is int and type(vb) is int
+                and getattr(a, 'int64', False) and getattr(b, 'int64', False)):
+            value = {'+': lambda: va + vb, '-': lambda: va - vb,
+                     '*': lambda: va * vb}[op]()
+            if -(1 << 63) <= value < (1 << 63):
+                return ConstantOperand(int64_typed_literal(value), value, int64=True)
             return written
 
         def zero(value, negative):
@@ -589,7 +599,6 @@ class StatementEmitMixin:
                     f"upstream_dfs needs {ex_node.name} declared as a "
                     f"{n}-element array constant.")
             ev_values_list.append(vals)
-        coord_exprs = [self._emit_coord_scalar(c) for c in coord_nodes]
         lname = lat_id.name
         sizes = self._grid_sizes()
         for i in range(n):
@@ -602,32 +611,8 @@ class StatementEmitMixin:
                     raise NotImplementedError(
                         f"upstream_dfs: could not fold "
                         f"{ex_node.name}[{i}] to a constant integer.")
-            src_coords = []
-            for axis_idx, (off, c_expr) in enumerate(
-                    zip(offsets, coord_exprs)):
-                n_axis = sizes[axis_idx]
-                periodic = is_periodic(self._lattice_info, axis_idx)
-                if off == 0:
-                    src_coords.append(c_expr)
-                elif (axis_idx in self._wrap_safe_axes
-                      or (periodic and abs(off) <= 1)):
-                    # Periodic axes have their wrap targets pre-staged
-                    # in the one-cell halo by ``halo_update_<lname>``,
-                    # so the read at ``c_expr - off`` is a plain
-                    # storage subscript -- no modulo.  Wrap-safe axes
-                    # (caller restricted loop bounds) take the same
-                    # path.
-                    src_coords.append(f'({c_expr} - ({off}))')
-                elif periodic:
-                    # Beyond the halo: wrap the index itself.
-                    src_coords.append(
-                        f'((({c_expr} - ({off})) % {n_axis} + {n_axis})'
-                        f' % {n_axis})')
-                else:
-                    src_coords.append(
-                        f'(({c_expr} - ({off}) < 0) ? 0 : '
-                        f'(({c_expr} - ({off}) >= {n_axis}) ? {n_axis - 1} '
-                        f': ({c_expr} - ({off}))))')
+            src_coords = [self._coordinate(c, axis, -off, subtract=True)
+                          for axis, (c, off) in enumerate(zip(coord_nodes, offsets))]
             # SIMD-CBT: stencil reads at x +/- 1 cross tile boundaries.
             # Emit valignq of (prev_tile, curr_tile) or (curr_tile,
             # next_tile) instead of a single load.  Same-tile reads
@@ -656,12 +641,10 @@ class StatementEmitMixin:
                     # and gives the compiler a stronger alignment
                     # hint than ``hn::LoadU``.
                     coord_idx_cbt = self._storage_subscript(
-                        src_coords, df_idx_str=str(i), lattice_name=lname)
+                        src_coords, df_idx_str=str(i), lattice_name=lname,
+                        aligned_tile_start=True)
                     addr = (f'{_lname(lname)}_storage[{_lname(lname)}_old]'
                             f'{coord_idx_cbt}')
-                    # Drop the trailing `[(...)%8]` lane subscript so
-                    # we point at lane 0 of the tile (aligned start).
-                    addr = _cbt_addr_to_tile_start(addr)
                     self._emit(f'{name}[{i}] = '
                                f'hn::Load(d, &{addr});')
                 else:
@@ -681,8 +664,7 @@ class StatementEmitMixin:
                     else:  # off_x < 0
                         tile_lo_expr = 'g_x_tile'
                         tile_hi_expr = '(g_x_tile + 1)'
-                    non_x_spatial = ''.join(
-                        f'[({c}) + 1]' for c in reversed(src_coords[1:]))
+                    non_x_spatial = spatial_subscript(src_coords[1:])
                     addr_lo = (f'{_lname(lname)}_storage[{_lname(lname)}_old]'
                                f'{non_x_spatial}[{tile_lo_expr}][{i}][0]')
                     addr_hi = (f'{_lname(lname)}_storage[{_lname(lname)}_old]'
@@ -1181,7 +1163,7 @@ class StatementEmitMixin:
         return r
 
     def _emit_lattice_out_lhs(self, sel: RectSelOfLatticeOutDFs_N,
-                              context: str, df_var: str | None = None) -> str:
+                              context: str, df_var: str | None = None) -> LatticeAddress:
         lname = sel.lattice_name.name
         spatial, df = self._decode_lattice_sel(sel)
         if len(spatial) != self._d:
@@ -1196,9 +1178,7 @@ class StatementEmitMixin:
             buf = f'{_lname(lname)}_old'
         # SoA: g_f_storage[buf][df][y][x] (x innermost -- contiguous).
         # AoS: g_f_storage[buf][y][x][df] (DF innermost -- co-located).
-        coord_idx = self._storage_subscript(
-            coord_strs, df_idx_str=df_idx_str, lattice_name=lname)
-        return f'{_lname(lname)}_storage[{buf}]{coord_idx}'
+        return self._lattice_address(lname, buf, coord_strs, df_idx_str)
 
     def _emit_coord_scalar(self, node, df_var=None) -> str:
         """Emit a coord expression as a scalar (int) regardless of
@@ -1229,68 +1209,34 @@ class StatementEmitMixin:
             return None
         return (axis_name, form[1])
 
-    def _coord_with_wrap(self, axis_idx: int, offset: int,
-                         for_write: bool = False) -> str:
-        """Return the C++ coord expression for ``g_<axis> + offset``.
-        For periodic axes the halo'd storage layout has already been
-        populated with wrap data by ``halo_update_<lname>``, one cell
-        deep, so a *read* at +-1 emits the plain ``(g_<axis> +
-        offset)``; a larger one wraps the index with a modulo.  A
-        *write* (``for_write``) wraps at any non-zero offset: a ghost
-        cell is never copied back, so a push must land in the interior.
-        Axes in ``_wrap_safe_axes`` (loop bounds keep
-        every access of the block inside the domain, writes included)
-        always emit the plain form.  For non-periodic axes a read emits
-        a clamp ternary; a write emits the plain form, since the
-        validators reject writes that leave the grid.  The +1
-        storage-coord shift is applied uniformly downstream by
-        ``_storage_subscript``."""
-        ax = self._axis(axis_idx)
-        base = f'g_{ax}'
-        if offset == 0:
-            return base
-        if axis_idx in self._wrap_safe_axes:
-            return f'({base} + ({offset}))'
-        n_axis = self._grid_sizes()[axis_idx]
-        if is_periodic(self._lattice_info, axis_idx):
-            if abs(offset) <= 1 and not for_write:
-                return f'({base} + ({offset}))'
-            # Beyond the one-cell halo, or a push: wrap the index itself.
-            return (f'((({base} + ({offset})) % {n_axis} + {n_axis})'
-                    f' % {n_axis})')
-        if for_write:
-            return f'({base} + ({offset}))'
-        # Non-periodic: clamp to [0, n-1].  Same shape as the
-        # upstream_dfs clamp; expensive but safe.  Most non-periodic
-        # examples paint walls as a separate NC, so the clamp is
-        # exercised only at the boundary itself.
-        return (f'(({base} + ({offset}) < 0) ? 0 : '
-                f'(({base} + ({offset}) >= {n_axis}) ? {n_axis - 1} '
-                f': ({base} + ({offset}))))')
+    def _coordinate(self, node, axis_idx, offset=0, *, for_write=False,
+                    subtract=False, bounce=False):
+        """Resolve an affine coordinate without parsing its emitted spelling."""
+        parsed = self._split_axis_offset(node)
+        size = self._grid_sizes()[axis_idx]
+        periodic = is_periodic(self._lattice_info, axis_idx)
+        if parsed is not None and parsed[0] == self._axis(axis_idx):
+            axis, base_offset = parsed
+            total = base_offset + offset
+            policy = 'plain'
+            if total and axis_idx not in self._wrap_safe_axes:
+                if periodic and (for_write or abs(total) > 1):
+                    policy = 'wrap'
+                elif not periodic and not for_write and not bounce:
+                    policy = 'clamp'
+            coord = AxisOffset(axis, total, size, periodic, policy, subtract)
+            # Even a wrap-safe bound read is resolved by the same rule.
+            if axis in self._axis_bindings and not periodic and not for_write and not bounce:
+                coord = AxisOffset(axis, total, size, False, 'clamp', subtract)
+            return coord.resolve(self._axis_bindings)
+        text = self._emit_coord_scalar(node)
+        if offset:
+            text = f'({text} - ({-offset}))' if subtract else f'({text} + ({offset}))'
+        return ExprCoord(text)
 
-    def _emit_lattice_coord_strs(self, spatial, for_write: bool = False):
-        """Emit the per-axis C++ coord expressions for a lattice access.
-        Recognises ``axis +/- k`` shapes and applies wrap math (write
-        semantics when ``for_write``); falls back to the generic
-        expression emitter for anything else (literal indices, more
-        complex shapes)."""
-        out = []
-        for axis_idx, s in enumerate(spatial):
-            scalar = self._range_scalar(s)
-            parsed = self._split_axis_offset(scalar)
-            if parsed is not None:
-                axis_name, offset = parsed
-                # Sanity: the parsed axis-name should match the
-                # lattice's dimension at this position.  In practice
-                # the user always writes them in dim order (x first,
-                # then y, then z) -- so this matches.  If it ever
-                # doesn't, we fall back to expression emission.
-                if axis_name == self._axis(axis_idx):
-                    out.append(self._coord_with_wrap(
-                        axis_idx, offset, for_write=for_write))
-                    continue
-            out.append(self._emit_expression(scalar))
-        return out
+    def _emit_lattice_coord_strs(self, spatial, for_write=False):
+        return [self._coordinate(self._range_scalar(node), i, for_write=for_write)
+                for i, node in enumerate(spatial)]
 
     def _x_offset_of_spatial(self, spatial) -> int | None:
         """Return the integer x-offset of a lattice spatial selector,
