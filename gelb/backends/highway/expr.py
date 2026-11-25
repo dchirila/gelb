@@ -8,6 +8,7 @@ in both scalar and SIMD modes.
 from __future__ import annotations
 
 from gelb.backends.highway.addressing import ConstCoord
+from gelb.backends.highway.simd_types import EmittedValue, ScalarFallbackRequired
 
 from gelb.type_table import UnifiedTypeTable as Types
 
@@ -40,6 +41,7 @@ from gelb.gelb_ast.ASTNodes import (
     Less_N,
     List_N,
     Mul_N,
+    Node_N,
     NotEqual_N,
     NotExpr_N,
     Or_N,
@@ -125,8 +127,8 @@ _LIBRARY_FUNCTIONS = frozenset({'sin', 'cos', 'tan', 'tanh', 'exp', 'log'})
 # operand converts instead of failing template deduction.  In SIMD mode
 # ``min`` / ``max`` on a vector operand call the vector overloads in
 # cpu_highway_runtime.hpp (the same IEEE minimum / maximum); a ``mod``
-# or ``atan2`` on a vector has no vector form, so such a block takes
-# the scalar path (``_block_has_scalar_only_intrinsic``).  ``atan2`` is
+# or ``atan2`` has no vector form, so such a block takes the scalar
+# path (``_emit_intrinsic_call``).  ``atan2`` is
 # a library function, one implementation per backend: the platform's
 # ``std::atan2`` at the call's width.
 _BINARY_MATH_SCALAR = {
@@ -171,85 +173,214 @@ class ExpressionEmitMixin:
         return 'static_cast<int64_t>(gelb_timestep)'
 
     def _emit_expression(self, expr, df_var: str | None = None) -> str:
+        """The C++ source of ``expr`` alone, for callers outside block
+        bodies (global constants, indices, CUDA)."""
+        return self._emit_typed_expr(expr, df_var).code
+
+    def _value(self, node, code, lane_kind='scalar', vec_int_origin=None) -> EmittedValue:
+        dtype = getattr(getattr(node, 'inferred_type', None), 'element_dtype', None)
+        return EmittedValue(code, dtype, _TYPE_MAP.get(dtype, 'double'),
+                            lane_kind, vec_int_origin)
+
+    @staticmethod
+    def _coerce_to_vec(value: EmittedValue) -> str:
+        """``value`` as a ``V``: Highway converts neither a scalar nor a
+        mask to a vector implicitly."""
+        if value.lane_kind == 'vec':
+            return value.code
+        if value.lane_kind == 'mask':
+            return f'hn::IfThenElse({value.code}, hn::Set(d, 1.0), hn::Set(d, 0.0))'
+        return f'hn::Set(d, {value.code})'
+
+    @staticmethod
+    def _coerce_to_mask(value: EmittedValue) -> str:
+        """``value`` as an ``hn::Mask<D>``: a scalar bool is the same in
+        every lane."""
+        if value.lane_kind == 'mask':
+            return value.code
+        return f'hn::FirstN(d, ({value.code}) ? hn::Lanes(d) : 0)'
+
+    def _require_wide(self, node) -> None:
+        """A vector body holds binary64 lanes only: a value of a narrow
+        width sends the block to the scalar path, where every operation
+        rounds to its width (user manual, Numerical semantics: Types and
+        promotion)."""
+        dtype = getattr(getattr(node, 'inferred_type', None), 'element_dtype', None)
+        if self._simd_mode == 'vec8d' and dtype in Types.narrow_array_types:
+            raise ScalarFallbackRequired(f'a {dtype} value has no vector form')
+
+    def _require_vector_reduction(self, *arrays) -> None:
+        """``sum``, ``dot_prod`` and ``matmul`` have exact vector helpers
+        for real arrays and for global constant integer arrays (an
+        integer velocity set); an integer array local to the block has
+        scalar helpers only."""
+        if self._simd_mode != 'vec8d':
+            return
+        for array in arrays:
+            self._require_wide(array)
+            local = (self._local_array_type(array.name)
+                     if isinstance(array, Identifier_N) else None)
+            if local is not None and local.dtype in Types.integer_types:
+                raise ScalarFallbackRequired(
+                    f"a reduction over the integer array '{array.name}' has no vector form")
+
+    def _has_integer_division(self, expr) -> bool:
+        """True iff ``expr`` holds an integer ``/``: evaluating it stops
+        the program when the divisor is zero."""
+        dtype = getattr(getattr(expr, 'inferred_type', None), 'element_dtype', None)
+        if isinstance(expr, Div_N) and dtype in Types.integer_types:
+            return True
+        return (isinstance(expr, Node_N)
+                and any(self._has_integer_division(c) for c in expr.get_children()))
+
+    def _emit_typed_expr(self, expr, df_var: str | None = None) -> EmittedValue:
+        """Emit ``expr`` once, with the way its value is held.
+
+        In a vector body the result says whether the C++ value is one
+        scalar for the whole iteration, a ``V`` or a mask, and the forms
+        with no vector equivalent raise ``ScalarFallbackRequired``: a
+        narrow width, and an integer that varies from cell to cell other
+        than the two a ``V`` holds exactly (a reference to x or to an
+        ``int`` local declared from it, and the integer of a per-cell
+        truth value).  An integer computed as a double would round where
+        its type says exact (user manual, Numerical semantics: Types and
+        promotion)."""
+        value = self._emit_typed_node(expr, df_var)
+        if self._simd_mode == 'vec8d':
+            self._require_wide(expr)
+            dtype = getattr(getattr(expr, 'inferred_type', None), 'element_dtype', None)
+            exact = (isinstance(expr, Identifier_N)
+                     or (isinstance(expr, (TypePromotionNode_N, IntrinsicFunctionCall_N))
+                         and value.vec_int_origin == 'bool_int_cast'))
+            if (value.lane_kind != 'scalar' and dtype in Types.integer_types
+                    and not exact):
+                raise ScalarFallbackRequired(
+                    'an integer that varies from cell to cell has no vector form')
+        return value
+
+    def _emit_typed_operand(self, expr, df_var: str | None = None, *,
+                            int64_op: bool = False) -> EmittedValue:
+        """An operand of an expression.  For an operand of an ``int64``
+        operation (``int64_op``: ``+ - * /``, ``^``, unary minus,
+        ``abs``) an integer literal, also broadcast over a slice or taken
+        from an array literal, is written with the operation's int64
+        width (``2147483647LL``), whatever its own type (a folded
+        ``int32`` constant passed to an ``int`` parameter is an int64
+        operand there): a bare C++ literal is a 32-bit ``int``, and
+        an operation with two of them is computed in 32 bits where GeLB
+        computes in int64 (user manual, Numerical semantics: Types and
+        promotion).  With every literal operand so written, every
+        ``int64`` operation has 64-bit operands, whatever the folds keep
+        or combine.  An index (``_emit_coord_scalar``) keeps its literals
+        bare."""
+        node = expr
+        while isinstance(node, BroadcastNode_N):
+            node = node.scalar_expr
+        if (isinstance(node, Array1DLiteral_N) and df_var is not None
+                and df_var.lstrip('-').isdigit()):
+            elements = node.value.elements
+            if 0 <= int(df_var) < len(elements):
+                node = elements[int(df_var)]
+        if (int64_op and not self._in_coord_scalar
+                and isinstance(node, IntLiteral_N)):
+            return self._value(node, ConstantOperand(
+                int64_typed_literal(int(node.value)), int(node.value), int64=True))
+        return self._emit_typed_expr(expr, df_var)
+
+    def _emit_typed_identifier(self, expr, df_var) -> EmittedValue:
+        # `t` and `Nx`/`Ny`/`Nz` are GeLB `int`, int64; their C++
+        # carriers are `int` (NetCDF and loop bounds want them so):
+        # widened where a user expression reads them.
+        tag = getattr(expr, 'symbol_tag', None)
+        if tag == "implicit timestep variable":
+            return self._value(expr, self._emit_implicit_timestep())
+        if tag == "implicit dimension constant":
+            # The size parameters are `g__nx` etc.; `_uname('Nx')`
+            # would name an undeclared `g_Nx`.
+            return self._value(expr, f'static_cast<int64_t>(g__n{expr.name[1].lower()})')
+        vector = self._simd_mode == 'vec8d'
+        if expr.name in ('x', 'y', 'z'):
+            # In a vector body the x coordinate varies across the lanes:
+            # the lane vector declared at the top of each iteration.  y
+            # and z are constant within one iteration of the inner
+            # x-loop.
+            if expr.name == 'x' and vector:
+                return self._value(expr, 'gelb_xv', 'vec', 'coord_x')
+            if expr.name in self._axis_bindings:
+                return self._value(expr, ConstantOperand(
+                    int64_typed_literal(self._axis_bindings[expr.name]),
+                    self._axis_bindings[expr.name], int64=True))
+            return self._value(expr, f'g_{expr.name}')
+        # Array variables -- local or global -- referenced inside a
+        # for-df slice loop become element accesses.  Outside such a
+        # loop, bare-name access is only allowed for scalars; an
+        # array-typed identifier here would be a whole-array
+        # operation (e.g. sum(EX) -- handled at the IntrinsicFunctionCall
+        # level, never reached here as a bare identifier).
+        base = _uname(expr.name)
+        carrier = self._simd_env.carrier(expr.name) if vector else None
+        lane_kind = {'vec': 'vec', 'vec_int': 'vec', 'mask': 'mask'}.get(carrier, 'scalar')
+        is_array = (self._local_array_type(expr.name) is not None
+                    or self._constant_vector(expr.name) is not None)
+        if is_array and df_var is not None:
+            # Constant-fold accesses into a constexpr array
+            # constant when the index is a literal integer.
+            # Without this, ``EX[3]`` (with EX = {..., -1.0, ...})
+            # emits as ``g_EX[3]`` and gcc keeps ``g_EX[3] * x``
+            # as a multiplication even though the value is -1
+            # (IEEE-754 strictness).  Inlining the literal lets
+            # the compiler see ``-1.0 * x`` and fold it to ``-x``.
+            # An integer array's element is its exact value (an
+            # int64 above 2^53 keeps its low bits), carrying its
+            # int64 width into the expression; a real one is a
+            # literal of the array's width.
+            if (df_var.lstrip('-').isdigit()
+                    and self._constant_vector(expr.name) is not None):
+                vals = self._constant_values(expr.name)
+                if vals is not None:
+                    idx = int(df_var)
+                    if 0 <= idx < len(vals):
+                        value = vals[idx]
+                        cpp = _TYPE_MAP.get(getattr(expr.inferred_type, 'element_dtype', 'real'), 'double')
+                        text = (cpp_real(value, cpp) if type(value) is float
+                                else int64_typed_literal(value))
+                        return self._value(expr, ConstantOperand(text, value, int64=type(value) is int)
+                                           if type(value) is int or cpp == 'double' else text)
+            return self._value(expr, f'{base}[{df_var}]', lane_kind)
+        return self._value(expr, base, lane_kind,
+                           'local' if carrier == 'vec_int' else None)
+
+    def _emit_typed_node(self, expr, df_var) -> EmittedValue:
+        vector = self._simd_mode == 'vec8d'
         if isinstance(expr, IntLiteral_N):
-            return ConstantOperand(int64_literal(expr.value), int(expr.value))
+            return self._value(expr, ConstantOperand(int64_literal(expr.value), int(expr.value)))
         if isinstance(expr, RealLiteral_N):
             kind = getattr(getattr(expr, 'inferred_type', None), 'element_dtype', None)
             cpp_type = Types.cpp.get(kind, 'double')
             text = cpp_real(expr.value, cpp_type)
-            return ConstantOperand(text, float(expr.value)) if cpp_type == 'double' else text
+            return self._value(expr, ConstantOperand(text, float(expr.value))
+                               if cpp_type == 'double' else text)
         if isinstance(expr, BoolLiteral_N):
-            return 'true' if expr.value in (True, 'true') else 'false'
+            return self._value(expr, 'true' if expr.value in (True, 'true') else 'false')
         if isinstance(expr, Identifier_N):
-            # `t` and `Nx`/`Ny`/`Nz` are GeLB `int`, int64; their C++
-            # carriers are `int` (NetCDF and loop bounds want them so):
-            # widened where a user expression reads them.
-            tag = getattr(expr, 'symbol_tag', None)
-            if tag == "implicit timestep variable":
-                return self._emit_implicit_timestep()
-            if tag == "implicit dimension constant":
-                # The size parameters are `g__nx` etc.; `_uname('Nx')`
-                # would name an undeclared `g_Nx`.
-                return f'static_cast<int64_t>(g__n{expr.name[1].lower()})'
-            if expr.name in ('x', 'y', 'z'):
-                # In SIMD mode, the x coordinate varies across the 8
-                # vector lanes; emit the pre-computed lane vector
-                # (declared at the top of each SIMD iteration).  y and
-                # z are still scalar -- they're constant within one SIMD
-                # iteration of the inner x-loop.
-                if expr.name == 'x' and self._simd_mode == 'vec8d':
-                    return 'gelb_xv'
-                if expr.name in self._axis_bindings:
-                    return ConstantOperand(int64_typed_literal(self._axis_bindings[expr.name]),
-                                           self._axis_bindings[expr.name], int64=True)
-                return f'g_{expr.name}'
-            # Array variables -- local or global -- referenced inside a
-            # for-df slice loop become element accesses.  Outside such a
-            # loop, bare-name access is only allowed for scalars; an
-            # array-typed identifier here would be a whole-array
-            # operation (e.g. sum(EX) -- handled at the IntrinsicFunctionCall
-            # level, never reached here as a bare identifier).
-            base = _uname(expr.name)
-            is_array = (self._local_array_type(expr.name) is not None
-                        or self._constant_vector(expr.name) is not None)
-            if is_array and df_var is not None:
-                # Constant-fold accesses into a constexpr array
-                # constant when the index is a literal integer.
-                # Without this, ``EX[3]`` (with EX = {..., -1.0, ...})
-                # emits as ``g_EX[3]`` and gcc keeps ``g_EX[3] * x``
-                # as a multiplication even though the value is -1
-                # (IEEE-754 strictness).  Inlining the literal lets
-                # the compiler see ``-1.0 * x`` and fold it to ``-x``.
-                # An integer array's element is its exact value (an
-                # int64 above 2^53 keeps its low bits), carrying its
-                # int64 width into the expression; a real one is a
-                # literal of the array's width.
-                if (df_var.lstrip('-').isdigit()
-                        and self._constant_vector(expr.name) is not None):
-                    vals = self._constant_values(expr.name)
-                    if vals is not None:
-                        idx = int(df_var)
-                        if 0 <= idx < len(vals):
-                            value = vals[idx]
-                            cpp = _TYPE_MAP.get(getattr(expr.inferred_type, 'element_dtype', 'real'), 'double')
-                            text = (cpp_real(value, cpp) if type(value) is float
-                                    else int64_typed_literal(value))
-                            return (ConstantOperand(text, value, int64=type(value) is int)
-                                    if type(value) is int or cpp == 'double' else text)
-                return f'{base}[{df_var}]'
-            return base
-        if isinstance(expr, (Add_N, Sub_N, Mul_N)):
+            return self._emit_typed_identifier(expr, df_var)
+        if isinstance(expr, (Add_N, Sub_N, Mul_N, Div_N)):
             kind = numeric_kind(getattr(expr, 'inferred_type', None))
-            a, b = self._broadcast_for_binop(expr.left, expr.right, df_var,
-                                             int64_op=kind == 'int64')
-            return self._constant_binop(expr, a, b, kind)
-        if isinstance(expr, Div_N):
-            kind = numeric_kind(getattr(expr, 'inferred_type', None))
-            a, b = self._broadcast_for_binop(expr.left, expr.right, df_var,
-                                             int64_op=kind == 'int64')
-            return f'({a} / {b})'
+            a = self._emit_typed_operand(expr.left, df_var, int64_op=kind == 'int64')
+            b = self._emit_typed_operand(expr.right, df_var, int64_op=kind == 'int64')
+            op = {Add_N: '+', Sub_N: '-', Mul_N: '*', Div_N: '/'}[type(expr)]
+            if a.lane_kind == b.lane_kind == 'scalar':
+                # Two scalars: the exact identities and folds apply.
+                if isinstance(expr, Div_N):
+                    return self._value(expr, f'({a.code} / {b.code})')
+                return self._value(expr, self._constant_binop(expr, a.code, b.code, kind))
+            # A vector operand: the other one is broadcast first, and the
+            # operation stays written (an identity such as ``1.0 * v`` is
+            # not applied across a vector).
+            return self._value(
+                expr, f'({self._coerce_to_vec(a)} {op} {self._coerce_to_vec(b)})', 'vec')
         if isinstance(expr, Pow_N):
-            base = self._emit_operand(
+            base = self._emit_typed_operand(
                 expr.left, df_var, int64_op=numeric_kind(
                     getattr(expr, 'inferred_type', None)) == 'int64')
             # Small non-negative integer exponents -> unrolled multiplication.
@@ -265,9 +396,8 @@ class ExpressionEmitMixin:
                 if 0 <= k <= 8:
                     if k == 0:
                         # One, in the power's own type: a scalar that a
-                        # consuming vector operation broadcasts
-                        # (``_broadcast_for_binop``).  The bare C++
-                        # literal ``1`` is a 32-bit ``int``: a quotient
+                        # consuming vector operation broadcasts.  The bare
+                        # C++ literal ``1`` is a 32-bit ``int``: a quotient
                         # of such powers was an integer division, and a
                         # product with ``int`` literals wrapped at 2^31
                         # (user manual, Numerical semantics: Types and
@@ -277,13 +407,22 @@ class ExpressionEmitMixin:
                                         'element_dtype', None)
                         cpp0 = _TYPE_MAP.get(kind0)
                         if cpp0 == 'double':
-                            return ConstantOperand('1.0', 1.0)
+                            return self._value(expr, ConstantOperand('1.0', 1.0))
                         if cpp0 == 'float':
-                            return '1.0f'
-                        return f'static_cast<{cpp0 or "int64_t"}>(1)'
+                            return self._value(expr, '1.0f')
+                        if base.lane_kind != 'scalar':
+                            # An integer power of a per-cell value is
+                            # integer arithmetic on it, whatever the
+                            # exponent.
+                            raise ScalarFallbackRequired(
+                                'an integer power of a per-cell value has no vector form')
+                        return self._value(expr, f'static_cast<{cpp0 or "int64_t"}>(1)')
                     if k == 1:
                         return base
-                    return '(' + ' * '.join([base] * k) + ')'
+                    return self._value(expr, '(' + ' * '.join([base.code] * k) + ')',
+                                       base.lane_kind)
+            if vector:
+                raise ScalarFallbackRequired('a power that is not unrolled has no vector form')
             exp_e = self._emit_expression(expr.right, df_var)
             kind = getattr(getattr(expr, 'inferred_type', None), 'element_dtype', None)
             if kind is not None and kind.startswith('int'):
@@ -291,22 +430,22 @@ class ExpressionEmitMixin:
                 # arithmetic with Fortran's negative-exponent rule (user
                 # manual, Numerical semantics: Types and promotion), not
                 # a double pow.
-                return f'gelb::gelb_ipow<{_TYPE_MAP[kind]}>({base}, {exp_e})'
+                return self._value(expr, f'gelb::gelb_ipow<{_TYPE_MAP[kind]}>({base.code}, {exp_e})')
             # A real base: backend-defined; the platform's pow.
-            return f'std::pow({base}, {exp_e})'
+            return self._value(expr, f'std::pow({base.code}, {exp_e})')
         if isinstance(expr, UnaryMinusExpr_N):
-            inner = self._emit_operand(
-                expr.value, df_var, int64_op=numeric_kind(
-                    getattr(expr, 'inferred_type', None)) == 'int64')
-            if self._simd_mode == 'vec8d' \
-                    and self._yields_simd_vector_at_df(expr.value, df_var):
+            kind = numeric_kind(getattr(expr, 'inferred_type', None))
+            inner = self._emit_typed_operand(expr.value, df_var, int64_op=kind == 'int64')
+            if inner.lane_kind == 'vec':
                 # Highway has no unary ``operator-`` overload on V --
                 # use ``hn::Neg`` for explicit lane-wise negation.
-                return f'hn::Neg({inner})'
-            kind = numeric_kind(getattr(expr, 'inferred_type', None))
-            return self._negate(inner, kind is not None and kind.startswith('int'))
+                return self._value(expr, f'hn::Neg({inner.code})', 'vec')
+            return self._value(
+                expr, self._negate(inner.code, kind is not None and kind.startswith('int')),
+                inner.lane_kind)
         if isinstance(expr, RectSelOfLatticeInDFs_N):
-            return self._emit_lattice_in(expr, df_var)
+            return self._value(expr, self._emit_lattice_in(expr, df_var),
+                               'vec' if vector else 'scalar')
         if isinstance(expr, RectSelOfArrayElems_N):
             # Indexing into a 1-D local/constant array (e.g.
             # ``moments[3]``).  PR scope: single integer index;
@@ -322,44 +461,41 @@ class ExpressionEmitMixin:
                     f"{arr_name}).")
             idx_scalar = self._range_scalar(ranges[0])
             idx_str = self._emit_expression(idx_scalar, df_var)
-            return f'{_uname(arr_name)}[{idx_str}]'
+            # A real local array is a ``V[]`` in a vector body; an
+            # integer or bool one and a global constant hold scalars.
+            held = vector and self._simd_env.carrier(arr_name) == 'vec'
+            return self._value(expr, f'{_uname(arr_name)}[{idx_str}]',
+                               'vec' if held else 'scalar')
         if isinstance(expr, Array1DLiteral_N):
             elements = expr.value.elements
-            # Common case: caller is unrolling a whole-array
-            # assignment and passes a literal index string ('0', '1',
-            # ...).  Just return the corresponding element directly --
-            # this also avoids the SIMD-mode trap where a compound
-            # literal of Vec8d-typed values doesn't type-check.
+            # The caller is unrolling a whole-array operation and passes
+            # a literal index string ('0', '1', ...): the corresponding
+            # element, emitted by itself, with its own lane kind.
             if df_var is not None and df_var.lstrip('-').isdigit():
                 idx = int(df_var)
                 if 0 <= idx < len(elements):
-                    return self._emit_expression(elements[idx])
+                    return self._emit_typed_expr(elements[idx])
             raise NotImplementedError(
                 "cpu_highway: array literals require a constant element index; "
                 "prepare the C-family AST before code generation.")
         if isinstance(expr, BroadcastNode_N):
-            return self._emit_expression(expr.scalar_expr, df_var)
+            return self._emit_typed_expr(expr.scalar_expr, df_var)
         if isinstance(expr, IntrinsicFunctionCall_N):
             return self._emit_intrinsic_call(expr, df_var)
         if isinstance(expr, TypePromotionNode_N):
-            # Promote with an explicit static_cast (or SIMD-aware
-            # equivalent -- see ``_emit_simd_aware_cast`` for the
-            # special cases involving Vec8db / Vec8q operands).
             tgt = expr.target_type
             tgt_elem = (getattr(tgt, 'element_dtype', None)
                         or getattr(tgt, 'name', 'double'))
             cpp_tgt = _TYPE_MAP.get(tgt_elem, 'double')
             inner_df = '0' if expr.is_singleton_coercion() else df_var
-            inner = self._emit_expression(expr.expr, inner_df)
-            return self._emit_simd_aware_cast(inner, expr.expr, cpp_tgt, inner_df)
-        # Comparison operators -- in scalar mode produce a C++ bool
-        # (implicitly convertible to int / double in arithmetic
-        # contexts); in SIMD mode lower to Highway's free-function
-        # comparison ops which return ``hn::Mask<D>``.  Highway has
-        # no comparison ``operator<`` / ``operator==`` etc. on V
-        # (verified: only the ``Vec128<XXX, N>`` overloads exist for
-        # 8/16/32-bit unsigned-int lanes), so the function form is
-        # the only portable shape.
+            return self._cast_value(expr, self._emit_typed_expr(expr.expr, inner_df), cpp_tgt)
+        # Comparison operators -- on scalars a C++ bool (implicitly
+        # convertible to int / double in arithmetic contexts); on a
+        # vector Highway's free-function comparison ops, which return
+        # ``hn::Mask<D>``.  Highway has no comparison ``operator<`` /
+        # ``operator==`` etc. on V (only the ``Vec128<XXX, N>`` overloads
+        # exist for 8/16/32-bit unsigned-int lanes), so the function form
+        # is the only portable shape.
         _CMP_HWY = {
             'Equal_N':        'hn::Eq',
             'Less_N':         'hn::Lt',
@@ -377,80 +513,101 @@ class ExpressionEmitMixin:
         }
         cmp_kind = type(expr).__name__
         if cmp_kind in _CMP_OP:
-            if self._simd_mode == 'vec8d' and (
-                    self._produces_simd_bool_mask_at_df(expr.left, df_var)
-                    or self._produces_simd_bool_mask_at_df(expr.right, df_var)):
+            a = self._emit_typed_expr(expr.left, df_var)
+            b = self._emit_typed_expr(expr.right, df_var)
+            if 'mask' in (a.lane_kind, b.lane_kind):
                 # ``==`` / ``!=`` between per-cell bools (the frontend
                 # rejects an order on bool): both sides are masks, a
                 # uniform scalar bool broadcasts.  Highway has no
                 # ``Eq`` / ``Ne`` on masks; ``Xor`` is ``!=``.
-                a = self._broadcast_simd_bool(
-                    expr.left, self._emit_expression(expr.left, df_var), df_var)
-                b = self._broadcast_simd_bool(
-                    expr.right, self._emit_expression(expr.right, df_var), df_var)
-                if cmp_kind == 'NotEqual_N':
-                    return f'hn::Xor({a}, {b})'
-                return f'hn::Not(hn::Xor({a}, {b}))'
-            a, b = self._broadcast_for_binop(
-                expr.left, expr.right, df_var)
-            if self._simd_mode == 'vec8d' and (
-                    self._yields_simd_vector_at_df(expr.left, df_var)
-                    or self._yields_simd_vector_at_df(expr.right, df_var)):
+                differ = f'hn::Xor({self._coerce_to_mask(a)}, {self._coerce_to_mask(b)})'
+                return self._value(
+                    expr, differ if cmp_kind == 'NotEqual_N' else f'hn::Not({differ})', 'mask')
+            if 'vec' in (a.lane_kind, b.lane_kind):
+                a_code, b_code = self._coerce_to_vec(a), self._coerce_to_vec(b)
                 if cmp_kind == 'NotEqual_N':
                     # ``hn::Ne`` is the *ordered* comparison with
                     # AVX2 or AVX-512 (``_CMP_NEQ_OQ``): false when a
                     # lane is NaN, where IEEE 754, the scalar path,
                     # Fortran, NEON and SSE say true.  ``Not(Eq)`` is
                     # the unordered inequality on every target.
-                    return f'hn::Not(hn::Eq({a}, {b}))'
-                return f'{_CMP_HWY[cmp_kind]}({a}, {b})'
-            return f'({a} {_CMP_OP[cmp_kind]} {b})'
-        # Boolean ops on masks -> ``hn::And`` / ``hn::Or`` /
-        # ``hn::Not``.  In scalar mode these stay as ``&&`` / ``||``.
-        # A uniform scalar operand (for example a comparison of t)
-        # broadcasts when combined with a per-lane boolean.
+                    return self._value(expr, f'hn::Not(hn::Eq({a_code}, {b_code}))', 'mask')
+                return self._value(expr, f'{_CMP_HWY[cmp_kind]}({a_code}, {b_code})', 'mask')
+            return self._value(expr, f'({a.code} {_CMP_OP[cmp_kind]} {b.code})')
+        # Boolean ops on masks -> ``hn::And`` / ``hn::Or`` / ``hn::Not``;
+        # on scalars ``&&`` / ``||`` / ``!``.  A uniform scalar operand
+        # (for example a comparison of t) broadcasts when the other
+        # operand is a mask, for ``&&`` and ``||`` as for ``==`` and
+        # ``!=``.  ``hn::And`` and ``hn::Or`` evaluate both operands, and
+        # ``&&`` and ``||`` do not evaluate the right one when the left
+        # one decides: a right operand with an integer division, which
+        # the left one may guard (``t > 0 && 10 / t > 2``), has no vector
+        # form.
         if isinstance(expr, NotExpr_N):
-            value = self._emit_expression(expr.value, df_var)
-            if (self._simd_mode == 'vec8d'
-                    and self._produces_simd_bool_mask_at_df(expr.value, df_var)):
-                return f'hn::Not({value})'
-            return f'(!{value})'
-        if isinstance(expr, And_N):
-            a = self._emit_expression(expr.left, df_var)
-            b = self._emit_expression(expr.right, df_var)
-            if self._simd_mode == 'vec8d' and (
-                    self._produces_simd_bool_mask_at_df(expr.left, df_var)
-                    or self._produces_simd_bool_mask_at_df(expr.right, df_var)):
-                a = self._broadcast_simd_bool(expr.left, a, df_var)
-                b = self._broadcast_simd_bool(expr.right, b, df_var)
-                return f'hn::And({a}, {b})'
-            return f'({a} && {b})'
-        if isinstance(expr, Or_N):
-            a = self._emit_expression(expr.left, df_var)
-            b = self._emit_expression(expr.right, df_var)
-            if self._simd_mode == 'vec8d' and (
-                    self._produces_simd_bool_mask_at_df(expr.left, df_var)
-                    or self._produces_simd_bool_mask_at_df(expr.right, df_var)):
-                a = self._broadcast_simd_bool(expr.left, a, df_var)
-                b = self._broadcast_simd_bool(expr.right, b, df_var)
-                return f'hn::Or({a}, {b})'
-            return f'({a} || {b})'
+            value = self._emit_typed_expr(expr.value, df_var)
+            if value.lane_kind == 'mask':
+                return self._value(expr, f'hn::Not({value.code})', 'mask')
+            return self._value(expr, f'(!{value.code})')
+        if isinstance(expr, (And_N, Or_N)):
+            a = self._emit_typed_expr(expr.left, df_var)
+            b = self._emit_typed_expr(expr.right, df_var)
+            if 'mask' in (a.lane_kind, b.lane_kind):
+                if self._has_integer_division(expr.right):
+                    raise ScalarFallbackRequired(
+                        'the right operand of && or || holds an integer division')
+                name = 'hn::And' if isinstance(expr, And_N) else 'hn::Or'
+                return self._value(
+                    expr, f'{name}({self._coerce_to_mask(a)}, {self._coerce_to_mask(b)})', 'mask')
+            op = '&&' if isinstance(expr, And_N) else '||'
+            return self._value(expr, f'({a.code} {op} {b.code})')
         raise NotImplementedError(
             f"cpu_highway: unsupported expression: {type(expr).__name__} "
             f"(grow this method as more constructs are added).")
 
+    def _cast_value(self, node, inner: EmittedValue, cpp_target: str) -> EmittedValue:
+        """``inner`` converted to ``cpp_target``, the type of ``node`` (a
+        promotion or a cast intrinsic).
+
+        A scalar is a ``static_cast``.  In a vector body a binary64
+        vector is its own conversion to ``real``, and a mask becomes 1.0
+        or 0.0 per lane, for ``real`` and for ``int``: every consumer of
+        such an integer promotes it back to double, Highway has no
+        implicit promotion between an int64 and a double vector, and the
+        round trip of 0 and 1 is exact.  Every other conversion of a
+        per-cell value (to an integer, to a narrow width) has no vector
+        form."""
+        if inner.lane_kind == 'scalar':
+            return self._value(node, f'static_cast<{cpp_target}>({inner.code})')
+        if inner.lane_kind == 'mask' and cpp_target in ('double', 'int64_t'):
+            return self._value(
+                node, f'hn::IfThenElse({inner.code}, hn::Set(d, 1.0), hn::Set(d, 0.0))',
+                'vec', 'bool_int_cast' if cpp_target == 'int64_t' else None)
+        if inner.lane_kind == 'vec' and cpp_target == 'double':
+            return self._value(node, inner.code, 'vec')
+        raise ScalarFallbackRequired(
+            f'a per-cell value has no vector conversion to {cpp_target}')
+
     def _emit_intrinsic_call(self, call: IntrinsicFunctionCall_N,
-                             df_var: str | None) -> str:
+                             df_var: str | None) -> EmittedValue:
         """Emit C++ for an intrinsic-function call expression.
 
         Pure dispatch -- each intrinsic family has a dedicated
-        ``_emit_intrinsic_*`` helper below.
+        ``_emit_intrinsic_*`` helper below.  ``mod``, ``atan2`` and the
+        width-specific casts have no vector form: such a call sends the
+        block to the scalar path, so that every cell takes the same one
+        (user manual, Numerical semantics: Types and promotion, Library
+        functions).  A reduction, a streamed read and ``random()`` are
+        vectors in a vector body whatever their arguments.
         """
         fname = call.function_name
+        vector = self._simd_mode == 'vec8d'
+        if vector and (fname in ('mod', 'atan2') or fname in Types.width_casts):
+            raise ScalarFallbackRequired(f'{fname}() has no vector form')
+        lane_kind = 'vec' if vector else 'scalar'
         if fname == 'sum':
-            return self._emit_intrinsic_sum(call, df_var)
+            return self._value(call, self._emit_intrinsic_sum(call, df_var), lane_kind)
         if fname == 'random':
-            return self._emit_intrinsic_random(call)
+            return self._value(call, self._emit_intrinsic_random(call), lane_kind)
         if fname in CAST_INTRINSIC_NAMES:
             return self._emit_intrinsic_cast(call, df_var)
         if fname in _UNARY_MATH_SET:
@@ -458,9 +615,10 @@ class ExpressionEmitMixin:
         if fname in _BINARY_MATH_SCALAR:
             return self._emit_intrinsic_binary_math(call, df_var)
         if fname == 'dot_prod':
-            return self._emit_intrinsic_dot_prod(call)
+            return self._value(call, self._emit_intrinsic_dot_prod(call), lane_kind)
         if fname == 'bounce_back_dfs':
-            return self._emit_intrinsic_bounce_back_dfs(call, df_var)
+            return self._value(call, self._emit_intrinsic_bounce_back_dfs(call, df_var),
+                               lane_kind)
         if fname == 'upstream_dfs':
             # upstream_dfs as an *expression* would mean its result is
             # used in-place (e.g. f.out[x|:] = upstream_dfs(...) + ...).
@@ -473,7 +631,7 @@ class ExpressionEmitMixin:
                 "(`array[real, q] var = upstream_dfs(...);`).  "
                 "Wrap it in a temporary if needed.")
         if fname == 'matmul':
-            return self._emit_intrinsic_matmul(call, df_var)
+            return self._value(call, self._emit_intrinsic_matmul(call, df_var), lane_kind)
         raise NotImplementedError(
             f"cpu_highway: intrinsic function '{fname}' not yet supported.")
 
@@ -498,6 +656,7 @@ class ExpressionEmitMixin:
             raise NotImplementedError(
                 "cpu_highway: sum() expects 1 argument.")
         arg = call.arguments[0]
+        self._require_vector_reduction(arg)
         if isinstance(arg, Identifier_N):
             # Route to the multi-acc helper in
             # cpu_highway_runtime.hpp.  Descriptor ``d`` is the
@@ -547,55 +706,23 @@ class ExpressionEmitMixin:
         return 'gelb::gelb_random()'
 
     def _emit_intrinsic_cast(self, call: IntrinsicFunctionCall_N,
-                             df_var: str | None) -> str:
+                             df_var: str | None) -> EmittedValue:
         """A cast intrinsic, ``real(x)``, ``int(x)``, ``real32(x)``,
         ``int8(x)`` ...: ``static_cast<T>(x)`` with the C++ type of the
         target width (user manual, Numerical semantics: Types and
         promotion: an integer to a narrower integer wraps, a real to an
-        integer truncates).  In SIMD mode when x is already
-        a ``V`` (double-typed) and the target is double, the cast is a
-        no-op; a width-specific cast on a vector has no vector form, so
-        such a block takes the scalar path
-        (``_block_has_scalar_only_intrinsic``)."""
+        integer truncates).  The conversions of a per-cell value are
+        ``_cast_value``'s."""
         fname = call.function_name
         target = _TYPE_MAP[fname]
         if len(call.arguments) != 1:
             raise NotImplementedError(
                 f"{fname}(): 1 argument expected.")
-        arg_node = call.arguments[0]
-        inner = self._emit_expression(arg_node, df_var)
-        return self._emit_simd_aware_cast(inner, arg_node, target, df_var)
-
-    def _emit_operand(self, expr, df_var: str | None = None, *,
-                      int64_op: bool = False) -> str:
-        """An operand of an expression.  For an operand of an ``int64``
-        operation (``int64_op``: ``+ - * /``, ``^``, unary minus,
-        ``abs``) an integer literal, also broadcast over a slice or taken
-        from an array literal, is written with the operation's int64
-        width (``2147483647LL``), whatever its own type (a folded
-        ``int32`` constant passed to an ``int`` parameter is an int64
-        operand there): a bare C++ literal is a 32-bit ``int``, and
-        an operation with two of them is computed in 32 bits where GeLB
-        computes in int64 (user manual, Numerical semantics: Types and
-        promotion).  With every literal operand so written, every
-        ``int64`` operation has 64-bit operands, whatever the folds keep
-        or combine.  An index (``_emit_coord_scalar``) keeps its literals
-        bare."""
-        node = expr
-        while isinstance(node, BroadcastNode_N):
-            node = node.scalar_expr
-        if (isinstance(node, Array1DLiteral_N) and df_var is not None
-                and df_var.lstrip('-').isdigit()):
-            elements = node.value.elements
-            if 0 <= int(df_var) < len(elements):
-                node = elements[int(df_var)]
-        if (int64_op and not getattr(self, '_in_coord_scalar', False)
-                and isinstance(node, IntLiteral_N)):
-            return ConstantOperand(int64_typed_literal(int(node.value)), int(node.value), int64=True)
-        return self._emit_expression(expr, df_var)
+        return self._cast_value(
+            call, self._emit_typed_expr(call.arguments[0], df_var), target)
 
     def _emit_intrinsic_unary_math(self, call: IntrinsicFunctionCall_N,
-                               df_var: str | None) -> str:
+                                   df_var: str | None) -> EmittedValue:
         fname = call.function_name
         unary_simd_spelling = _UNARY_SIMD_SPELLING
         unary_simd_takes_descriptor = _UNARY_SIMD_TAKES_DESCRIPTOR
@@ -603,11 +730,9 @@ class ExpressionEmitMixin:
             raise NotImplementedError(
                 f"cpu_highway: {fname}() expects 1 argument.")
         arg_node = call.arguments[0]
-        inner = self._emit_operand(
+        inner = self._emit_typed_operand(
             arg_node, df_var, int64_op=fname == 'abs' and numeric_kind(
                 getattr(call, 'inferred_type', None)) == 'int64')
-        vector_arg = (self._simd_mode == 'vec8d'
-                      and self._yields_simd_vector_at_df(arg_node, df_var))
         if fname in _LIBRARY_FUNCTIONS and self.backend_name == 'cpu_highway' \
                 and self._cpp_type_of(arg_node) == 'double':
             # One implementation per function on this backend, in every
@@ -619,41 +744,36 @@ class ExpressionEmitMixin:
             # value) and for tan, which Highway lacks.  Overloaded on V
             # and double.  A real32 argument keeps the platform's
             # function (no SIMD path for it).
-            return f'gelb::gelb_{fname}({inner})'
+            return self._value(call, f'gelb::gelb_{fname}({inner.code})', inner.lane_kind)
         # sqrt and abs are core ops, exact on every path; CUDA and a
         # real32 argument use the platform's library, one implementation
         # on that backend.
-        if vector_arg:
+        if inner.lane_kind == 'vec':
             if fname in unary_simd_takes_descriptor:
-                return f'{unary_simd_spelling[fname]}(d, {inner})'
-            return f'{unary_simd_spelling[fname]}({inner})'
-        return f'std::{fname}({inner})'
+                return self._value(call, f'{unary_simd_spelling[fname]}(d, {inner.code})', 'vec')
+            return self._value(call, f'{unary_simd_spelling[fname]}({inner.code})', 'vec')
+        return self._value(call, f'std::{fname}({inner.code})')
 
     def _emit_intrinsic_binary_math(self, call: IntrinsicFunctionCall_N,
-                                df_var: str | None) -> str:
+                                    df_var: str | None) -> EmittedValue:
         fname = call.function_name
         binary_map_scalar = _BINARY_MATH_SCALAR
         if len(call.arguments) != 2:
             raise NotImplementedError(
                 f"cpu_highway: {fname}() expects 2 arguments.")
-        a_node, b_node = call.arguments[0], call.arguments[1]
-        a = self._emit_expression(a_node, df_var)
-        b = self._emit_expression(b_node, df_var)
-        if self._simd_mode == 'vec8d' and fname in ('min', 'max'):
-            # The vector overloads are lane-wise on V; only take the
-            # SIMD path when at least one arg is V.  Pure scalar/scalar
-            # still goes to the scalar helper even in SIMD mode.
-            a_vec = self._yields_simd_vector_at_df(a_node, df_var)
-            b_vec = self._yields_simd_vector_at_df(b_node, df_var)
-            if a_vec or b_vec:
-                if a_vec and not b_vec:
-                    b = f'hn::Set(d, {b})'
-                elif b_vec and not a_vec:
-                    a = f'hn::Set(d, {a})'
-                return f'{binary_map_scalar[fname]}({a}, {b})'
+        a = self._emit_typed_expr(call.arguments[0], df_var)
+        b = self._emit_typed_expr(call.arguments[1], df_var)
+        if 'vec' in (a.lane_kind, b.lane_kind):
+            # ``min`` / ``max`` with a vector operand: the lane-wise
+            # overloads on V, the other operand broadcast.  Two scalars
+            # go to the scalar helper, also in a vector body.
+            return self._value(
+                call, f'{binary_map_scalar[fname]}({self._coerce_to_vec(a)}, '
+                      f'{self._coerce_to_vec(b)})', 'vec')
         if fname in _BINARY_MATH_TYPED:
-            return f'{binary_map_scalar[fname]}<{self._cpp_type_of(call)}>({a}, {b})'
-        return f'{binary_map_scalar[fname]}({a}, {b})'
+            return self._value(
+                call, f'{binary_map_scalar[fname]}<{self._cpp_type_of(call)}>({a.code}, {b.code})')
+        return self._value(call, f'{binary_map_scalar[fname]}({a.code}, {b.code})')
 
     @staticmethod
     def _cpp_type_of(node) -> str:
@@ -698,6 +818,7 @@ class ExpressionEmitMixin:
                 and isinstance(b, Identifier_N)):
             raise NotImplementedError(
                 "cpu_highway: dot_prod() arguments must be bare identifiers.")
+        self._require_vector_reduction(a, b)
         n_a = self._array_size(a.name)
         n_b = self._array_size(b.name)
         if n_a != n_b:
@@ -935,10 +1056,12 @@ class ExpressionEmitMixin:
         args = call.arguments
         vel = args[-1]
         if self._d == 1:
-            key = (vel.name,)
+            elems = [vel]
         else:
             elems = vel.elements if isinstance(vel, List_N) else vel.value
-            key = tuple(e.name for e in elems)
+        for elem in elems:
+            self._require_wide(elem)
+        key = tuple(e.name for e in elems)
         offsets = [int(self.backend_context.global_constants[name].folded[i]) for name in key]
         opposite = self.backend_context.opp_tables[key][i]
         coords = [self._coordinate(c, axis, bounce=True)
@@ -992,6 +1115,7 @@ class ExpressionEmitMixin:
                 not isinstance(varg, Identifier_N):
             raise NotImplementedError(
                 "matmul: both args must be bare identifiers.")
+        self._require_vector_reduction(Marg, varg)
         matrix = self.backend_context.global_constants.get(Marg.name)
         if matrix is None or len(matrix.dims) != 2:
             raise NotImplementedError(

@@ -142,17 +142,8 @@ class OutputEmitMixin:
             gblock = self._find_block(self.ast.gauges, info.gauge)
             rect_suffix = (f' [rect bbox={rect_info.bbox}]'
                            if is_synth else '')
-            if self._block_simd_eligible(gblock, rect_info):
-                self._emit(f'// Gauge: {info.gauge} ({nc_name}) '
-                           f'-- SIMD{rect_suffix}')
-                self._emit_block_simd(gblock, rect_info,
-                                      context='gauge')
-            else:
-                self._emit(f'// Gauge: {info.gauge} '
-                           f'({nc_name}){rect_suffix}')
-                self._emit_spatial_loop_open(rect_info)
-                self._emit_block_body(gblock, context='gauge')
-                self._emit_spatial_loop_close()
+            self._emit_block_dispatch('Gauge', gblock, nc_name,
+                                      rect_info, rect_suffix, 'gauge')
         self._emit_gauge_netcdf_write(gauge)
 
     def _emit_gauge_at_t0_preamble(self, gauge) -> bool:

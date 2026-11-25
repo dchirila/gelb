@@ -179,7 +179,7 @@ def assert_blocks(source, case, config):
         if kind != "Dynamic" and case not in ("blocks", "narrow_gauge"):
             continue
         body = source[match.end():marks[i + 1].start() if i + 1 < len(marks) else len(source)]
-        vector = case not in ("inline_comparison", "integer_arithmetic", "real_power", "lane_power", "mod")
+        vector = case not in ("integer_arithmetic", "real_power", "lane_power", "mod")
         vector &= not (case == "narrow_gauge" and kind == "Gauge")
         vector &= node_class != "INLET"
         if config != "aos":
@@ -422,3 +422,151 @@ def test_dot_product_hoisted_slice_and_expression(tmp_path, monkeypatch, backend
         init='f.out[x|:]={real(x),2.0,3.0};')
     data = run_source(tmp_path, backend, source)
     np.testing.assert_array_equal(data['a'][-1], 2.0 * np.arange(67) + 48.0)
+
+
+def assert_block_path(cpp, config, kind, name, vector, names=()):
+    """The path of every section of one block: vector (the banner says SIMD,
+    and off AoS the section holds each of ``names``) or scalar (no SIMD
+    banner and no Highway call, in every layout)."""
+    if config not in ('soa', 'aos', 'cbt'):
+        return
+    matches = list(BANNER.finditer(cpp))
+    sections = [(match, cpp[match.end():matches[i+1].start() if i+1 < len(matches) else len(cpp)])
+                for i, match in enumerate(matches)
+                if (match.group(1), match.group(2)) == (kind, name)]
+    assert sections
+    for match, body in sections:
+        assert bool(match.group(4)) == vector, match.group()
+        assert ('hn::' in body) == (vector and config != 'aos'), match.group()
+        if config != 'aos':
+            assert all(token in body for token in names), match.group()
+
+
+MIXED_BOOLS = '''simulation_description("a scalar bool beside a per-cell one");
+lattices {{ lattice f(2, 3, real, {{67, 5}}, {{true, true}}); }}
+initializer I {{ {init} f.out[x, y | 1:2] = 0.5; }}
+dynamic D {{ {dynamic} f.out[x, y | 1:2] = f.in[x, y | 1:2]; }}
+gauge G -> (real p0) {{ {gauge} }}
+node_classes {{ node_class B(I, D, G); }}
+geometry {{ nodes[:, :] = B; }}
+'''
+FIELD = 'f.out[x, y | 0] = 1.0 + real(x) + 100.0 * real(y);'
+
+
+@pytest.mark.parametrize('config', CONFIGS)
+@pytest.mark.parametrize('form', ['and_coordinates', 'or_scalar_left', 'and_scalar_right'])
+def test_scalar_bool_beside_a_mask_is_broadcast(tmp_path, monkeypatch, config, form):
+    """``&&`` and ``||`` with one per-cell operand and one operand that is
+    the same in every cell of a row take the vector path on SoA and CBT, the
+    scalar operand broadcast, with the values of every other
+    configuration."""
+    x, y = np.meshgrid(np.arange(67), np.arange(5))
+    field = 1.0 + x + 100.0 * y
+    if form == 'and_coordinates':
+        block, call = ('Initialiser', 'I'), 'hn::And'
+        source = MIXED_BOOLS.format(
+            init='f.out[x, y | 0] = 1.0 + real((x == 33) && (y == 1));',
+            dynamic='f.out[x, y | 0] = f.in[x, y | 0];', gauge='p0 = f.in[x, y | 0];')
+        expected = [1.0 + ((x == 33) & (y == 1))] * 2
+    elif form == 'or_scalar_left':
+        block, call = ('Gauge', 'G'), 'hn::Or'
+        source = MIXED_BOOLS.format(
+            init=FIELD, dynamic='f.out[x, y | 0] = f.in[x, y | 0];',
+            gauge='p0 = real((t > 0) || (f.in[x, y | 0] > 10.0));')
+        expected = [(field > 10.0).astype(float), np.ones_like(field)]
+    else:
+        block, call = ('Dynamic', 'D'), 'hn::And'
+        source = MIXED_BOOLS.format(
+            init=FIELD, gauge='p0 = f.in[x, y | 0];',
+            dynamic='f.out[x, y | 0] = f.in[x, y | 0] + real((f.in[x, y | 0] > 10.0) && (t > 0));')
+        expected = [field, field + (field > 10.0)]
+    values, cpp = run_literal_source(tmp_path, config, source, monkeypatch)
+    for record, wanted in zip(values['p0'], expected):
+        np.testing.assert_array_equal(record, wanted)
+    assert_block_path(cpp, config, *block, vector=True, names=(call, 'hn::FirstN'))
+
+
+BOOL_ARRAYS = {
+    # A per-cell truth value has no place in a bool[N]: the scalar path.
+    'literal': ('array[bool, 2] b = {f.in[x | 0] > 10.0, false};', False),
+    'assigned': ('array[bool, 2] b; b = {f.in[x | 0] > 10.0, false};', False),
+    'slice_and_literal': ('array[bool, 2] b = f.in[x | 0:1] > {10.0, 20.0};', False),
+    'two_slices': ('array[bool, 2] b = f.in[x | 0:1] > f.in[x | 1:2];', False),
+    'scalar_path_already': ('int q = x / 2; array[bool, 2] b = {f.in[x | 0] > 10.0, false};', False),
+    # Two scalar bools are masks, and a constant array holds scalars.
+    'two_scalars': ('bool b0 = f.in[x | 0] > 10.0; bool b1 = false;', True),
+    'constant_array': ('', True),
+}
+
+
+@pytest.mark.parametrize('config', CONFIGS)
+@pytest.mark.parametrize('form', tuple(BOOL_ARRAYS))
+def test_local_bool_array_with_per_cell_values(tmp_path, monkeypatch, config, form):
+    """A local ``array[bool, N]`` that takes a per-cell truth value builds
+    and gives the same values in every configuration; its block is on the
+    scalar path in all three Highway layouts.  The controls stay on the
+    vector path."""
+    statements, vector = BOOL_ARRAYS[form]
+    result = {'two_scalars': 'real(b0) + real(b1)',
+              'constant_array': 'real(CB[0]) + real(CB[1]) + f.in[x | 0]'}.get(
+                  form, 'real(b[0]) + real(b[1])')
+    source = program('f.out[x | :] = f.in[x | :];',
+                     init='f.out[x | 0] = 1.0 + real(x); f.out[x | 1] = 40.0 - real(x); f.out[x | 2] = 20.0;',
+                     constants='const array[bool, 2] CB = {true, false};',
+                     gauge=f'{statements} a = {result};').replace('67, true', '64, true')
+    values, cpp = run_literal_source(tmp_path, config, source, monkeypatch)
+    x = np.arange(64)
+    first = (1.0 + x > 10.0).astype(float)
+    expected = {'slice_and_literal': first + (40.0 - x > 20.0),
+                'two_slices': (1.0 + x > 40.0 - x) + (40.0 - x > 20.0).astype(float),
+                'constant_array': 2.0 + x}.get(form, first)
+    for record in values['a']:
+        np.testing.assert_array_equal(record, expected)
+    assert_block_path(cpp, config, 'Gauge', 'G', vector=vector)
+
+
+FIRST = 'f.out[x | 0] = 1.0 + real(x); f.out[x | 1:2] = 0.5;'
+# gauge statements; whether G has a vector body; `a` at t = 0 and at t = 1
+# (None: 0.0 or 1.0, by a draw)
+RIGHT_OPERANDS = {
+    # An integer division in the right operand, which the left one guards.
+    'and_scalar_division': ('a = real(f.in[x | 0] > 3.0 && t > 0 && 10 / t > 2);',
+                            False, 0.0, lambda f0: f0 > 3.0),
+    'or_scalar_division': ('a = real(f.in[x | 0] > 40.0 || t == 0 || 10 / t > 20);',
+                           False, 1.0, lambda f0: f0 > 40.0),
+    'and_bool_locals': ('bool c1 = f.in[x | 0] > 3.0; bool c2 = t > 0; a = real(c1 && c2 && 10 / t > 2);',
+                        False, 0.0, lambda f0: f0 > 3.0),
+    'and_mask_division': ('a = real(t > 0 && f.in[x | 0] > real(10 / t));',
+                          False, 0.0, lambda f0: f0 > 10.0),
+    'or_mask_division': ('a = real(t == 0 || f.in[x | 0] > real(10 / t));',
+                         False, 1.0, lambda f0: f0 > 10.0),
+    # A real division by zero is an infinity, and a draw is taken before its
+    # statement, whichever operand reads it.
+    'and_real_division': ('a = real(f.in[x | 0] > 3.0 && t > 0 && 10.0 / real(t) > 2.0);',
+                          True, 0.0, lambda f0: f0 > 3.0),
+    'and_draw_left': ('a = real((random() < 0.5) && (t > 0));', True, 0.0, None),
+    'and_draw_right': ('a = real((t > 0) && (random() < 0.5));', True, 0.0, None),
+}
+
+
+@pytest.mark.parametrize('config', CONFIGS)
+@pytest.mark.parametrize('form', tuple(RIGHT_OPERANDS))
+def test_right_operand_of_and_or_beside_a_per_cell_operand(tmp_path, monkeypatch, config, form):
+    """``&&`` and ``||`` do not evaluate the right operand when the left
+    one decides: a block whose right operand holds an integer division is
+    a scalar loop in the three Highway layouts and runs where the left
+    operand guards a zero divisor (t is 0 at the first gauge pass), with
+    the values of every other configuration.  Without such a division the
+    block keeps its vector body."""
+    statements, vector, first, later = RIGHT_OPERANDS[form]
+    values, cpp = run_literal_source(
+        tmp_path, config, program(KEEP + 'f.out[x | 0] = f.in[x | 0];', init=FIRST, gauge=statements),
+        monkeypatch)
+    at_start, after_one_step = values['a']
+    np.testing.assert_array_equal(at_start, np.full(67, first))
+    if later is None:
+        assert set(np.unique(after_one_step)) <= {0.0, 1.0}
+    else:
+        np.testing.assert_array_equal(after_one_step, later(1.0 + np.arange(67)).astype(float))
+    assert_block_path(cpp, config, 'Gauge', 'G', vector=vector,
+                      names=('hn::And',) if vector else ())

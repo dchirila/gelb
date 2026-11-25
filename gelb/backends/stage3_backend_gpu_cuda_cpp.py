@@ -156,13 +156,12 @@ class CudaCppCodeGenerator(
         assert not any(self._use_cbt.values()), (
             "gpu_cuda_cpp inherited contract violated: a CBT lattice "
             "survived the hard-disable above")
-        # ``_simd_int_locals`` must stay empty in scalar mode -- a
-        # non-empty map means a parent SIMD-retyping path ran, which
-        # would emit Highway ``V`` types into CUDA C++.  Checked here
-        # (constructor) and cheap enough to re-assert in generate().
-        assert not self._simd_int_locals, (
+        # The table of vector-held locals must stay empty in scalar
+        # mode -- an entry means a parent vector-body path ran, which
+        # would emit Highway ``V`` types into CUDA C++.
+        assert not len(self._simd_env), (
             "gpu_cuda_cpp inherited contract violated: parent recorded "
-            "SIMD-retyped locals in scalar mode")
+            "vector-held locals in scalar mode")
 
         # CUDA-specific: threads-per-block for kernel launches.
         # ``self._user_block_size`` is None when the caller did not

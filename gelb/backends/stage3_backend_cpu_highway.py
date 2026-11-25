@@ -72,6 +72,7 @@ from gelb.backends.highway.expr import ExpressionEmitMixin
 from gelb.backends.highway.layout import StorageLayoutMixin
 from gelb.backends.highway.output import OutputEmitMixin
 from gelb.backends.highway.simd import SimdEmitMixin
+from gelb.backends.highway.simd_types import SimdSymbolEnv
 from gelb.backends.highway.statements import StatementEmitMixin
 from gelb.backends.highway.common import (
     _lname,
@@ -162,16 +163,17 @@ class HighwayCodeGenerator(
                     "exclusive (got both True)")
 
         self._current_block = None
-        # Tracks user-level int-typed scalar locals that have been
-        # retyped to a SIMD vector in the currently-emitting block
-        # because their RHS evaluates to a Vec-typed expression
-        # (e.g. ``int dx = x - N/2;`` in the SIMD body becomes
-        # ``V g_dx = ...``).  Maps user-name -> 'vec8d' or 'vec8q'.
-        # Consulted by ``_emit_simd_aware_cast`` so that downstream
-        # casts of these locals (e.g. an implicit promote to
-        # ``double`` for a lattice-out store) emit the right Highway
-        # spelling rather than a compile-failing ``static_cast``.
-        self._simd_int_locals: dict[str, str] = {}
+        # How the vector body holds each local of the block being
+        # emitted (a ``V``, a mask, a C++ scalar): filled by the
+        # declarations of one body emit, read where an expression or a
+        # store refers to the local.  Empty outside a vector body.
+        self._simd_env = SimdSymbolEnv()
+        # Vector bodies emitted for the block being dispatched
+        # (``_emit_block_dispatch``).
+        self._vector_bodies: int = 0
+        # Inside a lattice index, emitted as scalar code
+        # (``_emit_coord_scalar``).
+        self._in_coord_scalar = False
         # Registry for ``static constexpr`` index/coefficient arrays
         # that the dot_prod / matmul emit needs.  Hoisted to the top
         # of ``main()`` and de-duplicated by content so repeated calls
@@ -544,17 +546,8 @@ class HighwayCodeGenerator(
             for rect_info, is_synth in self._iter_dispatch_rects(info):
                 rect_suffix = (f' [rect bbox={rect_info.bbox}]'
                                if is_synth else '')
-                if self._block_simd_eligible(iblock, rect_info):
-                    self._emit(f'// Initialiser: {info.initializer} '
-                               f'({nc_name}) -- SIMD{rect_suffix}')
-                    self._emit_block_simd(iblock, rect_info,
-                                          context='initializer')
-                else:
-                    self._emit(f'// Initialiser: {info.initializer} '
-                               f'({nc_name}){rect_suffix}')
-                    self._emit_spatial_loop_open(rect_info)
-                    self._emit_block_body(iblock, context='initializer')
-                    self._emit_spatial_loop_close()
+                self._emit_block_dispatch('Initialiser', iblock, nc_name,
+                                          rect_info, rect_suffix, 'initializer')
         # 2nd-buffer init: NCs without a dynamic are never written by the
         # time-loop's collide-and-stream pass, so their f_new slot stays
         # uninitialised and becomes garbage after the first ping-pong
@@ -684,17 +677,8 @@ class HighwayCodeGenerator(
             for rect_info, is_synth in self._iter_dispatch_rects(info):
                 rect_suffix = (f' [rect bbox={rect_info.bbox}]'
                                if is_synth else '')
-                if self._block_simd_eligible(dblock, rect_info):
-                    self._emit(f'// Dynamic: {info.dynamic} '
-                               f'({nc_name}) -- SIMD{rect_suffix}')
-                    self._emit_block_simd(dblock, rect_info,
-                                          context='dynamic')
-                else:
-                    self._emit(f'// Dynamic: {info.dynamic} '
-                               f'({nc_name}){rect_suffix}')
-                    self._emit_spatial_loop_open(rect_info)
-                    self._emit_block_body(dblock, context='dynamic')
-                    self._emit_spatial_loop_close()
+                self._emit_block_dispatch('Dynamic', dblock, nc_name,
+                                          rect_info, rect_suffix, 'dynamic')
         self._emit('gelb_timer.dyn_stop();')
 
         # NT-store fence.  ``hn::Stream`` writes through the
@@ -734,17 +718,8 @@ class HighwayCodeGenerator(
                 for rect_info, is_synth in self._iter_dispatch_rects(info):
                     rect_suffix = (f' [rect bbox={rect_info.bbox}]'
                                    if is_synth else '')
-                    if self._block_simd_eligible(gblock, rect_info):
-                        self._emit(f'// Gauge: {info.gauge} ({nc_name}) '
-                                   f'-- SIMD{rect_suffix}')
-                        self._emit_block_simd(gblock, rect_info,
-                                              context='gauge')
-                    else:
-                        self._emit(f'// Gauge: {info.gauge} '
-                                   f'({nc_name}){rect_suffix}')
-                        self._emit_spatial_loop_open(rect_info)
-                        self._emit_block_body(gblock, context='gauge')
-                        self._emit_spatial_loop_close()
+                    self._emit_block_dispatch('Gauge', gblock, nc_name,
+                                              rect_info, rect_suffix, 'gauge')
             self._emit_gauge_netcdf_write(gauge)
             if need_guard:
                 self._indent -= 1
@@ -929,14 +904,6 @@ class HighwayCodeGenerator(
         are only taken when this is 0."""
         stencils = self._stencils
         return stencils.write_reach()
-
-    # Back-compat alias for any external caller / test that used the
-    # dyn-specific name.
-    _dyn_block_simd_eligible = SimdEmitMixin._block_simd_eligible
-
-    # Back-compat alias for any external caller that used the
-    # dyn-specific name.
-    _emit_dynamic_simd = SimdEmitMixin._emit_block_simd
 
     # ------------------------------------------------------------------
     # Spatial loops
