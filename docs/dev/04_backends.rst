@@ -54,6 +54,40 @@ The three generators
    Constant operands retain their integer or binary64 values through
    expression emission, preserving integer widths and signed-zero rules.
 
+   Expression emission is typed. ``_emit_typed_expr`` returns an
+   ``EmittedValue`` (``simd_types.py``): the C++ source, its element type
+   and how a vector body holds the value, as one scalar for the whole
+   iteration, as a ``V`` with one binary64 value per cell, or as an
+   ``hn::Mask<D>``. ``SimdSymbolEnv`` records the same for every local of
+   the body being emitted. Operators and stores read these kinds to
+   broadcast: a scalar beside a vector with ``hn::Set``, and a scalar
+   ``bool`` beside a mask with ``hn::FirstN``, in ``==``, ``!=``, ``&&``
+   and ``||`` alike. Outside a vector body every value is a scalar.
+
+   A block that passes the structural gate ``_block_simd_eligible`` (a
+   node class that fills a dense box wide enough for one vector, binary64
+   lattices and gauge outputs) is emitted speculatively as a vector body
+   by ``_emit_block_dispatch``. A statement with no vector form raises
+   ``ScalarFallbackRequired``: a narrow width, ``mod``, ``atan2``, a
+   width-specific cast, a power that is not unrolled, an integer that
+   varies from cell to cell (other than ``x`` itself, the integer of a
+   per-cell comparison, and an ``int`` local declared from either and
+   never assigned again), a per-cell value stored into any other ``int``
+   local or into an element of an ``int`` or ``bool`` array, a
+   reduction over an integer array of the block, and a ``&&`` or ``||``
+   with a per-cell operand whose right operand holds an integer ``/``.
+   ``hn::And`` and ``hn::Or`` evaluate both operands; in the scalar loop
+   the C++ ``&&`` and ``||`` skip the right one when the left one
+   decides, so a division that the left operand guards against a zero
+   divisor is not executed. A ``random()`` call is never inside an
+   operand here: the midware moves every draw into a local declared
+   ahead of its statement. The dispatch then
+   restores the output lines, the indentation, the axis bindings and the
+   hoisted ``static constexpr`` arrays, and emits the block as one scalar
+   loop nest. Where the interior runs scalar in any case (AoS storage, a
+   CBT range without a full tile) it emits the body once more as a vector
+   body and discards it, so a block takes the same path in every layout.
+
 ``gpu_cuda_cpp``
    ``generate_cuda_cpp`` and ``CudaCppCodeGenerator`` in
    :source:`gelb/backends/stage3_backend_gpu_cuda_cpp.py` emit CUDA C++
@@ -64,7 +98,12 @@ The three generators
    kernels), ``launch.py`` (launch configuration, the time loop, CUDA
    graphs) and ``tiling.py`` (``--cuda-tiled``, ``--cuda-ldg``,
    ``--cuda-stwt``).  Expression and statement emission are inherited,
-   so a change in ``highway/expr.py`` reaches the CUDA output.
+   so a change in ``highway/expr.py`` reaches the CUDA output.  The
+   class emits no vector body.  It overrides
+   ``_emit_implicit_timestep()``: in a kernel ``t`` reads
+   ``gelb_timestep_d``, the counter on the device that a replayed CUDA
+   graph advances, where ``cpu_highway`` reads the host's
+   ``gelb_timestep``.
 
 Shared by more than one generator: :source:`gelb/backends/gauge_outputs.py`
 (the gauge fields of the NetCDF file) and

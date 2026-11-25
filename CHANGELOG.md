@@ -20,6 +20,15 @@ versions follow upstream end of life and can change in any release.
 
 ### Changed
 
+- On `cpu_highway` with the SoA and CBT layouts, a block in which `&&` or
+  `||` combines a comparison that depends on the cell (on `x` or on a
+  lattice value) is now vectorized: an operand that is the same in every
+  cell of a row, such as `y == 1` or `t > 0`, is broadcast, as `==` and
+  `!=` already did. Any block that is vectorized on these two layouts
+  for the first time and calls `random()` now draws from the vector
+  generator, so its values under a given `--seed` differ from those of
+  earlier versions.
+
 - Block and function `const` initializers must be evaluable at compile time.
   Every DF index and slice bound in reads and writes must also be a
   compile-time constant on every backend, including Fortran. Non-constant
@@ -52,6 +61,22 @@ versions follow upstream end of life and can change in any release.
   type, and so do `real` and `real64`.
 
 ### Fixed
+
+- On `cpu_highway` with the SoA and CBT layouts, a block that stores a
+  per-cell comparison into a local `array[bool, N]`, in the declaration
+  or in a later assignment, now builds and runs as a scalar loop. The
+  generated C++ did not compile before.
+- An element of a constant `int` array equal to the `int64` minimum,
+  substituted into a block expression, is written as the native signed
+  64-bit minimum, `(-9223372036854775807LL - 1LL)`, on `cpu_highway` and
+  `gpu_cuda_cpp`. `gpu_cuda_cpp` read the former literal as `+2^63`, and
+  on `cpu_highway` the C++ compiler warned about an unsigned literal.
+- On `cpu_highway` with the SoA and CBT layouts, `&&` and `||` no longer
+  evaluate a right operand that holds an integer division when the left
+  operand already decides the result. A division guarded in this way, as
+  in `c && t > 0 && 10 / t > 2` with `c` a `bool` local set from a
+  per-cell comparison, stopped the program with an illegal instruction
+  at `t = 0`. Such a block now runs as a scalar loop.
 
 - `dot_prod` on `cpu_highway` and `gpu_cuda_cpp` accepts lattice slices and
   one-dimensional array expressions directly, matching `cpu_fortran_serial`.
