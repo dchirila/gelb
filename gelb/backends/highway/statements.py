@@ -11,6 +11,8 @@ from gelb.backends.highway.addressing import LatticeAddress, AxisOffset, ConstCo
 
 from gelb.backends.real_literals import cpp_real
 from gelb.backends.highway.expr import ConstantOperand
+from gelb.backends.highway.simd_types import ScalarFallbackRequired, SimdSymbolEnv
+from gelb.type_table import UnifiedTypeTable as Types
 from gelb.midware.ast_simplify import is_pure, numeric_kind
 
 import math
@@ -66,15 +68,17 @@ class StatementEmitMixin:
         # peel/remainder, with a fresh set of decls each time, and a
         # name declared in another block (an array of another length,
         # or a scalar of the same name) must not be visible here.
-        # Save/restore so a parent caller's sets (if any) are preserved.
-        prev_simd_int_locals = self._simd_int_locals
+        # Save/restore so a parent caller's table (if any) is preserved.
+        prev_env = self._simd_env
         prev_block = self._current_block
-        self._simd_int_locals = {}
+        self._simd_env = SimdSymbolEnv()
         self._current_block = block
+        if self._simd_mode == 'vec8d':
+            self._vector_bodies += 1
         try:
             self._emit_block_body_inner(block, context=context)
         finally:
-            self._simd_int_locals = prev_simd_int_locals
+            self._simd_env = prev_env
             self._current_block = prev_block
 
     def _emit_block_body_inner(self, block, *, context: str) -> None:
@@ -88,13 +92,7 @@ class StatementEmitMixin:
             for decl in block.outputs:
                 if isinstance(decl, VariableDeclarationStmt_N):
                     if self._simd_mode == 'vec8d':
-                        # Register the gauge output as V-typed so
-                        # downstream ``_yields_simd_vector`` returns
-                        # True for references to it.  Without this,
-                        # ``rho`` in ``ux = ... / rho;`` would be
-                        # treated as scalar and incorrectly broadcast
-                        # via ``hn::Set(d, V)``.
-                        self._simd_int_locals[decl.name.name] = 'vec8d'
+                        self._simd_env.declare(decl.name.name, 'vec')
                         self._emit(f'V {_uname(decl.name.name)} = '
                                    f'hn::Zero(d);')
                     else:
@@ -407,6 +405,7 @@ class StatementEmitMixin:
                 not isinstance(varg, Identifier_N):
             raise NotImplementedError(
                 "matmul: both arguments must be bare identifiers.")
+        self._require_vector_reduction(Marg, varg)
         matrix = self.backend_context.global_constants.get(Marg.name)
         if matrix is None or len(matrix.dims) != 2:
             raise NotImplementedError(
@@ -587,6 +586,7 @@ class StatementEmitMixin:
                     "(e.g. EX, EY).")
         ev_values_list = []
         for ex_node in ex_nodes:
+            self._require_wide(ex_node)
             vals = self._constant_values(ex_node.name)
             if vals is None or len(vals) != n:
                 raise NotImplementedError(
@@ -754,7 +754,7 @@ class StatementEmitMixin:
         df_lo, df_hi = self._df_range(lhs)
         if df_lo == df_hi and not _is_array_typed(lhs):
             lhs_addr = self._emit_lattice_out_lhs(lhs, context)
-            rhs_expr = self._emit_expression(
+            rhs = self._emit_typed_expr(
                 stmt.rhs, df_var=(str(df_lo) if
                     self._expr_has_bounce_back(stmt.rhs) else None))
             if self._simd_mode == 'vec8d':
@@ -763,14 +763,12 @@ class StatementEmitMixin:
                 # ``StoreU`` for SoA, ``Store`` (aligned)
                 # for CBT-no-NT, ``Stream`` (NT) for
                 # CBT+NT.  See ``_emit_simd_store``.
-                # Scalar RHS broadcast (Highway has no
+                # A scalar RHS is broadcast (Highway has no
                 # implicit double->V conversion).
-                if not self._yields_simd_vector(stmt.rhs):
-                    rhs_expr = f'hn::Set(d, {rhs_expr})'
-                self._emit(f'{{ V gelb_v = {rhs_expr}; '
+                self._emit(f'{{ V gelb_v = {self._coerce_to_vec(rhs)}; '
                            f'{self._emit_simd_store("gelb_v", lhs_addr)}; }}')
             else:
-                self._emit(f'{lhs_addr} = {rhs_expr};')
+                self._emit(f'{lhs_addr} = {rhs.code};')
         else:
             # Slice-DF assignment: emit a `for (int df = lo; df <= hi)` loop
             # and substitute the DF index with the loop variable inside
@@ -816,39 +814,52 @@ class StatementEmitMixin:
                 for df in range(0, n_slice):
                     lhs_addr = self._emit_lattice_out_lhs(
                         lhs, context, df_var=str(df))
-                    rhs_expr = self._emit_expression(
-                        stmt.rhs, df_var=str(df))
+                    rhs = self._emit_typed_expr(stmt.rhs, df_var=str(df))
                     if self._simd_mode == 'vec8d':
-                        # Same scalar-broadcast guard +
-                        # layout-aware store dispatch as the
-                        # single-DF site above.
-                        if not self._yields_simd_vector(
-                                stmt.rhs):
-                            rhs_expr = f'hn::Set(d, {rhs_expr})'
+                        # Same scalar broadcast and layout-aware
+                        # store dispatch as the single-DF site above.
                         self._emit(f'{{ V gelb_v = '
-                                   f'{rhs_expr}; '
+                                   f'{self._coerce_to_vec(rhs)}; '
                                    f'{self._emit_simd_store("gelb_v", lhs_addr)}; }}')
                     else:
                         self._emit(f'{lhs_addr} = '
-                                   f'{rhs_expr};')
+                                   f'{rhs.code};')
             else:
                 self._emit(f'for (int gelb_df = 0; '
                            f'gelb_df <= {n_slice - 1}; ++gelb_df) {{')
                 self._indent += 1
                 lhs_addr = self._emit_lattice_out_lhs(
                     lhs, context, df_var='gelb_df')
-                rhs_expr = self._emit_expression(stmt.rhs,
-                                                 df_var='gelb_df')
+                rhs = self._emit_typed_expr(stmt.rhs, df_var='gelb_df')
                 if self._simd_mode == 'vec8d':
-                    if not self._yields_simd_vector(stmt.rhs):
-                        rhs_expr = f'hn::Set(d, {rhs_expr})'
-                    self._emit(f'V gelb_v = {rhs_expr};')
+                    self._emit(f'V gelb_v = {self._coerce_to_vec(rhs)};')
                     self._emit(
                         f'{self._emit_simd_store("gelb_v", lhs_addr)};')
                 else:
-                    self._emit(f'{lhs_addr} = {rhs_expr};')
+                    self._emit(f'{lhs_addr} = {rhs.code};')
                 self._indent -= 1
                 self._emit('}')
+
+    def _stored(self, carrier, value) -> str:
+        """``value`` as it is stored into a local held as ``carrier``
+        (``SimdSymbolEnv``; None outside a vector body).
+
+        A ``V`` takes a broadcast scalar and a mask a broadcast scalar
+        bool.  A local that stays a C++ scalar in the vector body (an
+        ``int64_t``, an element of an ``int64_t[N]`` or of a
+        ``bool[N]``) holds one value for all cells of the iteration, so
+        a per-cell value has no place in it; and an ``int`` held as a
+        ``V`` is exact only for the value it was declared from.  Both
+        send the block to the scalar path."""
+        if carrier == 'vec':
+            return self._coerce_to_vec(value)
+        if carrier == 'mask':
+            return self._coerce_to_mask(value)
+        if carrier == 'vec_int' or (carrier == 'scalar'
+                                    and value.lane_kind != 'scalar'):
+            raise ScalarFallbackRequired(
+                'a store of a per-cell value into a scalar local has no vector form')
+        return value.code
 
     def _emit_identifier_assignment(
             self, stmt: AssignmentStmt_N,
@@ -856,6 +867,8 @@ class StatementEmitMixin:
         """``name = expr`` -- scalar local or whole-array
         assignment (Fortran-style element-wise semantics)."""
         lname = _uname(lhs.name)
+        carrier = (self._simd_env.carrier(lhs.name)
+                   if self._simd_mode == 'vec8d' else None)
         # Whole-array assignment: rebroadcast the RHS over a
         # per-element loop, like Fortran's array-assignment
         # semantics.  Detect array-typed LHS via the local-array
@@ -868,260 +881,141 @@ class StatementEmitMixin:
             # expression (``moments = moments + {0, 0, 0,
             # 0.5*G, ...}``) -- unroll element-wise.  Each
             # iteration substitutes a literal int index into
-            # the RHS, which lets _emit_expression for
-            # Array1DLiteral_N pick the corresponding element
-            # directly (see the digit-df_var short-circuit
-            # there).
-            lhs_is_vec = (
-                self._simd_mode == 'vec8d'
-                and self._simd_int_locals.get(lhs.name)
-                    == 'vec8d')
+            # the RHS, which lets the emitter pick the
+            # corresponding element of an Array1DLiteral_N
+            # directly, with its own lane kind.
             if self._expr_should_unroll_slice(stmt.rhs):
                 for i in range(n):
-                    elem_str = self._emit_expression(
-                        stmt.rhs, df_var=str(i))
-                    if lhs_is_vec and not \
-                            self._unrolled_element_yields_simd_vector(
-                                stmt.rhs, i):
-                        elem_str = f'hn::Set(d, {elem_str})'
-                    self._emit(f'{lname}[{i}] = {elem_str};')
+                    elem = self._emit_typed_expr(stmt.rhs, df_var=str(i))
+                    self._emit(f'{lname}[{i}] = {self._stored(carrier, elem)};')
             else:
                 self._emit(f'for (int gelb_df = 0; gelb_df < {n};'
                            f' ++gelb_df) {{')
                 self._indent += 1
-                rhs_expr = self._emit_expression(stmt.rhs,
-                                                 df_var='gelb_df')
-                # The rolled-loop path can't pick a specific
-                # element per-i; use the whole-RHS predicate.
-                # Array1DLiteral_N RHSs trip
-                # ``_expr_should_unroll_slice`` and route to the
-                # unrolled branch above, so this rolled path
-                # never sees mixed-V-ness elements.
-                if lhs_is_vec and not \
-                        self._yields_simd_vector(stmt.rhs):
-                    rhs_expr = f'hn::Set(d, {rhs_expr})'
-                self._emit(f'{lname}[gelb_df] = {rhs_expr};')
+                rhs = self._emit_typed_expr(stmt.rhs, df_var='gelb_df')
+                self._emit(f'{lname}[gelb_df] = {self._stored(carrier, rhs)};')
                 self._indent -= 1
                 self._emit('}')
         else:
-            rhs_expr = self._emit_expression(stmt.rhs)
-            if (self._simd_mode == 'vec8d'
-                    and self._simd_int_locals.get(lhs.name) == 'mask'):
-                rhs_expr = self._broadcast_simd_bool(stmt.rhs, rhs_expr)
-            # Scalar-LHS assignment to a SIMD-V-retyped local
-            # (``_simd_int_locals[name] == 'vec8d'``) needs
-            # to broadcast a scalar RHS into V -- Highway has
-            # no implicit ``V::operator=(double)``.
-            if (self._simd_mode == 'vec8d'
-                    and self._simd_int_locals.get(lhs.name) == 'vec8d'
-                    and not self._yields_simd_vector(stmt.rhs)):
-                rhs_expr = f'hn::Set(d, {rhs_expr})'
-            self._emit(f'{lname} = {rhs_expr};')
+            rhs = self._emit_typed_expr(stmt.rhs)
+            self._emit(f'{lname} = {self._stored(carrier, rhs)};')
 
     def _emit_variable_decl_stmt(
             self, stmt: VariableDeclarationStmt_N,
             context: str) -> None:
-        """Local declaration (scalar or array), including the
-        SIMD V-retyping rules and the array-initialiser forms
+        """Local declaration (scalar or array), including how the
+        vector body holds it and the array-initialiser forms
         (upstream_dfs / matmul / literal / rolled loop)."""
         kind = stmt.data_type.canonical_type
         arr_size = kind.dims[0] if kind.rank == 1 else None
         cpp_type = self._decl_cpp_type(stmt)
-        # In SIMD mode, retype real-valued *scalar* locals as
-        # ``V`` so subsequent arithmetic with V-typed lattice
-        # loads / intrinsic results works.  Highway has no
-        # implicit ``V(double)`` constructor, so any scalar RHS
-        # must be explicitly broadcast via ``hn::Set(d, ...)`` --
-        # handled at the init-emit site below and at scalar-LHS
-        # assignment sites in the AssignmentStmt_N branch.
-        #
-        # Track the retype in ``_simd_int_locals`` (historic
-        # name; now covers all SIMD-retyped locals -- real + int)
-        # so the V-yielding predicate (``_yields_simd_vector``)
-        # propagates V-ness through downstream references.
-        #
-        # Real-valued *array* locals retype to V[] only when
-        # their initialiser yields V (e.g. ``upstream_dfs``,
-        # ``EX * ux + EY * uy`` with V ``ux``).  Pure-scalar
-        # array initialisers (``{0.1, 0.2, ...}``) stay
-        # double[] -- there's no scalar->V conversion for
-        # element-wise list initialisation.
-        if (self._simd_mode == 'vec8d'
-                and arr_size is None and cpp_type == 'bool'):
-            # A bool local holds one value per lane, including when its
-            # first assignment is scalar or comes after its declaration.
-            cpp_type = 'hn::Mask<D>'
-            self._simd_int_locals[stmt.name.name] = 'mask'
-        elif self._simd_mode == 'vec8d' \
-                and arr_size is None \
-                and cpp_type in ('double', 'float'):
-            cpp_type = 'V'
-            self._simd_int_locals[stmt.name.name] = 'vec8d'
-        elif (self._simd_mode == 'vec8d'
-                and arr_size is not None
-                and cpp_type in ('double', 'float')):
-            # Real-typed array locals always retype to V[] in
-            # SIMD mode.  An "init yields V?" flow analysis is
-            # not enough -- uninitialised arrays (e.g. ``array
-            # [real, 9] feq;`` then ``feq[i] = ...``) often
-            # receive V values from later assignments.  The
-            # cost of the slightly-wasteful V[] for purely-
-            # scalar arrays is offset by gcc's ability to
-            # constant-fold ``hn::Set`` when the inputs are
-            # literals.  Per-element init paths broadcast
-            # scalar RHS values via the new ``_simd_broadcast_str``
-            # helper; downstream reads of ``arr[i]`` carry the
-            # V-ness through ``_yields_simd_vector``'s
-            # RectSelOfArrayElems_N branch.
-            cpp_type = 'V'
-            self._simd_int_locals[stmt.name.name] = 'vec8d'
-        # Int-typed scalar locals whose RHS is a SIMD-vector-
-        # producing expression (e.g. ``int dx = x - N/2;`` where
-        # ``x`` is the SIMD-promoted spatial coord) must also
-        # retype, otherwise a Highway vector value won't type-
-        # check against an ``int64_t`` declaration.
-        elif (self._simd_mode == 'vec8d'
-                and arr_size is None
-                and cpp_type in ('int8_t', 'int16_t', 'int32_t', 'int64_t')
-                and stmt.initial_value is not None):
-            vec_kind = self._rhs_simd_vec_kind(stmt.initial_value)
-            if vec_kind == 'vec8d':
-                cpp_type = 'V'
-                self._simd_int_locals[stmt.name.name] = 'vec8d'
-            elif vec_kind == 'vec8q':
-                # Integer SIMD arithmetic support is narrower than
-                # real-valued SIMD today; emit the type spelling
-                # here and keep arithmetic fixups localized to the
-                # operations that need them.
-                cpp_type = 'hn::Vec<hn::CappedTag<int64_t, 8>>'
-                self._simd_int_locals[stmt.name.name] = 'vec8q'
+        vector = self._simd_mode == 'vec8d'
         name = _uname(stmt.name.name)
+        # How the vector body holds the local (``SimdSymbolEnv``).  A
+        # real scalar is a ``V`` and a bool scalar an ``hn::Mask<D>``,
+        # including when the first value is scalar or comes after the
+        # declaration.  A real array is always a ``V[]``: an
+        # uninitialised one (``array[real, 9] feq;`` then
+        # ``feq[i] = ...``) often receives vectors later, and gcc folds
+        # the ``hn::Set`` of a literal.  An ``int`` scalar is a ``V``
+        # only when declared from x or from the integer of a per-cell
+        # truth value, the two integers a binary64 lane holds exactly;
+        # every other integer or bool local stays a C++ scalar or array.
+        carrier = None
+        if vector:
+            if kind.dtype in Types.narrow_array_types:
+                raise ScalarFallbackRequired(
+                    f'a {kind.dtype} local has no vector form')
+            carrier = ('vec' if cpp_type == 'double' else
+                       'mask' if cpp_type == 'bool' and arr_size is None
+                       else 'scalar')
         if arr_size is None:
             # Scalar: T name = (init expr or 0);
-            if stmt.initial_value is not None:
-                init_expr = self._emit_expression(stmt.initial_value)
-                if cpp_type == 'hn::Mask<D>':
-                    init_expr = self._broadcast_simd_bool(
-                        stmt.initial_value, init_expr)
-                # If the local was retyped to V (Highway vector)
-                # but the init expression evaluates to a scalar,
-                # broadcast explicitly -- Highway has no implicit
-                # scalar->V conversion.  When the RHS is a
-                # comparison or other mask-producing expression
-                # (e.g. ``int seed = ((dx*dx + dy*dy) < SEED_R2);``
-                # in fd/2d/fisher_kpp_rk2, fd/2d/gray_scott_2d),
-                # ``hn::Set(d, mask)`` is ill-typed (Highway's
-                # ``Mask<D>`` is opaque, ``Set`` only accepts a
-                # scalar) -- route through ``_emit_simd_aware_cast``
-                # which lowers the mask via ``IfThenElse`` to
-                # an ``hn::Vec<D>`` of 1.0 / 0.0.
-                if cpp_type == 'V' \
-                        and self._simd_mode == 'vec8d' \
-                        and not self._yields_simd_vector(
-                            stmt.initial_value):
-                    if self._produces_simd_bool_mask(
-                            stmt.initial_value):
-                        init_expr = self._emit_simd_aware_cast(
-                            init_expr, stmt.initial_value, 'double')
-                    else:
-                        init_expr = f'hn::Set(d, {init_expr})'
+            init = (self._emit_typed_expr(stmt.initial_value)
+                    if stmt.initial_value is not None else None)
+            if (carrier == 'scalar' and init is not None
+                    and init.lane_kind == 'vec'
+                    and init.vec_int_origin in ('coord_x', 'bool_int_cast')):
+                carrier = 'vec_int'
+                init_expr = init.code
+            elif init is not None:
+                init_expr = self._stored(carrier, init)
+            if carrier is not None:
+                self._simd_env.declare(stmt.name.name, carrier)
+                cpp_type = {'vec': 'V', 'vec_int': 'V',
+                            'mask': 'hn::Mask<D>'}.get(carrier, cpp_type)
+            if init is not None:
                 self._emit(f'{cpp_type} {name} = {init_expr};')
-            elif cpp_type == 'hn::Mask<D>':
+            elif carrier == 'mask':
                 self._emit(f'{cpp_type} {name} = hn::FirstN(d, 0);')
-            elif cpp_type == 'V':
+            elif carrier == 'vec':
                 # Highway's V is opaque -- ``V x = 0;`` won't
                 # compile.  Use ``hn::Zero(d)`` to broadcast zero
                 # into all lanes.
                 self._emit(f'{cpp_type} {name} = hn::Zero(d);')
             else:
                 self._emit(f'{cpp_type} {name} = 0;')
+            return
+        # Array: T name[N];  followed by per-element init if any.
+        if carrier is not None:
+            self._simd_env.declare(stmt.name.name, carrier)
+            if carrier == 'vec':
+                cpp_type = 'V'
+        self._emit(f'{cpp_type} {name}[{arr_size}];')
+        init = stmt.initial_value
+        # Unwrap a TypePromotionNode_N wrapper so that the
+        # dispatch below sees the actual initializer node
+        # (e.g. ``IntrinsicFunctionCall_N(upstream_dfs)`` rather
+        # than ``TypePromotionNode_N(IntrinsicFunctionCall_N(...))``).
+        # Such wrappers appear when an ``array[real32, q]`` decl
+        # is initialized with a default-real64-typed call.
+        while isinstance(init, TypePromotionNode_N):
+            init = init.expr
+        if init is None:
+            pass  # uninitialised
+        elif isinstance(init, IntrinsicFunctionCall_N) \
+                and init.function_name in ('upstream_dfs', 'matmul'):
+            self._emit_intrinsic_into_array(name, arr_size, init)
+        elif isinstance(init, Array1DLiteral_N):
+            # ``array[real, n] x = {a, b, c, ...};`` -- unroll
+            # element-wise: each element has its own lane kind.
+            elements = init.value.elements
+            if len(elements) != arr_size:
+                raise NotImplementedError(
+                    f"array literal length {len(elements)}"
+                    f" != array {stmt.name.name} size "
+                    f"{arr_size}")
+            for i in range(arr_size):
+                elem = self._emit_typed_expr(init, df_var=str(i))
+                self._emit(f'{name}[{i}] = {self._stored(carrier, elem)};')
+        elif isinstance(init, Identifier_N) and (
+                self._local_array_type(init.name) is not None
+                or self._constant_vector(init.name) is not None):
+            # Array-to-array copy, element by element (a global
+            # constant array is broadcast into a ``V[]``).
+            source = self._emit_typed_expr(init, df_var='gelb_df')
+            self._emit(f'for (int gelb_df = 0; gelb_df < {arr_size};'
+                       f' ++gelb_df) {{ {name}[gelb_df] = '
+                       f'{self._stored(carrier, source)}; }}')
+        elif self._expr_should_unroll_slice(init):
+            # Init expression references a constexpr array
+            # (e.g. ``eu = EX*ux + EY*uy``).  Unroll so each
+            # ``EX[i]`` / ``EY[i]`` resolves to its literal
+            # value, letting the compiler fold zero terms.
+            for i in range(arr_size):
+                elem = self._emit_typed_expr(init, df_var=str(i))
+                self._emit(f'{name}[{i}] = {self._stored(carrier, elem)};')
         else:
-            # Array: T name[N];  followed by per-element init if any.
-            self._emit(f'{cpp_type} {name}[{arr_size}];')
-            init = stmt.initial_value
-            # Unwrap a TypePromotionNode_N wrapper so that the
-            # dispatch below sees the actual initializer node
-            # (e.g. ``IntrinsicFunctionCall_N(upstream_dfs)`` rather
-            # than ``TypePromotionNode_N(IntrinsicFunctionCall_N(...))``).
-            # Such wrappers appear when an ``array[real32, q]`` decl
-            # is initialized with a default-real64-typed call.
-            while isinstance(init, TypePromotionNode_N):
-                init = init.expr
-            if init is None:
-                pass  # uninitialised
-            elif isinstance(init, IntrinsicFunctionCall_N) \
-                    and init.function_name in ('upstream_dfs', 'matmul'):
-                self._emit_intrinsic_into_array(name, arr_size, init)
-            elif isinstance(init, Array1DLiteral_N):
-                # ``array[real, n] x = {a, b, c, ...};`` -- unroll
-                # element-wise to keep the per-element type
-                # consistent (matters in SIMD mode where each
-                # element may itself be V-typed).
-                elements = init.value.elements
-                if len(elements) != arr_size:
-                    raise NotImplementedError(
-                        f"array literal length {len(elements)}"
-                        f" != array {stmt.name.name} size "
-                        f"{arr_size}")
-                for i, e in enumerate(elements):
-                    elem_str = self._emit_expression(e)
-                    # When the array was retyped to V[] (real
-                    # array in SIMD mode), pure-scalar element
-                    # values need an explicit ``hn::Set(d, ...)``
-                    # broadcast; Highway's V has no implicit
-                    # ``V::operator=(double)``.
-                    if cpp_type == 'V' \
-                            and self._simd_mode == 'vec8d' \
-                            and not self._yields_simd_vector(e):
-                        elem_str = f'hn::Set(d, {elem_str})'
-                    self._emit(f'{name}[{i}] = {elem_str};')
-            elif isinstance(init, Identifier_N) and (
-                    self._local_array_type(init.name) is not None
-                    or self._constant_vector(init.name) is not None):
-                # Array-to-array copy.  When the destination is
-                # V[] but the source is a scalar compound-literal array
-                # global constant, broadcast each element.
-                src = _uname(init.name)
-                src_is_vec = (
-                    self._simd_mode == 'vec8d'
-                    and self._simd_int_locals.get(init.name)
-                        == 'vec8d')
-                if cpp_type == 'V' and not src_is_vec:
-                    rhs = f'hn::Set(d, {src}[gelb_df])'
-                else:
-                    rhs = f'{src}[gelb_df]'
-                self._emit(f'for (int gelb_df = 0; gelb_df < {arr_size};'
-                           f' ++gelb_df) {{ {name}[gelb_df] = '
-                           f'{rhs}; }}')
-            elif self._expr_should_unroll_slice(init):
-                # Init expression references a constexpr array
-                # (e.g. ``eu = EX*ux + EY*uy``).  Unroll so each
-                # ``EX[i]`` / ``EY[i]`` resolves to its literal
-                # value, letting the compiler fold zero terms.
-                for i in range(arr_size):
-                    elem_str = self._emit_expression(init, df_var=str(i))
-                    if cpp_type == 'V' \
-                            and self._simd_mode == 'vec8d' \
-                            and not \
-                            self._unrolled_element_yields_simd_vector(
-                                init, i):
-                        elem_str = f'hn::Set(d, {elem_str})'
-                    self._emit(f'{name}[{i}] = {elem_str};')
-            else:
-                # Array-valued expression (broadcast op, slice, etc.):
-                # emit a per-element init loop, substituting the DF
-                # index into any array-typed sub-expression.
-                self._emit(f'for (int gelb_df = 0; gelb_df < {arr_size};'
-                           f' ++gelb_df) {{')
-                self._indent += 1
-                init_expr = self._emit_expression(init, df_var='gelb_df')
-                if cpp_type == 'V' \
-                        and self._simd_mode == 'vec8d' \
-                        and not self._yields_simd_vector(init):
-                    init_expr = f'hn::Set(d, {init_expr})'
-                self._emit(f'{name}[gelb_df] = {init_expr};')
-                self._indent -= 1
-                self._emit('}')
+            # Array-valued expression (broadcast op, slice, etc.):
+            # emit a per-element init loop, substituting the DF
+            # index into any array-typed sub-expression.
+            self._emit(f'for (int gelb_df = 0; gelb_df < {arr_size};'
+                       f' ++gelb_df) {{')
+            self._indent += 1
+            elem = self._emit_typed_expr(init, df_var='gelb_df')
+            self._emit(f'{name}[gelb_df] = {self._stored(carrier, elem)};')
+            self._indent -= 1
+            self._emit('}')
 
     def _decode_lattice_sel(self, sel) -> tuple[list, object]:
         """Return ``(spatial_ranges, df_range)`` from a RectSel.
@@ -1180,9 +1074,9 @@ class StatementEmitMixin:
         (the inner dimensions of g_f_storage[...]), where the per-lane
         Vec8d gelb_xv would not type-check as an integer subscript."""
         old = self._simd_mode
-        old_index = getattr(self, '_in_coord_scalar', False)
+        old_index = self._in_coord_scalar
         self._simd_mode = 'scalar'
-        # An index keeps its literals bare (``_emit_operand``).
+        # An index keeps its literals bare (``_emit_typed_operand``).
         self._in_coord_scalar = True
         try:
             return self._emit_expression(node, df_var)
