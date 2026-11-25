@@ -140,7 +140,7 @@ class SimdEmitMixin:
         # After deducting head/tail along x, the SIMD interior must
         # still span >= VW cells for the vector body to fire even once.
         offsets = self._stencils.offset_bounds(block.name.name, self._d)
-        if (self._block_has_bounce_back(block) and self._any_cbt_lattice()
+        if (self._has_guarded_reads(block) and self._any_cbt_lattice()
                 and max(offsets[0]) >= _CBT_TILE):
             # The cross-tile loader covers adjacent tiles. Wider links
             # still work through scalar addressing (including modulo).
@@ -838,12 +838,11 @@ class SimdEmitMixin:
             return emitted
         return f'hn::FirstN(d, ({emitted}) ? hn::Lanes(d) : 0)'
 
-    def _block_has_bounce_back(self, node):
-        if (isinstance(node, IntrinsicFunctionCall_N)
-                and node.function_name == 'bounce_back_dfs'):
-            return True
-        return (isinstance(node, Node_N) and
-                any(self._block_has_bounce_back(c) for c in node.get_children()))
+    def _has_guarded_reads(self, block) -> bool:
+        """Whether ``block`` reads a neighbour through ``bounce_back_dfs``
+        (a guarded read of the stencil analysis)."""
+        return any(access.guarded
+                   for access in self._stencils.blocks[block.name.name].reads)
 
     def _emit_block_simd(self, block, info, *,
                         context: str = 'dynamic') -> None:
@@ -896,7 +895,7 @@ class SimdEmitMixin:
         # (writes off a wall are rejected by the validators).
         head = [0] * d
         tail = [0] * d
-        bounce = self._block_has_bounce_back(block)
+        bounce = self._has_guarded_reads(block)
         for axis in range(d):
             if not is_periodic(self._lattice_info, axis):
                 if bounce and axis == 0:
@@ -920,14 +919,6 @@ class SimdEmitMixin:
                                outer_safe_axes=frozenset(),
                                context=context)
             return
-
-        def _maybe_omp(lo, hi, is_outermost):
-            # Only put #pragma omp parallel for on the outermost loop
-            # of the nest -- nested pragmas with default settings cause
-            # team-explosion overhead.
-            if (is_outermost and self.use_openmp
-                    and (hi - lo + 1) >= 2):
-                self._emit('#pragma omp parallel for schedule(static)')
 
         def _emit_axis_split(axis_idx: int,
                              outer_safe_axes: frozenset):
@@ -1088,7 +1079,7 @@ class SimdEmitMixin:
                 # peel only when the straddle lands in real interior
                 # cells (i.e. bbox doesn't reach the corresponding
                 # grid edge).
-                guarded_reads = self._block_has_bounce_back(dblock)
+                guarded_reads = self._has_guarded_reads(dblock)
                 # Guarded neighbour loads describe real grid cells only.
                 # Do not execute them for halo/padding lanes: a shifted
                 # whole-tile load could otherwise reach past storage.

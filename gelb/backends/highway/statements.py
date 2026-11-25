@@ -172,20 +172,14 @@ class StatementEmitMixin:
             f"cpu_highway: array initialisation from intrinsic "
             f"'{fname}' is emitted element-wise by the caller.")
 
-    def _expr_contains_array_literal(self, expr) -> bool:
-        """True iff the AST sub-tree rooted at ``expr`` contains any
-        Array1DLiteral_N node.  The whole-array assign emit uses this
-        to decide between a slice loop (no literals) and per-element
-        unrolling (literals present)."""
-        from gelb.gelb_ast.ASTNodes import Node_N
-        if not isinstance(expr, Node_N):
-            return False
-        if isinstance(expr, Array1DLiteral_N):
+    def _expr_has_bounce_back(self, expr) -> bool:
+        """True iff ``expr`` holds a ``bounce_back_dfs`` call, which is
+        emitted one DF at a time."""
+        if (isinstance(expr, IntrinsicFunctionCall_N)
+                and expr.function_name == 'bounce_back_dfs'):
             return True
-        for c in expr.get_children():
-            if self._expr_contains_array_literal(c):
-                return True
-        return False
+        return (isinstance(expr, Node_N) and
+                any(self._expr_has_bounce_back(c) for c in expr.get_children()))
 
     def _expr_should_unroll_slice(self, expr) -> bool:
         """True iff the slice loop for ``expr`` should be fully
@@ -762,7 +756,7 @@ class StatementEmitMixin:
             lhs_addr = self._emit_lattice_out_lhs(lhs, context)
             rhs_expr = self._emit_expression(
                 stmt.rhs, df_var=(str(df_lo) if
-                    self._block_has_bounce_back(stmt.rhs) else None))
+                    self._expr_has_bounce_back(stmt.rhs) else None))
             if self._simd_mode == 'vec8d':
                 # Dispatch the store call on the active
                 # layout's alignment / NT decision --
@@ -815,7 +809,7 @@ class StatementEmitMixin:
             # peel collapse.  Keep at Q>=16.)
             n_slice = df_hi - df_lo + 1
             should_unroll = (
-                self._block_has_bounce_back(stmt.rhs) or
+                self._expr_has_bounce_back(stmt.rhs) or
                 (n_slice >= 16
                  and self._expr_should_unroll_slice(stmt.rhs)))
             if should_unroll:

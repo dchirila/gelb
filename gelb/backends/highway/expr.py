@@ -164,6 +164,12 @@ class ExpressionEmitMixin:
             return constant.dims[0]
         raise NotImplementedError(f"cpu_highway: no one-dimensional array '{name}' in this scope.")
 
+    def _emit_implicit_timestep(self) -> str:
+        """The implicit ``t`` as an ``int64`` operand: the host's step
+        counter.  A backend whose counter lives elsewhere overrides
+        this."""
+        return 'static_cast<int64_t>(gelb_timestep)'
+
     def _emit_expression(self, expr, df_var: str | None = None) -> str:
         if isinstance(expr, IntLiteral_N):
             return ConstantOperand(int64_literal(expr.value), int(expr.value))
@@ -180,7 +186,7 @@ class ExpressionEmitMixin:
             # widened where a user expression reads them.
             tag = getattr(expr, 'symbol_tag', None)
             if tag == "implicit timestep variable":
-                return 'static_cast<int64_t>(gelb_timestep)'
+                return self._emit_implicit_timestep()
             if tag == "implicit dimension constant":
                 # The size parameters are `g__nx` etc.; `_uname('Nx')`
                 # would name an undeclared `g_Nx`.
@@ -720,23 +726,6 @@ class ExpressionEmitMixin:
         elif a_vals is None and b_vals is not None:
             coeff_vals, runtime_arr = b_vals, ba
             coeff_vals = self._dot_prod_coefficients(call, b, coeff_vals)
-        elif a_vals is not None and b_vals is not None \
-                and all(v is not None for v in a_vals):
-            # Both operands are constant arrays (the folder folds the
-            # global-constant case in the expression's width; a local
-            # constant reaches here): the scalar helper multiplies and
-            # adds in the arrays' C++ type (every operation rounds to
-            # its type), rather than an inline chain of binary64
-            # literals.
-            coeff_name = self._register_constexpr_array(
-                'gelb_dp_coeff', 'double', tuple(float(v) for v in a_vals))
-            idx_name = self._register_constexpr_array(
-                'gelb_dp_idx', 'int', tuple(range(n)))
-            scalar = f'gelb::gelb_dot_prod_const({coeff_name}, {bb}, {idx_name})'
-            if self._simd_mode == 'vec8d':
-                # a dot_prod is taken to yield V in the SIMD body
-                return f'hn::Set(d, {scalar})'
-            return scalar
         if coeff_vals is not None:
             survived = [(float(coeff_vals[i]), i) for i in range(n)
                         if coeff_vals[i] is not None]   # every term, zeros included

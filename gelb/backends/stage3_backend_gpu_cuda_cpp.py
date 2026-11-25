@@ -325,8 +325,8 @@ class CudaCppCodeGenerator(
     # AST scanning helpers used by the scope guard
     # ------------------------------------------------------------------
 
-    def _emit_expression(self, expr, df_var=None) -> str:
-        """Override only the implicit-``t`` resolution.
+    def _emit_implicit_timestep(self) -> str:
+        """The implicit ``t`` inside a kernel.
 
         Parent (HighwayCodeGenerator) emits ``t`` as ``gelb_timestep``
         -- the host loop variable.  Under ``--cuda-graphs``, kernel
@@ -336,13 +336,9 @@ class CudaCppCodeGenerator(
         device-resident counter instead (incremented by
         ``gelb_inc_t`` at the head of the captured sequence).
         """
-        from gelb.gelb_ast.ASTNodes import Identifier_N
-        if (self._uses_t
-                and isinstance(expr, Identifier_N)
-                and getattr(expr, 'symbol_tag', None)
-                    == "implicit timestep variable"):
+        if self._uses_t:
             return 'static_cast<int64_t>(gelb_timestep_d)'
-        return super()._emit_expression(expr, df_var)
+        return super()._emit_implicit_timestep()
 
     def _block_simd_eligible(self, block, info) -> bool:
         # Hard-disable parent's SIMD emit path everywhere.  Even with
