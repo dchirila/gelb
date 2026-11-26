@@ -810,6 +810,15 @@ class ExpressionEmitMixin:
         # array, in either order, is written out as well
         # (``_emit_dot_prod_real_coeffs_int_array``): the helpers would
         # compute in the integer type or convert through binary64.
+        #
+        # A constant ``real`` array with a per-cell ``real32`` array has
+        # a ``real`` result, and each element converts before it is
+        # multiplied (user manual, Numerical semantics: Types and
+        # promotion).  The two helpers above take their type from the
+        # array they read, so this case names the result's type through
+        # ``gelb_signed_sum_as`` / ``gelb_dot_prod_const_as``, which add
+        # in the same order, and the written-out chain converts each
+        # element.  Operands of one width keep the deducing helpers.
         if len(call.arguments) != 2:
             raise NotImplementedError(
                 "cpu_highway: dot_prod() expects 2 arguments.")
@@ -841,13 +850,23 @@ class ExpressionEmitMixin:
         # side and which is the "runtime array" side.
         coeff_vals = None
         runtime_arr = None
+        runtime_node = None
         if a_vals is not None and b_vals is None:
-            coeff_vals, runtime_arr = a_vals, bb
+            coeff_vals, runtime_arr, runtime_node = a_vals, bb, b
             coeff_vals = self._dot_prod_coefficients(call, a, coeff_vals)
         elif a_vals is None and b_vals is not None:
-            coeff_vals, runtime_arr = b_vals, ba
+            coeff_vals, runtime_arr, runtime_node = b_vals, ba, a
             coeff_vals = self._dot_prod_coefficients(call, b, coeff_vals)
+        # The result's C++ type where the per-cell array is narrower
+        # (``real`` coefficients with a ``real32`` array), else None.
+        widened_to = None
         if coeff_vals is not None:
+            acc_cpp = _TYPE_MAP.get(
+                getattr(call.inferred_type, 'element_dtype', None))
+            arr_cpp = _TYPE_MAP.get(
+                getattr(runtime_node.inferred_type, 'element_dtype', None))
+            if acc_cpp is not None and arr_cpp is not None and acc_cpp != arr_cpp:
+                widened_to = acc_cpp
             survived = [(float(coeff_vals[i]), i) for i in range(n)
                         if coeff_vals[i] is not None]   # every term, zeros included
             if not survived:
@@ -874,6 +893,9 @@ class ExpressionEmitMixin:
                     'gelb_dp_pos', 'int', tuple(pos_idx))
                 neg_name = self._register_constexpr_array(
                     'gelb_dp_neg', 'int', tuple(neg_idx))
+                if widened_to is not None:
+                    return (f'gelb::gelb_signed_sum_as<{widened_to}>('
+                            f'{runtime_arr}, {pos_name}, {neg_name})')
                 return (f'gelb::gelb_signed_sum({ds_arg}{runtime_arr}, '
                         f'{pos_name}, {neg_name})')
             # General (some non-+/-1 coefficient, or all-positive /
@@ -886,6 +908,9 @@ class ExpressionEmitMixin:
                 idx_name = self._register_constexpr_array(
                     'gelb_dp_idx', 'int',
                     tuple(i for _, i in survived))
+                if widened_to is not None:
+                    return (f'gelb::gelb_dot_prod_const_as<{widened_to}>('
+                            f'{coeff_name}, {runtime_arr}, {idx_name})')
                 return (f'gelb::gelb_dot_prod_const({ds_arg}'
                         f'{coeff_name}, {runtime_arr}, '
                         f'{idx_name})')
@@ -895,19 +920,25 @@ class ExpressionEmitMixin:
         # all-negative +/-1.  Keep the original inline emit, every term
         # included (a zero coefficient is a ``0.0 * x`` term).
         # A real result: an integer constant's coefficients are the
-        # binary64 values the helper paths see.
+        # binary64 values the helper paths see.  A narrower per-cell
+        # element converts to the result's type before it is negated or
+        # added.
         terms = []
         for i in range(n):
             ca = float(a_vals[i]) if a_vals is not None else None
             cb = float(b_vals[i]) if b_vals is not None else None
-            lhs = self._operand_for_coeff(ca, f'{ba}[{i}]')
-            rhs = self._operand_for_coeff(cb, f'{bb}[{i}]')
+            raw_a, raw_b = f'{ba}[{i}]', f'{bb}[{i}]'
+            if widened_to is not None and runtime_node is a:
+                raw_a = f'static_cast<{widened_to}>({raw_a})'
+            elif widened_to is not None:
+                raw_b = f'static_cast<{widened_to}>({raw_b})'
+            lhs = self._operand_for_coeff(ca, raw_a)
+            rhs = self._operand_for_coeff(cb, raw_b)
             if lhs is None and rhs is None:
                 terms.append(('+', f'{ba}[{i}] * {bb}[{i}]'))
             else:
                 sign, body = self._merge_signed_product(lhs, rhs,
-                                                         f'{ba}[{i}]',
-                                                         f'{bb}[{i}]')
+                                                         raw_a, raw_b)
                 terms.append((sign, body))
         if not terms:
             return '0.0'
