@@ -1758,3 +1758,225 @@ def test_matmul_promoted_width(tmp_path, backend, layout, strict,
     data = run_matmul_source(tmp_path / 'run', backend, source, layout, strict=strict)
     for i, value in enumerate(expected):
         np.testing.assert_array_equal(data[f'p{i}'], np.full((2, 67), value))
+
+
+# ----------------------------------------------------------------------
+# dot_prod of a constant real array with a per-cell real32 array
+# ----------------------------------------------------------------------
+
+# The result is ``real`` and each ``real32`` element converts before it
+# is multiplied (user manual, Numerical semantics: Types and promotion).
+# Each case is a pair of gauge outputs of one run: ``m_<case>`` is the
+# mixed call, ``c_<case>`` the same call on the same values held in a
+# ``real`` array (lattice ``h`` is ``g`` converted element by element).
+# The two are the same arithmetic, so they agree bit for bit on every
+# backend and in both build modes.  The values are inexact in binary32,
+# and the second one is far from the first, so a sum or a difference
+# taken in binary32 differs from the pair's other half.  No backend is
+# compared with another: the reduction orders differ.
+_DOT_COEFFS = ("0.1", "0.7", "1.3", "-0.9", "2.1", "0.3", "-1.7", "0.6", "1.9")
+_DOT_SIGNS = ("1.0", "-1.0", "1.0", "1.0", "-1.0", "-1.0", "1.0", "-1.0", "1.0")
+_DOT_OFFSETS = (0.11, 24.3, 0.37, 0.5, 0.63, 0.76, 0.89, 1.02, 1.15)
+
+
+def _dot_constants(name, values, lengths):
+    return "".join(f"    const array[real, {n}] {name}{n} = {{{', '.join(values[:n])}}};\n"
+                   for n in lengths)
+
+
+def _dot_pair(case, constant, narrow, wide, reverse=False):
+    call = "dot_prod({1}, {0})" if reverse else "dot_prod({0}, {1})"
+    return (f"    m_{case} = {call.format(constant, narrow)};\n"
+            f"    c_{case} = {call.format(constant, wide)};\n")
+
+
+def _dot_program(description, constants, lattices, coords, init, body, dynamic="", functions=""):
+    cases = [line.split("=")[0].strip()[2:] for line in body.splitlines()
+             if line.strip().startswith("m_")]
+    outputs = ", ".join(f"real m_{case}, real c_{case}" for case in cases)
+    source = f"""simulation_description("{description}");
+global_constants {{
+    const int Q = 9;
+{constants}}}
+{functions}lattices {{
+{lattices}}}
+initializer I {{
+{init}}}
+dynamic D {{
+    g.out[C | :] = g.in[C | :];
+    h.out[C | :] = h.in[C | :];
+{dynamic}}}
+gauge G -> ({outputs}) {{
+{body}}}
+node_classes {{ node_class B(I, D, G); }}
+geometry {{ nodes[{', '.join(':' * (coords.count(',') + 1))}] = B; }}
+"""
+    return source.replace("[C", "[" + coords), cases
+
+
+def _dot_init(value="real(x) * 0.37 + {offset}", q=9):
+    return "".join(
+        f"    g.out[C | {k}] = real32({value.format(offset=_DOT_OFFSETS[k])});\n"
+        f"    h.out[C | {k}] = real(real32({value.format(offset=_DOT_OFFSETS[k])}));\n"
+        for k in range(q))
+
+
+_DOT_LATTICES_1D = ("    lattice g(1, 9, real32, 16, true);\n"
+                    "    lattice h(1, 9, real, 16, true);\n")
+_DOT_LOCALS = "".join(f"    array[real32, {n}] a{n} = g.in[x | 0:{n - 1}];\n"
+                      f"    array[real, {n}] b{n} = h.in[x | 0:{n - 1}];\n"
+                      for n in (2, 3, 4, 5, 9))
+
+# The three ways the call is written: general coefficients (lengths 2 to
+# 9, both argument orders, zeros among them), +1/-1 coefficients, and
+# coefficients that are all +1 or all -1.
+_MIXED_DOT_PATHS = _dot_program(
+    "mixed-width dot_prod: the three paths",
+    _dot_constants("WG", _DOT_COEFFS, (2, 3, 4, 5, 9))
+    + "    const array[real, 3] WZ3 = {0.5, 0.0, 0.25};\n"
+    + "    const array[real, 9] WZ9 = {0.1, 0.0, 1.3, -0.9, 0.0, 0.3, -1.7, 0.0, 1.9};\n"
+    + _dot_constants("WS", _DOT_SIGNS, (2, 3, 9))
+    + _dot_constants("WP", ("1.0",) * 9, (2, 3, 9))
+    + _dot_constants("WN", ("-1.0",) * 9, (2, 3, 9)),
+    _DOT_LATTICES_1D, "x", _dot_init(),
+    _DOT_LOCALS
+    + "".join(_dot_pair(f"g{n}", f"WG{n}", f"a{n}", f"b{n}")
+              + _dot_pair(f"r{n}", f"WG{n}", f"a{n}", f"b{n}", reverse=True)
+              for n in (2, 3, 4, 5, 9))
+    + _dot_pair("z3", "WZ3", "a3", "b3") + _dot_pair("z9", "WZ9", "a9", "b9")
+    + "".join(_dot_pair(f"{kind}{n}", f"{constant}{n}", f"a{n}", f"b{n}")
+              for kind, constant in (("s", "WS"), ("p", "WP"), ("n", "WN")) for n in (2, 3, 9))
+    + "".join(_dot_pair(f"r{kind}9", f"{constant}9", "a9", "b9", reverse=True)
+              for kind, constant in (("s", "WS"), ("p", "WP"), ("n", "WN"))))
+
+# A real32 lattice slice passed directly (whole, partial, a neighbour's)
+# and an array declared with a named extent.
+_MIXED_DOT_HOISTED = _dot_program(
+    "mixed-width dot_prod: slices as arguments",
+    _dot_constants("WG", _DOT_COEFFS, (3, 9)) + _dot_constants("WS", _DOT_SIGNS, (3, 9))
+    + _dot_constants("WP", ("1.0",) * 9, (9,)) + _dot_constants("WN", ("-1.0",) * 9, (3,)),
+    _DOT_LATTICES_1D, "x", _dot_init(),
+    "    array[real32, Q] aq = g.in[x | :];\n    array[real, Q] bq = h.in[x | :];\n"
+    + _dot_pair("whole_general", "WG9", "g.in[x | :]", "h.in[x | :]")
+    + _dot_pair("whole_general_reversed", "WG9", "g.in[x | :]", "h.in[x | :]", reverse=True)
+    + _dot_pair("whole_signed", "WS9", "g.in[x | :]", "h.in[x | :]")
+    + _dot_pair("whole_plus", "WP9", "g.in[x | :]", "h.in[x | :]")
+    + _dot_pair("partial_general", "WG3", "g.in[x | 2:4]", "h.in[x | 2:4]")
+    + _dot_pair("partial_signed", "WS3", "g.in[x | 5:7]", "h.in[x | 5:7]", reverse=True)
+    + _dot_pair("partial_minus", "WN3", "g.in[x | 6:8]", "h.in[x | 6:8]")
+    + _dot_pair("neighbour_general", "WG9", "g.in[x - 1 | :]", "h.in[x - 1 | :]")
+    + _dot_pair("neighbour_signed", "WS9", "g.in[x + 2 | :]", "h.in[x + 2 | :]")
+    + _dot_pair("neighbour_plus", "WP9", "g.in[x + 1 | :]", "h.in[x + 1 | :]", reverse=True)
+    + _dot_pair("named_extent_general", "WG9", "aq", "bq")
+    + _dot_pair("named_extent_signed", "WS9", "aq", "bq", reverse=True)
+    + _dot_pair("named_extent_plus", "WP9", "aq", "bq"))
+
+# Every term counts (user manual, Numerical semantics: Reproducibility):
+# a zero coefficient against +Inf or NaN gives NaN, and an infinite
+# sixth term, which a default build may fuse, gives an infinity.
+_DOT_HUGE = "real32(1.0e30) * real32(1.0e30) * real32(1.0 + real(x))"
+_MIXED_DOT_SPECIAL = _dot_program(
+    "mixed-width dot_prod: special values",
+    "    const array[real, 3] WA = {0.5, 0.0, 0.25};\n"
+    "    const array[real, 3] WB = {0.5, 0.25, 0.0};\n"
+    "    const array[real, 6] WC = {0.5, 0.1, 0.2, 0.3, 0.4, 0.0};\n"
+    "    const array[real, 6] WD = {0.5, 0.1, 0.2, 0.3, 0.4, 2.0};\n"
+    "    const array[real, 6] WE = {0.5, 0.1, 0.2, 0.3, 0.4, -2.0};\n",
+    _DOT_LATTICES_1D, "x",
+    _dot_init(q=5)
+    + f"    g.out[x | 5] = {_DOT_HUGE};\n    h.out[x | 5] = real({_DOT_HUGE});\n"
+    + "".join(_dot_init().splitlines(keepends=True)[12:16])
+    + f"    g.out[x | 8] = ({_DOT_HUGE}) - ({_DOT_HUGE});\n"
+    + f"    h.out[x | 8] = real(({_DOT_HUGE}) - ({_DOT_HUGE}));\n",
+    "    array[real32, 3] ai = g.in[x | 4:6];\n    array[real, 3] bi = h.in[x | 4:6];\n"
+    "    array[real32, 3] an = g.in[x | 6:8];\n    array[real, 3] bn = h.in[x | 6:8];\n"
+    "    array[real32, 6] a6 = g.in[x | 0:5];\n    array[real, 6] b6 = h.in[x | 0:5];\n"
+    + _dot_pair("zero_times_infinity_3", "WA", "ai", "bi")
+    + _dot_pair("zero_times_nan_3", "WB", "an", "bn")
+    + _dot_pair("zero_times_infinity_6", "WC", "a6", "b6")
+    + _dot_pair("plus_infinity_6", "WD", "a6", "b6")
+    + _dot_pair("minus_infinity_6", "WE", "a6", "b6"))
+_MIXED_DOT_SPECIAL_VALUES = {
+    "zero_times_infinity_3": math.nan, "zero_times_nan_3": math.nan,
+    "zero_times_infinity_6": math.nan, "plus_infinity_6": math.inf, "minus_infinity_6": -math.inf}
+
+# The calls in an initializer, in a dynamic block and inside a user
+# function of a 2-D program; lattice ``r`` carries the results to the
+# gauge, one DF per result.
+_DOT_RESULTS = ["init_general", "init_signed", "init_plus", "dynamic_general",
+                "dynamic_minus", "function_general", "function_signed"]
+_MIXED_DOT_BLOCKS = _dot_program(
+    "mixed-width dot_prod: blocks and functions",
+    _dot_constants("WG", _DOT_COEFFS, (9,)) + _dot_constants("WS", _DOT_SIGNS, (9,))
+    + _dot_constants("WP", ("1.0",) * 9, (9,)) + _dot_constants("WN", ("-1.0",) * 9, (9,)),
+    "    lattice g(2, 9, real32, {16, 4}, {true, true});\n"
+    "    lattice h(2, 9, real, {16, 4}, {true, true});\n"
+    f"    lattice r(2, {2 * len(_DOT_RESULTS)}, real, {{16, 4}}, {{true, true}});\n",
+    "x, y",
+    _dot_init("real(x) * 0.37 + real(y) * 0.19 + {offset}")
+    + "    array[real32, Q] a = {" + ", ".join(
+        f"real32(real(x) * 0.41 + real(y) * 0.13 + {o})" for o in _DOT_OFFSETS) + "};\n"
+    + "    array[real, Q] b = {" + ", ".join(
+        f"real(real32(real(x) * 0.41 + real(y) * 0.13 + {o}))" for o in _DOT_OFFSETS) + "};\n"
+    + "    r.out[x, y | 0] = dot_prod(WG9, a);\n    r.out[x, y | 1] = dot_prod(WG9, b);\n"
+    + "    r.out[x, y | 2] = dot_prod(a, WS9);\n    r.out[x, y | 3] = dot_prod(b, WS9);\n"
+    + "    r.out[x, y | 4] = dot_prod(WP9, a);\n    r.out[x, y | 5] = dot_prod(WP9, b);\n"
+    + "    r.out[x, y | 6:13] = 0.0;\n",
+    "".join(f"    m_{case} = r.in[x, y | {2 * k}];\n    c_{case} = r.in[x, y | {2 * k + 1}];\n"
+            for k, case in enumerate(_DOT_RESULTS))
+    + _dot_pair("gauge_general", "WG9", "g.in[x, y - 1 | :]", "h.in[x, y - 1 | :]")
+    + _dot_pair("gauge_signed", "WS9", "g.in[x, y | :]", "h.in[x, y | :]"),
+    dynamic="    r.out[x, y | 0:5] = r.in[x, y | 0:5];\n"
+            "    array[real32, Q] a = g.in[x, y | :];\n    array[real, Q] b = h.in[x, y | :];\n"
+            "    r.out[x, y | 6] = dot_prod(WG9, g.in[x - 1, y + 1 | :]);\n"
+            "    r.out[x, y | 7] = dot_prod(WG9, h.in[x - 1, y + 1 | :]);\n"
+            "    r.out[x, y | 8] = dot_prod(a, WN9);\n    r.out[x, y | 9] = dot_prod(b, WN9);\n"
+            "    r.out[x, y | 10] = General(a);\n    r.out[x, y | 11] = GeneralWide(b);\n"
+            "    r.out[x, y | 12] = Signed(a);\n    r.out[x, y | 13] = SignedWide(b);\n",
+    functions="function General(array[real32, 9] v) -> (real s) { s = dot_prod(WG9, v); }\n"
+              "function GeneralWide(array[real, 9] v) -> (real s) { s = dot_prod(WG9, v); }\n"
+              "function Signed(array[real32, 9] v) -> (real s) { s = dot_prod(v, WS9); }\n"
+              "function SignedWide(array[real, 9] v) -> (real s) { s = dot_prod(v, WS9); }\n")
+
+_MIXED_DOT_3D = _dot_program(
+    "mixed-width dot_prod: three dimensions",
+    _dot_constants("WG", _DOT_COEFFS, (9,)) + _dot_constants("WS", _DOT_SIGNS, (9,))
+    + _dot_constants("WN", ("-1.0",) * 9, (9,)),
+    "    lattice g(3, 9, real32, {16, 4, 4}, {true, true, true});\n"
+    "    lattice h(3, 9, real, {16, 4, 4}, {true, true, true});\n",
+    "x, y, z", _dot_init("real(x) * 0.37 + real(y) * 0.19 + real(z) * 0.07 + {offset}"),
+    "    array[real32, Q] a = g.in[x, y, z | :];\n    array[real, Q] b = h.in[x, y, z | :];\n"
+    + _dot_pair("general", "WG9", "a", "b")
+    + _dot_pair("signed", "WS9", "a", "b", reverse=True)
+    + _dot_pair("minus", "WN9", "a", "b")
+    + _dot_pair("neighbour_general", "WG9", "g.in[x - 1, y, z + 1 | :]", "h.in[x - 1, y, z + 1 | :]"))
+
+_MIXED_DOT_PROGRAMS = {
+    "paths": _MIXED_DOT_PATHS, "slices": _MIXED_DOT_HOISTED, "special": _MIXED_DOT_SPECIAL,
+    "blocks": _MIXED_DOT_BLOCKS, "three_dimensions": _MIXED_DOT_3D}
+
+
+@pytest.mark.parametrize('backend,layout', MATMUL_CONFIGS)
+@pytest.mark.parametrize('strict', [False, True], ids=['default', 'strict'])
+@pytest.mark.parametrize('program', list(_MIXED_DOT_PROGRAMS))
+def test_mixed_dot_prod_equals_the_call_on_the_widened_array(tmp_path, backend, layout,
+                                                              strict, program):
+    """``dot_prod`` of a constant ``real`` array with a per-cell ``real32``
+    array is ``real``, and each element converts before it is multiplied
+    (user manual, Numerical semantics: Types and promotion): it gives the
+    bits of the same call on the same values in a ``real`` array, in every
+    block kind and dimension, on every backend and in both build modes."""
+    _skip_cbt_without_avx512(layout)
+    source, cases = _MIXED_DOT_PROGRAMS[program]
+    data = run_matmul_source(tmp_path / 'run', backend, source, layout, strict=strict)
+    assert sorted(name[2:] for name in data if name.startswith('m_')) == sorted(cases)
+    for case in cases:
+        mixed, control = data[f'm_{case}'], data[f'c_{case}']
+        assert mixed.dtype == control.dtype == np.dtype('float64'), case
+        nan = np.isnan(control)
+        np.testing.assert_array_equal(np.isnan(mixed), nan, err_msg=case)
+        np.testing.assert_array_equal(mixed[~nan].view(np.uint64),
+                                      control[~nan].view(np.uint64), err_msg=case)
+        if program == 'special':
+            np.testing.assert_array_equal(mixed, np.full(mixed.shape, _MIXED_DOT_SPECIAL_VALUES[case]),
+                                          err_msg=case)
