@@ -77,6 +77,13 @@ versions follow upstream end of life and can change in any release.
   in `c && t > 0 && 10 / t > 2` with `c` a `bool` local set from a
   per-cell comparison, stopped the program with an illegal instruction
   at `t = 0`. Such a block now runs as a scalar loop.
+- `dot_prod` of a constant `real` array with a `real32` array that is
+  computed per cell, in either argument order, now converts each `real32`
+  element to `real` and computes the sum in binary64 on `cpu_highway` and
+  `gpu_cuda_cpp`, as `cpu_fortran_serial` does and as the promotion rules
+  of the Numerical semantics chapter require. The two backends computed
+  it in binary32 before, constants of `+1` and `-1` only, of `+1` only
+  and of `-1` only included, so the `real` result held binary32 accuracy.
 
 - `dot_prod` on `cpu_highway` and `gpu_cuda_cpp` accepts lattice slices and
   one-dimensional array expressions directly, matching `cpu_fortran_serial`.
